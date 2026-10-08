@@ -2,7 +2,7 @@
 
 import argparse
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, localcontext
 import fcntl
 import hashlib
@@ -751,6 +751,176 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
         if namespace_lock is not None:
             os.close(namespace_lock)
         os.close(lock)
+
+
+def unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            fail("JSON_DUPLICATE_KEY")
+        result[key] = value
+    return result
+
+
+def remote_decimal(value):
+    # json.loads(parse_float=Decimal) avoids rounding through binary Python floats.
+    if isinstance(value, bool) or not isinstance(value, (int, Decimal)):
+        fail("REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED")
+    number = Decimal(value)
+    if not number.is_finite():
+        fail("REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED")
+    return number
+
+
+def remote_active_context(activity):
+    account = activity.get("account")
+    if not isinstance(account, dict):
+        fail("REMOTE_ACCOUNT_CONTEXT_MISSING")
+    if account.get("id") != activity["accountId"]:
+        fail("REMOTE_ACCOUNT_CONTEXT_CONFLICT")
+    inactive = False
+    reserved = {"0c077abd-eca2-4cbb-818c-6cefbf2d169a", "f2e868af-8333-459f-b161-cbc6544c24bd"}
+    for context in (activity, account):
+        for flag in ("isDraft", "isExcluded"):
+            if flag in context:
+                if not isinstance(context[flag], bool):
+                    fail("REMOTE_ACTIVE_FLAG_INVALID")
+                inactive = inactive or context[flag]
+        tags = context.get("tags")
+        if not isinstance(tags, list) or any(not isinstance(t, dict) or not isinstance(t.get("id"), str) or not t["id"] for t in tags):
+            fail("REMOTE_ACTIVE_TAGS_MISSING_OR_INVALID")
+        inactive = inactive or any(t["id"] in reserved for t in tags)
+    return not inactive
+
+
+def parse_remote_activity_snapshot(raw):
+    try:
+        data = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+    except (ValueError, TypeError, RecursionError):
+        fail("INVALID_REMOTE_ACTIVITY_JSON")
+    if not isinstance(data, dict) or not isinstance(data.get("activities"), list):
+        fail("INVALID_REMOTE_ACTIVITY_SNAPSHOT")
+    if type(data.get("count")) is not int or data["count"] != len(data["activities"]):
+        fail("REMOTE_ACTIVITY_COUNT_MISMATCH")
+    normalized = []
+    seen = set()
+    for row in data["activities"]:
+        if not isinstance(row, dict):
+            fail("INVALID_REMOTE_ACTIVITY_SNAPSHOT")
+        for key in ("id", "accountId", "type", "currency", "date"):
+            if not isinstance(row.get(key), str) or not row[key].strip():
+                fail("REMOTE_ACTIVITY_CONTEXT_MISSING")
+        if row["id"] in seen:
+            fail("REMOTE_ACTIVITY_ID_DUPLICATE")
+        seen.add(row["id"])
+        if "comment" not in row or row["comment"] is not None and not isinstance(row["comment"], str):
+            fail("REMOTE_COMMENT_CONTEXT_MISSING")
+        amount = {k: remote_decimal(row.get(k)) for k in ("quantity", "unitPrice", "fee")}
+        active = remote_active_context(row)
+        try:
+            instant = datetime.fromisoformat(row["date"].replace("Z", "+00:00"))
+        except ValueError:
+            fail("INVALID_REMOTE_ACTIVITY_DATE")
+        if instant.tzinfo is None:
+            fail("REMOTE_ACTIVITY_TIMEZONE_MISSING")
+        utc = instant.astimezone(timezone.utc)
+        active = active and utc <= datetime.now(timezone.utc)
+        if row["type"] in ("BUY", "SELL"):
+            if amount["quantity"] <= 0 or amount["unitPrice"] <= 0 or amount["fee"] < 0:
+                fail("INVALID_REMOTE_TRADE_AMOUNT")
+            profile = row["assetProfile"] if "assetProfile" in row else row.get("SymbolProfile")
+            if not isinstance(profile, dict):
+                fail("REMOTE_ASSET_PROFILE_INVALID")
+            for key in ("symbol", "dataSource", "currency"):
+                if not isinstance(profile.get(key), str) or not profile[key].strip():
+                    fail("REMOTE_ASSET_PROFILE_INVALID")
+            if profile["currency"] != row["currency"]:
+                fail("REMOTE_TRADE_CURRENCY_CONTEXT_CONFLICT")
+            symbol, source = profile["symbol"], profile["dataSource"]
+        else:
+            symbol, source = None, None
+        normalized.append({"remote_id": row["id"], "target_account_id": row["accountId"],
+                           "kind": row["type"], "symbol": symbol, "data_source": source,
+                           "price_currency": row["currency"], "quantity": amount["quantity"],
+                           "unit_price": amount["unitPrice"], "fee": amount["fee"],
+                           "operation_date": utc.date().isoformat(),
+                           "date_context_verified": utc.hour == utc.minute == utc.second == utc.microsecond == 0,
+                           "active": active, "comment": row["comment"]})
+    return normalized
+
+
+def activity_financial_fingerprint(activity):
+    fields = ("target_account_id", "operation_date", "kind", "symbol", "data_source", "price_currency")
+    values = [activity[k].isoformat() if hasattr(activity[k], "isoformat") else activity[k] for k in fields]
+    for key in ("quantity", "unit_price", "fee"):
+        value = activity[key]
+        if isinstance(value, str):
+            if not re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", value):
+                fail("INVALID_ACTIVITY_DECIMAL")
+            value = Decimal(value)
+        values.append(canonical_decimal(value))
+    return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def reconcile_existing_activities(prepared, remote, resolutions):
+    """Private offline adoption proposal; never changes remote records or readiness."""
+    if not isinstance(prepared, dict) or not isinstance(resolutions, dict):
+        fail("INVALID_ADOPTION_CONFIGURATION")
+    if set(resolutions) - set(prepared):
+        fail("STALE_ADOPTION_RESOLUTION")
+    result = {"new": [], "owned": [], "adopted": {}, "candidates": {},
+              "blockers": {"ISOLATED_API_CONTRACT_UNVERIFIED", "OPENING_HOLDINGS_UNVERIFIED"},
+              "import_ready": False}
+    owned = {}
+    for row in remote:
+        comment = row["comment"]
+        if comment in prepared:
+            if comment in owned:
+                fail("REMOTE_OWNED_MARKER_DUPLICATE")
+            owned[comment] = row
+    claimed_remote = set()
+    for event_id, activity in prepared.items():
+        if activity.get("id") != event_id:
+            fail("PREPARED_IDENTITY_CONFLICT")
+        fingerprint = activity_financial_fingerprint(activity)
+        if event_id in owned:
+            row = owned[event_id]
+            if not row["active"] or not row["date_context_verified"] or activity_financial_fingerprint(row) != fingerprint:
+                fail("REMOTE_OWNED_ACTIVITY_CONFLICT")
+            if event_id in resolutions:
+                fail("STALE_ADOPTION_RESOLUTION")
+            result["owned"].append(event_id)
+            claimed_remote.add(row["remote_id"])
+            continue
+        candidates = [r for r in remote if r["kind"] in ("BUY", "SELL") and r["target_account_id"] == activity["target_account_id"]
+                      and activity_financial_fingerprint(r) == fingerprint]
+        if any(not r["active"] or not r["date_context_verified"] for r in candidates):
+            fail("REMOTE_CANDIDATE_CONTEXT_UNVERIFIED")
+        if not candidates:
+            if event_id in resolutions:
+                fail("STALE_ADOPTION_RESOLUTION")
+            result["new"].append(event_id)
+            continue
+        resolution = resolutions.get(event_id)
+        if resolution is None:
+            result["candidates"][event_id] = [r["remote_id"] for r in candidates]
+            result["blockers"].add("MANUAL_ACTIVITY_ADOPTION_REQUIRED")
+            continue
+        if not isinstance(resolution, dict) or set(resolution) != {"remote_id", "financial_fingerprint"}:
+            fail("INVALID_ADOPTION_RESOLUTION")
+        selected = [r for r in candidates if r["remote_id"] == resolution["remote_id"]]
+        if len(selected) != 1 or resolution["financial_fingerprint"] != fingerprint:
+            fail("STALE_ADOPTION_RESOLUTION")
+        row = selected[0]
+        if row["remote_id"] in claimed_remote:
+            fail("ADOPTION_MULTIPLICITY_CONFLICT")
+        # Another stable marker cannot be silently adopted under a new owner.
+        if isinstance(row["comment"], str) and row["comment"].startswith("BD#"):
+            fail("FOREIGN_BD_OWNERSHIP_CONFLICT")
+        claimed_remote.add(row["remote_id"])
+        result["adopted"][event_id] = dict(resolution)
+    result["blockers"] = sorted(result["blockers"])
+    return result
 
 
 def main(argv=None):
