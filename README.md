@@ -124,3 +124,19 @@ describes configuration and explicit manual-adoption resolutions.
 It writes a private reconciliation artifact and exact new-activity wire body,
 with readiness false. Stdout contains counts and blockers only. It never fetches,
 sends or changes Ghostfolio; there is no apply command.
+
+## Save a read-only Ghostfolio snapshot
+
+The optional [GET-only snapshot command](docs/design/readonly-snapshot.md) requires
+an explicit private HTTPS allowlist and an existing session bearer supplied by
+environment. It does not exchange a Security Token or renew credentials.
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py snapshot \
+  --config inputs/snapshot-config.yaml --input-root inputs \
+  --max-bytes 1048576 --timeout 30
+```
+
+It makes one GET and saves private raw activity JSON. No import/update/delete or
+authentication POST exists. Current runtime access has not been exercised; tests
+use fake HTTPS responses and forbid real sockets.

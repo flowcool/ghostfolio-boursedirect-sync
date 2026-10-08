@@ -6,14 +6,17 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, localcontext
 import fcntl
 import hashlib
+import http.client
 import json
 import logging
 import os
 from pathlib import Path
 import re
 import stat
+import ssl
 import sys
 import uuid
+from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup, Comment
 import yaml
@@ -637,14 +640,18 @@ def private_directory(path):
 
 
 def atomic_private_yaml(path, value):
+    atomic_private_bytes(path, yaml.safe_dump(value, sort_keys=False, allow_unicode=True).encode("utf-8"))
+
+
+def atomic_private_bytes(path, raw):
     path = Path(path)
     if path.is_symlink():
         fail("SYMLINK_PRIVATE_FILE")
     temporary = path.with_name("." + path.name + "." + uuid.uuid4().hex)
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            yaml.safe_dump(value, stream, sort_keys=False, allow_unicode=True)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
@@ -1341,6 +1348,72 @@ def review_local_snapshot(config_path, input_root, max_bytes):
             "import_ready": False, "blockers": artifact["blockers"]}
 
 
+def validated_ghost_origin(value):
+    if not isinstance(value, str) or not value.isascii() or value != value.strip() or any(c.isspace() for c in value):
+        fail("INVALID_GHOST_ORIGIN")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        fail("INVALID_GHOST_ORIGIN")
+    if (parsed.scheme != "https" or parsed.username is not None or parsed.password is not None
+            or parsed.path or parsed.query or parsed.fragment or "?" in value or "#" in value
+            or not parsed.hostname or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", parsed.hostname)):
+        fail("INVALID_GHOST_ORIGIN")
+    if any(not label or len(label) > 63 or label.startswith("-") or label.endswith("-") for label in parsed.hostname.split(".")):
+        fail("INVALID_GHOST_ORIGIN")
+    canonical = "https://" + parsed.hostname + (":" + str(port) if port is not None else "")
+    if value != canonical or port is not None and not 1 <= port <= 65535:
+        fail("INVALID_GHOST_ORIGIN")
+    return parsed.hostname, port or 443
+
+
+def acquire_readonly_snapshot(config_path, input_root, max_bytes, timeout):
+    """Only GET; never exchanges tokens, follows redirects, retries or imports."""
+    if type(timeout) is not int or not 1 <= timeout <= 120 or type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_SNAPSHOT_LIMITS")
+    config = read_keyed_yaml(config_path, input_root, max_bytes)
+    if set(config) != {"schema_version", "allowed_origin"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+        fail("INVALID_SNAPSHOT_CONFIGURATION")
+    host, port = validated_ghost_origin(config["allowed_origin"])
+    origin = os.environ.get("GHOST_HOST")
+    validated_ghost_origin(origin)
+    if origin != config["allowed_origin"]:
+        fail("GHOST_ORIGIN_NOT_ALLOWLISTED")
+    # A UI Security Token is not a session JWT. Deliberately no POST auth path.
+    bearer = os.environ.get("GHOST_SESSION_BEARER")
+    if not isinstance(bearer, str) or len(bearer) > 16384 or not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", bearer):
+        fail("GHOST_SESSION_BEARER_REQUIRED")
+    connection = None
+    try:
+        connection = http.client.HTTPSConnection(host, port, timeout=timeout, context=ssl.create_default_context())
+        connection.request("GET", "/api/v1/activities", headers={"Authorization": "Bearer " + bearer,
+                                                               "Accept": "application/json", "Accept-Encoding": "identity"})
+        response = connection.getresponse()
+        if 300 <= response.status < 400:
+            fail("GHOST_REDIRECT_REJECTED")
+        if response.status != 200:
+            fail("GHOST_SNAPSHOT_HTTP_REJECTED")
+        if response.getheader("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+            fail("GHOST_SNAPSHOT_CONTENT_TYPE_REJECTED")
+        if response.getheader("Content-Encoding", "identity").strip().lower() != "identity":
+            fail("GHOST_SNAPSHOT_ENCODING_REJECTED")
+        raw = response.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            fail("GHOST_SNAPSHOT_TOO_LARGE")
+    except (OSError, http.client.HTTPException, ValueError):
+        fail("GHOST_SNAPSHOT_TRANSPORT_FAILED")
+    finally:
+        if connection is not None:
+            connection.close()
+    normalized = parse_remote_activity_snapshot(raw)
+    digest = hashlib.sha256(raw).hexdigest()
+    output_root = private_directory("outputs")
+    atomic_private_bytes(output_root / ("ghostfolio-snapshot-" + digest + ".json"), raw)
+    return {"snapshot_activities": len(normalized), "import_ready": False,
+            "blockers": ["SNAPSHOT_REVIEW_REQUIRED", "COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED"]}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1359,8 +1432,16 @@ def main(argv=None):
     review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
     review.add_argument("--input-root", required=True)
     review.add_argument("--max-bytes", type=int, required=True)
+    snapshot = subparsers.add_parser("snapshot", help="Save complete activity JSON with one allowlisted HTTPS GET")
+    snapshot.add_argument("--config", required=True)
+    snapshot.add_argument("--input-root", required=True)
+    snapshot.add_argument("--max-bytes", type=int, required=True)
+    snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "snapshot":
+            print(json.dumps(acquire_readonly_snapshot(args.config, args.input_root, args.max_bytes, args.timeout), sort_keys=True))
+            return 2
         if args.command == "review":
             print(json.dumps(review_local_snapshot(args.config, args.input_root, args.max_bytes), sort_keys=True))
             return 2
