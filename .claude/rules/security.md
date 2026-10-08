@@ -10,4 +10,7 @@
 - SMS 2FA is not automatable; do not design an unattended flow around it.
 - Any new external HTTP/browser automation or credential handling → run `security-review` before merge.
 - Future Ghostfolio transport must validate an exact allowlisted origin and reject redirects,
-  userinfo, query and fragment; the audited IBKR sibling has no `validate_ghost_host` helper.
+  userinfo, query and fragment. The original audited IBKR revision had no
+  `validate_ghost_host` helper; current sibling revisions do. Inspect and pin the
+  actual implementation before selective reuse; historical plan statements are
+  not evidence about current sibling code.

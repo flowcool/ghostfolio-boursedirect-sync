@@ -4,6 +4,10 @@ The approved strict document-import scope includes offline statement/note inspec
 internal EUR trade conversion, stable ledger identity and private `prepare` review plans.
 See [preparation](docs/design/offline-preparation.md); remote adoption and API delivery
 remain gates, and no apply command exists.
+Pure [adoption helpers](docs/design/offline-adoption.md) operate on saved snapshots.
+The [isolated API evidence](docs/design/ghostfolio-api-lab.md) covers basic pinned
+DTO/date/numeric/account behavior, not complete uncertain-write recovery or a
+production destination. Always preserve those readiness boundaries.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 

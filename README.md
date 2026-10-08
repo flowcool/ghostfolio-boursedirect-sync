@@ -88,3 +88,13 @@ local preparation. These artifacts contain private financial details and are
 **not Ghostfolio API payloads**. They remain `import_ready=false` because existing
 activity adoption and isolated API/date/number contracts are not yet verified.
 No `apply` command exists. See the [preparation contract](docs/design/offline-preparation.md).
+
+Pure offline [adoption helpers](docs/design/offline-adoption.md) validate complete
+saved Ghostfolio snapshots and propose explicit reconciliation of existing manual
+activities. They are not yet exposed through a CLI and do not contact Ghostfolio.
+The [pinned disposable API bench](docs/design/ghostfolio-api-lab.md) establishes
+basic numeric/date/marker behavior, account namespace requirements and bounded
+activity deletion. It also demonstrates that HTTP201 can create nothing and that
+bare date strings shift under the server timezone. Full uncertain-write recovery,
+wire serialization, historical holdings and destination validation remain gates;
+these observations do not make preparation artifacts import-ready.

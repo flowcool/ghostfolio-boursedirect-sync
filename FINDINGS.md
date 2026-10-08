@@ -626,3 +626,31 @@ unknown taxes, revisions, ambiguous/identical matches and unsupported operation
 periods fail closed. This does not authorize skipping them or claim all-history
 coverage. Financial conversion, durable identity and isolated API/display proof
 remain later gates, and production application requires separate authorization.
+
+## 14. Offline implementation and isolated destination evidence
+
+The strict offline path now parses monthly HTML and contract notes, matches
+trades exactly, converts explicit EUR BUY/SELL records, assigns stable ledger
+identities and writes private internal preparation artifacts with source-revision
+guards. Pure saved-snapshot adoption helpers require full account/tag/financial
+context and explicit resolutions for existing manual activities. They are not
+yet exposed through a CLI. All artifacts remain not import-ready; there is no
+public HTTP transport or apply command.
+
+The [isolated API report](docs/design/ghostfolio-api-lab.md) records synthetic
+Ghostfolio3.80.2 tests on agentvm-local Docker, without production access. Numeric
+fields, explicit UTC dates and ownership comments survive the tested round trips.
+Identical imports can return HTTP201 with no rows, and native duplicate comparison
+can skip a trade in another account unless its ownership namespace differs.
+Date-only input shifts under Europe/Paris server time; the explicit UTC-midnight
+candidate preserves the calendar day in the operator's Europe/Zurich display
+context. The report distinguishes source/runtime display evidence from a rendered
+UI test and does not claim preservation in every timezone.
+
+Yahoo BUY and a holdings-covered SELL were accepted; an uncovered SELL was
+rejected. Only exact owned synthetic activity IDs were deleted, followed by empty
+readback. Both disposable labs and their owned networks were removed; image
+caches remain. This proves bounded activity compensation, not reversal of all
+asset-profile/market-data effects. Full delayed-request, response-loss and
+crash/replay-fence recovery remain mandatory before any apply capability. The
+existing production portfolio has not been read or written by this work.
