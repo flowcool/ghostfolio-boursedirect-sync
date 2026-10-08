@@ -1,7 +1,7 @@
 # ghostfolio-boursedirect-sync
 
-Offline source-characterization tools for a candidate manual Bourse Direct →
-Ghostfolio importer. The implemented `inspect` command reads monthly statement
+Offline preparation and reconciliation tools for a Bourse Direct → Ghostfolio
+document importer. The implemented `inspect` command reads monthly statement
 HTML, preserves aligned ledger slots and checks cash controls with Decimal.
 Optional `--notes` inputs inspect daily contract notes and match trades exactly.
 Inspection does not submit activities or contact either service. A pure internal
@@ -40,8 +40,9 @@ are for the synthetic bench, not established broker-document limits.
 Save original statement and contract-note HTML locally under ignored `inputs/`
 with private permissions. Do not put account documents in Git or Beads. PDFs,
 pasted plain text and an authenticated URL cannot replace the saved HTML inputs.
-Saved note layout and exact enrichment are evidenced for one month; historical
-coverage and explicit price currencies remain source gates. Florent approved a
+Saved note layout and exact enrichment are evidenced for one month; explicit EUR
+and security mappings are evidenced for that private sample. Complete historical
+coverage and legacy adoption remain gates. Florent approved a
 strict BUY/SELL first version with unsupported periods blocked and existing
 Ghostfolio acquisitions used for adoption; that importer is not delivered yet.
 Florent has also authorized agent-led interactive collection through a private
@@ -97,7 +98,7 @@ No `apply` command exists. See the [preparation contract](docs/design/offline-pr
 
 Pure offline [adoption helpers](docs/design/offline-adoption.md) validate complete
 saved Ghostfolio snapshots and propose explicit reconciliation of existing manual
-activities. They are not yet exposed through a CLI and do not contact Ghostfolio.
+activities. The offline `review` CLI joins these helpers without contacting Ghostfolio.
 The [pinned disposable API bench](docs/design/ghostfolio-api-lab.md) establishes
 basic numeric/date/marker behavior, account namespace requirements and bounded
 activity deletion. It also demonstrates that HTTP201 can create nothing and that
@@ -110,7 +111,11 @@ Pure [wire review](docs/design/offline-wire.md) and
 bytes and uncertainty fences. The [recovery bench](docs/design/ghostfolio-recovery-lab.md)
 demonstrates delayed/lost/partial outcomes in an owned disposable instance.
 [Chronological holdings](docs/design/chronological-holdings.md) checks saved
-history conservatively; no production history has been inspected or written.
+history conservatively. Private actual destination snapshots were captured with
+read-only GET requests; source mappings are evidenced for the sample, while legacy
+dates, one fee discrepancy, explicit adoption and complete acquisition history
+remain blocking. No production activity was written. See [actual evidence](FINDINGS.md#17-source-bound-mappings-and-legacy-duplicate-quarantine)
+and the [legacy duplicate quarantine](docs/plans/2026-10-09-legacy-candidate-quarantine.md).
 
 ## Reconcile against a saved snapshot
 
@@ -140,5 +145,12 @@ environment. It does not exchange a Security Token or renew credentials.
 ```
 
 It makes one GET and saves private raw activity JSON. No import/update/delete or
-authentication POST exists. Current runtime access has not been exercised; tests
-use fake HTTPS responses and forbid real sockets.
+authentication POST exists. Actual read-only evidence used the authorized private
+runtime route described in [FINDINGS.md](FINDINGS.md#16-actual-destination-read-only-evidence);
+the public HTTPS command is tested with fake responses and forbidden real sockets.
+
+This is an offline diagnostic tool, not a delivered automatic sync. Unsupported
+periods and uncertain legacy matches block; no `apply` command exists. Personal
+documents, configuration, outputs and journals stay ignored and private. Independent
+agent PR reviews and synthetic CI are the validation evidence while the repository
+is private; CodeRabbit is not assumed to run in that state.
