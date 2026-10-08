@@ -149,3 +149,32 @@ def test_mutating_original_files_after_read_does_not_change_captured_provenance(
     artifact = yaml.safe_load(output().read_text())
     assert artifact['input_sha256']['prepared'] == hashlib.sha256(captured['prepared.yaml']).hexdigest()
     assert artifact['wire']['activity_count'] == 3
+
+
+@pytest.mark.parametrize('previous', [False, True])
+def test_legacy_quarantine_preserves_inputs_journals_and_previous_output(previous):
+    setup()
+    if previous:
+        run()
+    first = next(iter(prepared().values()))
+    remote = row(first)
+    remote['fee'] += 1
+    remote['date'] = first['operation_date'].isoformat() + 'T13:14:15.123Z'
+    path = Path('inputs/snapshot.json')
+    data = json.loads(path.read_bytes())
+    data['activities'].append(remote)
+    data['count'] += 1
+    path.write_text(json.dumps(data))
+    history = Path('inputs/history.yaml')
+    evidence = yaml.safe_load(history.read_text())
+    evidence['snapshot_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    history.write_text(yaml.safe_dump(evidence))
+    paths = [p for folder in ('inputs', 'state', 'outputs') for p in Path(folder).rglob('*') if p.is_file()]
+    before = {str(p): p.read_bytes() for p in paths}
+    with pytest.raises(RuntimeError, match='^REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED$'):
+        run()
+    after = {str(p): p.read_bytes() for folder in ('inputs', 'state', 'outputs')
+             for p in Path(folder).rglob('*') if p.is_file()}
+    assert after == before
+    assert output().exists() is previous
+    assert not list(Path('state').glob('writes-*.yaml'))

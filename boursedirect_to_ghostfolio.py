@@ -923,6 +923,18 @@ def reconcile_existing_activities(prepared, remote, resolutions):
         if not candidates:
             if event_id in resolutions:
                 fail("STALE_ADOPTION_RESOLUTION")
+            # Different fees/currency or legacy timestamps must not erase a
+            # potential duplicate. This rejects similarity; it never adopts it.
+            day = activity["operation_date"]
+            source_day = datetime.fromisoformat(day.isoformat() if hasattr(day, "isoformat") else day).date()
+            identity = ("target_account_id", "symbol", "data_source", "kind")
+            if any(r["kind"] in ("BUY", "SELL")
+                   and all(r[k] == activity[k] for k in identity)
+                   and r["quantity"] == Decimal(activity["quantity"])
+                   and r["unit_price"] == Decimal(activity["unit_price"])
+                   and abs((datetime.fromisoformat(r["operation_date"]).date() - source_day).days) <= 1
+                   for r in remote):
+                fail("REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED")
             result["new"].append(event_id)
             continue
         resolution = resolutions.get(event_id)

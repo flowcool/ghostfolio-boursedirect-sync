@@ -710,3 +710,32 @@ Neither absent strict-date matches nor a complete GET proves that source trades
 are new, that all mappings are valid, or that earlier acquisitions are complete.
 These remain blocking source/history checks. No apply command exists and Florent
 has explicitly prohibited Ghostfolio writes.
+
+## 17. Source-bound mappings and legacy duplicate quarantine
+
+Exact-ISIN searches against the market-data provider each returned one matching
+stored target symbol for the three source securities. Saved primary exchange
+instrument metadata corroborates the two ISINs absent from the target profiles;
+the third has matching stored ISIN evidence. Provider responses, exchange pages,
+URLs, hashes and target-profile joins remain private. The existing explicit EUR
+confirmation is retained. This supersedes the partial mapping checkpoint above.
+
+The supported monthly sample now prepares three internal activities locally with
+source/target binding and revision journaling. Each source trade has one existing
+target-account candidate with exact type, quantity and price. Their UTC and Paris
+calendar days agree with the notes, but all have nonmidnight timestamps. Two fees
+match exactly; one differs. Similarity does not prove adoption or date provenance.
+
+The [Astra-approved quarantine](docs/plans/2026-10-09-legacy-candidate-quarantine.md)
+blocks new classification when no exact fingerprint exists but an otherwise
+identical target trade lies within one UTC calendar day. It ignores fee, currency,
+ownership and eligibility for this rejection only; existing strict adoption,
+ownership and holdings rules remain. The private sample diagnoses two unverified
+date contexts and one legacy duplicate requiring review. No source trade is
+declared new, no date or fee is rewritten, and no full-history assertion is invented.
+
+The guard is bounded and can reject legitimate repeats. It does not establish
+absence of duplicates outside its predicate, complete acquisition history or
+production readiness. Private preparation/diagnostics are not an import artifact.
+No Ghostfolio write or apply command exists. Independent agent reviews remain the
+review evidence while the repository is private; CodeRabbit is not assumed to run.
