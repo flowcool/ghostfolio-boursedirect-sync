@@ -15,6 +15,9 @@ Pure [wire helpers](docs/design/offline-wire.md) produce exact numeric UTC revie
 bytes and compare POST acceptance; they do not send requests or grant readiness.
 Local [write intent helpers](docs/design/write-intents.md) persist uncertainty
 before a future dispatch; empty readback cannot clear the account fence.
+The [single-event lab core](docs/design/single-event-lab-dispatch.md) holds both
+locks through trusted injected GET/POST/readback and exact transition confirmation;
+it has no apply CLI or production endpoint and does not grant financial readiness.
 The [offline verify command](docs/design/offline-intent-verification.md) observes
 retained journals and saved snapshots without resolution, fence mutation or
 capture-freshness claims; recorded settlement remains distinct from row presence.

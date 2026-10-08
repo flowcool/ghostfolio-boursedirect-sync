@@ -1222,56 +1222,201 @@ def resolve_write_intent(journal, digest, raw_snapshot, completion_evidence=None
     return {**journal, "intents": {**journal["intents"], digest: {**intent, "state": state, "resolution": resolution}}}
 
 
+def _acquire_write_locks(root, binding):
+    target = hashlib.sha256(binding["target_account_id"].encode()).hexdigest()
+    descriptors = []
+    try:
+        for name, code in (("prepare-" + target, "WRITE_TARGET_LOCKED"),
+                           ("account-" + binding["account_key"], "WRITE_ACCOUNT_LOCKED")):
+            descriptor = os.open(root / (name + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            descriptors.append(descriptor)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                fail("INVALID_WRITE_LOCK")
+            os.fchmod(descriptor, 0o600)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                fail(code)
+        return target, descriptors
+    except BaseException:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+        raise
+
+
+def _persist_write_transition_locked(root, binding, target, max_bytes, action, review=None,
+                                     digest=None, raw_snapshot=None, completion_evidence=None):
+    """Internal: caller holds both target and namespace locks."""
+    binding_path = root / ("write-binding-" + binding["account_key"] + ".yaml")
+    if binding_path.exists() or binding_path.is_symlink():
+        if read_keyed_yaml(binding_path, root, max_bytes) != binding:
+            fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    path = root / ("writes-" + target + ".yaml")
+    journal = read_keyed_yaml(path, root, max_bytes) if path.exists() or path.is_symlink() else {"schema_version": 1, "binding": dict(binding), "intents": {}}
+    if journal.get("binding") != binding:
+        fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    if action == "intent":
+        updated = write_intent_transition(journal, review)
+    elif action == "resolve":
+        updated = resolve_write_intent(journal, digest, raw_snapshot, completion_evidence)
+    else:
+        fail("INVALID_WRITE_TRANSITION")
+    encoded = yaml.safe_dump(updated, sort_keys=False, allow_unicode=True).encode("utf-8")
+    if max_bytes <= 0 or len(encoded) > max_bytes:
+        fail("WRITE_JOURNAL_TOO_LARGE")
+    atomic_private_yaml(binding_path, binding)
+    atomic_private_yaml(path, updated)
+    return {"wire_sha256": review["sha256"] if action == "intent" else digest,
+            "account_fenced": any(i["state"] == "uncertain" for i in updated["intents"].values()),
+            "import_ready": False}
+
+
 def persist_write_transition(state_root, binding, max_bytes, action, review=None,
                              digest=None, raw_snapshot=None, completion_evidence=None):
     """Locked local durability boundary only; no dispatch, response or replay API."""
     validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
     root = private_directory(state_root)
-    target = hashlib.sha256(binding["target_account_id"].encode("utf-8")).hexdigest()
-    # Share preparation's target lock. Future transport must revalidate all gates.
-    lock = os.open(root / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
-    namespace_lock = None
+    target, locks = _acquire_write_locks(root, binding)
     try:
-        if not stat.S_ISREG(os.fstat(lock).st_mode):
-            fail("INVALID_WRITE_LOCK")
+        return _persist_write_transition_locked(root, binding, target, max_bytes, action,
+            review=review, digest=digest, raw_snapshot=raw_snapshot, completion_evidence=completion_evidence)
+    finally:
+        for descriptor in reversed(locks):
+            os.close(descriptor)
+
+
+def _dispatch_json(raw, max_bytes):
+    if not isinstance(raw, bytes) or len(raw) > max_bytes:
+        fail("LAB_DISPATCH_BODY_LIMIT_OR_TYPE")
+    try:
+        data = json.loads(raw, parse_float=Decimal, parse_int=Decimal,
+                          parse_constant=lambda value: fail("INVALID_LAB_DISPATCH_JSON"),
+                          object_pairs_hook=unique_json_object)
+    except (ValueError, TypeError, RecursionError, InvalidOperation):
+        fail("INVALID_LAB_DISPATCH_JSON")
+    pending = [data]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, Decimal):
+            bound_decimal_shape(value, max_bytes)
+    return data
+
+
+def _dispatch_snapshot(raw, max_bytes):
+    # Separate richer comparison context; existing normalizer schema is unchanged.
+    _dispatch_json(raw, max_bytes)
+    try:
+        normalized = bounded_remote_snapshot(raw, max_bytes)
+    except (ValueError, OverflowError, InvalidOperation):
+        fail("INVALID_LAB_DISPATCH_SNAPSHOT")
+    original = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+    semantic = {}
+    for row, source in zip(normalized, original["activities"]):
+        contexts = []
+        for context in (source, source["account"]):
+            contexts.append(None if context is None else {
+                "flags": {k: (k in context, context.get(k)) for k in ("isDraft", "isExcluded")},
+                "tags": sorted(t["id"] for t in context["tags"])})
+        profile = source["assetProfile"] if "assetProfile" in source else source.get("SymbolProfile")
+        semantic[row["remote_id"]] = {**row,
+            "full_utc_instant": datetime.fromisoformat(source["date"].replace("Z", "+00:00")).astimezone(timezone.utc).isoformat(),
+            "persistent_context": contexts,
+            "profile_identity": None if not isinstance(profile, dict) else {
+                k: (k in profile, profile.get(k)) for k in ("id", "symbol", "dataSource", "currency")}}
+    return semantic
+
+
+def dispatch_single_lab_intent(state_root, binding, reviewed, baseline_raw, max_bytes, request):
+    """Trusted owned-lab callback only; no apply CLI or production authorization."""
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_LAB_DISPATCH_LIMIT")
+    if not isinstance(reviewed, dict) or not isinstance(reviewed.get("body"), bytes) or len(reviewed["body"]) > max_bytes:
+        fail("LAB_DISPATCH_BODY_LIMIT_OR_TYPE")
+    _dispatch_json(reviewed["body"], max_bytes)
+    expected = reviewed_wire_rows(reviewed)
+    if len(expected) != 1:
+        fail("LAB_DISPATCH_SINGLE_ACTIVITY_REQUIRED")
+    validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
+    marker, sent = next(iter(expected.items()))
+    if sent["accountId"] != binding["target_account_id"] or marker.split("#")[2] != binding["account_key"]:
+        fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    baseline = _dispatch_snapshot(baseline_raw, max_bytes)
+    if any(row["comment"] == marker for row in baseline.values()):
+        fail("LAB_DISPATCH_MARKER_ALREADY_PRESENT")
+    if datetime.fromisoformat(sent["date"].replace("Z", "+00:00")) > datetime.now(timezone.utc):
+        fail("LAB_DISPATCH_FUTURE_ACTIVITY")
+    def call(method, body=None):
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            fail("WRITE_TARGET_LOCKED")
-        namespace_lock = os.open(root / ("account-" + binding["account_key"] + ".lock"),
-                                 os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
-        if not stat.S_ISREG(os.fstat(namespace_lock).st_mode):
-            fail("INVALID_WRITE_LOCK")
-        try:
-            fcntl.flock(namespace_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            fail("WRITE_ACCOUNT_LOCKED")
+            response = request(method, "/api/v1/import" if method == "POST" else "/api/v1/activities", body)
+        except Exception:
+            raise RuntimeError("LAB_DISPATCH_TRANSPORT_FAILED") from None
+        if not isinstance(response, tuple) or len(response) != 2 or type(response[0]) is not int or not isinstance(response[1], bytes):
+            fail("LAB_DISPATCH_RESPONSE_INVALID")
+        if len(response[1]) > max_bytes:
+            fail("LAB_DISPATCH_RESPONSE_TOO_LARGE")
+        return response
+    root = private_directory(state_root)
+    target, locks = _acquire_write_locks(root, binding)
+    try:
         binding_path = root / ("write-binding-" + binding["account_key"] + ".yaml")
-        if binding_path.exists() or binding_path.is_symlink():
-            if read_keyed_yaml(binding_path, root, max_bytes) != binding:
-                fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        if (binding_path.exists() or binding_path.is_symlink()) and read_keyed_yaml(binding_path, root, max_bytes) != binding:
+            fail("WRITE_JOURNAL_BINDING_CONFLICT")
         path = root / ("writes-" + target + ".yaml")
         journal = read_keyed_yaml(path, root, max_bytes) if path.exists() or path.is_symlink() else {"schema_version": 1, "binding": dict(binding), "intents": {}}
         if journal.get("binding") != binding:
             fail("WRITE_JOURNAL_BINDING_CONFLICT")
-        if action == "intent":
-            updated = write_intent_transition(journal, review)
-        elif action == "resolve":
-            updated = resolve_write_intent(journal, digest, raw_snapshot, completion_evidence)
-        else:
-            fail("INVALID_WRITE_TRANSITION")
-        encoded = yaml.safe_dump(updated, sort_keys=False, allow_unicode=True).encode("utf-8")
-        if max_bytes <= 0 or len(encoded) > max_bytes:
-            fail("WRITE_JOURNAL_TOO_LARGE")
-        atomic_private_yaml(binding_path, binding)
-        atomic_private_yaml(path, updated)
-        return {"wire_sha256": review["sha256"] if action == "intent" else digest,
-                "account_fenced": any(i["state"] == "uncertain" for i in updated["intents"].values()),
-                "import_ready": False}
+        # All fences and tombstones must reject before even the first GET.
+        write_intent_transition(journal, reviewed)
+        status, raw = call("GET")
+        if status != 200 or _dispatch_snapshot(raw, max_bytes) != baseline:
+            fail("LAB_DISPATCH_BASELINE_CHANGED")
+        try:
+            _persist_write_transition_locked(root, binding, target, max_bytes, "intent", review=reviewed)
+        except OSError:
+            raise RuntimeError("LAB_DISPATCH_PERSISTENCE_FAILED") from None
+        status, raw = call("POST", reviewed["body"])
+        if status != 201:
+            fail("LAB_DISPATCH_ACCEPTANCE_FAILED")
+        _dispatch_json(raw, max_bytes)
+        try:
+            comparison = compare_import_response(reviewed, raw)
+        except (InvalidOperation, ValueError, OverflowError, TypeError):
+            fail("LAB_DISPATCH_ACCEPTANCE_FAILED")
+        if comparison["status"] != "complete" or set(comparison["accepted"]) != {marker}:
+            fail("LAB_DISPATCH_ACCEPTANCE_FAILED")
+        remote_id = comparison["accepted"][marker]
+        if remote_id in baseline:
+            fail("LAB_DISPATCH_ACCEPTED_ID_ALREADY_PRESENT")
+        status, raw = call("GET")
+        if status != 200:
+            fail("LAB_DISPATCH_READBACK_FAILED")
+        readback = _dispatch_snapshot(raw, max_bytes)
+        if (set(readback) != set(baseline) | {remote_id}
+                or any(readback[k] != v for k, v in baseline.items())):
+            fail("LAB_DISPATCH_TRANSITION_CONFLICT")
+        row = readback[remote_id]
+        wanted = {"target_account_id": sent["accountId"], "operation_date": sent["date"][:10],
+            "kind": sent["type"], "symbol": sent["symbol"], "data_source": sent["dataSource"],
+            "price_currency": sent["currency"], "quantity": remote_decimal(sent["quantity"]),
+            "unit_price": remote_decimal(sent["unitPrice"]), "fee": remote_decimal(sent["fee"])}
+        if (row["comment"] != marker or not row["active"] or not row["date_context_verified"]
+                or not row["financial_context_verified"]
+                or activity_financial_fingerprint(row) != activity_financial_fingerprint(wanted)
+                or sum(r["comment"] == marker for r in readback.values()) != 1):
+            fail("LAB_DISPATCH_TRANSITION_CONFLICT")
+        try:
+            _persist_write_transition_locked(root, binding, target, max_bytes, "resolve",
+                digest=reviewed["sha256"], raw_snapshot=raw)
+        except OSError:
+            raise RuntimeError("LAB_DISPATCH_PERSISTENCE_FAILED") from None
+        return {"accepted": 1, "readback": raw, "import_ready": False}
     finally:
-        if namespace_lock is not None:
-            os.close(namespace_lock)
-        os.close(lock)
+        for descriptor in reversed(locks):
+            os.close(descriptor)
 
 
 def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence):
@@ -1518,26 +1663,33 @@ def review_local_snapshot(config_path, input_root, max_bytes):
             "import_ready": False, "blockers": artifact["blockers"]}
 
 
+def bound_decimal_shape(number, max_bytes):
+    if not number:
+        return
+    sign, digits, exponent = number.as_tuple()
+    point = len(digits) + exponent
+    length = (point if exponent >= 0 else len(digits) + 1 if point > 0 else 2 - exponent) + sign
+    if length > min(VERIFICATION_DECIMAL_CHAR_LIMIT, max_bytes):
+        fail("VERIFICATION_DECIMAL_LIMIT_EXCEEDED")
+
+
+def bounded_remote_snapshot(raw, max_bytes):
+    try:
+        rows = parse_remote_activity_snapshot(raw)
+    except InvalidOperation:
+        fail("INVALID_REMOTE_ACTIVITY_JSON")
+    for row in rows:
+        for key in ("quantity", "unit_price", "fee"):
+            bound_decimal_shape(row[key], max_bytes)
+    return rows
+
+
 def observe_retained_intents(captures, max_bytes):
     """Pure bounded observations from captured journal/snapshot bytes."""
     journal = parse_keyed_yaml(captures["journal"])
     validate_write_journal(journal)
     started = datetime.now(timezone.utc).isoformat()
-    try:
-        remote = parse_remote_activity_snapshot(captures["snapshot"])
-    except InvalidOperation:
-        fail("INVALID_REMOTE_ACTIVITY_JSON")
-    # Bound scientific exponent expansion before any fixed-point formatting.
-    for row in remote:
-        for key in ("quantity", "unit_price", "fee"):
-            number = row[key]
-            if not number:
-                continue
-            sign, digits, exponent = number.as_tuple()
-            point = len(digits) + exponent
-            length = (point if exponent >= 0 else len(digits) + 1 if point > 0 else 2 - exponent) + sign
-            if length > min(VERIFICATION_DECIMAL_CHAR_LIMIT, max_bytes):
-                fail("VERIFICATION_DECIMAL_LIMIT_EXCEEDED")
+    remote = bounded_remote_snapshot(captures["snapshot"], max_bytes)
     rows_by_id = {r["remote_id"]: r for r in remote}
     rows_by_marker = {}
     for row in remote:
