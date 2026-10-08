@@ -685,3 +685,28 @@ GitHub now hosts the project privately. Changes pass independent PR review and
 versioned synthetic offline CI; a rate-limited bot status is never counted as a
 completed review. Private source/output/state never belong in the repository.
 Live review/ticket status remains canonical in Beads/Git rather than this report.
+
+## 16. Actual destination read-only evidence
+
+The earlier destination-access checkpoint is superseded. Canonical CMDB and
+UGreen Compose led to an existing runtime bearer, allowing exactly two private
+GET captures: complete activities and accounts. The running destination is
+Ghostfolio3.81.0 with Europe/Paris server timezone. No authentication POST,
+activity write, restart or deployment occurred. Credentials were consumed from
+the runtime environment; personal responses remain ignored private evidence.
+
+Actual nullable currency and unassigned-account records required the
+[source-proven compatibility contract](docs/design/remote-schema-compatibility.md).
+The complete saved response now normalizes without replacing raw financial
+numbers. Unsupported FX/zero-price contexts remain quarantined at financial
+gates. Synthetic tests and independent security/financial review verify this
+compatibility change; they do not authorize an actual import.
+
+The target PEA account is uniquely identified in private account evidence.
+Historical timestamps mix exact UTC midnight, Europe/Paris midnight and other
+instants. Current server timezone cannot prove the original operation calendar
+day. Stored ISIN evidence proves only part of the three source-security mappings.
+Neither absent strict-date matches nor a complete GET proves that source trades
+are new, that all mappings are valid, or that earlier acquisitions are complete.
+These remain blocking source/history checks. No apply command exists and Florent
+has explicitly prohibited Ghostfolio writes.
