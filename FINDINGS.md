@@ -588,9 +588,11 @@ to retry. Focus by `getElementById` corrected the selection and a deliberate fre
 session completed one password and one TOTP successfully. Unknown/rejected
 submissions remain non-resumable. All exploration code stays private and ignored.
 
-The close RPC returned an error, so cleanup relies on the independently observed
-container state: Puppet is exited with no published ports; owned vault container
-and network are absent; no private capture/control file appears in container diff.
+Normal close completed with controller exit code 0. The redundant final close
+reported a disposed-context error; the private worker now clears closed handles
+so cleanup is idempotent. Independently observed state confirms Puppet is exited
+with no published ports; owned vault container and network are absent; no private
+capture/control file appears in container diff.
 No raw document, password, OTP seed, token or cookie was committed. No financial
 transaction, broker preference change or Ghostfolio production write occurred.
 
