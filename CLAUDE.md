@@ -24,6 +24,9 @@ quiescence and the remaining financial/security gates are separate obligations.
 The [3.81.0 parity bench](docs/design/ghostfolio-381-parity.md) repeats selected
 API and uncertain-write scenarios at the observed destination version; it remains
 isolated evidence, not production authorization or complete delivery acceptance.
+The [synthetic import lifecycle](docs/design/synthetic-import-lifecycle.md) joins
+saved document preparation to exact lab acceptance/readback and a zero-new second
+review. Real legacy history and an application dispatcher remain separate gates.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 
