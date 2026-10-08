@@ -52,8 +52,8 @@ The output destination must not resolve to, or share an existing hard-link inode
 with, config/prepared/snapshot/resolutions/history-evidence input. Such collisions
 fail with `OUTPUT_INPUT_COLLISION` before publication, preserving captured inputs
 and the previous destination. This applies when input-root includes outputs too.
-Path-resolution failures, including output symlink loops, use `INVALID_OUTPUT_PATH`
-without logging the underlying path.
+Path-resolution failures use `INVALID_OUTPUT_PATH`; a symlink refused by atomic
+publication uses `SYMLINK_PRIVATE_FILE`. Neither logs the underlying path.
 Neither creating this file nor its digest authorizes apply. Source approval,
 actual destination/account/profile/date version, security review, production
 permission and independently verified recovery still stand. A review captures

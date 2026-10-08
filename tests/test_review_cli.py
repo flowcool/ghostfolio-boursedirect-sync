@@ -222,6 +222,14 @@ def test_output_symlink_loop_reports_safe_code_without_path(command, capsys, cap
         Path('inputs/review.yaml').write_text(yaml.safe_dump(config))
     assert bd.main([command, '--config', 'inputs/review.yaml', '--input-root', 'inputs', '--max-bytes', '100000']) == 1
     assert capsys.readouterr().out == ''
-    assert 'INVALID_OUTPUT_PATH' in caplog.text
+    assert 'SYMLINK_PRIVATE_FILE' in caplog.text
     assert str(destination) not in caplog.text
     assert destination.is_symlink()
+
+
+def test_collision_guard_sanitizes_path_resolver_exception(monkeypatch):
+    def fail_resolution(*args, **kwargs):
+        raise RuntimeError('Underlying resolver includes a private path')
+    monkeypatch.setattr(Path, 'resolve', fail_resolution)
+    with pytest.raises(RuntimeError, match='^INVALID_OUTPUT_PATH$'):
+        bd.reject_output_input_collision('output.yaml', ['input.json'])
