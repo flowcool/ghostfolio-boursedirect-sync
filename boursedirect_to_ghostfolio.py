@@ -1337,9 +1337,13 @@ def validated_prepared_review(raw):
 
 def reject_output_input_collision(destination, input_paths):
     destination = Path(destination)
-    for path in input_paths:
-        path = Path(path)
-        if destination.resolve() == path.resolve() or destination.exists() and destination.samefile(path):
+    try:
+        resolved = destination.resolve()
+        paths = [(Path(path), Path(path).resolve()) for path in input_paths]
+    except (OSError, RuntimeError):
+        fail("INVALID_OUTPUT_PATH")
+    for path, source in paths:
+        if resolved == source or destination.exists() and destination.samefile(path):
             fail("OUTPUT_INPUT_COLLISION")
 
 
@@ -1480,7 +1484,10 @@ def review_local_snapshot(config_path, input_root, max_bytes):
                 "holdings": {k: v for k, v in coverage.items() if k != "adoption"},
                 "wire": None if wire is None else {"body_utf8": wire["body"].decode("utf-8"),
                                                     "sha256": wire["sha256"], "activity_count": len(new)}}
-    output_root = private_directory("outputs")
+    output = Path("outputs") / ("review-" + prepared["account_key"] + ".yaml")
+    reject_output_input_collision(output, [Path(config_path),
+                                  *(Path(input_root) / config[k] for k in ("prepared", "snapshot", "resolutions", "history_evidence"))])
+    private_directory("outputs")
     state = private_directory("state")
     target = hashlib.sha256(prepared["target_account_id"].encode("utf-8")).hexdigest()
     lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
@@ -1491,7 +1498,7 @@ def review_local_snapshot(config_path, input_root, max_bytes):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             fail("REVIEW_TARGET_LOCKED")
-        atomic_private_yaml(output_root / ("review-" + prepared["account_key"] + ".yaml"), artifact)
+        atomic_private_yaml(output, artifact)
     finally:
         os.close(lock)
     return {"new_activities": len(new), "owned_activities": len(adoption["owned"]),

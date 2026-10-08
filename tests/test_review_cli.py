@@ -178,3 +178,50 @@ def test_legacy_quarantine_preserves_inputs_journals_and_previous_output(previou
     assert after == before
     assert output().exists() is previous
     assert not list(Path('state').glob('writes-*.yaml'))
+
+
+@pytest.mark.parametrize('kind', ['config', 'prepared', 'snapshot', 'resolutions', 'history_evidence'])
+def test_output_cannot_replace_any_captured_review_input(kind):
+    original = setup()
+    config = {key: value if key == 'schema_version' else 'inputs/' + value for key, value in original.items()}
+    config_path = Path('inputs/review.yaml')
+    if kind == 'config':
+        config_path = output()
+        config_path.write_text(yaml.safe_dump(config))
+    else:
+        output().write_bytes(Path(config[kind]).read_bytes())
+        config[kind] = str(output())
+        config_path.write_text(yaml.safe_dump(config))
+    before = {str(p): p.read_bytes() for folder in ('inputs', 'outputs', 'state')
+              for p in Path(folder).rglob('*') if p.is_file()}
+    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+        bd.review_local_snapshot(config_path, '.', 100000)
+    after = {str(p): p.read_bytes() for folder in ('inputs', 'outputs', 'state')
+             for p in Path(folder).rglob('*') if p.is_file()}
+    assert after == before
+
+
+def test_review_rejects_existing_hardlink_to_captured_snapshot():
+    setup()
+    output().hardlink_to(Path('inputs/snapshot.json'))
+    before = {str(p): p.read_bytes() for folder in ('inputs', 'outputs', 'state')
+              for p in Path(folder).rglob('*') if p.is_file()}
+    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+        run()
+    assert before == {str(p): p.read_bytes() for folder in ('inputs', 'outputs', 'state')
+                      for p in Path(folder).rglob('*') if p.is_file()}
+
+
+@pytest.mark.parametrize('command', ['review', 'diagnose'])
+def test_output_symlink_loop_reports_safe_code_without_path(command, capsys, caplog):
+    setup()
+    destination = Path('outputs/' + ('review-' if command == 'review' else 'diagnosis-') + ACCOUNT + '.yaml')
+    destination.symlink_to(destination.name)
+    if command == 'diagnose':
+        config = {'schema_version': 1, 'prepared': 'prepared.yaml', 'snapshot': 'snapshot.json'}
+        Path('inputs/review.yaml').write_text(yaml.safe_dump(config))
+    assert bd.main([command, '--config', 'inputs/review.yaml', '--input-root', 'inputs', '--max-bytes', '100000']) == 1
+    assert capsys.readouterr().out == ''
+    assert 'INVALID_OUTPUT_PATH' in caplog.text
+    assert str(destination) not in caplog.text
+    assert destination.is_symlink()

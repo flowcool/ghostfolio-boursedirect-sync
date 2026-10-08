@@ -41,6 +41,8 @@ at most ten thousand candidate references are materialized; encoded
 report size cannot exceed max-bytes. Exceeding a budget fails without truncation.
 Invalid inputs, lock conflicts and collision/budget failures preserve a previous
 report. Input bytes and preparation/intent journals are never rewritten.
+Path-resolution failures use a fixed `INVALID_OUTPUT_PATH` code rather than logging
+paths from an underlying exception.
 
 There is no emitted wire body, new-activity list, adoption resolution, holdings
 verdict or write intent. Shared preparation validation may transiently validate
