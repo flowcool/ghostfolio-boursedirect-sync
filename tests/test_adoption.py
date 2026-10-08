@@ -217,5 +217,70 @@ def test_incomplete_eligibility_context_and_timezone_fail():
 def test_remote_quote_currency_conflict_not_interpreted_as_conversion():
     item = row(next(iter(prepared().values())))
     item['assetProfile']['currency'] = 'USD'
-    with pytest.raises(RuntimeError, match='REMOTE_TRADE_CURRENCY_CONTEXT_CONFLICT'):
+    parsed = snapshot([item])
+    assert parsed[0]['price_currency'] == 'EUR'
+    assert parsed[0]['financial_context_verified'] is False
+    with pytest.raises(RuntimeError, match='REMOTE_CANDIDATE_CONTEXT_UNVERIFIED'):
+        bd.reconcile_existing_activities(prepared(), parsed, {})
+
+
+def test_explicit_null_currency_uses_proven_profile_default():
+    plan = prepared()
+    item = row(next(iter(plan.values())), owned=True)
+    item['currency'] = None
+    parsed = snapshot([item])
+    assert parsed[0]['price_currency'] == 'EUR'
+    assert parsed[0]['currency_origin'] == 'asset_profile_default'
+    assert parsed[0]['financial_context_verified'] is True
+    assert len(bd.reconcile_existing_activities(plan, parsed, {})['owned']) == 1
+
+
+def test_absent_currency_does_not_get_null_inheritance():
+    item = row(next(iter(prepared().values())))
+    del item['currency']
+    with pytest.raises(RuntimeError, match='REMOTE_ACTIVITY_CONTEXT_MISSING'):
         snapshot([item])
+
+
+@pytest.mark.parametrize('profile', [None, {}, {'currency': None}])
+def test_null_currency_requires_actual_profile_currency(profile):
+    item = row(next(iter(prepared().values())))
+    item['currency'], item['assetProfile'] = None, profile
+    with pytest.raises(RuntimeError):
+        snapshot([item])
+
+
+def test_unassigned_account_pair_preserved_but_never_owned_or_holdings_active():
+    plan = prepared()
+    item = row(next(iter(plan.values())))
+    item['accountId'], item['account'] = None, None
+    parsed = snapshot([item])
+    assert parsed[0]['target_account_id'] is None and parsed[0]['active'] is False
+    assert len(bd.reconcile_existing_activities(plan, parsed, {})['new']) == 3
+    item['comment'] = next(iter(plan))
+    with pytest.raises(RuntimeError, match='REMOTE_OWNED_ACTIVITY_CONFLICT'):
+        bd.reconcile_existing_activities(plan, snapshot([item]), {})
+
+
+@pytest.mark.parametrize('change', ['missing-account', 'missing-id', 'null-id-object', 'id-null-account'])
+def test_unassigned_account_cannot_excuse_missing_or_conflicting_context(change):
+    item = row(next(iter(prepared().values())))
+    if change == 'missing-account':
+        item['accountId'] = None
+        del item['account']
+    elif change == 'missing-id':
+        del item['accountId']
+        item['account'] = None
+    elif change == 'null-id-object':
+        item['accountId'] = None
+    else:
+        item['account'] = None
+    with pytest.raises(RuntimeError):
+        snapshot([item])
+
+
+def test_zero_price_history_is_preserved_but_not_financially_verified():
+    item = row(next(iter(prepared().values())))
+    item['unitPrice'] = 0
+    parsed = snapshot([item])
+    assert parsed[0]['unit_price'] == 0 and parsed[0]['financial_context_verified'] is False

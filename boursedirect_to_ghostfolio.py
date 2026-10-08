@@ -785,13 +785,14 @@ def remote_decimal(value):
 
 def remote_active_context(activity):
     account = activity.get("account")
-    if not isinstance(account, dict):
+    unassigned = activity.get("accountId") is None and "account" in activity and account is None
+    if not unassigned and not isinstance(account, dict):
         fail("REMOTE_ACCOUNT_CONTEXT_MISSING")
-    if account.get("id") != activity["accountId"]:
+    if not unassigned and account.get("id") != activity["accountId"]:
         fail("REMOTE_ACCOUNT_CONTEXT_CONFLICT")
-    inactive = False
+    inactive = unassigned
     reserved = {"0c077abd-eca2-4cbb-818c-6cefbf2d169a", "f2e868af-8333-459f-b161-cbc6544c24bd"}
-    for context in (activity, account):
+    for context in (activity,) if unassigned else (activity, account):
         for flag in ("isDraft", "isExcluded"):
             if flag in context:
                 if not isinstance(context[flag], bool):
@@ -818,9 +819,20 @@ def parse_remote_activity_snapshot(raw):
     for row in data["activities"]:
         if not isinstance(row, dict):
             fail("INVALID_REMOTE_ACTIVITY_SNAPSHOT")
-        for key in ("id", "accountId", "type", "currency", "date"):
+        for key in ("id", "type", "date"):
             if not isinstance(row.get(key), str) or not row[key].strip():
                 fail("REMOTE_ACTIVITY_CONTEXT_MISSING")
+        if "accountId" not in row or row["accountId"] is not None and (not isinstance(row["accountId"], str) or not row["accountId"].strip()):
+            fail("REMOTE_ACTIVITY_CONTEXT_MISSING")
+        if row["accountId"] is None and ("account" not in row or row["account"] is not None):
+            fail("REMOTE_ACCOUNT_CONTEXT_CONFLICT")
+        profile = row["assetProfile"] if "assetProfile" in row else row.get("SymbolProfile")
+        if "currency" not in row:
+            fail("REMOTE_ACTIVITY_CONTEXT_MISSING")
+        inherited_currency = row["currency"] is None
+        price_currency = profile.get("currency") if inherited_currency and isinstance(profile, dict) else row["currency"]
+        if not isinstance(price_currency, str) or not price_currency.strip():
+            fail("REMOTE_ACTIVITY_CONTEXT_MISSING")
         if row["id"] in seen:
             fail("REMOTE_ACTIVITY_ID_DUPLICATE")
         seen.add(row["id"])
@@ -836,23 +848,24 @@ def parse_remote_activity_snapshot(raw):
             fail("REMOTE_ACTIVITY_TIMEZONE_MISSING")
         utc = instant.astimezone(timezone.utc)
         active = active and utc <= datetime.now(timezone.utc)
+        financial_context_verified = True
         if row["type"] in ("BUY", "SELL"):
-            if amount["quantity"] <= 0 or amount["unitPrice"] <= 0 or amount["fee"] < 0:
+            if amount["quantity"] <= 0 or amount["unitPrice"] < 0 or amount["fee"] < 0:
                 fail("INVALID_REMOTE_TRADE_AMOUNT")
-            profile = row["assetProfile"] if "assetProfile" in row else row.get("SymbolProfile")
             if not isinstance(profile, dict):
                 fail("REMOTE_ASSET_PROFILE_INVALID")
             for key in ("symbol", "dataSource", "currency"):
                 if not isinstance(profile.get(key), str) or not profile[key].strip():
                     fail("REMOTE_ASSET_PROFILE_INVALID")
-            if profile["currency"] != row["currency"]:
-                fail("REMOTE_TRADE_CURRENCY_CONTEXT_CONFLICT")
+            financial_context_verified = profile["currency"] == price_currency and amount["unitPrice"] > 0
             symbol, source = profile["symbol"], profile["dataSource"]
         else:
             symbol, source = None, None
         normalized.append({"remote_id": row["id"], "target_account_id": row["accountId"],
                            "kind": row["type"], "symbol": symbol, "data_source": source,
-                           "price_currency": row["currency"], "quantity": amount["quantity"],
+                           "price_currency": price_currency, "quantity": amount["quantity"],
+                           "currency_origin": "asset_profile_default" if inherited_currency else "explicit",
+                           "financial_context_verified": financial_context_verified,
                            "unit_price": amount["unitPrice"], "fee": amount["fee"],
                            "operation_date": utc.date().isoformat(),
                            "date_context_verified": utc.hour == utc.minute == utc.second == utc.microsecond == 0,
@@ -896,7 +909,7 @@ def reconcile_existing_activities(prepared, remote, resolutions):
         fingerprint = activity_financial_fingerprint(activity)
         if event_id in owned:
             row = owned[event_id]
-            if not row["active"] or not row["date_context_verified"] or activity_financial_fingerprint(row) != fingerprint:
+            if not row["active"] or not row["date_context_verified"] or not row["financial_context_verified"] or activity_financial_fingerprint(row) != fingerprint:
                 fail("REMOTE_OWNED_ACTIVITY_CONFLICT")
             if event_id in resolutions:
                 fail("STALE_ADOPTION_RESOLUTION")
@@ -905,7 +918,7 @@ def reconcile_existing_activities(prepared, remote, resolutions):
             continue
         candidates = [r for r in remote if r["kind"] in ("BUY", "SELL") and r["target_account_id"] == activity["target_account_id"]
                       and activity_financial_fingerprint(r) == fingerprint]
-        if any(not r["active"] or not r["date_context_verified"] for r in candidates):
+        if any(not r["active"] or not r["date_context_verified"] or not r["financial_context_verified"] for r in candidates):
             fail("REMOTE_CANDIDATE_CONTEXT_UNVERIFIED")
         if not candidates:
             if event_id in resolutions:
@@ -1157,7 +1170,7 @@ def resolve_write_intent(journal, digest, raw_snapshot, completion_evidence=None
     expected = reviewed_wire_rows(review)
     normalized = parse_remote_activity_snapshot(raw_snapshot)
     selected = [r for r in normalized if r["comment"] in expected]
-    if any(not r["active"] or not r["date_context_verified"] for r in selected):
+    if any(not r["active"] or not r["date_context_verified"] or not r["financial_context_verified"] for r in selected):
         fail("WRITE_READBACK_CONTEXT_CONFLICT")
     accepted = {}
     for row in selected:
@@ -1259,7 +1272,7 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
             fail("UNSUPPORTED_HOLDINGS_ACTIVITY")
         if row["symbol"] not in symbols:
             continue
-        if not row["date_context_verified"] or row["data_source"] != "YAHOO" or row["price_currency"] != "EUR":
+        if not row["date_context_verified"] or not row["financial_context_verified"] or row["data_source"] != "YAHOO" or row["price_currency"] != "EUR":
             fail("HOLDINGS_SECURITY_OR_DATE_CONTEXT_UNVERIFIED")
         events.append(row)
     for marker in adoption["new"]:
