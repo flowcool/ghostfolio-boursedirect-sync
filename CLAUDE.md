@@ -18,6 +18,9 @@ before a future dispatch; empty readback cannot clear the account fence.
 The [offline verify command](docs/design/offline-intent-verification.md) observes
 retained journals and saved snapshots without resolution, fence mutation or
 capture-freshness claims; recorded settlement remains distinct from row presence.
+The [offline compensation candidate command](docs/design/offline-compensation-candidates.md)
+selects exact recorded-ID associations only; it establishes neither creation
+provenance nor deletion authority and sends no requests.
 The [isolated API evidence](docs/design/ghostfolio-api-lab.md) covers basic pinned
 DTO/date/numeric/account behavior, not complete uncertain-write recovery or a
 production destination. Always preserve those readiness boundaries.
