@@ -525,3 +525,85 @@ cleanup verification is recorded in the source-acceptance Bead. Financial
 transactions, broker settings and Ghostfolio production writes were untouched.
 These observations do not satisfy full G1 acceptance; infrastructure
 authentication success alone is not the source-coverage verdict.
+
+
+## 13. Resumed source characterization — 2026-10-08
+
+**Verdict: monthly HTML plus daily contract notes is a technically viable source
+for a strict trade importer. Complete source acceptance is conditional: explicit
+price-currency evidence, approved coverage and existing-history adoption remain
+gates. A full-history/all-operation sync is not established.**
+
+### Saved-document evidence
+
+- Two daily contract-note HTML documents contain one BUY and two SELL operations.
+  Both sales share a daily document and remain distinct groups. Each of the three
+  monthly trades has exactly one note match on date, type, absolute quantity,
+  unit price and debit/credit amount. No name-based security matching is needed.
+- Each note supplies an ISIN-shaped identifier, quantity, course, gross,
+  brokerage, VAT, execution time and venue. For all three observed trades, gross
+  equals absolute quantity times course; buy debit equals gross plus brokerage
+  and VAT; sell credit equals gross minus brokerage and VAT. This confirms only
+  the observed components, not every possible tax or fee.
+- Note HTML has the same four parallel date/designation/debit/credit columns as
+  the statement. Designation slots contain nested three-cell field tables.
+  Blank slots are significant: one-operation and two-operation samples have
+  nine and eighteen slots respectively. There is no observed unique operation
+  reference; execution-time timezone and settlement-date semantics are unresolved.
+- The debit/credit headers explicitly use EUR. Neither inspected note labels
+  course or gross with a separate currency or provides an FX rate. Numerical
+  agreement and a EUR account are insufficient proof for arbitrary instruments.
+  Currency must be established explicitly before creating an activity; unsupported
+  currencies/taxes must block rather than be inferred from a venue or net gap.
+- July, August and September monthly HTML reconciles independently. Both adjacent
+  closing/opening cash balances agree exactly. July has four recognized BUYs and
+  twelve unclassified rows; August has two unclassified rows. Coupon, split and
+  securities-withdrawal categories are observed. They are evidence of coverage,
+  not approved financial mappings. Some other labels remain unclassified.
+- The earliest offered January 2025 statement was opened and saved; its ledger
+  reconciles (seven BUYs, six SELLs, eight unclassified rows). This proves that
+  endpoint month is obtainable, not continuity of all intervening months or
+  lifetime retention. Contract-note calendar history depth is still unverified.
+- Florent confirms acquisitions before the offered history are already in
+  Ghostfolio. Existing activities therefore supply the proposed opening history;
+  G4 must verify coverage and reconcile manual entries without duplicate import.
+  No production Ghostfolio query or write was performed here.
+
+### Evidence handling and acquisition recovery
+
+All six financial documents are private browser-DOM serializations under ignored
+`inputs/`, with hashes in its private manifest. Original HTTP bytes and statement
+revision behavior remain unverified. Public fixtures
+`tests/fixtures/note-buy-synthetic.html` and
+`tests/fixtures/note-multi-sell-synthetic.html` reproduce the observed slot and
+nested-field layout with invented identities, dates and financial values.
+Their arithmetic is checked offline; they do not establish a production parser.
+
+The resumed pilot first failed before OTP submission: the confirmed first input
+ID began with a digit, but the old worker used a raw CSS `#ID` selector. The
+selector-equality guard and an isolated synthetic Chromium reproduction establish
+that this path could not type the first digit or reach confirmation. The private
+journal retains that attempt with a pre-submit reconciliation; it was not erased
+to retry. Focus by `getElementById` corrected the selection and a deliberate fresh
+session completed one password and one TOTP successfully. Unknown/rejected
+submissions remain non-resumable. All exploration code stays private and ignored.
+
+The close RPC returned an error, so cleanup relies on the independently observed
+container state: Puppet is exited with no published ports; owned vault container
+and network are absent; no private capture/control file appears in container diff.
+No raw document, password, OTP seed, token or cookie was committed. No financial
+transaction, broker preference change or Ghostfolio production write occurred.
+
+### Scope recommendation and unresolved gates
+
+Proceed with the existing reviewed design only for a first explicitly accepted
+BUY/SELL boundary: unique note matching, validated instrument currency and ISIN
+mapping, exact explicit costs, existing-history reconciliation, and blocking of
+unsupported account periods. Do not silently skip coupons, splits, withdrawals
+or unknown rows. Florent was asked whether this reduced boundary is acceptable;
+Beads owns that decision and the live source-gate status.
+
+Full operation coverage, identical-trade multiplicity, document revisions,
+additional taxes/currencies, note-calendar depth and production adoption are not
+proven. No new activity importer or online recurring service is delivered by
+this evidence collection. Private infrastructure reuse remains exploration only.
