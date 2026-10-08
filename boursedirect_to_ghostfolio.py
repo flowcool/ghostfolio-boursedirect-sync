@@ -1069,6 +1069,159 @@ def compare_import_response(review, raw):
     return result
 
 
+def validate_write_journal(journal):
+    if not isinstance(journal, dict) or set(journal) != {"schema_version", "binding", "intents"} or type(journal["schema_version"]) is not int or journal["schema_version"] != 1:
+        fail("INVALID_WRITE_JOURNAL")
+    binding = journal["binding"]
+    if not isinstance(binding, dict) or set(binding) != {"account_key", "target_account_id"}:
+        fail("INVALID_WRITE_JOURNAL")
+    validate_account_key(binding["account_key"])
+    if not isinstance(binding["target_account_id"], str) or not binding["target_account_id"].strip():
+        fail("INVALID_WRITE_JOURNAL")
+    if not isinstance(journal["intents"], dict):
+        fail("INVALID_WRITE_JOURNAL")
+    for digest, intent in journal["intents"].items():
+        if not isinstance(intent, dict) or set(intent) != {"body", "state", "resolution"} or not isinstance(intent["body"], str):
+            fail("INVALID_WRITE_JOURNAL")
+        rows = reviewed_wire_rows({"body": intent["body"].encode("utf-8"), "sha256": digest, "import_ready": False})
+        if any(r["accountId"] != binding["target_account_id"] or r["comment"].split("#")[2] != binding["account_key"] for r in rows.values()):
+            fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        resolution = intent["resolution"]
+        if intent["state"] == "uncertain":
+            if resolution is not None:
+                fail("INVALID_WRITE_JOURNAL")
+        elif intent["state"] in ("confirmed", "quiescent"):
+            if not isinstance(resolution, dict) or set(resolution) != {"snapshot_sha256", "accepted", "completion_evidence"}:
+                fail("INVALID_WRITE_JOURNAL")
+            if not isinstance(resolution["snapshot_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", resolution["snapshot_sha256"]):
+                fail("INVALID_WRITE_JOURNAL")
+            accepted = resolution["accepted"]
+            if not isinstance(accepted, dict) or set(accepted) - set(rows) or any(not isinstance(v, str) or not v.strip() for v in accepted.values()) or len(set(accepted.values())) != len(accepted):
+                fail("INVALID_WRITE_JOURNAL")
+            if intent["state"] == "confirmed":
+                if set(accepted) != set(rows) or resolution["completion_evidence"] is not None:
+                    fail("INVALID_WRITE_JOURNAL")
+            else:
+                validate_completion_evidence(resolution["completion_evidence"], digest)
+        else:
+            fail("INVALID_WRITE_JOURNAL")
+
+
+def validate_completion_evidence(evidence, digest):
+    # Explicit operator review is data, not automatically inferred from elapsed time.
+    if not isinstance(evidence, dict) or set(evidence) != {"kind", "reviewed_by", "reference", "wire_sha256"}:
+        fail("INDEPENDENT_COMPLETION_EVIDENCE_REQUIRED")
+    if evidence["kind"] not in ("independently_completed", "independently_cancelled") or evidence["wire_sha256"] != digest:
+        fail("INDEPENDENT_COMPLETION_EVIDENCE_REQUIRED")
+    if any(not isinstance(evidence[k], str) or not evidence[k].strip() for k in ("reviewed_by", "reference")):
+        fail("INDEPENDENT_COMPLETION_EVIDENCE_REQUIRED")
+
+
+def write_intent_transition(journal, review):
+    validate_write_journal(journal)
+    rows = reviewed_wire_rows(review)
+    binding = journal["binding"]
+    if any(r["accountId"] != binding["target_account_id"] or r["comment"].split("#")[2] != binding["account_key"] for r in rows.values()):
+        fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    if any(i["state"] == "uncertain" for i in journal["intents"].values()):
+        fail("ACCOUNT_WRITE_UNCERTAIN")
+    if review["sha256"] in journal["intents"]:
+        fail("WRITE_INTENT_ALREADY_RECORDED")
+    previously_accepted = {marker for i in journal["intents"].values()
+                           for marker in i["resolution"]["accepted"]}
+    if set(rows) & previously_accepted:
+        fail("WRITE_INTENT_PREVIOUSLY_ACCEPTED")
+    # Conservative crash window: already uncertain before any dispatch can occur.
+    return {**journal, "intents": {**journal["intents"], review["sha256"]:
+            {"body": review["body"].decode("utf-8"), "state": "uncertain", "resolution": None}}}
+
+
+def resolve_write_intent(journal, digest, raw_snapshot, completion_evidence=None):
+    """Pure resolution: all-positive complete context, or explicit independent proof."""
+    validate_write_journal(journal)
+    intent = journal["intents"].get(digest)
+    if intent is None or intent["state"] != "uncertain":
+        fail("WRITE_INTENT_NOT_UNCERTAIN")
+    review = {"body": intent["body"].encode("utf-8"), "sha256": digest, "import_ready": False}
+    expected = reviewed_wire_rows(review)
+    normalized = parse_remote_activity_snapshot(raw_snapshot)
+    selected = [r for r in normalized if r["comment"] in expected]
+    if any(not r["active"] or not r["date_context_verified"] for r in selected):
+        fail("WRITE_READBACK_CONTEXT_CONFLICT")
+    accepted = {}
+    for row in selected:
+        marker = row["comment"]
+        sent = expected[marker]
+        comparison = {"target_account_id": sent["accountId"], "operation_date": sent["date"][:10],
+                      "kind": sent["type"], "symbol": sent["symbol"], "data_source": sent["dataSource"],
+                      "price_currency": sent["currency"], "quantity": remote_decimal(sent["quantity"]),
+                      "unit_price": remote_decimal(sent["unitPrice"]), "fee": remote_decimal(sent["fee"])}
+        if marker in accepted or activity_financial_fingerprint(row) != activity_financial_fingerprint(comparison):
+            fail("WRITE_READBACK_CONFLICT")
+        accepted[marker] = row["remote_id"]
+    if set(accepted) == set(expected):
+        state, completion_evidence = "confirmed", None
+    else:
+        validate_completion_evidence(completion_evidence, digest)
+        state = "quiescent"
+    raw = raw_snapshot.encode("utf-8") if isinstance(raw_snapshot, str) else raw_snapshot
+    resolution = {"snapshot_sha256": hashlib.sha256(raw).hexdigest(), "accepted": accepted,
+                  "completion_evidence": dict(completion_evidence) if completion_evidence is not None else None}
+    return {**journal, "intents": {**journal["intents"], digest: {**intent, "state": state, "resolution": resolution}}}
+
+
+def persist_write_transition(state_root, binding, max_bytes, action, review=None,
+                             digest=None, raw_snapshot=None, completion_evidence=None):
+    """Locked local durability boundary only; no dispatch, response or replay API."""
+    validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
+    root = private_directory(state_root)
+    target = hashlib.sha256(binding["target_account_id"].encode("utf-8")).hexdigest()
+    # Share preparation's target lock. Future transport must revalidate all gates.
+    lock = os.open(root / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    namespace_lock = None
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_WRITE_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("WRITE_TARGET_LOCKED")
+        namespace_lock = os.open(root / ("account-" + binding["account_key"] + ".lock"),
+                                 os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        if not stat.S_ISREG(os.fstat(namespace_lock).st_mode):
+            fail("INVALID_WRITE_LOCK")
+        try:
+            fcntl.flock(namespace_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("WRITE_ACCOUNT_LOCKED")
+        binding_path = root / ("write-binding-" + binding["account_key"] + ".yaml")
+        if binding_path.exists() or binding_path.is_symlink():
+            if read_keyed_yaml(binding_path, root, max_bytes) != binding:
+                fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        path = root / ("writes-" + target + ".yaml")
+        journal = read_keyed_yaml(path, root, max_bytes) if path.exists() or path.is_symlink() else {"schema_version": 1, "binding": dict(binding), "intents": {}}
+        if journal.get("binding") != binding:
+            fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        if action == "intent":
+            updated = write_intent_transition(journal, review)
+        elif action == "resolve":
+            updated = resolve_write_intent(journal, digest, raw_snapshot, completion_evidence)
+        else:
+            fail("INVALID_WRITE_TRANSITION")
+        encoded = yaml.safe_dump(updated, sort_keys=False, allow_unicode=True).encode("utf-8")
+        if max_bytes <= 0 or len(encoded) > max_bytes:
+            fail("WRITE_JOURNAL_TOO_LARGE")
+        atomic_private_yaml(binding_path, binding)
+        atomic_private_yaml(path, updated)
+        return {"wire_sha256": review["sha256"] if action == "intent" else digest,
+                "account_fenced": any(i["state"] == "uncertain" for i in updated["intents"].values()),
+                "import_ready": False}
+    finally:
+        if namespace_lock is not None:
+            os.close(namespace_lock)
+        os.close(lock)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
