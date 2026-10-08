@@ -66,8 +66,8 @@ The test suite discriminates structural ambiguity, altered cash controls, sign
 errors, invalid dates, duplicate multiplicity, negative balances, encoding,
 precision, file boundaries and safe diagnostics. These prove the probe contract,
 not real-source completeness, rounding semantics, note matching, Ghostfolio
-idempotency, recovery or performance accuracy. Real contract-note HTML and
-representative adjacent/non-trade monthly statements remain necessary.
+idempotency, recovery or performance accuracy. Saved note HTML and adjacent/non-trade evidence are characterized in FINDINGS
+section 13; full currency, history and financial coverage remain unproven.
 
 ## Provenance and rollback
 
@@ -86,3 +86,39 @@ inputs. Review `git diff`, stage tracked changes with `git add -u`, and create a
 new rollback commit. The script refuses to overwrite an existing recovery
 directory. Backup access and script syntax were checked; rollback was not run.
 Do not rewrite Git history or revert the root commit indiscriminately.
+
+
+## Contract-note inspection extension
+
+Florent explicitly accepted the strict BUY/SELL first-version boundary, per-title
+currency validation, existing Ghostfolio opening history and blocking unsupported
+periods. The authorized G1 coding probe now accepts `inspect --notes FILE...`;
+it remains source characterization, not activity conversion or API transport.
+
+Require an exact account header, one observed four-column ledger and equal
+parallel column lengths. Only observed nine-slot operation groups are accepted;
+blank slots, date and amount alignment, nested three-cell field tables and known
+BUY/SELL labels are checked. Unknown labels, additional field cells or monetary
+components, invalid ISIN checksums, invalid time and unsupported structure fail.
+Quantity sign agrees with type and debit/credit direction. Exact Decimal checks
+gross against absolute quantity times price and net against gross plus/minus
+explicit brokerage and VAT. Fractional-cent cash and unexplained rounding fail;
+no tolerance or fee is invented. Execution time is retained without assigning
+its unverified timezone. Price currency remains unset.
+
+Matching requires the same account, date, type, absolute quantity, price and net
+debit/credit. Names are not security identity. Missing or unmatched notes and
+ambiguous assignments block. Identical trades and repeated documents retain all
+occurrences; this extension does not resolve their durable identity. It cannot
+erase duplicates or use execution time to guess a ledger match.
+
+CLI output adds counts only. Successful enrichment removes only the unverified
+note-enrichment blocker and adds `EXPLICIT_PRICE_CURRENCY_REQUIRED`; source
+acceptance and unknown-operation blockers remain. Exit 2 and
+`import_ready=false` are unconditional. No broker/Bitwarden/infra dependency,
+remote asset load or Ghostfolio request exists in this public implementation.
+
+Rollback is a new revert of the scoped extension commit. Private inputs,
+manifest and auth journal stay excluded and untouched; the earlier statement-only
+probe remains available. Git and local file access were verified before edits;
+this change has no external-state blast radius.

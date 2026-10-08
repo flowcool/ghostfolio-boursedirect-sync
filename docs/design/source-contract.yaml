@@ -41,7 +41,7 @@ document_kinds:
         quantity, price and net debit/credit.
       limitation: Two daily DOM captures only; price currency, additional taxes, timezone,
         revisions and identical-trade multiplicity unverified.
-    executable_scope: none
+    executable_scope: inspect_explicit_fields_and_exact_match_only
     parser_variant:
       columns:
       - Date
@@ -74,7 +74,6 @@ operation_types:
     import_support: blocked
     missing_evidence:
     - price_currency
-    - approved_initial_coverage
     - broader_tax_semantics
     - identical_trade_multiplicity
     source_matching: observed_unique_in_three_trade_sample
@@ -86,7 +85,6 @@ operation_types:
     import_support: blocked
     missing_evidence:
     - price_currency
-    - approved_initial_coverage
     - broader_tax_semantics
     - identical_trade_multiplicity
     source_matching: observed_unique_in_three_trade_sample
@@ -117,8 +115,7 @@ history:
   opening_history_audited: false
 source_acceptance:
   recommendation: conditional_go_for_strict_trade_scope
-  scope_approval: beads_owns_decision
+  scope_approval: user_accepted_strict_buy_sell_scope_with_explicit_currency_and_unsupported_period_blocking
   blocking_conditions:
   - explicit_price_currency_evidence
-  - approved_supported_coverage
   full_operation_sync_proven: false
