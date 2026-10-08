@@ -12,6 +12,9 @@ before a future dispatch; empty readback cannot clear the account fence.
 The [isolated API evidence](docs/design/ghostfolio-api-lab.md) covers basic pinned
 DTO/date/numeric/account behavior, not complete uncertain-write recovery or a
 production destination. Always preserve those readiness boundaries.
+The [recovery bench](docs/design/ghostfolio-recovery-lab.md) proves isolated
+delayed/lost/partial-write fencing and bounded lab cancellation; production
+quiescence and the remaining financial/security gates are separate obligations.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 
