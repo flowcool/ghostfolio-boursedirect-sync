@@ -7,7 +7,8 @@ Global working agreement applies. Beads owns live work state.
 ## Architecture and validation
 
 - `boursedirect_to_ghostfolio.py` is a functional mono-file offline inspection
-  probe. No classes or type hints; follow `.claude/rules/python-conventions.md`
+  probe with pure internal note-matching and financial-conversion helpers.
+  No classes or type hints; follow `.claude/rules/python-conventions.md`
   and `.claude/rules/security.md`.
 - Only local saved HTML is read; scripts, links and assets are never fetched.
 - Decimal controls, direct-child column parsing and blank slots are mandatory.

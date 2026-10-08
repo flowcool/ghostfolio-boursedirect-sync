@@ -439,6 +439,75 @@ def match_trade_notes(statement, documents):
             "unmatched_notes": sum(uses[i] == 0 for i in range(len(notes)))}
 
 
+def convert_matched_trades(statement, documents, account, mappings):
+    """Return private internal records only; identity and API contracts are separate."""
+    if not isinstance(account, dict) or not isinstance(mappings, dict):
+        fail("INVALID_CONVERSION_CONFIGURATION")
+    for key in ("source_account_ref", "account_key", "target_account_id"):
+        if not isinstance(account.get(key), str) or not account[key].strip():
+            fail("ACCOUNT_CONFIGURATION_MISSING")
+    if statement["account_ref"] != account["source_account_ref"]:
+        fail("SOURCE_ACCOUNT_MISMATCH")
+    if any(e["kind"] not in ("BUY", "SELL") for e in statement["events"]):
+        fail("UNSUPPORTED_OPERATION_PERIOD")
+    if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
+        fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
+    validate_ledger(statement["controls"], statement["events"])
+    result = match_trade_notes(statement, documents)
+    if set(result["blockers"]) - {"EXPLICIT_PRICE_CURRENCY_REQUIRED"}:
+        fail("NOTE_MATCHING_NOT_COMPLETE")
+    records = []
+    for event, note in result["matches"]:
+        mapping = mappings.get(note["isin"])
+        if not isinstance(mapping, dict):
+            fail("SECURITY_MAPPING_MISSING")
+        for key in ("symbol", "currency_evidence", "target_security_evidence"):
+            if not isinstance(mapping.get(key), str) or not mapping[key].strip():
+                fail("SECURITY_MAPPING_UNVERIFIED")
+        if not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", mapping["symbol"]):
+            fail("INVALID_TARGET_SYMBOL")
+        if mapping.get("data_source") != "YAHOO":
+            fail("UNSUPPORTED_TARGET_DATA_SOURCE")
+        price_currency = mapping.get("execution_price_currency")
+        if not price_currency or mapping.get("target_currency") != price_currency:
+            fail("SECURITY_CURRENCY_CONFLICT")
+        if price_currency != "EUR" or note["net_currency"] != "EUR":
+            fail("UNVERIFIED_FX_SEMANTICS")
+        if note["price_currency"] not in (None, price_currency):
+            fail("SOURCE_PRICE_CURRENCY_CONFLICT")
+        if note["vat"] != 0:
+            fail("UNVERIFIED_VAT_TREATMENT")
+        if note["brokerage"] < 0 or event["unit_price"] <= 0:
+            fail("INVALID_TRADE_PRICE_OR_COST")
+        if (event["kind"] == "BUY" and (event["quantity"] <= 0 or event["debit"] <= 0 or event["credit"])
+                or event["kind"] == "SELL" and (event["quantity"] >= 0 or event["credit"] <= 0 or event["debit"])):
+            fail("TRADE_DIRECTION_CONFLICT")
+        if note["quantity"] != event["quantity"]:
+            fail("NOTE_QUANTITY_SIGN_CONFLICT")
+        if not valid_isin(note["isin"]):
+            fail("INVALID_NOTE_SECURITY")
+        monetary = [note[k] for k in ("gross", "brokerage", "vat")]
+        monetary.extend(event[k] for k in ("quantity", "unit_price", "debit", "credit"))
+        with localcontext() as context:
+            context.prec = max(28, sum(len(v.as_tuple().digits) for v in monetary) + 8)
+            if note["gross"] != event["quantity"].copy_abs() * event["unit_price"]:
+                fail("NOTE_GROSS_MISMATCH")
+            net = event["debit"] + event["credit"]
+            expected = note["gross"] + note["brokerage"] if event["kind"] == "BUY" else note["gross"] - note["brokerage"]
+            if expected != net:
+                fail("NOTE_NET_MISMATCH")
+        records.append({"account_key": account["account_key"], "target_account_id": account["target_account_id"],
+                        "statement_period": statement["period"], "operation_date": event["date"],
+                        "execution_time": note["execution_time"], "kind": event["kind"],
+                        "source_label": event["label"], "isin": note["isin"], "symbol": mapping["symbol"],
+                        "data_source": "YAHOO", "quantity": event["quantity"].copy_abs(),
+                        "unit_price": event["unit_price"], "price_currency": price_currency,
+                        "gross": note["gross"], "net": net, "net_currency": "EUR",
+                        "brokerage": note["brokerage"], "vat": note["vat"], "fee": note["brokerage"],
+                        "source_slot": event["slot"], "import_ready": False})
+    return records
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
