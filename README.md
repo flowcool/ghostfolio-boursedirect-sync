@@ -4,7 +4,7 @@ Offline source-characterization tools for a candidate manual Bourse Direct →
 Ghostfolio importer. The implemented `inspect` command reads monthly statement
 HTML, preserves aligned ledger slots and checks cash controls with Decimal.
 Optional `--notes` inputs inspect daily contract notes and match trades exactly.
-It does not export or submit activities or contact either service. A pure internal
+Inspection does not submit activities or contact either service. A pure internal
 [conversion helper](docs/design/internal-trade-conversion.md) validates matched
 EUR trades and explicit mappings; identity, adoption and API delivery are separate
 gates.
@@ -90,7 +90,9 @@ permissions. Repeating equivalent inputs preserves identities; source correction
 and account-binding changes require review. Target/account locks prevent concurrent
 local preparation. These artifacts contain private financial details and are
 **not Ghostfolio API payloads**. They remain `import_ready=false` because existing
-activity adoption and isolated API/date/number contracts are not yet verified.
+actual activity adoption, historical holdings and destination validation remain
+unverified. The isolated API/date/number and recovery evidence describes synthetic
+laboratories only.
 No `apply` command exists. See the [preparation contract](docs/design/offline-preparation.md).
 
 Pure offline [adoption helpers](docs/design/offline-adoption.md) validate complete

@@ -8,7 +8,8 @@ Global working agreement applies. Beads owns live work state.
 
 - `boursedirect_to_ghostfolio.py` is a functional mono-file offline inspection
   tool with note-matching, internal financial conversion, stable ledger identities
-  and local `prepare` review artifacts.
+  and local `prepare`/`review` artifacts, exact wire bytes, uncertainty journals
+  and conservative chronological holdings checks.
   No classes or type hints; follow `.claude/rules/python-conventions.md`
   and `.claude/rules/security.md`.
 - Only local saved HTML is read; scripts, links and assets are never fetched.

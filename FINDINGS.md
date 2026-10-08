@@ -654,3 +654,34 @@ caches remain. This proves bounded activity compensation, not reversal of all
 asset-profile/market-data effects. Full delayed-request, response-loss and
 crash/replay-fence recovery remain mandatory before any apply capability. The
 existing production portfolio has not been read or written by this work.
+
+## 15. Reviewed offline reconciliation and read-only acquisition boundary
+
+The offline implementation now preserves canonical numeric JSON bytes and their
+digest, uses explicit UTC-midnight dates and compares exact accepted ownership,
+account/profile and financial fields. HTTP success, an empty result and partial
+acceptance are distinct. Private durable intents fence uncertain requests across
+fresh processes; absent readback cannot authorize replay. Conservative historical
+coverage uses earlier validated acquisitions, counts owned/adopted trades once
+and never invents an opening BUY or uses later/same-day acquisitions for a sale.
+
+The [recovery report](docs/design/ghostfolio-recovery-lab.md) records an isolated
+INSERT stall after duplicate inspection, full empty/partial GETs, lost responses,
+fresh-process replay fences and bounded single-instance cancellation proof.
+Both disposable laboratories were cleaned up; private uncertainty journals remain.
+This does not establish quiescence for a replicated or shared production service.
+
+The [offline review CLI](docs/design/offline-review-cli.md) joins prepared source,
+saved snapshot and explicit adoption/history evidence into a private diagnostic
+artifact, containing exact new-only wire bytes and captured-input provenance.
+The optional [snapshot CLI](docs/design/readonly-snapshot.md) uses one exact-
+allowlisted HTTPS GET, an existing environment-only session bearer, no redirects,
+no retries and no authentication POST. Its new credential/HTTP path passed
+independent security review with fake HTTPS tests; no real Ghostfolio call was
+made. Actual destination history, target securities/account/version and displayed
+dates remain unverified. No apply or production write command exists.
+
+GitHub now hosts the project privately. Changes pass independent PR review and
+versioned synthetic offline CI; a rate-limited bot status is never counted as a
+completed review. Private source/output/state never belong in the repository.
+Live review/ticket status remains canonical in Beads/Git rather than this report.
