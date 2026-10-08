@@ -435,23 +435,51 @@ def run(lab):
         reviewed = {'body': wire['body_utf8'].encode(), 'sha256': wire['sha256'], 'import_ready': False}
         if len(bd.reviewed_wire_rows(reviewed)) != 3:
             raise RuntimeError('LAB_LIFECYCLE_WIRE_FAILED')
-        result = bd.persist_write_transition('state', binding, 1000000, 'intent', review=reviewed)
-        if result['account_fenced'] is not True:
-            raise RuntimeError('LAB_LIFECYCLE_INTENT_NOT_FENCED')
-        lab.emit('LAB_LIFECYCLE_REVIEW', prepared=3, new=3, holdings_shortfalls=0, uncertain_before_dispatch=True)
-
-        # Exact retained bytes; this development controller only knows the owned lab.
-        status, raw = request('POST', '/api/v1/import', reviewed['body'])
-        bd.atomic_private_bytes(inputs / 'import-response.json', raw)
-        comparison = bd.compare_import_response(reviewed, raw)
-        if status != 201 or comparison['status'] != 'complete' or len(comparison['accepted']) != 3:
-            raise RuntimeError('LAB_LIFECYCLE_ACCEPTANCE_FAILED')
-        raw = snapshot(6)
-        result = bd.persist_write_transition('state', binding, 1000000, 'resolve',
-                                             digest=reviewed['sha256'], raw_snapshot=raw)
-        if result['account_fenced']:
-            raise RuntimeError('LAB_LIFECYCLE_POSITIVE_RESOLUTION_FAILED')
-        lab.emit('LAB_LIFECYCLE_ACCEPTED', accepted=3, full_readback_count=6, exact_body=True, positively_resolved=True)
+        dispatch_root = inputs / 'dispatch'
+        dispatch_root.mkdir(mode=0o700)
+        baseline = (inputs / 'snapshot.json').read_bytes()
+        attempts = 0
+        target = hashlib.sha256(binding['target_account_id'].encode()).hexdigest()
+        lab.emit('LAB_LIFECYCLE_REVIEW', prepared=3, new=3, holdings_shortfalls=0, dispatch_mode='single_event')
+        for ordinal, marker in enumerate(bd.reviewed_wire_rows(reviewed)):
+            single = bd.build_wire_payload({marker: prepared['activities'][marker]})
+            prefix = dispatch_root / ('event-' + str(ordinal))
+            bd.atomic_private_bytes(prefix.with_suffix('.wire.json'), single['body'])
+            bd.atomic_private_yaml(prefix.with_suffix('.provenance.yaml'), {
+                'schema_version': 1, 'ordinal': ordinal, 'wire_sha256': single['sha256'],
+                'proposal_batch_sha256': reviewed['sha256'],
+                'baseline_sha256': hashlib.sha256(baseline).hexdigest()})
+            def dispatch_request(method, path, body):
+                nonlocal attempts
+                if method == 'POST':
+                    if body != single['body']:
+                        raise RuntimeError('LAB_LIFECYCLE_WIRE_CONFLICT')
+                    retained = bd.read_keyed_yaml(Path('state/writes-' + target + '.yaml'), 'state', 1000000)
+                    if retained['intents'][single['sha256']]['state'] != 'uncertain':
+                        raise RuntimeError('LAB_LIFECYCLE_INTENT_NOT_FENCED')
+                    attempts += 1
+                    lab.emit('LAB_LIFECYCLE_SOURCE_POST_ATTEMPT', ordinal=ordinal, source_posts=attempts,
+                             uncertain_before_dispatch=True)
+                status, response = request(method, path, body)
+                if method == 'POST':
+                    bd.atomic_private_bytes(prefix.with_suffix('.response.json'), response)
+                return status, response
+            result = bd.dispatch_single_lab_intent('state', binding, single, baseline, 1000000, dispatch_request)
+            if result['accepted'] != 1 or result['import_ready'] is not False:
+                raise RuntimeError('LAB_LIFECYCLE_ACCEPTANCE_FAILED')
+            baseline = result['readback']
+            bd.atomic_private_bytes(prefix.with_suffix('.readback.json'), baseline)
+            bd.atomic_private_bytes(inputs / ('snapshot-' + str(4 + ordinal) + '.json'), baseline)
+            lab.emit('LAB_LIFECYCLE_SINGLE_ACCEPTED', ordinal=ordinal, accepted=1,
+                     full_readback_count=4 + ordinal, exact_body=True, positively_resolved=True)
+        journal = bd.read_keyed_yaml(Path('state/writes-' + target + '.yaml'), 'state', 1000000)
+        bd.validate_write_journal(journal)
+        if attempts != 3 or len(journal['intents']) != 3 or any(i['state'] != 'confirmed' for i in journal['intents'].values()):
+            raise RuntimeError('LAB_LIFECYCLE_SINGLE_JOURNALS_CONFLICT')
+        # Refresh the saved full snapshot AND its matching history assertion together.
+        snapshot(6)
+        lab.emit('LAB_LIFECYCLE_ACCEPTED', accepted=3, source_posts=3, confirmed_intents=3,
+                 full_readback_count=6, exact_single_bodies=True, positively_resolved=True)
 
         bd.prepare_local_plan('inputs/prepare.yaml', 'inputs', 1000000, 32)
         if prepared_path.read_bytes() != first_prepared:

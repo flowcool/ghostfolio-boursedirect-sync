@@ -231,8 +231,8 @@ def test_startup_requires_cached_pins_no_pull_and_version_before_auth(monkeypatc
     assert os.environ['TZ'] == 'Europe/Paris'
 
 
-@pytest.mark.parametrize('fail_intent', [False, True])
-def test_complete_synthetic_lifecycle_preserves_stages_and_fences_failed_persistence(monkeypatch, tmp_path, fail_intent):
+@pytest.mark.parametrize('failure', ['none', 'first-intent', 'second-post-timeout'])
+def test_complete_synthetic_lifecycle_preserves_stages_and_stops_on_failure(monkeypatch, tmp_path, failure):
     account_id = str(uuid.uuid4())
     monkeypatch.setattr(lab, 'accounts', {'A': account_id})
     rows, posts = [], []
@@ -251,21 +251,41 @@ def test_complete_synthetic_lifecycle_preserves_stages_and_fences_failed_persist
                    'assetProfile': {k: sent[k] for k in ('symbol', 'dataSource', 'currency')}}
             rows.append(row)
             returned.append(row)
+        if failure == 'second-post-timeout' and len(posts) == 3:
+            raise TimeoutError('Synthetic lost response after creation')
         return 201, json.dumps({'activities': returned}).encode()
     monkeypatch.setattr(lab, 'request', request)
-    if fail_intent:
+    if failure == 'first-intent':
         def failure(*args, **kwargs):
             raise OSError('Synthetic persistence failure')
-        monkeypatch.setattr(lab.bd, 'persist_write_transition', failure)
-        with pytest.raises(OSError, match='Synthetic persistence failure'):
+        monkeypatch.setattr(lab.bd, '_persist_write_transition_locked', failure)
+        with pytest.raises(RuntimeError, match='LAB_DISPATCH_PERSISTENCE_FAILED'):
             lab.run(lab)
         assert len(posts) == 1  # Seed only; source body never dispatched.
+    elif failure == 'second-post-timeout':
+        with pytest.raises(RuntimeError, match='LAB_DISPATCH_TRANSPORT_FAILED'):
+            lab.run(lab)
+        assert len(posts) == 3  # Seed plus two source attempts; no third source event.
+        paths = list((tmp_path / 'state').glob('writes-*'))
+        journal = lab.bd.parse_keyed_yaml(paths[0].read_bytes())
+        assert sorted(i['state'] for i in journal['intents'].values()) == ['confirmed', 'uncertain']
+        assert (tmp_path / 'inputs/dispatch/event-0.readback.json').exists()
+        assert not (tmp_path / 'inputs/dispatch/event-2.wire.json').exists()
     else:
         lab.run(lab)
-        assert len(posts) == 2  # Seed plus one source POST, never a repeat.
+        assert len(posts) == 4  # Seed plus three single source POSTs, never a repeat.
         initial = lab.bd.parse_keyed_yaml((tmp_path / 'inputs/initial-review.yaml').read_bytes())
         repeat = lab.bd.parse_keyed_yaml((tmp_path / 'inputs/repeat-review.yaml').read_bytes())
-        assert initial['wire']['body_utf8'].encode() == posts[1]
+        proposal_rows = json.loads(initial['wire']['body_utf8'])['activities']
+        sent_rows = [json.loads(body)['activities'] for body in posts[1:]]
+        assert all(len(batch) == 1 for batch in sent_rows)
+        assert [batch[0] for batch in sent_rows] == proposal_rows
+        for ordinal, body in enumerate(posts[1:]):
+            assert (tmp_path / ('inputs/dispatch/event-' + str(ordinal) + '.wire.json')).read_bytes() == body
+        history = lab.bd.parse_keyed_yaml((tmp_path / 'inputs/history.yaml').read_bytes())
+        # Finally compensation refreshes history to count0; repeat was bound to count6.
+        assert history['snapshot_sha256'] == lab.hashlib.sha256((tmp_path / 'inputs/snapshot-0.json').read_bytes()).hexdigest()
+        assert repeat['input_sha256']['snapshot'] == lab.hashlib.sha256((tmp_path / 'inputs/snapshot-6.json').read_bytes()).hexdigest()
         assert repeat['wire'] is None and len(repeat['adoption']['owned']) == 3
         assert (tmp_path / 'inputs/initial-prepared.yaml').read_bytes() == (tmp_path / 'inputs/repeat-prepared.yaml').read_bytes()
         assert all((tmp_path / ('inputs/snapshot-' + str(n) + '.json')).exists() for n in (0, 3, 6))
