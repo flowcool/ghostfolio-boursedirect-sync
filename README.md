@@ -60,3 +60,31 @@ invalid notes fail with exit 1; missing, extra or ambiguous matches block with
 exit 2. Exact matching never infers currency or silently discards duplicate trades.
 Even complete matching leaves `import_ready=false`: there is no activity export
 or Ghostfolio write command. The limits above are example local budgets.
+
+
+## Prepare an offline review plan
+
+`prepare` validates all supplied statements and daily notes using explicit keyed
+YAML configuration. Run from this repository so private artifacts remain covered
+by `.gitignore`. The entirely synthetic bench example is runnable:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py prepare \
+  --config tests/fixtures/import-config-synthetic.yaml --input-root tests/fixtures \
+  --max-bytes 100000 --max-depth 32
+```
+
+For real inputs, copy the example to ignored `inputs/import-config.yaml` and
+replace synthetic account bindings, paths, ISIN mappings and evidence. Generate
+one UUIDv4 account key, persist it, and do not rotate it between runs. Validate
+execution and target-symbol currencies explicitly. Do not place tokens/passwords
+in this configuration. Any unsupported operation blocks its entire period.
+
+The command exits 2 and writes a private internal review artifact under ignored
+`outputs/` plus keyed source-revision state under `state/`, both with private
+permissions. Repeating equivalent inputs preserves identities; source corrections
+and account-binding changes require review. Target/account locks prevent concurrent
+local preparation. These artifacts contain private financial details and are
+**not Ghostfolio API payloads**. They remain `import_ready=false` because existing
+activity adoption and isolated API/date/number contracts are not yet verified.
+No `apply` command exists. See the [preparation contract](docs/design/offline-preparation.md).

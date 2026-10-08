@@ -1,6 +1,9 @@
 # CLAUDE.md — ghostfolio-boursedirect-sync
 
-The manual-document importer design includes an offline statement-inspection probe.
+The approved strict document-import scope includes offline statement/note inspection,
+internal EUR trade conversion, stable ledger identity and private `prepare` review plans.
+See [preparation](docs/design/offline-preparation.md); remote adoption and API delivery
+remain gates, and no apply command exists.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 

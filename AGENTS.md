@@ -7,12 +7,14 @@ Global working agreement applies. Beads owns live work state.
 ## Architecture and validation
 
 - `boursedirect_to_ghostfolio.py` is a functional mono-file offline inspection
-  probe with pure internal note-matching and financial-conversion helpers.
+  tool with note-matching, internal financial conversion, stable ledger identities
+  and local `prepare` review artifacts.
   No classes or type hints; follow `.claude/rules/python-conventions.md`
   and `.claude/rules/security.md`.
 - Only local saved HTML is read; scripts, links and assets are never fetched.
 - Decimal controls, direct-child column parsing and blank slots are mandatory.
-  Unknown operations and missing source evidence block import readiness.
+  Unknown operations block the affected period. `prepare` remains not import-ready
+  until remote adoption and isolated API/date/number gates are proved.
 - Runtime dependencies: `requirements.txt`; development: `requirements-dev.txt`.
 - Required logic verification: `.venv/bin/python -m pytest -q`. Tests use synthetic
   inputs and forbid sockets. Never point tests at real Ghostfolio or shared state.
@@ -24,7 +26,8 @@ Global working agreement applies. Beads owns live work state.
 - Root epic: `infra-4g8u`, metadata `project=ghostfolio-boursedirect-sync`.
 - Source-acceptance owner: `infra-4g8u.4`; offline-probe owner: `infra-4g8u.7`.
 - Design: [probe contract](docs/design/offline-probe.md),
-  [source matrix](docs/design/source-contract.yaml).
+  [source matrix](docs/design/source-contract.yaml),
+  [preparation contract](docs/design/offline-preparation.md).
 - Independent review: [Astra report](docs/reviews/2026-10-08-manual-document-import-astra.md).
 
 Interactive broker source acquisition is authorized under the

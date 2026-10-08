@@ -1,0 +1,33 @@
+schema_version: 1
+account:
+  source_account_ref: SYNTHETIC_ACCOUNT_EUR
+  account_key: 3a5d9909-b311-4412-96b4-a0df15861530
+  target_account_id: synthetic-ghostfolio-account
+mappings:
+  FR0000000036:
+    symbol: SYNTHG.PA
+    data_source: YAHOO
+    execution_price_currency: EUR
+    target_currency: EUR
+    currency_evidence: Synthetic operator evidence only
+    target_security_evidence: Synthetic target profile only
+  FR0000000010:
+    symbol: SYNTHA.BR
+    data_source: YAHOO
+    execution_price_currency: EUR
+    target_currency: EUR
+    currency_evidence: Synthetic operator evidence only
+    target_security_evidence: Synthetic target profile only
+  FR0000000028:
+    symbol: SYNTHB.PA
+    data_source: YAHOO
+    execution_price_currency: EUR
+    target_currency: EUR
+    currency_evidence: Synthetic operator evidence only
+    target_security_evidence: Synthetic target profile only
+documents:
+  month-a:
+    statement: statement-paired-synthetic.html
+    notes:
+    - note-buy-synthetic.html
+    - note-multi-sell-synthetic.html

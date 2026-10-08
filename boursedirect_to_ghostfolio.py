@@ -4,6 +4,7 @@ import argparse
 import calendar
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, localcontext
+import fcntl
 import hashlib
 import json
 import logging
@@ -15,6 +16,7 @@ import sys
 import uuid
 
 from bs4 import BeautifulSoup, Comment
+import yaml
 
 
 log = logging.getLogger(__name__)
@@ -104,7 +106,7 @@ def decode_document(raw):
     return html
 
 
-def read_document(path, input_root, max_bytes):
+def read_local_bytes(path, input_root, max_bytes):
     if max_bytes <= 0:
         fail("INVALID_SIZE_LIMIT")
     root = Path(input_root).resolve(strict=True)
@@ -126,6 +128,11 @@ def read_document(path, input_root, max_bytes):
             os.close(descriptor)
     if len(raw) > max_bytes:
         fail("INPUT_TOO_LARGE")
+    return raw
+
+
+def read_document(path, input_root, max_bytes):
+    raw = read_local_bytes(path, input_root, max_bytes)
     return decode_document(raw), hashlib.sha256(raw).hexdigest()
 
 
@@ -583,6 +590,169 @@ def register_statement_snapshot(journal, snapshot):
             snapshot["account_key"]: {**owned, snapshot["period"]: current}}}
 
 
+def read_keyed_yaml(path, input_root, max_bytes):
+    raw = read_local_bytes(path, input_root, max_bytes)
+    try:
+        contents = raw.decode("utf-8", errors="strict")
+        if any(isinstance(t, (yaml.tokens.AliasToken, yaml.tokens.AnchorToken)) for t in yaml.scan(contents)):
+            fail("YAML_ALIAS_NOT_SUPPORTED")
+        node = yaml.compose(contents, Loader=yaml.SafeLoader)
+        pending = [(node, 0)]
+        while pending:
+            item, depth = pending.pop()
+            if depth > 32:
+                fail("YAML_TOO_DEEP")
+            if isinstance(item, yaml.MappingNode):
+                keys = []
+                for key, value in item.value:
+                    if not isinstance(key, yaml.ScalarNode) or key.tag != "tag:yaml.org,2002:str":
+                        fail("YAML_STRING_KEYS_REQUIRED")
+                    keys.append(key.value)
+                    pending.append((value, depth + 1))
+                if len(keys) != len(set(keys)):
+                    fail("YAML_DUPLICATE_KEY")
+            elif isinstance(item, yaml.SequenceNode):
+                pending.extend((child, depth + 1) for child in item.value)
+        value = yaml.safe_load(contents)
+    except (yaml.YAMLError, UnicodeError, RecursionError):
+        fail("INVALID_KEYED_YAML")
+    if not isinstance(value, dict):
+        fail("INVALID_KEYED_YAML")
+    return value
+
+
+def private_directory(path):
+    path = Path(path)
+    if path.is_symlink():
+        fail("SYMLINK_PRIVATE_DIRECTORY")
+    path.mkdir(mode=0o700, exist_ok=True)
+    if not path.is_dir():
+        fail("PRIVATE_DIRECTORY_NOT_REGULAR")
+    path.chmod(0o700)
+    return path
+
+
+def atomic_private_yaml(path, value):
+    path = Path(path)
+    if path.is_symlink():
+        fail("SYMLINK_PRIVATE_FILE")
+    temporary = path.with_name("." + path.name + "." + uuid.uuid4().hex)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(value, stream, sort_keys=False, allow_unicode=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
+    config = read_keyed_yaml(config_path, input_root, max_bytes)
+    if set(config) != {"schema_version", "account", "mappings", "documents"} or config["schema_version"] != 1:
+        fail("INVALID_PREPARATION_CONFIGURATION")
+    account = config["account"]
+    if not isinstance(account, dict) or set(account) != {"source_account_ref", "account_key", "target_account_id"}:
+        fail("INVALID_ACCOUNT_CONFIGURATION")
+    validate_account_key(account["account_key"])
+    if not isinstance(account["target_account_id"], str) or not account["target_account_id"].strip():
+        fail("ACCOUNT_CONFIGURATION_MISSING")
+    entries = config["documents"]
+    if not isinstance(entries, dict) or not entries:
+        fail("PREPARATION_DOCUMENTS_MISSING")
+    plans = []
+    snapshots = []
+    raw_digests = {}
+    seen_periods = set()
+    for alias, entry in entries.items():
+        if not isinstance(alias, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", alias):
+            fail("INVALID_DOCUMENT_ALIAS")
+        if not isinstance(entry, dict) or set(entry) != {"statement", "notes"}:
+            fail("INVALID_DOCUMENT_CONFIGURATION")
+        if not isinstance(entry["statement"], str) or not isinstance(entry["notes"], list) or not entry["notes"] or not all(isinstance(n, str) for n in entry["notes"]):
+            fail("INVALID_DOCUMENT_CONFIGURATION")
+        html, digest = read_document(Path(input_root) / entry["statement"], input_root, max_bytes)
+        statement = parse_statement(html, max_depth)
+        if statement["period"] in seen_periods:
+            fail("DUPLICATE_STATEMENT_PERIOD")
+        seen_periods.add(statement["period"])
+        notes = []
+        note_digests = []
+        for path in entry["notes"]:
+            note_html, note_digest = read_document(Path(input_root) / path, input_root, max_bytes)
+            notes.append(parse_contract_note(note_html, max_depth))
+            note_digests.append(note_digest)
+        activities = convert_matched_trades(statement, notes, account, config["mappings"])
+        snapshot = ledger_identity(statement, account["account_key"])
+        identities = {e["source_slot"]: e["id"] for e in snapshot["events"]}
+        for activity in activities:
+            output = {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                      for k, v in activity.items()}
+            output["id"] = identities[activity["source_slot"]]
+            output["document_alias"] = alias
+            plans.append(output)
+        snapshots.append(snapshot)
+        raw_digests[alias] = {"statement": digest, "notes": note_digests}
+    plans.sort(key=lambda a: (a["operation_date"], a["id"]))
+    state = private_directory("state")
+    output_root = private_directory("outputs")
+    target = hashlib.sha256(account["target_account_id"].encode("utf-8")).hexdigest()
+    lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    namespace_lock = None
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_PREPARATION_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("PREPARATION_TARGET_LOCKED")
+        namespace_lock = os.open(state / ("account-" + account["account_key"] + ".lock"),
+                                 os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        if not stat.S_ISREG(os.fstat(namespace_lock).st_mode):
+            fail("INVALID_PREPARATION_LOCK")
+        try:
+            fcntl.flock(namespace_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("PREPARATION_ACCOUNT_LOCKED")
+        journal_path = state / ("ledger-" + target + ".yaml")
+        binding = {k: account[k] for k in ("source_account_ref", "account_key", "target_account_id")}
+        binding_path = state / ("binding-" + account["account_key"] + ".yaml")
+        if binding_path.exists() or binding_path.is_symlink():
+            if read_keyed_yaml(binding_path, state, max_bytes) != binding:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        if journal_path.exists() or journal_path.is_symlink():
+            journal = read_keyed_yaml(journal_path, state, max_bytes)
+            if journal.get("binding") != binding:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        else:
+            journal = {"schema_version": 1, "accounts": {}}
+        for snapshot in snapshots:
+            journal = register_statement_snapshot(journal, snapshot)
+        journal["binding"] = binding
+        artifact = {"schema_version": 1, "artifact_kind": "internal_activity_review_not_api_payload",
+                    "import_ready": False, "blockers": ["REMOTE_ADOPTION_UNVERIFIED", "ISOLATED_API_CONTRACT_UNVERIFIED"],
+                    "account_key": account["account_key"], "target_account_id": account["target_account_id"],
+                    "source_digests": raw_digests, "activities": {a["id"]: a for a in plans}}
+        # Persist revision guard first. Failed artifact write can be retried safely;
+        # neither file is evidence that an external activity was created.
+        atomic_private_yaml(binding_path, binding)
+        atomic_private_yaml(journal_path, journal)
+        atomic_private_yaml(output_root / ("prepared-" + account["account_key"] + ".yaml"), artifact)
+        return {"prepared_activities": len(plans), "statement_periods": len(snapshots),
+                "import_ready": False, "blockers": artifact["blockers"]}
+    finally:
+        if namespace_lock is not None:
+            os.close(namespace_lock)
+        os.close(lock)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -592,8 +762,17 @@ def main(argv=None):
     inspect.add_argument("--max-bytes", type=int, required=True, help="Explicit local input size budget")
     inspect.add_argument("--max-depth", type=int, required=True, help="Explicit HTML nesting budget")
     inspect.add_argument("--notes", nargs="+", help="Saved daily contract-note HTML files; no URLs")
+    prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
+    prepare.add_argument("--config", required=True, help="Local keyed YAML inside input root")
+    prepare.add_argument("--input-root", required=True)
+    prepare.add_argument("--max-bytes", type=int, required=True)
+    prepare.add_argument("--max-depth", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "prepare":
+            summary = prepare_local_plan(args.config, args.input_root, args.max_bytes, args.max_depth)
+            print(json.dumps(summary, sort_keys=True))
+            return 2
         html, _ = read_document(args.path, args.input_root, args.max_bytes)
         statement = parse_statement(html, args.max_depth)
         summary = inspection_summary(statement)
