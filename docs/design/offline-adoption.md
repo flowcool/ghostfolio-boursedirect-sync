@@ -10,8 +10,12 @@ exact integer count equals list length, unique remote IDs, required account/type
 date/currency/comment context, nonredacted finite numeric fields and source profile.
 JSON floats parse directly as Decimal; duplicate JSON keys fail. Current
 `assetProfile` takes precedence; `SymbolProfile` is accepted only if the current
-key is absent. Trade profile currency must agree with activity price currency.
-No conversion rate is inferred. BUY/SELL quantity and price must be positive.
+key is absent. Explicit nullable fields follow the
+[source-proven schema compatibility contract](remote-schema-compatibility.md).
+Trade profile currency must agree with activity price currency before adoption,
+holdings coverage or positive write readback can be verified. No conversion rate
+is inferred. BUY/SELL quantity must be positive; zero-price history is preserved
+for inspection but cannot pass those financial gates.
 
 Activity/account tags and flags determine active context. Draft/exclusion flags
 must be Boolean; missing/invalid tag context fails. Reserved draft/exclusion tag

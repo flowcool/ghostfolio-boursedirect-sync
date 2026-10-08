@@ -100,7 +100,7 @@ def test_elapsed_time_self_assertions_and_wrong_digest_are_not_completion_proof(
         bd.resolve_write_intent(bd.write_intent_transition(journal, review), review['sha256'], snapshot(plan, 0), evidence)
 
 
-@pytest.mark.parametrize('change', ['fee', 'account', 'date', 'inactive', 'duplicate'])
+@pytest.mark.parametrize('change', ['fee', 'account', 'date', 'inactive', 'duplicate', 'fx-context', 'zero-price', 'unassigned'])
 def test_conflicting_readback_cannot_be_excused_by_completion_proof(change):
     plan, review, journal = setup()
     data = json.loads(snapshot(plan))
@@ -113,6 +113,12 @@ def test_conflicting_readback_cannot_be_excused_by_completion_proof(change):
         first['date'] = first['date'].replace('T00:', 'T12:')
     elif change == 'inactive':
         first['isDraft'] = True
+    elif change == 'fx-context':
+        first['assetProfile']['currency'] = 'USD'
+    elif change == 'zero-price':
+        first['unitPrice'] = 0
+    elif change == 'unassigned':
+        first['accountId'], first['account'] = None, None
     else:
         duplicate = copy.deepcopy(first)
         duplicate['id'] = 'duplicate-remote'

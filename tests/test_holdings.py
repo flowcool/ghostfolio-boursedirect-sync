@@ -111,7 +111,7 @@ def test_history_proof_is_explicit_account_and_snapshot_bound(key, value):
         check(plan, [], evidence=evidence)
 
 
-@pytest.mark.parametrize('change', ['date', 'currency', 'source', 'unknown-type'])
+@pytest.mark.parametrize('change', ['date', 'currency', 'source', 'unknown-type', 'fx-context', 'zero-price'])
 def test_unverified_quantity_context_blocks(change):
     plan = prepared()
     rows = acquired(plan)
@@ -122,6 +122,10 @@ def test_unverified_quantity_context_blocks(change):
         r['currency'] = r['assetProfile']['currency'] = 'USD'
     elif change == 'source':
         r['assetProfile']['dataSource'] = 'MANUAL'
+    elif change == 'fx-context':
+        r['assetProfile']['currency'] = 'USD'
+    elif change == 'zero-price':
+        r['unitPrice'] = 0
     else:
         r['type'] = 'LIABILITY'
     with pytest.raises(RuntimeError, match='HOLDINGS'):
