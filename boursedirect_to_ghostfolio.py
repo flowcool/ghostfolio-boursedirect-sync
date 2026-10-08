@@ -1222,6 +1222,65 @@ def persist_write_transition(state_root, binding, max_bytes, action, review=None
         os.close(lock)
 
 
+def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence):
+    """Pure conservative coverage proof; never invent opening acquisitions."""
+    build_wire_payload(prepared)
+    remote = parse_remote_activity_snapshot(raw_snapshot)
+    adoption = reconcile_existing_activities(prepared, remote, resolutions)
+    raw = raw_snapshot.encode("utf-8") if isinstance(raw_snapshot, str) else raw_snapshot
+    snapshot_digest = hashlib.sha256(raw).hexdigest()
+    target = next(iter(prepared.values()))["target_account_id"]
+    keys = {"kind", "target_account_id", "snapshot_sha256", "confirmed_by", "reference"}
+    if not isinstance(history_evidence, dict) or set(history_evidence) != keys or history_evidence.get("kind") != "complete_acquisition_history" or history_evidence.get("target_account_id") != target or history_evidence.get("snapshot_sha256") != snapshot_digest:
+        fail("COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED")
+    if any(not isinstance(history_evidence[k], str) or not history_evidence[k].strip() for k in ("confirmed_by", "reference")):
+        fail("COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED")
+    if adoption["candidates"]:
+        fail("HOLDINGS_ADOPTION_UNRESOLVED")
+    symbols = {a["symbol"] for a in prepared.values()}
+    events = []
+    for row in remote:
+        if row["target_account_id"] != target or not row["active"]:
+            continue
+        if row["kind"] in ("DIVIDEND", "FEE", "INTEREST"):
+            continue  # These do not change security quantities in the pinned enum.
+        if row["kind"] not in ("BUY", "SELL"):
+            fail("UNSUPPORTED_HOLDINGS_ACTIVITY")
+        if row["symbol"] not in symbols:
+            continue
+        if not row["date_context_verified"] or row["data_source"] != "YAHOO" or row["price_currency"] != "EUR":
+            fail("HOLDINGS_SECURITY_OR_DATE_CONTEXT_UNVERIFIED")
+        events.append(row)
+    for marker in adoption["new"]:
+        activity = prepared[marker]
+        day = activity["operation_date"]
+        day = day.isoformat() if hasattr(day, "isoformat") else day
+        if day > datetime.now(timezone.utc).date().isoformat():
+            fail("FUTURE_HOLDINGS_ACTIVITY")
+        quantity = Decimal(activity["quantity"]) if isinstance(activity["quantity"], str) else activity["quantity"]
+        events.append({"operation_date": day, "symbol": activity["symbol"], "kind": activity["kind"], "quantity": quantity})
+    grouped = {}
+    for event in events:
+        key = (event["operation_date"], event["symbol"])
+        grouped.setdefault(key, []).append(event)
+    balances, shortages = {}, []
+    quantities = [e["quantity"] for e in events]
+    with localcontext() as context:
+        context.prec = max(28, sum(len(q.as_tuple().digits) + abs(q.as_tuple().exponent) for q in quantities) + 8)
+        for (day, symbol), trades in sorted(grouped.items()):
+            before = balances.get(symbol, Decimal(0))
+            buys = sum((t["quantity"] for t in trades if t["kind"] == "BUY"), Decimal(0))
+            sells = sum((t["quantity"] for t in trades if t["kind"] == "SELL"), Decimal(0))
+            if sells > 0 and sells > before:
+                shortages.append({"date": day, "symbol": symbol, "available_before_day": canonical_decimal(before),
+                                  "sales": canonical_decimal(sells), "same_day_buys": canonical_decimal(buys)})
+            balances[symbol] = before + buys - sells
+    return {"snapshot_sha256": snapshot_digest, "coverage_verified": not shortages,
+            "shortages": shortages, "ending_quantities": {k: canonical_decimal(v) for k, v in sorted(balances.items())},
+            "adoption": adoption, "import_ready": False,
+            "blockers": ["DESTINATION_VALIDATION_REQUIRED", "SECURITY_REVIEW_REQUIRED"] + (["CHRONOLOGICAL_HOLDINGS_SHORTFALL"] if shortages else [])}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
