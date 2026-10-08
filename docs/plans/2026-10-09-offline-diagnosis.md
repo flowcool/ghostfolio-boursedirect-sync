@@ -51,8 +51,9 @@ of duplicate absence, mapping correctness, date provenance or complete history.
 Error text must not expose paths, account identifiers, comments or financial values.
 Before publication, reject an output destination resolving to any captured
 config/prepared/snapshot path, with a fixed code and preserved input bytes.
-Bound source-count times remote-count to one million comparisons and encoded
-output bytes to the supplied max-bytes budget. Exceeding either budget fails
+Bound source-count times remote-count to one million comparisons, materialized
+candidate references to ten thousand, and encoded output bytes to the supplied
+max-bytes budget. Exceeding a budget fails
 without publication or silent truncation. Record evaluation time explicitly:
 the normalized active flag includes the current-time check and is not immutable
 snapshot evidence. The candidate predicate remains independent of that flag.

@@ -9,6 +9,8 @@ The [remote schema contract](docs/design/remote-schema-compatibility.md) disting
 legitimate nulls from missing evidence and quarantines unsupported financial context.
 The [offline review CLI](docs/design/offline-review-cli.md) binds saved snapshot,
 adoption/history evidence and exact new-activity wire bytes in a private artifact.
+The [offline diagnosis CLI](docs/design/offline-diagnosis.md) reports saved legacy
+candidates and conflicts without adoption/history assertions or a wire artifact.
 Pure [wire helpers](docs/design/offline-wire.md) produce exact numeric UTC review
 bytes and compare POST acceptance; they do not send requests or grant readiness.
 Local [write intent helpers](docs/design/write-intents.md) persist uncertainty

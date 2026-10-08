@@ -119,6 +119,19 @@ and the [legacy duplicate quarantine](docs/plans/2026-10-09-legacy-candidate-qua
 
 ## Reconcile against a saved snapshot
 
+For an initial [offline diagnosis](docs/design/offline-diagnosis.md) without
+inventing a complete-history assertion or adoption resolutions:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py diagnose \
+  --config inputs/diagnosis-config.yaml --input-root inputs --max-bytes 1048576
+```
+
+It saves a private candidate/discrepancy report with exact input provenance. Exact
+matches are observations, and missing matches never declare new imports. No wire,
+adoption, holdings verdict or write intent is emitted. Success exits2 with readiness
+false. The strict review below requires the separately established evidence.
+
 Save a complete Ghostfolio activity-list JSON and reviewed acquisition-history
 evidence privately. The [review command contract](docs/design/offline-review-cli.md)
 describes configuration and explicit manual-adoption resolutions.

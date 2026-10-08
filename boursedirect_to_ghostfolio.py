@@ -886,6 +886,18 @@ def activity_financial_fingerprint(activity):
     return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def legacy_duplicate_candidate(activity, row):
+    """Bounded similarity for rejection/diagnosis only, never adoption."""
+    identity = ("target_account_id", "symbol", "data_source", "kind")
+    if row["kind"] not in ("BUY", "SELL") or any(row[k] != activity[k] for k in identity):
+        return False
+    day = activity["operation_date"]
+    source_day = datetime.fromisoformat(day.isoformat() if hasattr(day, "isoformat") else day).date()
+    return (row["quantity"] == Decimal(activity["quantity"])
+            and row["unit_price"] == Decimal(activity["unit_price"])
+            and abs((datetime.fromisoformat(row["operation_date"]).date() - source_day).days) <= 1)
+
+
 def reconcile_existing_activities(prepared, remote, resolutions):
     """Private offline adoption proposal; never changes remote records or readiness."""
     if not isinstance(prepared, dict) or not isinstance(resolutions, dict):
@@ -925,15 +937,7 @@ def reconcile_existing_activities(prepared, remote, resolutions):
                 fail("STALE_ADOPTION_RESOLUTION")
             # Different fees/currency or legacy timestamps must not erase a
             # potential duplicate. This rejects similarity; it never adopts it.
-            day = activity["operation_date"]
-            source_day = datetime.fromisoformat(day.isoformat() if hasattr(day, "isoformat") else day).date()
-            identity = ("target_account_id", "symbol", "data_source", "kind")
-            if any(r["kind"] in ("BUY", "SELL")
-                   and all(r[k] == activity[k] for k in identity)
-                   and r["quantity"] == Decimal(activity["quantity"])
-                   and r["unit_price"] == Decimal(activity["unit_price"])
-                   and abs((datetime.fromisoformat(r["operation_date"]).date() - source_day).days) <= 1
-                   for r in remote):
+            if any(legacy_duplicate_candidate(activity, r) for r in remote):
                 fail("REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED")
             result["new"].append(event_id)
             continue
@@ -1317,6 +1321,135 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
             "blockers": ["DESTINATION_VALIDATION_REQUIRED", "SECURITY_REVIEW_REQUIRED"] + (["CHRONOLOGICAL_HOLDINGS_SHORTFALL"] if shortages else [])}
 
 
+def validated_prepared_review(raw):
+    """Shared existing preparation checks; transient numeric validation only."""
+    prepared = parse_keyed_yaml(raw)
+    expected = {"schema_version", "artifact_kind", "import_ready", "blockers", "account_key", "target_account_id", "source_digests", "activities"}
+    if set(prepared) != expected or type(prepared["schema_version"]) is not int or prepared["schema_version"] != 1 or prepared["artifact_kind"] != "internal_activity_review_not_api_payload" or prepared["import_ready"] is not False:
+        fail("INVALID_PREPARED_REVIEW_ARTIFACT")
+    activities = prepared["activities"]
+    build_wire_payload(activities)
+    for activity in activities.values():
+        if activity["account_key"] != prepared["account_key"] or activity["target_account_id"] != prepared["target_account_id"] or activity.get("import_ready") is not False:
+            fail("PREPARED_REVIEW_BINDING_CONFLICT")
+    return prepared
+
+
+def reject_output_input_collision(destination, input_paths):
+    destination = Path(destination)
+    for path in input_paths:
+        path = Path(path)
+        if destination.resolve() == path.resolve() or destination.exists() and destination.samefile(path):
+            fail("OUTPUT_INPUT_COLLISION")
+
+
+def diagnose_local_snapshot(config_path, input_root, max_bytes):
+    """Private uncertainty evidence, without adoption/history/delivery claims."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "prepared", "snapshot"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+        fail("INVALID_DIAGNOSIS_CONFIGURATION")
+    captures = {}
+    paths = [Path(config_path)]
+    for key in ("prepared", "snapshot"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            fail("INVALID_DIAGNOSIS_CONFIGURATION")
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    prepared = validated_prepared_review(captures["prepared"])
+    started_at = datetime.now(timezone.utc).isoformat()
+    remote = parse_remote_activity_snapshot(captures["snapshot"])
+    activities = prepared["activities"]
+    if len(activities) * len(remote) > 1000000:
+        fail("DIAGNOSIS_COMPARISON_LIMIT_EXCEEDED")
+    original = json.loads(captures["snapshot"], parse_float=Decimal, object_pairs_hook=unique_json_object)
+    timestamps = {r["id"]: r["date"] for r in original["activities"]}
+    fingerprints = {r["remote_id"]: activity_financial_fingerprint(r) for r in remote}
+    fields = ("target_account_id", "operation_date", "kind", "symbol", "data_source", "price_currency",
+              "quantity", "unit_price", "fee")
+    numeric = ("quantity", "unit_price", "fee")
+    sources, evidence, uses = {}, {}, {}
+    candidate_count = 0
+    for marker, activity in sorted(activities.items()):
+        source = {k: canonical_decimal(Decimal(activity[k])) if k in numeric else activity[k] for k in fields}
+        if hasattr(source["operation_date"], "isoformat"):
+            source["operation_date"] = source["operation_date"].isoformat()
+        fingerprint = activity_financial_fingerprint(activity)
+        candidates, codes, owned_count = {}, set(), 0
+        for row in remote:
+            remote_id = row["remote_id"]
+            exact = fingerprints[remote_id] == fingerprint
+            nearby = legacy_duplicate_candidate(activity, row)
+            owned = row["comment"] == marker
+            if not (exact or nearby or owned):
+                continue
+            candidate_count += 1
+            if candidate_count > 10000:
+                fail("DIAGNOSIS_CANDIDATE_LIMIT_EXCEEDED")
+            values = {k: canonical_decimal(row[k]) if k in numeric else row[k] for k in fields}
+            verified = row["active"] and row["date_context_verified"] and row["financial_context_verified"]
+            ownership = ("SELF_MARKER" if owned else "FOREIGN_BD_MARKER" if isinstance(row["comment"], str)
+                         and row["comment"].startswith("BD#") else "OTHER_COMMENT" if row["comment"] else "UNMARKED")
+            # No full raw record or free-text comment enters the report.
+            evidence[remote_id] = {**values, "original_timestamp": timestamps[remote_id],
+                                   "active_at_evaluation": row["active"],
+                                   "date_context_verified": row["date_context_verified"],
+                                   "financial_context_verified": row["financial_context_verified"],
+                                   "currency_origin": row["currency_origin"]}
+            candidates[remote_id] = {"exact_financial_match": exact, "nearby_legacy_candidate": nearby,
+                                     "ownership": ownership,
+                                     "different_fields": [k for k in fields if source[k] != values[k]]}
+            uses[remote_id] = uses.get(remote_id, 0) + 1
+            if owned:
+                owned_count += 1
+                codes.add("OWNED_MARKER_OBSERVED")
+                if not exact:
+                    codes.add("OWNED_MARKER_FINANCIAL_CONFLICT")
+            if exact:
+                codes.add("EXACT_FINANCIAL_MATCH_OBSERVED")
+            elif nearby:
+                codes.add("NEAR_LEGACY_CANDIDATE_OBSERVED")
+            if not verified:
+                codes.add("CANDIDATE_CONTEXT_UNVERIFIED")
+        if owned_count > 1:
+            codes.add("OWNED_MARKER_DUPLICATE")
+        if not candidates:
+            codes.add("NO_CANDIDATE_IN_BOUNDED_CHECK")
+        sources[marker] = {"source": source, "candidates": candidates, "codes": sorted(codes)}
+    for entry in sources.values():
+        if any(uses[key] > 1 for key in entry["candidates"]):
+            entry["codes"] = sorted(set(entry["codes"]) | {"SHARED_CANDIDATE_REVIEW_REQUIRED"})
+    artifact = {"schema_version": 1, "artifact_kind": "offline_diagnosis_not_adoption_or_delivery",
+                "engine_contract": "strict-offline-diagnosis-v1", "import_ready": False,
+                "evaluation_started_at_utc": started_at, "account_key": prepared["account_key"],
+                "target_account_id": prepared["target_account_id"], "source_digests": prepared["source_digests"],
+                "input_sha256": {k: hashlib.sha256(v).hexdigest() for k, v in {"config": config_raw, **captures}.items()},
+                "activities": sources, "remote_evidence": evidence,
+                "blockers": ["DIAGNOSIS_IS_NOT_ADOPTION", "COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED",
+                             "PRODUCTION_WRITES_NOT_AUTHORIZED"]}
+    raw = yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True).encode("utf-8")
+    if len(raw) > max_bytes:
+        fail("DIAGNOSIS_OUTPUT_LIMIT_EXCEEDED")
+    output = Path("outputs") / ("diagnosis-" + prepared["account_key"] + ".yaml")
+    reject_output_input_collision(output, paths)
+    private_directory("outputs")
+    state = private_directory("state")
+    target = hashlib.sha256(prepared["target_account_id"].encode("utf-8")).hexdigest()
+    lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_DIAGNOSIS_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("DIAGNOSIS_TARGET_LOCKED")
+        atomic_private_bytes(output, raw)
+    finally:
+        os.close(lock)
+    return {"source_activities": len(sources), "sources_with_candidates": sum(bool(s["candidates"]) for s in sources.values()),
+            "remote_candidates": len(evidence), "import_ready": False, "blockers": artifact["blockers"]}
+
+
 def review_local_snapshot(config_path, input_root, max_bytes):
     """Private end-to-end offline review; exact bytes, no remote calls or intent."""
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
@@ -1329,15 +1462,8 @@ def review_local_snapshot(config_path, input_root, max_bytes):
         if not isinstance(config[key], str) or not config[key].strip():
             fail("INVALID_REVIEW_CONFIGURATION")
         captures[key] = read_local_bytes(Path(input_root) / config[key], input_root, max_bytes)
-    prepared = parse_keyed_yaml(captures["prepared"])
-    expected = {"schema_version", "artifact_kind", "import_ready", "blockers", "account_key", "target_account_id", "source_digests", "activities"}
-    if set(prepared) != expected or type(prepared["schema_version"]) is not int or prepared["schema_version"] != 1 or prepared["artifact_kind"] != "internal_activity_review_not_api_payload" or prepared["import_ready"] is not False:
-        fail("INVALID_PREPARED_REVIEW_ARTIFACT")
+    prepared = validated_prepared_review(captures["prepared"])
     activities = prepared["activities"]
-    build_wire_payload(activities)
-    for activity in activities.values():
-        if activity["account_key"] != prepared["account_key"] or activity["target_account_id"] != prepared["target_account_id"] or activity.get("import_ready") is not False:
-            fail("PREPARED_REVIEW_BINDING_CONFLICT")
     resolutions = parse_keyed_yaml(captures["resolutions"])
     history = parse_keyed_yaml(captures["history_evidence"])
     coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history)
@@ -1457,6 +1583,10 @@ def main(argv=None):
     review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
     review.add_argument("--input-root", required=True)
     review.add_argument("--max-bytes", type=int, required=True)
+    diagnose = subparsers.add_parser("diagnose", help="Describe saved candidates without adoption or import claims")
+    diagnose.add_argument("--config", required=True)
+    diagnose.add_argument("--input-root", required=True)
+    diagnose.add_argument("--max-bytes", type=int, required=True)
     snapshot = subparsers.add_parser("snapshot", help="Save complete activity JSON with one allowlisted HTTPS GET")
     snapshot.add_argument("--config", required=True)
     snapshot.add_argument("--input-root", required=True)
@@ -1464,6 +1594,9 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "diagnose":
+            print(json.dumps(diagnose_local_snapshot(args.config, args.input_root, args.max_bytes), sort_keys=True))
+            return 2
         if args.command == "snapshot":
             print(json.dumps(acquire_readonly_snapshot(args.config, args.input_root, args.max_bytes, args.timeout), sort_keys=True))
             return 2
