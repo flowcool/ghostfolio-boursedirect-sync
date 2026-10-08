@@ -739,3 +739,36 @@ absence of duplicates outside its predicate, complete acquisition history or
 production readiness. Private preparation/diagnostics are not an import artifact.
 No Ghostfolio write or apply command exists. Independent agent reviews remain the
 review evidence while the repository is private; CodeRabbit is not assumed to run.
+
+## 18. Reproducible strict synthetic delivery evidence
+
+The destination-version uncertainty is narrowed by the
+[3.81.0 parity rehearsal](docs/design/ghostfolio-381-parity.md): selected native
+import/account/date behavior and delayed/lost/partial-write fencing were verified
+on disposable resources. Bounded cancellation of the sole owned lab app with
+zero remaining application database sessions resolved a partial outcome without
+replay. This is not production quiescence evidence or permission to interrupt a
+shared service.
+
+The [synthetic lifecycle](docs/design/synthetic-import-lifecycle.md) then joined
+saved statement/note preparation to three exact accepted trades, complete readback
+and a second review with zero new/three owned/no wire. The
+[portable opt-in runner](docs/design/disposable-acceptance.md) reproduces that
+fixture chain from versioned files with fixed owned local Docker resources;
+its first explicit rehearsal passed and cleaned all resources. Initial and
+repeated reviews, snapshots and private uncertainty journals remain retained.
+These observations demonstrate the supported synthetic chain, not complete real
+history, legacy fee/date adoption or an application dispatcher.
+
+Local evidence preservation is separately guarded: review/diagnosis and
+[preparation](docs/design/offline-preparation.md) reject generated destinations
+aliasing captured inputs. An isolated preparation-config replacement was
+reproduced before its guard and regression-tested afterward. Exact source hashes
+alone do not prove that original local inputs survive output publication.
+
+The repository is now public under Florent's authorization, after bounded
+reachable-history private-data audits. Private input/output/state remains ignored.
+PRs stay open; CodeRabbit triggering, review and merge are managed externally.
+Independent development continues without waiting for those reviews. No broker
+or production Ghostfolio mutation occurred during these benches; no application
+apply command exists and real source/history/production gates remain separate.
