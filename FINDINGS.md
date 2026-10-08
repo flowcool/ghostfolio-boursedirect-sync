@@ -609,3 +609,20 @@ Full operation coverage, identical-trade multiplicity, document revisions,
 additional taxes/currencies, note-calendar depth and production adoption are not
 proven. No new activity importer or online recurring service is delivered by
 this evidence collection. Private infrastructure reuse remains exploration only.
+
+
+### Accepted source boundary
+
+Florent explicitly accepts the strict BUY/SELL first version and confirms EUR
+execution for his selected PEA sample. Net columns already label EUR and exact
+note arithmetic corroborates this configuration; the price currency remains an
+operator-supplied fact rather than an inferred universal property of a PEA or
+foreign venue. The private per-ISIN source review records this confirmation.
+
+The source gate therefore recommends GO for this limited evidence-backed path:
+exact matched trades, explicit validated mappings, unsupported periods blocked,
+and existing Ghostfolio acquisitions reconciled before import. Wider currencies,
+unknown taxes, revisions, ambiguous/identical matches and unsupported operation
+periods fail closed. This does not authorize skipping them or claim all-history
+coverage. Financial conversion, durable identity and isolated API/display proof
+remain later gates, and production application requires separate authorization.

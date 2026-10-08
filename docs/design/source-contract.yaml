@@ -64,16 +64,15 @@ document_kinds:
       - execution_time
       - venue
       net_currency: EUR
-      price_currency: unverified
+      price_currency: EUR_explicit_user_configuration_for_selected_sample_not_inferred_from_header
       unique_operation_reference: not_observed
 operation_types:
   buy:
     labels:
     - 'ACH CPT '
     probe: ledger_trade_fields_only
-    import_support: blocked
+    import_support: conditional_on_explicit_mapping_and_financial_identity_api_gates
     missing_evidence:
-    - price_currency
     - broader_tax_semantics
     - identical_trade_multiplicity
     source_matching: observed_unique_in_three_trade_sample
@@ -82,9 +81,8 @@ operation_types:
     labels:
     - 'VTE CPT '
     probe: ledger_trade_fields_only
-    import_support: blocked
+    import_support: conditional_on_explicit_mapping_and_financial_identity_api_gates
     missing_evidence:
-    - price_currency
     - broader_tax_semantics
     - identical_trade_multiplicity
     source_matching: observed_unique_in_three_trade_sample
@@ -114,8 +112,8 @@ history:
   opening_history_source: user_reports_existing_ghostfolio_acquisitions
   opening_history_audited: false
 source_acceptance:
-  recommendation: conditional_go_for_strict_trade_scope
+  recommendation: go_for_user_approved_strict_trade_scope_with_fail_closed_currency_mapping
   scope_approval: user_accepted_strict_buy_sell_scope_with_explicit_currency_and_unsupported_period_blocking
-  blocking_conditions:
-  - explicit_price_currency_evidence
+  blocking_conditions: []
   full_operation_sync_proven: false
+  currency_basis: explicit_user_confirmation_for_selected_PEA_sample_corroborated_by_net_EUR_headers_and_exact_note_arithmetic
