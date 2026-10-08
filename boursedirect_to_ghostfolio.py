@@ -923,6 +923,364 @@ def reconcile_existing_activities(prepared, remote, resolutions):
     return result
 
 
+def wire_number(value):
+    """Accept only source values preserved by the emitted binary64 JSON token."""
+    if isinstance(value, str):
+        if not re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", value):
+            fail("INVALID_WIRE_DECIMAL")
+        value = Decimal(value)
+    if not isinstance(value, Decimal) or not value.is_finite():
+        fail("INVALID_WIRE_DECIMAL")
+    try:
+        number = float(value)
+        token = json.dumps(number, allow_nan=False)
+    except (OverflowError, ValueError):
+        fail("WIRE_NUMERIC_PRECISION_LOSS")
+    if Decimal(token) != value:
+        fail("WIRE_NUMERIC_PRECISION_LOSS")
+    # Integer tokens must also survive JavaScript Number, checked above.
+    return int(value) if value == value.to_integral_value() and abs(value) <= 2 ** 53 else number
+
+
+def build_wire_payload(activities):
+    """Pure private byte review; does not grant permission or import readiness."""
+    if not isinstance(activities, dict) or not activities or any(not isinstance(k, str) for k in activities):
+        fail("INVALID_WIRE_ACTIVITIES")
+    rows = []
+    binding = None
+    for marker in sorted(activities):
+        activity = activities[marker]
+        if not isinstance(activity, dict) or activity.get("id") != marker:
+            fail("WIRE_IDENTITY_CONFLICT")
+        account_key = activity.get("account_key")
+        validate_account_key(account_key)
+        if not isinstance(marker, str) or not re.fullmatch(r"BD#v1#" + re.escape(account_key) + r"#[0-9a-f]{64}", marker):
+            fail("WIRE_IDENTITY_CONFLICT")
+        target = activity.get("target_account_id")
+        if not isinstance(target, str) or not target.strip() or target != target.strip():
+            fail("WIRE_ACCOUNT_INVALID")
+        current = (account_key, target)
+        if binding is not None and current != binding:
+            fail("WIRE_ACCOUNT_BINDING_CONFLICT")
+        binding = current
+        if activity.get("kind") not in ("BUY", "SELL") or activity.get("data_source") != "YAHOO" or activity.get("price_currency") != "EUR":
+            fail("UNSUPPORTED_WIRE_TRADE")
+        symbol = activity.get("symbol")
+        if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", symbol):
+            fail("WIRE_SYMBOL_INVALID")
+        day = activity.get("operation_date")
+        day = day.isoformat() if hasattr(day, "isoformat") else day
+        if not isinstance(day, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", day):
+            fail("WIRE_DATE_INVALID")
+        try:
+            datetime.strptime(day, "%Y-%m-%d")
+        except ValueError:
+            fail("WIRE_DATE_INVALID")
+        amounts = {key: wire_number(activity.get(key)) for key in ("quantity", "unit_price", "fee")}
+        if amounts["quantity"] <= 0 or amounts["unit_price"] <= 0 or amounts["fee"] < 0:
+            fail("WIRE_TRADE_AMOUNT_INVALID")
+        rows.append({"accountId": target, "comment": marker, "currency": "EUR", "dataSource": "YAHOO",
+                     "date": day + "T00:00:00.000Z", "fee": amounts["fee"], "quantity": amounts["quantity"],
+                     "symbol": symbol, "type": activity["kind"], "unitPrice": amounts["unit_price"]})
+    # Chronological days; stable marker breaks ties without inventing clock zones.
+    rows.sort(key=lambda row: (row["date"], row["comment"]))
+    body = json.dumps({"activities": rows}, ensure_ascii=False, allow_nan=False,
+                      sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {"body": body, "sha256": hashlib.sha256(body).hexdigest(), "import_ready": False}
+
+
+def reviewed_wire_rows(review):
+    """Reject tampered, noncanonical or nonallowlisted review bytes."""
+    if not isinstance(review, dict) or not isinstance(review.get("body"), bytes):
+        fail("INVALID_WIRE_REVIEW")
+    body = review["body"]
+    if review.get("sha256") != hashlib.sha256(body).hexdigest() or review.get("import_ready") is not False:
+        fail("WIRE_REVIEW_CONFLICT")
+    try:
+        data = json.loads(body, parse_float=Decimal, object_pairs_hook=unique_json_object)
+    except (ValueError, TypeError, RecursionError):
+        fail("INVALID_WIRE_REVIEW_JSON")
+    if not isinstance(data, dict) or set(data) != {"activities"} or not isinstance(data["activities"], list):
+        fail("INVALID_WIRE_REVIEW")
+    activities = {}
+    keys = {"accountId", "comment", "currency", "dataSource", "date", "fee", "quantity", "symbol", "type", "unitPrice"}
+    for row in data["activities"]:
+        if not isinstance(row, dict) or set(row) != keys or not isinstance(row.get("comment"), str):
+            fail("INVALID_WIRE_REVIEW")
+        marker = row["comment"]
+        if marker in activities or len(marker.split("#")) != 4:
+            fail("WIRE_IDENTITY_CONFLICT")
+        if not isinstance(row["date"], str) or not row["date"].endswith("T00:00:00.000Z"):
+            fail("WIRE_DATE_INVALID")
+        activities[marker] = {"id": marker, "account_key": marker.split("#")[2],
+                              "target_account_id": row["accountId"], "price_currency": row["currency"],
+                              "data_source": row["dataSource"], "operation_date": row["date"][:-14],
+                              "kind": row["type"], "symbol": row["symbol"],
+                              "quantity": remote_decimal(row["quantity"]),
+                              "unit_price": remote_decimal(row["unitPrice"]), "fee": remote_decimal(row["fee"])}
+    if build_wire_payload(activities)["body"] != body:
+        fail("WIRE_REVIEW_NONCANONICAL")
+    return {row["comment"]: row for row in data["activities"]}
+
+
+def compare_import_response(review, raw):
+    """Exact POST evidence only; full readback and uncertainty fences remain gates."""
+    expected = reviewed_wire_rows(review)
+    result = {"status": "conflicting", "accepted": {}, "missing": sorted(expected),
+              "import_ready": False, "blockers": ["COMPLETE_READBACK_REQUIRED", "UNCERTAIN_WRITE_RECOVERY_UNVERIFIED"]}
+    try:
+        data = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+        if not isinstance(data, dict) or not isinstance(data.get("activities"), list):
+            fail("INVALID_IMPORT_RESPONSE")
+        seen_ids = set()
+        for row in data["activities"]:
+            if not isinstance(row, dict):
+                fail("INVALID_IMPORT_RESPONSE")
+            marker, remote_id = row.get("comment"), row.get("id")
+            if not isinstance(marker, str) or marker not in expected or marker in result["accepted"]:
+                fail("IMPORT_RESPONSE_OWNERSHIP_CONFLICT")
+            if not isinstance(remote_id, str) or not remote_id.strip() or remote_id in seen_ids:
+                fail("IMPORT_RESPONSE_ID_CONFLICT")
+            sent = expected[marker]
+            if any(row.get(key) != sent[key] for key in ("accountId", "currency", "type")):
+                fail("IMPORT_RESPONSE_FINANCIAL_CONFLICT")
+            profile = row["assetProfile"] if "assetProfile" in row else row.get("SymbolProfile")
+            if not isinstance(profile, dict) or any(profile.get(k) != sent[k] for k in ("symbol", "dataSource", "currency")):
+                fail("IMPORT_RESPONSE_PROFILE_CONFLICT")
+            if any(remote_decimal(row.get(key)) != remote_decimal(sent[key]) for key in ("quantity", "unitPrice", "fee")):
+                fail("IMPORT_RESPONSE_FINANCIAL_CONFLICT")
+            if not isinstance(row.get("date"), str):
+                fail("IMPORT_RESPONSE_DATE_CONFLICT")
+            try:
+                instant = datetime.fromisoformat(row["date"].replace("Z", "+00:00"))
+            except ValueError:
+                fail("IMPORT_RESPONSE_DATE_CONFLICT")
+            if instant.tzinfo is None or instant.astimezone(timezone.utc) != datetime.fromisoformat(sent["date"].replace("Z", "+00:00")):
+                fail("IMPORT_RESPONSE_DATE_CONFLICT")
+            result["accepted"][marker] = remote_id
+            seen_ids.add(remote_id)
+    except (ValueError, TypeError, RecursionError):
+        result["conflict_code"] = "INVALID_IMPORT_RESPONSE_JSON"
+    except RuntimeError as error:
+        result["conflict_code"] = str(error)
+    else:
+        result["status"] = "complete" if len(result["accepted"]) == len(expected) else "partial" if result["accepted"] else "skipped"
+    result["missing"] = sorted(set(expected) - set(result["accepted"]))
+    return result
+
+
+def validate_write_journal(journal):
+    if not isinstance(journal, dict) or set(journal) != {"schema_version", "binding", "intents"} or type(journal["schema_version"]) is not int or journal["schema_version"] != 1:
+        fail("INVALID_WRITE_JOURNAL")
+    binding = journal["binding"]
+    if not isinstance(binding, dict) or set(binding) != {"account_key", "target_account_id"}:
+        fail("INVALID_WRITE_JOURNAL")
+    validate_account_key(binding["account_key"])
+    if not isinstance(binding["target_account_id"], str) or not binding["target_account_id"].strip():
+        fail("INVALID_WRITE_JOURNAL")
+    if not isinstance(journal["intents"], dict):
+        fail("INVALID_WRITE_JOURNAL")
+    for digest, intent in journal["intents"].items():
+        if not isinstance(intent, dict) or set(intent) != {"body", "state", "resolution"} or not isinstance(intent["body"], str):
+            fail("INVALID_WRITE_JOURNAL")
+        rows = reviewed_wire_rows({"body": intent["body"].encode("utf-8"), "sha256": digest, "import_ready": False})
+        if any(r["accountId"] != binding["target_account_id"] or r["comment"].split("#")[2] != binding["account_key"] for r in rows.values()):
+            fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        resolution = intent["resolution"]
+        if intent["state"] == "uncertain":
+            if resolution is not None:
+                fail("INVALID_WRITE_JOURNAL")
+        elif intent["state"] in ("confirmed", "quiescent"):
+            if not isinstance(resolution, dict) or set(resolution) != {"snapshot_sha256", "accepted", "completion_evidence"}:
+                fail("INVALID_WRITE_JOURNAL")
+            if not isinstance(resolution["snapshot_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", resolution["snapshot_sha256"]):
+                fail("INVALID_WRITE_JOURNAL")
+            accepted = resolution["accepted"]
+            if not isinstance(accepted, dict) or set(accepted) - set(rows) or any(not isinstance(v, str) or not v.strip() for v in accepted.values()) or len(set(accepted.values())) != len(accepted):
+                fail("INVALID_WRITE_JOURNAL")
+            if intent["state"] == "confirmed":
+                if set(accepted) != set(rows) or resolution["completion_evidence"] is not None:
+                    fail("INVALID_WRITE_JOURNAL")
+            else:
+                validate_completion_evidence(resolution["completion_evidence"], digest)
+        else:
+            fail("INVALID_WRITE_JOURNAL")
+
+
+def validate_completion_evidence(evidence, digest):
+    # Explicit operator review is data, not automatically inferred from elapsed time.
+    if not isinstance(evidence, dict) or set(evidence) != {"kind", "reviewed_by", "reference", "wire_sha256"}:
+        fail("INDEPENDENT_COMPLETION_EVIDENCE_REQUIRED")
+    if evidence["kind"] not in ("independently_completed", "independently_cancelled") or evidence["wire_sha256"] != digest:
+        fail("INDEPENDENT_COMPLETION_EVIDENCE_REQUIRED")
+    if any(not isinstance(evidence[k], str) or not evidence[k].strip() for k in ("reviewed_by", "reference")):
+        fail("INDEPENDENT_COMPLETION_EVIDENCE_REQUIRED")
+
+
+def write_intent_transition(journal, review):
+    validate_write_journal(journal)
+    rows = reviewed_wire_rows(review)
+    binding = journal["binding"]
+    if any(r["accountId"] != binding["target_account_id"] or r["comment"].split("#")[2] != binding["account_key"] for r in rows.values()):
+        fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    if any(i["state"] == "uncertain" for i in journal["intents"].values()):
+        fail("ACCOUNT_WRITE_UNCERTAIN")
+    if review["sha256"] in journal["intents"]:
+        fail("WRITE_INTENT_ALREADY_RECORDED")
+    previously_accepted = {marker for i in journal["intents"].values()
+                           for marker in i["resolution"]["accepted"]}
+    if set(rows) & previously_accepted:
+        fail("WRITE_INTENT_PREVIOUSLY_ACCEPTED")
+    # Conservative crash window: already uncertain before any dispatch can occur.
+    return {**journal, "intents": {**journal["intents"], review["sha256"]:
+            {"body": review["body"].decode("utf-8"), "state": "uncertain", "resolution": None}}}
+
+
+def resolve_write_intent(journal, digest, raw_snapshot, completion_evidence=None):
+    """Pure resolution: all-positive complete context, or explicit independent proof."""
+    validate_write_journal(journal)
+    intent = journal["intents"].get(digest)
+    if intent is None or intent["state"] != "uncertain":
+        fail("WRITE_INTENT_NOT_UNCERTAIN")
+    review = {"body": intent["body"].encode("utf-8"), "sha256": digest, "import_ready": False}
+    expected = reviewed_wire_rows(review)
+    normalized = parse_remote_activity_snapshot(raw_snapshot)
+    selected = [r for r in normalized if r["comment"] in expected]
+    if any(not r["active"] or not r["date_context_verified"] for r in selected):
+        fail("WRITE_READBACK_CONTEXT_CONFLICT")
+    accepted = {}
+    for row in selected:
+        marker = row["comment"]
+        sent = expected[marker]
+        comparison = {"target_account_id": sent["accountId"], "operation_date": sent["date"][:10],
+                      "kind": sent["type"], "symbol": sent["symbol"], "data_source": sent["dataSource"],
+                      "price_currency": sent["currency"], "quantity": remote_decimal(sent["quantity"]),
+                      "unit_price": remote_decimal(sent["unitPrice"]), "fee": remote_decimal(sent["fee"])}
+        if marker in accepted or activity_financial_fingerprint(row) != activity_financial_fingerprint(comparison):
+            fail("WRITE_READBACK_CONFLICT")
+        accepted[marker] = row["remote_id"]
+    if set(accepted) == set(expected):
+        state, completion_evidence = "confirmed", None
+    else:
+        validate_completion_evidence(completion_evidence, digest)
+        state = "quiescent"
+    raw = raw_snapshot.encode("utf-8") if isinstance(raw_snapshot, str) else raw_snapshot
+    resolution = {"snapshot_sha256": hashlib.sha256(raw).hexdigest(), "accepted": accepted,
+                  "completion_evidence": dict(completion_evidence) if completion_evidence is not None else None}
+    return {**journal, "intents": {**journal["intents"], digest: {**intent, "state": state, "resolution": resolution}}}
+
+
+def persist_write_transition(state_root, binding, max_bytes, action, review=None,
+                             digest=None, raw_snapshot=None, completion_evidence=None):
+    """Locked local durability boundary only; no dispatch, response or replay API."""
+    validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
+    root = private_directory(state_root)
+    target = hashlib.sha256(binding["target_account_id"].encode("utf-8")).hexdigest()
+    # Share preparation's target lock. Future transport must revalidate all gates.
+    lock = os.open(root / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    namespace_lock = None
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_WRITE_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("WRITE_TARGET_LOCKED")
+        namespace_lock = os.open(root / ("account-" + binding["account_key"] + ".lock"),
+                                 os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        if not stat.S_ISREG(os.fstat(namespace_lock).st_mode):
+            fail("INVALID_WRITE_LOCK")
+        try:
+            fcntl.flock(namespace_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("WRITE_ACCOUNT_LOCKED")
+        binding_path = root / ("write-binding-" + binding["account_key"] + ".yaml")
+        if binding_path.exists() or binding_path.is_symlink():
+            if read_keyed_yaml(binding_path, root, max_bytes) != binding:
+                fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        path = root / ("writes-" + target + ".yaml")
+        journal = read_keyed_yaml(path, root, max_bytes) if path.exists() or path.is_symlink() else {"schema_version": 1, "binding": dict(binding), "intents": {}}
+        if journal.get("binding") != binding:
+            fail("WRITE_JOURNAL_BINDING_CONFLICT")
+        if action == "intent":
+            updated = write_intent_transition(journal, review)
+        elif action == "resolve":
+            updated = resolve_write_intent(journal, digest, raw_snapshot, completion_evidence)
+        else:
+            fail("INVALID_WRITE_TRANSITION")
+        encoded = yaml.safe_dump(updated, sort_keys=False, allow_unicode=True).encode("utf-8")
+        if max_bytes <= 0 or len(encoded) > max_bytes:
+            fail("WRITE_JOURNAL_TOO_LARGE")
+        atomic_private_yaml(binding_path, binding)
+        atomic_private_yaml(path, updated)
+        return {"wire_sha256": review["sha256"] if action == "intent" else digest,
+                "account_fenced": any(i["state"] == "uncertain" for i in updated["intents"].values()),
+                "import_ready": False}
+    finally:
+        if namespace_lock is not None:
+            os.close(namespace_lock)
+        os.close(lock)
+
+
+def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence):
+    """Pure conservative coverage proof; never invent opening acquisitions."""
+    build_wire_payload(prepared)
+    remote = parse_remote_activity_snapshot(raw_snapshot)
+    adoption = reconcile_existing_activities(prepared, remote, resolutions)
+    raw = raw_snapshot.encode("utf-8") if isinstance(raw_snapshot, str) else raw_snapshot
+    snapshot_digest = hashlib.sha256(raw).hexdigest()
+    target = next(iter(prepared.values()))["target_account_id"]
+    keys = {"kind", "target_account_id", "snapshot_sha256", "confirmed_by", "reference"}
+    if not isinstance(history_evidence, dict) or set(history_evidence) != keys or history_evidence.get("kind") != "complete_acquisition_history" or history_evidence.get("target_account_id") != target or history_evidence.get("snapshot_sha256") != snapshot_digest:
+        fail("COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED")
+    if any(not isinstance(history_evidence[k], str) or not history_evidence[k].strip() for k in ("confirmed_by", "reference")):
+        fail("COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED")
+    if adoption["candidates"]:
+        fail("HOLDINGS_ADOPTION_UNRESOLVED")
+    symbols = {a["symbol"] for a in prepared.values()}
+    events = []
+    for row in remote:
+        if row["target_account_id"] != target or not row["active"]:
+            continue
+        if row["kind"] in ("DIVIDEND", "FEE", "INTEREST"):
+            continue  # These do not change security quantities in the pinned enum.
+        if row["kind"] not in ("BUY", "SELL"):
+            fail("UNSUPPORTED_HOLDINGS_ACTIVITY")
+        if row["symbol"] not in symbols:
+            continue
+        if not row["date_context_verified"] or row["data_source"] != "YAHOO" or row["price_currency"] != "EUR":
+            fail("HOLDINGS_SECURITY_OR_DATE_CONTEXT_UNVERIFIED")
+        events.append(row)
+    for marker in adoption["new"]:
+        activity = prepared[marker]
+        day = activity["operation_date"]
+        day = day.isoformat() if hasattr(day, "isoformat") else day
+        if day > datetime.now(timezone.utc).date().isoformat():
+            fail("FUTURE_HOLDINGS_ACTIVITY")
+        quantity = Decimal(activity["quantity"]) if isinstance(activity["quantity"], str) else activity["quantity"]
+        events.append({"operation_date": day, "symbol": activity["symbol"], "kind": activity["kind"], "quantity": quantity})
+    grouped = {}
+    for event in events:
+        key = (event["operation_date"], event["symbol"])
+        grouped.setdefault(key, []).append(event)
+    balances, shortages = {}, []
+    quantities = [e["quantity"] for e in events]
+    with localcontext() as context:
+        context.prec = max(28, sum(len(q.as_tuple().digits) + abs(q.as_tuple().exponent) for q in quantities) + 8)
+        for (day, symbol), trades in sorted(grouped.items()):
+            before = balances.get(symbol, Decimal(0))
+            buys = sum((t["quantity"] for t in trades if t["kind"] == "BUY"), Decimal(0))
+            sells = sum((t["quantity"] for t in trades if t["kind"] == "SELL"), Decimal(0))
+            if sells > 0 and sells > before:
+                shortages.append({"date": day, "symbol": symbol, "available_before_day": canonical_decimal(before),
+                                  "sales": canonical_decimal(sells), "same_day_buys": canonical_decimal(buys)})
+            balances[symbol] = before + buys - sells
+    return {"snapshot_sha256": snapshot_digest, "coverage_verified": not shortages,
+            "shortages": shortages, "ending_quantities": {k: canonical_decimal(v) for k, v in sorted(balances.items())},
+            "adoption": adoption, "import_ready": False,
+            "blockers": ["DESTINATION_VALIDATION_REQUIRED", "SECURITY_REVIEW_REQUIRED"] + (["CHRONOLOGICAL_HOLDINGS_SHORTFALL"] if shortages else [])}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)

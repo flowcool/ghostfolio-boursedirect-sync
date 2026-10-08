@@ -5,9 +5,16 @@ internal EUR trade conversion, stable ledger identity and private `prepare` revi
 See [preparation](docs/design/offline-preparation.md); remote adoption and API delivery
 remain gates, and no apply command exists.
 Pure [adoption helpers](docs/design/offline-adoption.md) operate on saved snapshots.
+Pure [wire helpers](docs/design/offline-wire.md) produce exact numeric UTC review
+bytes and compare POST acceptance; they do not send requests or grant readiness.
+Local [write intent helpers](docs/design/write-intents.md) persist uncertainty
+before a future dispatch; empty readback cannot clear the account fence.
 The [isolated API evidence](docs/design/ghostfolio-api-lab.md) covers basic pinned
 DTO/date/numeric/account behavior, not complete uncertain-write recovery or a
 production destination. Always preserve those readiness boundaries.
+The [recovery bench](docs/design/ghostfolio-recovery-lab.md) proves isolated
+delayed/lost/partial-write fencing and bounded lab cancellation; production
+quiescence and the remaining financial/security gates are separate obligations.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 

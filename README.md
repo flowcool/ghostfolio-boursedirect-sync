@@ -96,5 +96,12 @@ The [pinned disposable API bench](docs/design/ghostfolio-api-lab.md) establishes
 basic numeric/date/marker behavior, account namespace requirements and bounded
 activity deletion. It also demonstrates that HTTP201 can create nothing and that
 bare date strings shift under the server timezone. Full uncertain-write recovery,
-wire serialization, historical holdings and destination validation remain gates;
+actual historical holdings and destination validation remain gates;
 these observations do not make preparation artifacts import-ready.
+
+Pure [wire review](docs/design/offline-wire.md) and
+[durable intent](docs/design/write-intents.md) helpers now enforce exact numeric
+bytes and uncertainty fences. The [recovery bench](docs/design/ghostfolio-recovery-lab.md)
+demonstrates delayed/lost/partial outcomes in an owned disposable instance.
+[Chronological holdings](docs/design/chronological-holdings.md) checks saved
+history conservatively; no production history has been inspected or written.
