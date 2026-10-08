@@ -8,14 +8,17 @@ Start here: **[`FINDINGS.md`](FINDINGS.md)**, then the
 [manual document import proposal](docs/plans/2026-10-08-manual-document-import.md).
 Latest evidence supersedes earlier pending checkpoints. No CSV/Excel export is confirmed.
 Read the numbered approval and source gates before any implementation.
+Florent authorized interactive online source collection; see the
+[acquisition amendment](docs/design/online-source-inspection.md). The original
+manual-only proposal remains a historical reference.
 
 ## Candidate shape (conditional on the reviewed source gates)
 
 | Fact | Value |
 |---|---|
-| Data source | Candidate: manually saved monthly HTML statements plus contract-note enrichment; no broker scraping or automated login |
+| Data source | Offline importer consumes monthly HTML plus contract-note enrichment; interactive online G1 collection is explicitly authorized under the acquisition amendment |
 | Existing blocks | picsou `bourse-direct-auth`, `wadael/BourDirConnect` — **positions only**, reference material |
-| Auth | Manual broker session only; importer uses no broker credentials. TOTP used; SMS/TOTP both enabled; three incorrect passwords block the account |
+| Auth | User-assisted or explicitly authorized interactive session; secrets from os.environ only. TOTP used; SMS/TOTP both enabled; three incorrect passwords block the account |
 | Ghostfolio core | Selective audited helper reuse; replace IBKR identity/orchestration, enforce explicit mapping, exclude historical cash overwrite |
 
 ## Conventions (inherited from IBKR)

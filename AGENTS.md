@@ -26,5 +26,7 @@ Global working agreement applies. Beads owns live work state.
   [source matrix](docs/design/source-contract.yaml).
 - Independent review: [Astra report](docs/reviews/2026-10-08-manual-document-import-astra.md).
 
-No broker login, scraping, production writes or pushes without the applicable
-explicit authorization. Later financial/API behavior must pass the plan gates.
+Interactive broker source acquisition is authorized under the
+[acquisition amendment](docs/design/online-source-inspection.md); unattended
+scraping remains outside the design. No production writes or pushes without
+applicable explicit authorization. Later financial/API behavior must pass the gates.

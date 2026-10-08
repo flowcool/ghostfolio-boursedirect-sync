@@ -34,6 +34,9 @@ with private permissions. Do not put account documents in Git or Beads. PDFs,
 pasted plain text and an authenticated URL cannot replace the saved HTML inputs.
 Actual contract-note layout, enrichment, historical coverage and currencies
 still require evidence before import implementation can pass its source gate.
+Florent has also authorized agent-led interactive collection through a private
+browser; its [acquisition amendment](docs/design/online-source-inspection.md)
+defines authentication, document privacy and infrastructure boundaries.
 
 The scaffold license is retained verbatim from the IBKR sibling; this probe uses
 original code and does not copy sibling functions.

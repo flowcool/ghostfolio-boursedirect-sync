@@ -1,6 +1,7 @@
 # Security rules — ghostfolio-boursedirect-sync
 
-- No Bourse Direct API: this project reads manually saved local documents; no broker scraping or login automation.
+- No Bourse Direct API: importer reads local documents. Explicitly authorized interactive
+  source collection follows docs/design/online-source-inspection.md; no unattended broker scraping.
   **3 failed logins lock the account** — never loop logins, never retry an OTP blindly; fail loud and stop.
 - Credentials (`BD_LOGIN`, `BD_PASSWORD`, any OTP/TOTP seed, `GHOST_TOKEN`): only from `os.environ`,
   never hardcoded, never logged. OTP values and cookies must never be logged (picsou's sidecar redacts
