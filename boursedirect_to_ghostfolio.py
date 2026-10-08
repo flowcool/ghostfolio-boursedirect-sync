@@ -592,6 +592,10 @@ def register_statement_snapshot(journal, snapshot):
 
 def read_keyed_yaml(path, input_root, max_bytes):
     raw = read_local_bytes(path, input_root, max_bytes)
+    return parse_keyed_yaml(raw)
+
+
+def parse_keyed_yaml(raw):
     try:
         contents = raw.decode("utf-8", errors="strict")
         if any(isinstance(t, (yaml.tokens.AliasToken, yaml.tokens.AnchorToken)) for t in yaml.scan(contents)):
@@ -1281,6 +1285,62 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
             "blockers": ["DESTINATION_VALIDATION_REQUIRED", "SECURITY_REVIEW_REQUIRED"] + (["CHRONOLOGICAL_HOLDINGS_SHORTFALL"] if shortages else [])}
 
 
+def review_local_snapshot(config_path, input_root, max_bytes):
+    """Private end-to-end offline review; exact bytes, no remote calls or intent."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    keys = {"schema_version", "prepared", "snapshot", "resolutions", "history_evidence"}
+    if set(config) != keys or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+        fail("INVALID_REVIEW_CONFIGURATION")
+    captures = {}
+    for key in ("prepared", "snapshot", "resolutions", "history_evidence"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            fail("INVALID_REVIEW_CONFIGURATION")
+        captures[key] = read_local_bytes(Path(input_root) / config[key], input_root, max_bytes)
+    prepared = parse_keyed_yaml(captures["prepared"])
+    expected = {"schema_version", "artifact_kind", "import_ready", "blockers", "account_key", "target_account_id", "source_digests", "activities"}
+    if set(prepared) != expected or type(prepared["schema_version"]) is not int or prepared["schema_version"] != 1 or prepared["artifact_kind"] != "internal_activity_review_not_api_payload" or prepared["import_ready"] is not False:
+        fail("INVALID_PREPARED_REVIEW_ARTIFACT")
+    activities = prepared["activities"]
+    build_wire_payload(activities)
+    for activity in activities.values():
+        if activity["account_key"] != prepared["account_key"] or activity["target_account_id"] != prepared["target_account_id"] or activity.get("import_ready") is not False:
+            fail("PREPARED_REVIEW_BINDING_CONFLICT")
+    resolutions = parse_keyed_yaml(captures["resolutions"])
+    history = parse_keyed_yaml(captures["history_evidence"])
+    coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history)
+    adoption = coverage["adoption"]
+    new = {marker: activities[marker] for marker in adoption["new"]}
+    wire = build_wire_payload(new) if new else None
+    blockers = set(coverage["blockers"])
+    blockers.update({"PRODUCTION_WRITES_NOT_AUTHORIZED", "DESTINATION_VERSION_AND_DISPLAY_UNVERIFIED"})
+    artifact = {"schema_version": 1, "artifact_kind": "offline_reconciliation_review_not_apply_authorization",
+                "engine_contract": "strict-offline-review-v1", "import_ready": False, "blockers": sorted(blockers),
+                "account_key": prepared["account_key"], "target_account_id": prepared["target_account_id"],
+                "input_sha256": {key: hashlib.sha256(value).hexdigest() for key, value in {"config": config_raw, **captures}.items()},
+                "source_digests": prepared["source_digests"], "adoption": adoption,
+                "holdings": {k: v for k, v in coverage.items() if k != "adoption"},
+                "wire": None if wire is None else {"body_utf8": wire["body"].decode("utf-8"),
+                                                    "sha256": wire["sha256"], "activity_count": len(new)}}
+    output_root = private_directory("outputs")
+    state = private_directory("state")
+    target = hashlib.sha256(prepared["target_account_id"].encode("utf-8")).hexdigest()
+    lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_REVIEW_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("REVIEW_TARGET_LOCKED")
+        atomic_private_yaml(output_root / ("review-" + prepared["account_key"] + ".yaml"), artifact)
+    finally:
+        os.close(lock)
+    return {"new_activities": len(new), "owned_activities": len(adoption["owned"]),
+            "adopted_activities": len(adoption["adopted"]), "holdings_shortfalls": len(coverage["shortages"]),
+            "import_ready": False, "blockers": artifact["blockers"]}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1295,8 +1355,15 @@ def main(argv=None):
     prepare.add_argument("--input-root", required=True)
     prepare.add_argument("--max-bytes", type=int, required=True)
     prepare.add_argument("--max-depth", type=int, required=True)
+    review = subparsers.add_parser("review", help="Reconcile prepared activities against saved history without network")
+    review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
+    review.add_argument("--input-root", required=True)
+    review.add_argument("--max-bytes", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "review":
+            print(json.dumps(review_local_snapshot(args.config, args.input_root, args.max_bytes), sort_keys=True))
+            return 2
         if args.command == "prepare":
             summary = prepare_local_plan(args.config, args.input_root, args.max_bytes, args.max_depth)
             print(json.dumps(summary, sort_keys=True))
