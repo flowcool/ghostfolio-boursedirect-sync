@@ -28,6 +28,10 @@ python3 -m venv .venv
   --max-bytes 100000 --max-depth 32
 ```
 
+Pull requests run versioned `tests/` on Python3.13 in GitHub Actions with read-only
+repository permission and pinned action commits. Local full discovery may also
+include ignored private exploration tests; those are not part of public CI.
+
 The last command exits **2**, with a safe JSON summary: one buy, two sells, cash
 controls reconciled, import readiness blocked. Exit **1** means unreadable or
 inconsistent input. Input size/depth budgets are explicit; the example budgets
