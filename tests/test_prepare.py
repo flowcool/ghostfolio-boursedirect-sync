@@ -242,3 +242,53 @@ def test_public_complete_synthetic_example_runs_in_isolated_workdir():
         shutil.copyfile(fixture_root / name, Path('inputs') / name)
     summary = bd.prepare_local_plan('inputs/import-config-synthetic.yaml', 'inputs', 100000, 32)
     assert summary['prepared_activities'] == 3 and summary['import_ready'] is False
+
+
+@pytest.mark.parametrize('destination', ['artifact', 'ledger', 'binding'])
+@pytest.mark.parametrize('source', ['config', 'statement', 'buy', 'sell'])
+def test_preparation_publications_cannot_replace_any_captured_input(destination, source):
+    config = setup()
+    for entry in config['documents'].values():
+        entry['statement'] = 'inputs/' + entry['statement']
+        entry['notes'] = ['inputs/' + path for path in entry['notes']]
+    Path('outputs').mkdir(mode=0o700)
+    Path('state').mkdir(mode=0o700)
+    destinations = {'artifact': artifact(), 'ledger': journal(config),
+                    'binding': Path('state/binding-' + ACCOUNT + '.yaml')}
+    target = destinations[destination]
+    config_path = Path('inputs/import-config.yaml')
+    if source == 'config':
+        config_path = target
+    else:
+        entry = config['documents']['month-a']
+        path = Path('inputs/' + source + '.html')
+        target.write_bytes(path.read_bytes())
+        if source == 'statement':
+            entry['statement'] = str(target)
+        else:
+            entry['notes'][0 if source == 'buy' else 1] = str(target)
+    config_path.write_text(yaml.safe_dump(config))
+    before = {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
+              for p in Path(d).rglob('*') if p.is_file()}
+    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+        bd.prepare_local_plan(config_path, '.', 100000, 32)
+    after = {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
+             for p in Path(d).rglob('*') if p.is_file()}
+    assert before == after
+
+
+@pytest.mark.parametrize('destination', ['artifact', 'ledger', 'binding'])
+def test_preparation_rejects_hardlink_publication_alias_before_state_changes(destination):
+    config = setup()
+    run()
+    targets = {'artifact': artifact(), 'ledger': journal(config),
+               'binding': Path('state/binding-' + ACCOUNT + '.yaml')}
+    target = targets[destination]
+    target.unlink()
+    target.hardlink_to(Path('inputs/statement.html'))
+    before = {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
+              for p in Path(d).rglob('*') if p.is_file()}
+    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+        run()
+    assert before == {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
+                      for p in Path(d).rglob('*') if p.is_file()}

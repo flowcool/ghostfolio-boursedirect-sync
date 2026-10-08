@@ -667,6 +667,7 @@ def atomic_private_bytes(path, raw):
 
 def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
     config = read_keyed_yaml(config_path, input_root, max_bytes)
+    input_paths = [Path(config_path)]
     if set(config) != {"schema_version", "account", "mappings", "documents"} or config["schema_version"] != 1:
         fail("INVALID_PREPARATION_CONFIGURATION")
     account = config["account"]
@@ -689,7 +690,9 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
             fail("INVALID_DOCUMENT_CONFIGURATION")
         if not isinstance(entry["statement"], str) or not isinstance(entry["notes"], list) or not entry["notes"] or not all(isinstance(n, str) for n in entry["notes"]):
             fail("INVALID_DOCUMENT_CONFIGURATION")
-        html, digest = read_document(Path(input_root) / entry["statement"], input_root, max_bytes)
+        statement_path = Path(input_root) / entry["statement"]
+        input_paths.append(statement_path)
+        html, digest = read_document(statement_path, input_root, max_bytes)
         statement = parse_statement(html, max_depth)
         if statement["period"] in seen_periods:
             fail("DUPLICATE_STATEMENT_PERIOD")
@@ -697,7 +700,9 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
         notes = []
         note_digests = []
         for path in entry["notes"]:
-            note_html, note_digest = read_document(Path(input_root) / path, input_root, max_bytes)
+            note_path = Path(input_root) / path
+            input_paths.append(note_path)
+            note_html, note_digest = read_document(note_path, input_root, max_bytes)
             notes.append(parse_contract_note(note_html, max_depth))
             note_digests.append(note_digest)
         activities = convert_matched_trades(statement, notes, account, config["mappings"])
@@ -712,9 +717,16 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
         snapshots.append(snapshot)
         raw_digests[alias] = {"statement": digest, "notes": note_digests}
     plans.sort(key=lambda a: (a["operation_date"], a["id"]))
-    state = private_directory("state")
-    output_root = private_directory("outputs")
+    state = Path("state")
+    output_root = Path("outputs")
     target = hashlib.sha256(account["target_account_id"].encode("utf-8")).hexdigest()
+    journal_path = state / ("ledger-" + target + ".yaml")
+    binding_path = state / ("binding-" + account["account_key"] + ".yaml")
+    artifact_path = output_root / ("prepared-" + account["account_key"] + ".yaml")
+    for destination in (journal_path, binding_path, artifact_path):
+        reject_output_input_collision(destination, input_paths)
+    private_directory(state)
+    private_directory(output_root)
     lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     namespace_lock = None
     try:
@@ -732,9 +744,7 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
             fcntl.flock(namespace_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             fail("PREPARATION_ACCOUNT_LOCKED")
-        journal_path = state / ("ledger-" + target + ".yaml")
         binding = {k: account[k] for k in ("source_account_ref", "account_key", "target_account_id")}
-        binding_path = state / ("binding-" + account["account_key"] + ".yaml")
         if binding_path.exists() or binding_path.is_symlink():
             if read_keyed_yaml(binding_path, state, max_bytes) != binding:
                 fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
@@ -755,7 +765,7 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
         # neither file is evidence that an external activity was created.
         atomic_private_yaml(binding_path, binding)
         atomic_private_yaml(journal_path, journal)
-        atomic_private_yaml(output_root / ("prepared-" + account["account_key"] + ".yaml"), artifact)
+        atomic_private_yaml(artifact_path, artifact)
         return {"prepared_activities": len(plans), "statement_periods": len(snapshots),
                 "import_ready": False, "blockers": artifact["blockers"]}
     finally:
