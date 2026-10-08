@@ -1,0 +1,46 @@
+schema_version: 1
+authority:
+  plan: docs/plans/2026-10-08-manual-document-import.md
+  source_acceptance_issue: infra-4g8u.4
+  probe_issue: infra-4g8u.7
+document_kinds:
+  monthly_statement:
+    input: manually_saved_html
+    evidence:
+      observed_layout: FINDINGS.md#10-phase-0--supplied-statement-html-source-2026-10-08
+      synthetic_fixture: tests/fixtures/statement-synthetic.html
+      limitation: No actual saved broker file bytes inspected locally.
+    parser_variant:
+      columns: [Date, Désignation, Débit (€), Crédit (€)]
+      relationship: four_parallel_nested_tables_with_blank_slots
+      encoding_candidates: [windows-1252, utf-8]
+      controls: [opening_balance, cumulative_including_opening_columns, closing_balance]
+    executable_scope: inspect_and_reconcile_only
+    import_ready: false
+  contract_note:
+    input: manually_saved_html
+    evidence:
+      copied_text: FINDINGS.md
+      limitation: Only buy text supplied; saved HTML layout not inspected.
+      pairing: Supplied note and monthly statement are in different months; no matching pair verified.
+    executable_scope: none
+operation_types:
+  buy:
+    labels: ['ACH CPT ']
+    probe: ledger_trade_fields_only
+    import_support: blocked
+    missing_evidence: [note_layout, isin_enrichment, price_currency, explicit_costs, matching]
+  sell:
+    labels: ['VTE CPT ']
+    probe: ledger_trade_fields_only
+    import_support: blocked
+    missing_evidence: [sell_note, isin_enrichment, price_currency, explicit_costs, matching]
+  other:
+    probe: preserve_as_unknown_and_block
+    import_support: blocked
+    missing_evidence: [representative_documents, approved_financial_semantics]
+history:
+  offered_statement_months_observed: 21
+  retention_promise: false
+  completeness_proven: false
+  required_evidence: [adjacent_month_continuity, initial_holdings, chosen_history_cutoff]
