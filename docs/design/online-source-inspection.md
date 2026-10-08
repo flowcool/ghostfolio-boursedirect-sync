@@ -15,6 +15,13 @@ broker synchronization, orders, transfers, account-setting changes, Ghostfolio
 production writes, or production/shared-state agent tests. Source, conversion,
 identity, isolated API/recovery and delivery acceptance gates remain required.
 
+Florent further clarified that reuse of his infrastructure is **exploration only**.
+The public repository must not require Komodo, these host/container names, private
+SOPS paths or the exploration bridge. Any later reusable acquisition code needs
+its own configurable environment interface and provenance/license check. Do not
+copy private infrastructure wiring into the public importer or treat permission
+for this session as permission for an unattended service.
+
 ## Acquisition procedure
 
 1. Identify the browser capability from pinned source and actual owning runtime.

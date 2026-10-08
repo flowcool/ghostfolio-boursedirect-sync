@@ -471,3 +471,57 @@ source evidence, source characterization, exact parsing and identity candidates,
 financial semantics, adoption, API side effects, isolated verification and recovery.
 Beads owns current approval and execution state; CLAUDE.md holds structural pointers.
 Raw supplied private source and economic values were not persisted.
+
+
+---
+
+## 12. Authorized online source inspection — 2026-10-08
+
+**Verdict: dated monthly HTML can be obtained interactively and the inspected
+monthly ledger reconciles. Full activity import remains gated: matching contract
+notes, currency/cost semantics, non-trade coverage and historical completeness
+are still unverified. No CSV/Excel export has been confirmed.**
+
+Florent authorized direct online exploration through his existing Puppet and
+an independent Bitwarden reader. This supersedes the historical manual-only
+acquisition boundary; see the [amendment](docs/design/online-source-inspection.md).
+Private infrastructure reuse is exploration only. The public product must use
+its own configurable interfaces, with provenance/license review before reuse.
+
+### Directly observed evidence
+
+- One deliberate password submission reached an application-TOTP challenge.
+  One TOTP submission completed authentication and exposed account navigation.
+  The temporary device was marked untrusted. Credentials/code remained in
+  memory through the private bridge; no session or TOTP seed was exported.
+- The authenticated statement view embeds a legacy iframe. Its month selector
+  offers 21 periods, January 2025 through September 2026. This is an observed
+  menu range, not proof of document continuity or lifetime coverage.
+- The monthly statement opens an HTML popup with a PDF alternative. Its four
+  parallel ledger columns retain blank slots. One browser DOM serialization
+  was saved privately as UTF-8 with the charset declaration corrected. This
+  is not an original Windows-1252 HTTP-response capture.
+- Actual local inspection reported `ledger_reconciled=true`, `BUY=1`, `SELL=2`,
+  `UNKNOWN=0`, and 12 aligned slots. The command returned code 2 because
+  `CONTRACT_NOTE_ENRICHMENT_UNVERIFIED` and `REAL_SOURCE_ACCEPTANCE_PENDING`
+  remain, correctly preventing import readiness. No amounts or identifiers
+  are recorded in versioned evidence.
+- The contract-note calendar exposes two relevant days for that same month.
+  Opening a sell day reused the existing popup window. Its document was not
+  captured: a subsequent request for a nonexistent new window triggered the
+  controller's safe stop. No second authentication attempt followed.
+
+### Remaining evidence and acquisition correction
+
+The next acquisition must identify an owned popup by its observed document path,
+not assume every click creates another page. Capture the matching sell and buy
+notes, then inspect adjacent monthly/non-trade sources and historical limits.
+Do not infer ISIN, costs, price currency or opening holdings from this ledger.
+Private originals and their acquisition manifest live only in ignored `inputs/`;
+synthetic fixtures remain the sole versioned examples and test inputs.
+
+The browser/context was closed and task-started Puppet stopped. Infrastructure
+cleanup verification is recorded in the source-acceptance Bead. Financial
+transactions, broker settings and Ghostfolio production writes were untouched.
+These observations do not satisfy full G1 acceptance; infrastructure
+authentication success alone is not the source-coverage verdict.

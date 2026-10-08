@@ -5,11 +5,12 @@ authority:
   probe_issue: infra-4g8u.7
 document_kinds:
   monthly_statement:
-    input: manually_saved_html
+    input: local_saved_html
     evidence:
       observed_layout: FINDINGS.md#10-phase-0--supplied-statement-html-source-2026-10-08
       synthetic_fixture: tests/fixtures/statement-synthetic.html
-      limitation: No actual saved broker file bytes inspected locally.
+      interactive_observation: FINDINGS.md#12-authorized-online-source-inspection-2026-10-08
+      limitation: One UTF-8 browser DOM serialization inspected; original HTTP response bytes and adjacent months remain unverified.
     parser_variant:
       columns: [Date, Désignation, Débit (€), Crédit (€)]
       relationship: four_parallel_nested_tables_with_blank_slots
