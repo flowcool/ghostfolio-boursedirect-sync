@@ -5,6 +5,8 @@ internal EUR trade conversion, stable ledger identity and private `prepare` revi
 See [preparation](docs/design/offline-preparation.md); remote adoption and API delivery
 remain gates, and no apply command exists.
 Pure [adoption helpers](docs/design/offline-adoption.md) operate on saved snapshots.
+The [remote schema contract](docs/design/remote-schema-compatibility.md) distinguishes
+legitimate nulls from missing evidence and quarantines unsupported financial context.
 The [offline review CLI](docs/design/offline-review-cli.md) binds saved snapshot,
 adoption/history evidence and exact new-activity wire bytes in a private artifact.
 Pure [wire helpers](docs/design/offline-wire.md) produce exact numeric UTC review
