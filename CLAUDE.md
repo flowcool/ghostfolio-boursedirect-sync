@@ -21,6 +21,9 @@ production destination. Always preserve those readiness boundaries.
 The [recovery bench](docs/design/ghostfolio-recovery-lab.md) proves isolated
 delayed/lost/partial-write fencing and bounded lab cancellation; production
 quiescence and the remaining financial/security gates are separate obligations.
+The [3.81.0 parity bench](docs/design/ghostfolio-381-parity.md) repeats selected
+API and uncertain-write scenarios at the observed destination version; it remains
+isolated evidence, not production authorization or complete delivery acceptance.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 
