@@ -48,6 +48,16 @@ remote snapshots, current target security/account validation, historical holding
 API response/date/number/rollback proofs and production permission are later gates.
 No claim is made that a live destination was read or that test fixtures prove it.
 
+Before classifying an unowned source with no exact financial candidate as new,
+the [reviewed legacy quarantine](../plans/2026-10-09-legacy-candidate-quarantine.md)
+rejects nearby otherwise identical target trades with a safe error. Account,
+symbol, data source, type, quantity and price must agree exactly; normalized UTC
+days may differ by at most one. Fee, currency, ownership and eligibility cannot
+erase this duplicate evidence. This neither adopts nor rewrites historical rows.
+Legitimate repeat trades can block; absence of this bounded predicate does not
+prove absence of every historical duplicate. A rejection preserves any previous
+review artifact and emits no replacement wire or write intent.
+
 Tests are synthetic, forbid sockets, and cover incomplete/redacted lists, current
 vs legacy profiles, owned conflicts, exact manual resolutions, changed/stale
 financial evidence, multiplicity, cross-account separation and inactive/date
