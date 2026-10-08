@@ -923,6 +923,152 @@ def reconcile_existing_activities(prepared, remote, resolutions):
     return result
 
 
+def wire_number(value):
+    """Accept only source values preserved by the emitted binary64 JSON token."""
+    if isinstance(value, str):
+        if not re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", value):
+            fail("INVALID_WIRE_DECIMAL")
+        value = Decimal(value)
+    if not isinstance(value, Decimal) or not value.is_finite():
+        fail("INVALID_WIRE_DECIMAL")
+    try:
+        number = float(value)
+        token = json.dumps(number, allow_nan=False)
+    except (OverflowError, ValueError):
+        fail("WIRE_NUMERIC_PRECISION_LOSS")
+    if Decimal(token) != value:
+        fail("WIRE_NUMERIC_PRECISION_LOSS")
+    # Integer tokens must also survive JavaScript Number, checked above.
+    return int(value) if value == value.to_integral_value() and abs(value) <= 2 ** 53 else number
+
+
+def build_wire_payload(activities):
+    """Pure private byte review; does not grant permission or import readiness."""
+    if not isinstance(activities, dict) or not activities or any(not isinstance(k, str) for k in activities):
+        fail("INVALID_WIRE_ACTIVITIES")
+    rows = []
+    binding = None
+    for marker in sorted(activities):
+        activity = activities[marker]
+        if not isinstance(activity, dict) or activity.get("id") != marker:
+            fail("WIRE_IDENTITY_CONFLICT")
+        account_key = activity.get("account_key")
+        validate_account_key(account_key)
+        if not isinstance(marker, str) or not re.fullmatch(r"BD#v1#" + re.escape(account_key) + r"#[0-9a-f]{64}", marker):
+            fail("WIRE_IDENTITY_CONFLICT")
+        target = activity.get("target_account_id")
+        if not isinstance(target, str) or not target.strip() or target != target.strip():
+            fail("WIRE_ACCOUNT_INVALID")
+        current = (account_key, target)
+        if binding is not None and current != binding:
+            fail("WIRE_ACCOUNT_BINDING_CONFLICT")
+        binding = current
+        if activity.get("kind") not in ("BUY", "SELL") or activity.get("data_source") != "YAHOO" or activity.get("price_currency") != "EUR":
+            fail("UNSUPPORTED_WIRE_TRADE")
+        symbol = activity.get("symbol")
+        if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", symbol):
+            fail("WIRE_SYMBOL_INVALID")
+        day = activity.get("operation_date")
+        day = day.isoformat() if hasattr(day, "isoformat") else day
+        if not isinstance(day, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", day):
+            fail("WIRE_DATE_INVALID")
+        try:
+            datetime.strptime(day, "%Y-%m-%d")
+        except ValueError:
+            fail("WIRE_DATE_INVALID")
+        amounts = {key: wire_number(activity.get(key)) for key in ("quantity", "unit_price", "fee")}
+        if amounts["quantity"] <= 0 or amounts["unit_price"] <= 0 or amounts["fee"] < 0:
+            fail("WIRE_TRADE_AMOUNT_INVALID")
+        rows.append({"accountId": target, "comment": marker, "currency": "EUR", "dataSource": "YAHOO",
+                     "date": day + "T00:00:00.000Z", "fee": amounts["fee"], "quantity": amounts["quantity"],
+                     "symbol": symbol, "type": activity["kind"], "unitPrice": amounts["unit_price"]})
+    # Chronological days; stable marker breaks ties without inventing clock zones.
+    rows.sort(key=lambda row: (row["date"], row["comment"]))
+    body = json.dumps({"activities": rows}, ensure_ascii=False, allow_nan=False,
+                      sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {"body": body, "sha256": hashlib.sha256(body).hexdigest(), "import_ready": False}
+
+
+def reviewed_wire_rows(review):
+    """Reject tampered, noncanonical or nonallowlisted review bytes."""
+    if not isinstance(review, dict) or not isinstance(review.get("body"), bytes):
+        fail("INVALID_WIRE_REVIEW")
+    body = review["body"]
+    if review.get("sha256") != hashlib.sha256(body).hexdigest() or review.get("import_ready") is not False:
+        fail("WIRE_REVIEW_CONFLICT")
+    try:
+        data = json.loads(body, parse_float=Decimal, object_pairs_hook=unique_json_object)
+    except (ValueError, TypeError, RecursionError):
+        fail("INVALID_WIRE_REVIEW_JSON")
+    if not isinstance(data, dict) or set(data) != {"activities"} or not isinstance(data["activities"], list):
+        fail("INVALID_WIRE_REVIEW")
+    activities = {}
+    keys = {"accountId", "comment", "currency", "dataSource", "date", "fee", "quantity", "symbol", "type", "unitPrice"}
+    for row in data["activities"]:
+        if not isinstance(row, dict) or set(row) != keys or not isinstance(row.get("comment"), str):
+            fail("INVALID_WIRE_REVIEW")
+        marker = row["comment"]
+        if marker in activities or len(marker.split("#")) != 4:
+            fail("WIRE_IDENTITY_CONFLICT")
+        if not isinstance(row["date"], str) or not row["date"].endswith("T00:00:00.000Z"):
+            fail("WIRE_DATE_INVALID")
+        activities[marker] = {"id": marker, "account_key": marker.split("#")[2],
+                              "target_account_id": row["accountId"], "price_currency": row["currency"],
+                              "data_source": row["dataSource"], "operation_date": row["date"][:-14],
+                              "kind": row["type"], "symbol": row["symbol"],
+                              "quantity": remote_decimal(row["quantity"]),
+                              "unit_price": remote_decimal(row["unitPrice"]), "fee": remote_decimal(row["fee"])}
+    if build_wire_payload(activities)["body"] != body:
+        fail("WIRE_REVIEW_NONCANONICAL")
+    return {row["comment"]: row for row in data["activities"]}
+
+
+def compare_import_response(review, raw):
+    """Exact POST evidence only; full readback and uncertainty fences remain gates."""
+    expected = reviewed_wire_rows(review)
+    result = {"status": "conflicting", "accepted": {}, "missing": sorted(expected),
+              "import_ready": False, "blockers": ["COMPLETE_READBACK_REQUIRED", "UNCERTAIN_WRITE_RECOVERY_UNVERIFIED"]}
+    try:
+        data = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+        if not isinstance(data, dict) or not isinstance(data.get("activities"), list):
+            fail("INVALID_IMPORT_RESPONSE")
+        seen_ids = set()
+        for row in data["activities"]:
+            if not isinstance(row, dict):
+                fail("INVALID_IMPORT_RESPONSE")
+            marker, remote_id = row.get("comment"), row.get("id")
+            if not isinstance(marker, str) or marker not in expected or marker in result["accepted"]:
+                fail("IMPORT_RESPONSE_OWNERSHIP_CONFLICT")
+            if not isinstance(remote_id, str) or not remote_id.strip() or remote_id in seen_ids:
+                fail("IMPORT_RESPONSE_ID_CONFLICT")
+            sent = expected[marker]
+            if any(row.get(key) != sent[key] for key in ("accountId", "currency", "type")):
+                fail("IMPORT_RESPONSE_FINANCIAL_CONFLICT")
+            profile = row["assetProfile"] if "assetProfile" in row else row.get("SymbolProfile")
+            if not isinstance(profile, dict) or any(profile.get(k) != sent[k] for k in ("symbol", "dataSource", "currency")):
+                fail("IMPORT_RESPONSE_PROFILE_CONFLICT")
+            if any(remote_decimal(row.get(key)) != remote_decimal(sent[key]) for key in ("quantity", "unitPrice", "fee")):
+                fail("IMPORT_RESPONSE_FINANCIAL_CONFLICT")
+            if not isinstance(row.get("date"), str):
+                fail("IMPORT_RESPONSE_DATE_CONFLICT")
+            try:
+                instant = datetime.fromisoformat(row["date"].replace("Z", "+00:00"))
+            except ValueError:
+                fail("IMPORT_RESPONSE_DATE_CONFLICT")
+            if instant.tzinfo is None or instant.astimezone(timezone.utc) != datetime.fromisoformat(sent["date"].replace("Z", "+00:00")):
+                fail("IMPORT_RESPONSE_DATE_CONFLICT")
+            result["accepted"][marker] = remote_id
+            seen_ids.add(remote_id)
+    except (ValueError, TypeError, RecursionError):
+        result["conflict_code"] = "INVALID_IMPORT_RESPONSE_JSON"
+    except RuntimeError as error:
+        result["conflict_code"] = str(error)
+    else:
+        result["status"] = "complete" if len(result["accepted"]) == len(expected) else "partial" if result["accepted"] else "skipped"
+    result["missing"] = sorted(set(expected) - set(result["accepted"]))
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)

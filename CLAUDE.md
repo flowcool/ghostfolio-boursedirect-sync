@@ -5,6 +5,8 @@ internal EUR trade conversion, stable ledger identity and private `prepare` revi
 See [preparation](docs/design/offline-preparation.md); remote adoption and API delivery
 remain gates, and no apply command exists.
 Pure [adoption helpers](docs/design/offline-adoption.md) operate on saved snapshots.
+Pure [wire helpers](docs/design/offline-wire.md) produce exact numeric UTC review
+bytes and compare POST acceptance; they do not send requests or grant readiness.
 The [isolated API evidence](docs/design/ghostfolio-api-lab.md) covers basic pinned
 DTO/date/numeric/account behavior, not complete uncertain-write recovery or a
 production destination. Always preserve those readiness boundaries.
