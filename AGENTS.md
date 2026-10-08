@@ -12,6 +12,8 @@ Global working agreement applies. Beads owns live work state.
   No classes or type hints; follow `.claude/rules/python-conventions.md`
   and `.claude/rules/security.md`.
 - Only local saved HTML is read; scripts, links and assets are never fetched.
+  Optional Ghostfolio `snapshot` uses one exact-allowlisted HTTPS GET only;
+  session credentials come from environment, never an authentication POST.
 - Decimal controls, direct-child column parsing and blank slots are mandatory.
   Unknown operations block the affected period. `prepare` remains not import-ready
   until remote adoption and isolated API/date/number gates are proved.
