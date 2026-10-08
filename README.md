@@ -105,3 +105,18 @@ bytes and uncertainty fences. The [recovery bench](docs/design/ghostfolio-recove
 demonstrates delayed/lost/partial outcomes in an owned disposable instance.
 [Chronological holdings](docs/design/chronological-holdings.md) checks saved
 history conservatively; no production history has been inspected or written.
+
+## Reconcile against a saved snapshot
+
+Save a complete Ghostfolio activity-list JSON and reviewed acquisition-history
+evidence privately. The [review command contract](docs/design/offline-review-cli.md)
+describes configuration and explicit manual-adoption resolutions.
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py review \
+  --config inputs/review-config.yaml --input-root inputs --max-bytes 1048576
+```
+
+It writes a private reconciliation artifact and exact new-activity wire body,
+with readiness false. Stdout contains counts and blockers only. It never fetches,
+sends or changes Ghostfolio; there is no apply command.
