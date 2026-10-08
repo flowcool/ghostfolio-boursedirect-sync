@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import stat
 import sys
+import uuid
 
 from bs4 import BeautifulSoup, Comment
 
@@ -506,6 +507,80 @@ def convert_matched_trades(statement, documents, account, mappings):
                         "brokerage": note["brokerage"], "vat": note["vat"], "fee": note["brokerage"],
                         "source_slot": event["slot"], "import_ready": False})
     return records
+
+
+def canonical_decimal(value):
+    if not isinstance(value, Decimal) or not value.is_finite():
+        fail("INVALID_IDENTITY_DECIMAL")
+    if not value:
+        return "0"
+    result = format(value, "f")
+    return result.rstrip("0").rstrip(".") if "." in result else result
+
+
+def validate_account_key(account_key):
+    try:
+        parsed = uuid.UUID(account_key)
+    except (ValueError, TypeError, AttributeError):
+        fail("INVALID_IMMUTABLE_ACCOUNT_KEY")
+    if str(parsed) != account_key or parsed.version != 4:
+        fail("INVALID_IMMUTABLE_ACCOUNT_KEY")
+
+
+def ledger_identity(statement, account_key):
+    """Private semantic snapshot; preserves identical occurrences without guessing."""
+    validate_account_key(account_key)
+    if any(e["kind"] not in ("BUY", "SELL") for e in statement["events"]):
+        fail("UNSUPPORTED_OPERATION_PERIOD")
+    if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
+        fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
+    validate_ledger(statement["controls"], statement["events"])
+    occurrences = {}
+    events = []
+    normalized = []
+    for event in statement["events"]:
+        facts = ["v1", statement["period"], event["date"].isoformat(), event["kind"],
+                 event["label"], *[canonical_decimal(event[k]) for k in
+                                   ("quantity", "unit_price", "debit", "credit")]]
+        encoded = json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
+        occurrences[encoded] = occurrences.get(encoded, 0) + 1
+        occurrence = occurrences[encoded]
+        digest = hashlib.sha256(json.dumps([facts, occurrence], ensure_ascii=False,
+                                           separators=(",", ":")).encode("utf-8")).hexdigest()
+        events.append({"source_slot": event["slot"], "occurrence": occurrence,
+                       "id": "BD#v1#" + account_key + "#" + digest})
+        normalized.append(encoded)
+    controls = [[c["kind"], c["date"].isoformat() if c["date"] else None,
+                 canonical_decimal(c["debit"]), canonical_decimal(c["credit"])]
+                for c in statement["controls"]]
+    financial = ["v1", statement["period"], controls, sorted(normalized)]
+    fingerprint = hashlib.sha256(json.dumps(financial, ensure_ascii=False,
+                                           separators=(",", ":")).encode("utf-8")).hexdigest()
+    return {"normalization_version": 1, "account_key": account_key, "period": statement["period"],
+            "fingerprint": fingerprint, "events": events}
+
+
+def register_statement_snapshot(journal, snapshot):
+    """Return a keyed journal copy; caller owns private atomic persistence/locking."""
+    validate_account_key(snapshot["account_key"])
+    if snapshot.get("normalization_version") != 1:
+        fail("IDENTITY_VERSION_CONFLICT")
+    if not isinstance(journal, dict) or journal.get("schema_version") != 1 or not isinstance(journal.get("accounts"), dict):
+        fail("INVALID_IDENTITY_JOURNAL")
+    if not re.fullmatch(r"[0-9a-f]{64}", snapshot.get("fingerprint", "")):
+        fail("INVALID_STATEMENT_FINGERPRINT")
+    if not re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])", snapshot.get("period", "")):
+        fail("INVALID_STATEMENT_PERIOD")
+    accounts = journal["accounts"]
+    owned = accounts.get(snapshot["account_key"], {})
+    if not isinstance(owned, dict):
+        fail("INVALID_IDENTITY_JOURNAL")
+    previous = owned.get(snapshot["period"])
+    current = {"normalization_version": 1, "fingerprint": snapshot["fingerprint"]}
+    if previous is not None and previous != current:
+        fail("STATEMENT_REVISION_CONFLICT")
+    return {"schema_version": 1, "accounts": {**accounts,
+            snapshot["account_key"]: {**owned, snapshot["period"]: current}}}
 
 
 def main(argv=None):
