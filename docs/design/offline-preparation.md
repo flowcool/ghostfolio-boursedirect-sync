@@ -14,7 +14,13 @@ HTML charset and parser-depth budgets. Note matching/conversion enforce the
 strict validated EUR/zero-VAT financial scope. Unknown periods, unverified
 mappings, multiple supplied versions of a period or ambiguous notes block.
 
-The entire input set is validated before state/output mutation. Pure identity
+The entire input set is validated before state/output mutation. Publication
+guards reject artifact, ledger or binding destinations resolving to
+any captured config, statement or note path, including existing hard-link inode
+aliases. `OUTPUT_INPUT_COLLISION` is reported before publication; source bytes,
+previous journals and previous artifacts remain intact. This includes a common
+input root containing both inputs and generated state/output directories.
+Pure identity
 snapshots detect rendering-equivalent statements versus financial revision.
 Records receive their ledger-owned markers and are sorted for review. Decimal
 values become exact strings and source dates ISO calendar strings; this is an
