@@ -72,8 +72,9 @@ Before implementation, review the following concrete design:
    An unresolved or timed-out create keeps a failure verdict even if an interim
    list is empty, because late creation cannot be ruled out automatically.
 3. PostgreSQL and Redis use their existing tmpfs/resource caps; Ghostfolio uses
-   the proved1536MiB/1.5CPU cap, init and no-new-privileges. No host bind mounts,
-   production volumes or network membership. Publish only a random127.0.0.1
+   the proved 1536 MiB/1.5 CPU cap, init and no-new-privileges. No host bind mounts,
+   production volumes or production-network membership. Allow only run-owned
+   containers on the private lab network. Publish only a random 127.0.0.1
    port. Validate the unique loopback port before any HTTP request and rediscover
    it if restart is ever introduced; this iteration has no restart.
 4. Generate lab DB/salt/JWT credentials into the runner's process environment;
@@ -81,7 +82,7 @@ Before implementation, review the following concrete design:
    exchange operate solely on that owned loopback app and put resulting lab
    access/session tokens into process environment. Use stdlib `http.client`
    directly: no proxies, netrc, redirects or HTTP retry adapter. Bound every
-   response to1048576bytes plus one sentinel byte and use a fixed45s timeout;
+   response to 1048576 bytes plus one sentinel byte and use a fixed 45 s timeout;
    reject redirects, oversized bodies and malformed JSON with fixed codes.
    The size/timeout are the exercised private-controller budgets, not universal
    API limits. Reject unexpected content encoding; validate every returned ID
@@ -122,7 +123,7 @@ review, not a PR-review subagent or substitute for external CodeRabbit.
 Implement the already observed lifecycle with explicit assertions:
 
 1. Owned startup: new network/database/cache/app, exact running version, new
-   synthetic user and EUR account, complete activity list count0.
+   synthetic user and EUR account, complete activity list count 0.
 2. Seed exactly three prior synthetic BUYs; assert exact returned account,
    timestamp, EUR Yahoo profile and numeric fields. The artificial fixture ISINs
    deliberately map to distinct AIR.PA/OR.PA/MC.PA bench profiles, as documented
@@ -134,13 +135,13 @@ Implement the already observed lifecycle with explicit assertions:
    Assert three trades, three new activities, no holdings shortfall, readiness
    false and retained exact body/digest. Keep all artifacts private.
 4. Persist the exact retained body as uncertain before one lab POST. Match every
-   accepted row using `compare_import_response`; a complete raw GET count6 plus
+   accepted row using `compare_import_response`; a complete raw GET count 6 plus
    exact ownership/financial context positively resolves the intent. No response
    status/count alone grants acceptance. Any failure retains the journal.
 5. Repeat preparation and review with the fresh saved snapshot/declaration:
    assert byte-identical preparation, three owned/zero new/no wire, zero
    shortfalls, readiness false and no second source POST.
-6. Compensate only exact known seed/source marker and account IDs, assert count0.
+6. Compensate only exact known seed/source marker and account IDs, assert count 0.
    Never delete a row outside that known set. If activity compensation fails,
    still attempt owned infrastructure teardown and retain evidence.
 7. In finally, inspect exact ID/name/ownership labels for every attempted container before
@@ -186,7 +187,7 @@ leave CodeRabbit/merge to Florent's external workflow. Review is not a blocker t
 later independent work; unresolved security findings remain owning issues.
 
 Blast radius: exact newly owned lab resources and ignored run artifacts only.
-Rollback: exact ownership-checked resource teardown/count0 where reachable;
+Rollback: exact ownership-checked resource teardown/count 0 where reachable;
 revert the runner/tests/docs commit without deleting retained journals. No
 financial production rollback is claimed. The root epic cannot close on this
 bench: actual history/adoption and application delivery are separate obligations.
