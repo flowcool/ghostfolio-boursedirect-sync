@@ -36,6 +36,13 @@ ancestor also fsyncs its parent before enrollment can succeed. Existing hard-lin
 wrong modes/owners and invalid schemas refuse. Partial enrollment is retained and
 requires manual recovery, never automatic erasure to facilitate a retry.
 
+Releasing a lock permanently revokes its in-memory handle before removing the
+lock or synchronizing its parent. Removal, open, fsync or close failure leaves
+that handle unusable for journal reads or mutations. Repeating release with the
+closed handle cannot remove a subsequent owner's lock. If removal itself fails,
+the retained lock remains a manual-recovery condition; the helper never retries
+with stale authority or clears an uncertain journal to regain access.
+
 `otpFromEnvironment` consumes explicit provisioned TOTP or a timestamped static
 OTP, never both. It enforces integer clock, same 30-second step, age at most 20s,
 not future and at least 5s remaining. TOTP is strict Base32/SHA1/30s/six digits.
