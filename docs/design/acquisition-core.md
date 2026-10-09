@@ -37,15 +37,15 @@ wrong modes/owners and invalid schemas refuse. Partial enrollment is retained an
 requires manual recovery, never automatic erasure to facilitate a retry.
 
 `otpFromEnvironment` consumes explicit provisioned TOTP or a timestamped static
-OTP, never both. It enforces integer clock, same30-second step, age at most20s,
-not future and at least5s remaining. TOTP is strict Base32/SHA1/30s/six digits.
+OTP, never both. It enforces integer clock, same 30-second step, age at most 20s,
+not future and at least 5s remaining. TOTP is strict Base32/SHA1/30s/six digits.
 The pure `totp` arithmetic helper is separately verified with RFC6238 reference
 vectors; it alone is not the operational near-expiry gate. No seed was retrieved.
 `diagnostic` is the sole public error shape: literal allowlisted fixed codes and readiness
 false; low-level filesystem/parser errors must pass through it, not be printed.
 
 Run `npm ci --prefix collector --ignore-scripts --no-audit --no-fund`, then
-`npm test --prefix collector`. YAML2.9.1 is pinned with integrity in the lockfile.
+`npm test --prefix collector`. YAML 2.9.1 is pinned with integrity in the lockfile.
 CI also pins setup-node's v4 commit and Node20. Tests block socket/TLS/HTTP/fetch/
 WebSocket/DNS/datagram entrypoints before imports and forbid subprocess/browser
 startup except one exact owned Node principal-contention fixture with isolated
