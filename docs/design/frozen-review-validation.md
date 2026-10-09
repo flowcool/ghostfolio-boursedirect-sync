@@ -39,3 +39,22 @@ introduced. See the [approved plan](../plans/2026-10-09-frozen-review-validation
 
 Rollback: revert the scoped implementation commit; retain private captures and
 journals. Code rollback does not compensate any remote activity.
+
+## Operator check
+
+`check-review --config FILE --review FILE --review-sha256 HEX --input-root DIR
+--max-bytes N` captures each report/config/role once through the bounded regular
+local-file reader. The positive exact-integer budget is checked before reads.
+Config/report paths are relative to the working directory; role references are
+relative to input-root. The supplied pin is never derived by this command. Leaf
+symlinks are refused and resolved containment enforced; this does not promise an
+atomic filesystem snapshot or rejection of every ancestor symlink.
+
+Only verification/counts/fixed blockers and false readiness are printed. Success
+exits2, including null wire and shortfall diagnostics; refusal exits1 with a fixed
+error and no stdout. No output, lock, permission change, journal mutation, network
+request or credential lookup occurs. Existing files remain unchanged even with a
+common root including outputs. To replay the runner archive through this command,
+materialize a separate private copy of config/report and role bytes at the original
+config-relative filenames; archived `.bytes` names are capture roles, not paths.
+Do not alter the original archive or infer production approval from fixture pins.

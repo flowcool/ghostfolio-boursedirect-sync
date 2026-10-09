@@ -1681,6 +1681,23 @@ def validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_
     return expected
 
 
+def check_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
+    """Read-only operator capture and verification; no publication or authority."""
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_FROZEN_REVIEW_BYTE_LIMIT")
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    review_raw = read_local_bytes(review_path, input_root, max_bytes)
+    config = review_capture_configuration(config_raw)
+    captures = {k: read_local_bytes(Path(input_root) / config[k], input_root, max_bytes)
+                for k in ("prepared", "snapshot", "resolutions", "history_evidence")}
+    artifact = validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes)
+    return {"review_verified": True, "new_activities": len(artifact["adoption"]["new"]),
+            "owned_activities": len(artifact["adoption"]["owned"]),
+            "adopted_activities": len(artifact["adoption"]["adopted"]),
+            "holdings_shortfalls": len(artifact["holdings"]["shortages"]),
+            "import_ready": False, "blockers": artifact["blockers"]}
+
+
 def review_local_snapshot(config_path, input_root, max_bytes):
     """Private end-to-end offline review; exact bytes, no remote calls or intent."""
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
@@ -2028,6 +2045,12 @@ def main(argv=None):
     review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
     review.add_argument("--input-root", required=True)
     review.add_argument("--max-bytes", type=int, required=True)
+    check = subparsers.add_parser("check-review", help="Verify a pinned saved review offline without writing files")
+    check.add_argument("--config", required=True)
+    check.add_argument("--review", required=True)
+    check.add_argument("--review-sha256", required=True, help="External nonsecret content pin; not approval")
+    check.add_argument("--input-root", required=True)
+    check.add_argument("--max-bytes", type=int, required=True)
     diagnose = subparsers.add_parser("diagnose", help="Describe saved candidates without adoption or import claims")
     diagnose.add_argument("--config", required=True)
     diagnose.add_argument("--input-root", required=True)
@@ -2047,6 +2070,10 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "check-review":
+            print(json.dumps(check_local_frozen_review(args.config, args.review, args.review_sha256,
+                                                       args.input_root, args.max_bytes), sort_keys=True))
+            return 2
         if args.command == "rollback-plan":
             print(json.dumps(plan_local_compensation(args.config, args.input_root, args.max_bytes), sort_keys=True))
             return 2

@@ -145,7 +145,23 @@ The [frozen validation boundary](docs/design/frozen-review-validation.md) shares
 this calculation and verifies externally pinned saved reports against captured
 inputs. It proves computational equivalence, with readiness still false.
 
-It writes a private reconciliation artifact and exact new-activity wire body,
+To check an existing report against the same saved inputs without creating or
+changing files:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py check-review \
+  --config inputs/review-config.yaml --review outputs/review-YOUR_ACCOUNT_KEY.yaml \
+  --review-sha256 YOUR_EXTERNALLY_RECORDED_REPORT_SHA256 \
+  --input-root . --max-bytes 1048576
+```
+
+Config/report paths follow the working directory; each config reference follows
+input-root. With the common root above, reference values include `inputs/`.
+The supplied hash pins report bytes and is not human approval. Success exits2
+with verified counts, blockers and false readiness; invalid input exits1. An
+all-existing or shortfall report can verify without becoming dispatchable.
+
+The `review` command writes a private reconciliation artifact and exact new-activity wire body,
 with readiness false. Stdout contains counts and blockers only. It never fetches,
 sends or changes Ghostfolio; there is no apply command.
 
