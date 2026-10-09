@@ -43,7 +43,8 @@ The orchestrator owns the tier choice by selecting the persona/model at spawn.
 ## Infra handoff boundary — these never happen inside a sync repo
 
 Produce the artifact here (image to build, secret pointer, origin to expose); hand execution
-to the infra agent via the `handoff` skill → infra epic (`infra-8tt` family / current infra).
+to the infra agent via the `handoff` skill. Resolve the destination infrastructure
+epic in Beads; record the source project and issue explicitly.
 
 - **Deploy / Komodo / image**: build + push image, container deploy, supercronic cron in prod.
 - **Secrets / SOPS**: rotation, writes to the off-git SOPS store, access pointers.

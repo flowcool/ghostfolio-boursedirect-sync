@@ -13,7 +13,10 @@ dependencies, claims, and material work findings.
   criteria, topical labels, and
   `--metadata '{"project":"ghostfolio-boursedirect-sync"}'`
 - Claim an implementation issue before editing: `bd update <id> --claim`
-- Record material findings with `/home/flow/.agents/bin/bd-finding`
+- Record material findings with `bd-finding` (install the operator-provided
+  structured-comment helper on `PATH`; it is agent tooling, not an importer
+  runtime dependency). On the current operator host it is installed at
+  `/home/flow/.agents/bin/bd-finding`.
 - Model execution order with `bd dep add`; use epics as umbrellas rather than
   active implementation work
 - Close only after each acceptance criterion has exact evidence:

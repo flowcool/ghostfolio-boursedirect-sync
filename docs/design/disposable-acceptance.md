@@ -123,3 +123,28 @@ remains a separate trusted wrapper around the shared protocol sequence.
 The controller archives attempts through its request callback and successful
 provenance/readback through the post-confirmation observer. Observer failure stops
 later events while retaining the confirmed journal; finally owned cleanup still runs.
+
+## Real saved-document rehearsal
+
+On 2026-10-09, a private data adaptation of the existing runner at `ebed9a4`
+used one previously acquired real monthly statement and its two matching note
+files. Acquisition-manifest hashes and private permissions were verified before
+use. Actual source mappings came from the saved destination evidence; three
+explicitly synthetic support BUYs supplied only the disposable account's opening
+holdings. They do not establish actual account history or resolve legacy dates.
+
+Offline preparation preserved all three real trades, matching the earlier private
+preparation apart from disposable account identities. The qualified application
+controller used the existing ownership-checked loopback HTTP callback, sent three
+single-event POSTs, and confirmed each against exact acceptance and full readback.
+Independent checks matched dates, EUR, symbols, quantities, prices, fees and
+source gross/net arithmetic. Complete archive replay passed. A second qualified
+application produced zero new events and zero POSTs. Six owned activities were
+compensated with empty readback; exact container/network absence was verified.
+All newly created private input, archive and journal copies were then purged;
+the pre-existing source originals were retained at the operator's request.
+
+The socket-forbidden Python suite passed 999 tests. Beads `infra-4g8u.87` owns the
+exact private receipt, commands and attempt history. This rehearsal proves the
+real-document conversion and owned-lab controller path, not production history,
+legacy adoption, public HTTPS composition, or production write authorization.

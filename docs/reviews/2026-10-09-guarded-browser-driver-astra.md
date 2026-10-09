@@ -168,3 +168,261 @@ source acceptance, online egress/delivery, real secret provisioning, security
 review and production authorization remain separate. No broker or Ghostfolio
 production write is authorized. Knowledge verdict: **Used and sufficient**,
 unchanged from the narrow indexed lookup above. Parent owns commit and Beads.
+
+## Playwright candidate evidence (2026-10-09, author follow-up)
+
+Florent clarified that the suggested reuse candidate was Playwright. A bounded
+Luna primary-source lookup found that [context routing](https://playwright.dev/docs/api/class-browsercontext#browser-context-route)
+can cover popup initial requests, whereas page routing cannot. Context routing
+has a documented service-worker bypass; blocking service workers is an explicit
+option. Context redirect behavior remains unverified in this lookup.
+
+The inspected historical source sample is Playwright v1.56.1 at
+`54c711571a37de525377e6f3d3608c3e029b1829`, not a current-version claim.
+[Page initialization](https://github.com/microsoft/playwright/blob/54c711571a37de525377e6f3d3608c3e029b1829/packages/playwright-core/src/server/chromium/crPage.ts#L527-L564)
+collects network initialization and `Runtime.runIfWaitingForDebugger` in the same
+`Promise.all`.
+[Network session initialization](https://github.com/microsoft/playwright/blob/54c711571a37de525377e6f3d3608c3e029b1829/packages/playwright-core/src/server/chromium/crNetworkManager.ts#L87-L93)
+also awaits enablement and interception together. This sample does not establish
+a sequential interception-acknowledgement-before-resume guarantee; it is not
+proof of a runtime escape or a defect in current Playwright.
+
+The official [launch option](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-chromium-sandbox)
+defaults Chromium sandboxing to false. The [Docker guide](https://playwright.dev/docs/docker#crawling-and-scraping)
+recommends a separate user and seccomp policy for untrusted crawling. Runtime
+qualification remains separately owned by infra; these sources authorize no
+host-security change or sandbox fallback.
+
+The existing synthetic raw-CDP capability experiment remains approved; reusable
+B remains held. This author evidence note does not change the Astra verdict or
+the reviewed plan, approve a Playwright driver, or substitute for real ordered
+guard tests. Beads `.71` records exact lookup findings and unresolved limits.
+
+## Synthetic ordering experiment (author implementation evidence)
+
+`collector/capability-ordering.mjs` is the first mock-only part of the approved
+capability experiment. It imports no browser, network, child-process or source
+loader. Injected callbacks model route installation, sequential guard
+acknowledgements, resume, owned exit confirmation and pipe closure. The retained
+result explicitly states `browser_proven=false`. It is not a browser driver,
+bounded CDP pipe implementation, full target/request policy or runtime authority.
+
+Network/child-forbidden tests hold each guard acknowledgement independently,
+then observe whether resume is attempted. The deliberately parallel negative
+control must record one forbidden dispatch while the held interception remains
+unacknowledged; that counter is a simulated signal, not a browser server count.
+Other scenarios reject unpaused attachments, stop pending initialization,
+refuse pipe closure without positive owned-exit confirmation, and cancel HTTP
+auth explicitly before stopping, including cancellation failure and wrong session.
+
+This mock verifies the ordering primitive and the negative-control detector.
+The real sandboxed positive/negative experiment, bounded transport, unexpected
+popup/frame/worker handling, durable concurrent permits and loader freshness
+remain required under the owning issue. The existing sandbox runtime blocker
+and reusable B HOLD are unchanged. Subagent execution evidence is recorded on
+`.71`; it is not an independent design/PR review or real Chrome qualification.
+
+## Composed offline capability evidence (author implementation)
+
+The same approved experiment now includes callback-only NUL-framed transport,
+startup ownership binding, and fixed invented request/capture fixtures. Transport
+tests enforce strict UTF-8, exact command/session replies, bounded pending work,
+input/output/startup queues, command/session deadlines and synchronous event
+routing. Fatal transport failures compose with the ordering fence; owned exit
+confirmation precedes intentional pipe closure. Startup holds an early paused
+attachment until the exact create-target reply binds ownership, and rejects
+pre-existing, unpaused, second-page, worker and iframe targets. Aborting releases
+an attachment wait without initialization.
+
+The fixed fixture serializes concurrent authentication requests and requires
+successful durable consumption before its one continuation. Redirects, stale
+epochs and foreign targets cannot consume or continue. Isolated composition
+tests use the existing offline authority core with a private owned temporary
+directory, fsync failure injection and controller restart: persistence failure
+prevents continuation and uncertain delivery remains fenced after reacquisition.
+Capture requires matching request, frame commit and loader-load events plus the
+ticket account/day/epochs; DOM markers alone cannot satisfy it.
+
+These tests dispatch no real request and launch no browser. Invented fixtures and
+simulated protocol frames do not establish Chrome's initial request suspension,
+real worker/frame interception, server counters, process crash recovery or actual
+loader freshness. Every returned qualification remains `browser_proven=false`.
+The real sandbox prerequisite, real positive/negative controls and all browser
+acceptance remain open; the reviewed plan and Astra verdict are unchanged.
+
+## Initial real dispatch evidence (author experiment, 2026-10-09)
+
+Infra runtime owner `infra-66vf` qualified the existing exact Chrome image using
+the pinned Playwright crawling seccomp profile. The paired opt-in probe retains
+the default-profile sandbox failure as a negative control; `chrome://sandbox`
+reports the namespace layer, PID/network namespaces and Seccomp-BPF/TSYNC active
+under that profile. AppArmor, nonroot identity and network-none isolation remain
+in place. Infra commit `fbe0d1d` owns the reproducible sandbox probe; the source
+issue records exact runtime/profile pins and private cleanup receipts.
+
+The opt-in `scripts/run-cdp-first-request.py` copies only four synthetic modules
+into newly owned network-none containers without mounts or real credentials.
+`collector/lab/first-request.mjs` uses actual Node20.19.2, Chrome148.0.7778.97,
+NUL-framed CDP, acknowledged bootstrap guards and a loopback HTTP counter.
+The five initial scenarios passed with positively observed browser exit and
+exact container removal:
+
+- A permitted root POST reaches the server exactly once; forbidden count zero.
+- A forbidden root POST is intercepted before dispatch; server count zero.
+- Omitting Fetch installation in the negative control dispatches that POST once.
+- A form POST popup actually creates a second paused attachment, is rejected,
+  and does not reach the forbidden endpoint.
+- The popup negative control deliberately resumes the second attachment without
+  guards and dispatches the forbidden POST once. Popup blocking is disabled in
+  both controls so an absent popup cannot masquerade as containment.
+
+Initial exploration omitted extension suppression and correctly failed when
+Chrome announced a component service worker. The retained fixture suppresses
+extensions/component extensions per the existing design; no target rejection
+policy was weakened. Private prototype receipts remain diagnostic evidence.
+
+This is a partial executable proof, not a new Astra verdict or independent PR
+review. Every report retains `browser_proven=false`. The fixture's in-memory
+one-use counter does not establish the real durable-principal integration gate.
+Frames/workers, redirects307/308, HTTP-auth cancellation, concurrent durable
+permits/fsync failures, process crash/restart, pipe loss/forced-stop dispatch and
+actual loader/account/date freshness still retain acceptance ownership in `.71`.
+The qualified runtime removes the previous sandbox blocker; reusable B stays
+HOLD until complete proof and subsequent exact-hash design approval. No broker
+or Ghostfolio request was sent, and ordinary pytest/npm tests never start this
+opt-in Docker fixture.
+
+## Expanded real capability evidence (author experiment, 2026-10-09)
+
+The same opt-in harness now runs 28 fixed scenarios under the qualified image
+and seccomp pins. This is author implementation evidence, not a new Astra verdict
+or an independent security/PR review. The reviewed plan remains byte-identical.
+The runner copies the synthetic modules, existing durable authority core and
+installed pinned `yaml@2.9.1`; it records each copied file's SHA256 and its own
+SHA256. No source configuration, credentials, volumes or shared database enter
+the container. The core's invented role metadata is never a browser destination;
+only the exact invented loopback request is mapped to that offline authority.
+
+Guarded root and same-origin child-frame POSTs, popup POSTs, worker/shared-worker/
+service-worker requests, 307/308 replay and the second authentication POST have
+zero forbidden server dispatch. Corresponding unguarded controls actually reach
+the server; the second-auth and concurrent controls dispatch twice. Worker
+rejection can occur on discovery or on a paused attachment, depending on the
+observed ordering. The proof accepts either exact worker-type rejection signal,
+without resuming it. Cross-origin/OOPIF support is not delivered by this fixture.
+The late-installation negative control resumes before installing Fetch, waits
+500 ms, and observes one forbidden dispatch before installing the guard.
+
+In this exact runtime `Fetch.requestPaused` reports the fixture's JavaScript
+`fetch()` POST as `XHR`. The synthetic contract pins that observed value and
+passes the native method/resource type into durable consumption. Concurrent
+pauses consume exactly one durable permit and dispatch at most once: fatal
+rejection of the second pause can stop the browser before even the first request
+reaches the server. Separate permitted-root evidence proves positive dispatch.
+Injected fsync failure has no continuation or server POST. A Chrome group crash
+after durable consumption and before continuation also has no POST. A fresh Node
+process reads the fixture's journal and refuses a new attempt in all three
+durable cases. This uses only the newly owned principal, never shared state.
+
+Pipe-loss and forced-stop scenarios wait until two forbidden requests are
+actually paused. The former destroys the read pipe as explicit failure injection;
+the latter stops the process group so TERM cannot succeed, exercising bounded
+KILL escalation. Both retain zero forbidden server dispatch. The trace confirms
+synchronous fencing before owned stop and observed browser exit before deliberate
+teardown pipe closure. The outer runner verifies and removes the exact labelled
+container, covering any remaining descendants independently of browser exit.
+
+`collector/lab/capture-document.mjs` arms the capture experiment before navigation,
+binds native session/frame ownership, correlates Fetch.networkId with the actual
+Network request ID and loader, and requires ordered frame commit and loader-bound
+load. A fixed driver-owned DOM expression serializes invented markers/body; frame
+and loader checks bracket serialization. Two identical documents have distinct
+native request/loader IDs. Four additional real documents exercise wrong account,
+day, role and unknown-operation markers. A real replacement navigation invalidates
+the second capture's loader. Adversarial replays derived from these native events
+reject the previous commit/load, missing loader, wrong identity/epoch and a
+DOMContentLoaded event used in place of load. These derived cases are identified
+as policy replays, not fabricated additional browser events or real financial
+document/source-acceptance evidence.
+
+Private receipts remain under ignored `tmp/cdp-real-proof/`; ordinary pytest/npm
+tests still forbid networking and do not invoke Docker or Chrome. Every runtime
+report retains `browser_proven=false`: local capability evidence does not approve
+reusable B, source roles, online egress or broker access. Exact publication evidence
+and the subsequent grounded reusable-design approval remain separate gates.
+
+Verification for this increment: all 28 scenarios in `final-matrix-9` passed;
+the subsequent capture-only change (arm before navigation and explicit native
+event-order check) passed in `final-capture-10`. All corresponding exact container
+IDs were independently absent after cleanup. The required Python suite passed
+993 tests in 80.31 seconds; the network-forbidden collector suite passed 155
+tests with zero failures in 2535.969294 ms. Beads `.71` retains the private receipt
+locations, commit anchors and publication acceptance ownership.
+
+## Bench regression and consolidation follow-up (author implementation)
+
+The browser experiment now imports a pure `fixtureVerdict` evaluator and a
+single keyed `collector/lab/scenarios.yaml` catalogue shared with the Python
+runner. Offline tests exercise each scenario, historical expectation mistakes,
+missing stimuli, cancellation/authority failures, capture evidence and teardown
+order. They start no browser or Docker resource. Live reports also contain fixed
+verdict failure codes; containment policy and the approved plan are unchanged.
+
+`scripts/consolidate-cdp-proof.py` rechecks full coverage, current source and
+runner hashes, runtime pins, ownership/removal receipts and every observation
+through that same evaluator. It reads receipts and runs only the fixed pure Node
+evaluator. Docker absence inspection is explicitly opt-in and read-only:
+
+```sh
+.venv/bin/python scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/<matrix>
+.venv/bin/python scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/<matrix> --verify-owned-absence
+```
+
+An explicit `--replace-capture <directory>` accepts exactly one capture receipt
+with the same inventory, runner and common source pins; only the capture module
+hash may change. Both original and replacement must pass, all other modes must
+retain the original common pins, and the final capture must match current files.
+The summary retains selected receipt hashes, the superseded capture hash and
+validator hashes. This checks provenance consistency, not source authenticity or
+independent browser attestation. Original receipts are never rewritten; historic
+receipts from a different runner revision cannot qualify the current tool.
+
+PR39 review findings are addressed with explicit Python runtime checks that
+remain active under `-O`. Cleanup records the full create ID before inspection,
+attempts its removal even when inspection is temporarily unavailable, records
+cleanup failures, publishes a receipt and preserves the original execution
+exception. Explicit contradictory ownership blocks removal and qualification;
+the review suggestion to remove even a foreign-labelled resource is not adopted.
+Synthetic response-injection tests cover these distinctions without touching
+Docker or shared state. The reader-boundary "Major" finding is a false positive:
+the test fixture changes into `tmp_path`, so `inputs/` is beneath the accepted
+root; all six exact-boundary cases pass unchanged. Agent-helper installation is
+documented, and shared infrastructure routing distinguishes destination epic
+from source issue; sibling-copy alignment is handed off separately.
+
+These changes harden the same approved synthetic experiment. Reusable B,
+actual source/credential/egress gates and independent external review remain
+separate; every report retains `browser_proven=false`.
+
+
+### Current-head teardown review correction (author evidence)
+
+The subsequent CodeRabbit and Claude reviews of `6e211bf` identified a valid
+ordering gap in the pure fixture verdict: a fenced `stop-owned` recorded after
+`owned-exit` could qualify when pipe closure was correctly ordered. The evaluator
+now requires `stop-owned < owned-exit < close-pipe`, with the first stop fenced
+and pipe closure reporting exit. A focused regression independently rejects late,
+missing and unfenced stops; removing the stop-before-exit guard makes it fail.
+
+Python regressions now reject reused container IDs both across selected matrix
+receipts and across an explicit replacement and its superseded capture receipt.
+Removing the identity guard makes both tests fail because no error is raised.
+A nonzero inspection return cannot establish ownership even with plausible JSON.
+Malformed create output retains a durable failed receipt and cleanup uncertainty;
+it never grants authority to remove an unvalidated ID or a discovered resource.
+That improbable case remains unqualified rather than broadening removal authority.
+
+These are author corrections within the existing synthetic proof contract, not a
+new Astra verdict or production-browser qualification. Exact-current private
+receipts must be regenerated after the evaluator pin changes. Existing reader
+root feedback remains disproved; shared sibling routing is owned by `infra-d4cl`.
