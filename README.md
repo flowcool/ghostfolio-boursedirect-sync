@@ -285,3 +285,8 @@ no retry, resume, DELETE or automatic compensation is offered. Actual legacy
 history/date/fee/adoption acceptance and external security/recovery/exclusivity
 reviews are required separately from successful synthetic tests. Exit0 means a
 completed nonempty positively confirmed run, exit2 a diagnostic, exit1 failure.
+
+The portable acquisition [authority core](docs/design/acquisition-core.md) now
+provides offline principal fencing and one-use authentication permits. It does
+not connect to Bourse Direct; the browser driver still needs its separately
+reviewed capability proof. Source collection remains an operator-run activity.
