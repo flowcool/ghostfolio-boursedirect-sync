@@ -270,7 +270,7 @@ def test_preparation_publications_cannot_replace_any_captured_input(destination,
     config_path.write_text(yaml.safe_dump(config))
     before = {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
               for p in Path(d).rglob('*') if p.is_file()}
-    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+    with pytest.raises(RuntimeError, match=r'^OUTPUT_INPUT_COLLISION$'):
         bd.prepare_local_plan(config_path, '.', 100000, 32)
     after = {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
              for p in Path(d).rglob('*') if p.is_file()}
@@ -288,7 +288,7 @@ def test_preparation_rejects_hardlink_publication_alias_before_state_changes(des
     target.hardlink_to(Path('inputs/statement.html'))
     before = {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
               for p in Path(d).rglob('*') if p.is_file()}
-    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+    with pytest.raises(RuntimeError, match=r'^OUTPUT_INPUT_COLLISION$'):
         run()
     assert before == {str(p): p.read_bytes() for d in ('inputs', 'outputs', 'state')
                       for p in Path(d).rglob('*') if p.is_file()}
