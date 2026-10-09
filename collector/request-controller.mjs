@@ -49,7 +49,7 @@ export function requestController({binding, source, reads = [], consume, continu
     roles = structuredClone(reads); budget = {...limits};
   } catch { throw new Error('REQUEST_CONFIG_INVALID'); }
 
-  let fenced = false, stopping, pending = 0, queue = Promise.resolve(), action, reserved = false;
+  let fenced = false, stopping, pending = 0, queue = Promise.resolve(), action, reserved = false, lastOtpClock;
   const seen = new Set(), challenges = new Set();
   function check() { if (fenced) throw new Error('REQUEST_FENCED'); }
   function bounded(callback) {
@@ -76,11 +76,23 @@ export function requestController({binding, source, reads = [], consume, continu
   async function refuse() {
     await abort(); throw new Error('REQUEST_REJECTED');
   }
+  function otpClock(value) {
+    const time = now(), issued = value.otp.issuedAt;
+    if (!Number.isSafeInteger(time) || time < 0 || !Number.isSafeInteger(issued) || issued < 0
+        || !Number.isSafeInteger(value.otp.step) || value.otp.step !== Math.floor(issued / 30)
+        || time < issued || (lastOtpClock !== undefined && time < lastOtpClock)
+        || time - issued > 20 || Math.floor(time / 30) !== value.otp.step || 30 - time % 30 < 5) {
+      throw new Error('REQUEST_OTP_EXPIRED');
+    }
+    lastOtpClock = time;
+    return time;
+  }
   function arm(value) {
     try {
       check();
       if (action) throw new Error();
-      exact(value, ['phase', 'nonce', 'pageEpoch', 'frameEpoch', 'frameId', 'url', 'method', 'resourceType']);
+      const keys = ['phase', 'nonce', 'pageEpoch', 'frameEpoch', 'frameId', 'url', 'method', 'resourceType'];
+      exact(value, value?.phase === 'otp_uncertain' ? [...keys, 'otp'] : keys);
       epoch(value.nonce); epoch(value.pageEpoch); epoch(value.frameEpoch);
       if (!['password_uncertain', 'otp_uncertain'].includes(value.phase)
           || value.pageEpoch !== owner.pageEpoch || !Object.hasOwn(owner.frames, value.frameId)
@@ -88,6 +100,9 @@ export function requestController({binding, source, reads = [], consume, continu
           || !evaluateRequest(contract, value.phase, {
             url: value.url, method: value.method, resource_type: value.resourceType, redirect: false,
           })) throw new Error();
+      if (value.phase === 'otp_uncertain') {
+        exact(value.otp, ['issuedAt', 'step']); otpClock(value);
+      }
       // Caller must already have durably armed this exact permit before any fill.
       action = structuredClone(value);
     } catch {
@@ -122,15 +137,23 @@ export function requestController({binding, source, reads = [], consume, continu
       try {
         check();
         if (auth) {
-          const time = now();
+          const time = action.phase === 'otp_uncertain' ? otpClock(action) : now();
           if (!Number.isSafeInteger(time) || time < 0) throw new Error();
           const permit = {phase: action.phase, page_epoch: action.pageEpoch, frame_epoch: action.frameEpoch,
             url: action.url, method: action.method, resource_type: action.resourceType,
             nonce: action.nonce, redirect: false};
-          if (await bounded(() => {check(); return consume(permit, time);}) !== true) throw new Error();
+          if (await bounded(() => {
+            check();
+            return consume(permit, action.phase === 'otp_uncertain' ? otpClock(action) : time);
+          }) !== true) throw new Error();
           check();
+          if (action.phase === 'otp_uncertain') otpClock(action);
         }
-        await bounded(() => {check(); return continueRequest(request.requestId);});
+        await bounded(() => {
+          check();
+          if (auth && action.phase === 'otp_uncertain') otpClock(action);
+          return continueRequest(request.requestId);
+        });
         check();
         return {continued: 1, online_ready: false, browser_proven: false, import_ready: false};
       } catch { return refuse(); }

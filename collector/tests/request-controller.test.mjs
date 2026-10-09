@@ -200,6 +200,55 @@ test('configuration rejects wildcard/unbounded/read-auth overlap before any call
   assert.deepEqual(f.actions, []);
 });
 
+function otpFixture(overrides = {}) {
+  const source = {schema_version: 1, origin: core.ORIGIN, roles: {password: null, app_method: null,
+    otp: {url: core.ORIGIN + '/invented-auth', method: 'POST', resource_type: 'XHR', evidence: 'synthetic OTP'}}};
+  let time = 121;
+  const f = fixture({source, now: () => time, ...overrides});
+  f.action = {...f.action, phase: 'otp_uncertain', otp: {issuedAt: 120, step: 4}};
+  return {...f, source, time: value => {time = value;}};
+}
+test('valid one-step OTP applies the same timing metadata for either credential mode', async () => {
+  const f = otpFixture(); f.policy.arm(f.action);
+  // Request contains no code/provider/seed metadata; both modes share this guard.
+  await f.policy.paused(f.event()); assert.deepEqual(f.actions, ['consumed', 'continued:a']);
+  await assert.rejects(f.policy.paused(f.event('retry')), /REQUEST_REJECTED/);
+});
+for (const [name, time] of [['near expiry', 146], ['rollover', 150], ['age', 141], ['reversed clock', 120]]) {
+  test(`OTP ${name} after arm cannot consume`, async () => {
+    const f = otpFixture(); f.policy.arm(f.action); f.time(time);
+    await assert.rejects(f.policy.paused(f.event()), /REQUEST_REJECTED/);
+    assert.deepEqual(f.actions, ['stopped']);
+  });
+}
+test('malformed or absent OTP timing, wrong step and future issue refuse arm', async () => {
+  for (const change of [a => {delete a.otp;}, a => {a.otp.step = 5;}, a => {a.otp.issuedAt = 123;},
+    a => {a.otp.issuedAt = NaN;}, a => {a.otp.extra = true;}]) {
+    const f = otpFixture(); change(f.action);
+    assert.throws(() => f.policy.arm(f.action), /REQUEST_ACTION_REJECTED/); await f.policy.abort();
+  }
+});
+test('OTP expiration across held durable fsync preserves consumed uncertainty without continuation', async () => {
+  for (const expired of [146, 150, 120]) {
+    const entered = deferred(), held = deferred(); let consumed = 0, continued = 0;
+    const f = otpFixture({consume: () => {consumed++; entered.resolve(); return held.promise;}, continueRequest: () => {continued++;}});
+    f.policy.arm(f.action); const outcome = Promise.allSettled([f.policy.paused(f.event())]);
+    await entered.promise; f.time(expired); held.resolve(true);
+    assert.equal((await outcome)[0].status, 'rejected'); assert.equal(consumed, 1); assert.equal(continued, 0);
+    assert.deepEqual(f.actions, ['stopped']);
+  }
+});
+test('OTP clock checked again inside continuation callback after scheduling', async () => {
+  let sampled = 0, continued = 0;
+  const f = otpFixture({now: () => (++sampled < 5 ? 121 : 150), continueRequest: () => {continued++;}});
+  f.policy.arm(f.action); await assert.rejects(f.policy.paused(f.event()), /REQUEST_REJECTED/);
+  assert.equal(sampled, 5); assert.equal(continued, 0); assert.deepEqual(f.actions, ['consumed', 'stopped']);
+});
+test('OTP action timing is cloned before caller mutation', async () => {
+  const f = otpFixture(); f.policy.arm(f.action); f.action.otp.step = 999; f.action.otp.issuedAt = 99999;
+  await f.policy.paused(f.event()); assert.deepEqual(f.actions, ['consumed', 'continued:a']);
+});
+
 async function isolatedAuthority(run) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-request-policy-'));
   const homedir = os.homedir; os.homedir = () => directory;
@@ -224,6 +273,30 @@ for (const failure of ['none', 'fsync', 'continuation']) test(`real synthetic du
   } finally {fs.fsyncSync = fsync; core.releasePrincipal(handle);}
   assert.equal(continued, failure === 'fsync' ? 0 : 1);
   assert.equal(fs.statSync(path.join(handle.directory, 'journal.yaml')).mode & 0o777, 0o600);
+  const child = spawnSync(process.execPath, ['--import', path.resolve('tests/no-network.mjs'), path.resolve('tests/principal-child.mjs')],
+    {env: {HOME: directory, PATH: '/usr/bin:/bin'}, encoding: 'utf8', timeout: 5000});
+  assert.equal(child.status, 0); assert.equal(child.stdout.trim(), 'AUTH_PRINCIPAL_FENCED');
+}));
+test('real OTP permit consumed before expiry remains uncertain in a fresh process', async () => isolatedAuthority(async directory => {
+  const f = otpFixture(), source = structuredClone(f.source);
+  source.roles.password = {...source.roles.otp, url: core.ORIGIN + '/invented-password'};
+  core.enroll('SYNTHETIC'); const handle = core.acquirePrincipal('SYNTHETIC');
+  core.startAttempt(handle, 100); core.transition(handle, 'password_uncertain', 100);
+  const password = {phase: 'password_uncertain', page_epoch: f.action.pageEpoch, frame_epoch: f.action.frameEpoch,
+    url: source.roles.password.url, method: 'POST', resource_type: 'XHR'};
+  const n = core.armPermit(handle, password, 100, source); core.consumePermit(handle, {...password, nonce: n, redirect: false}, 101);
+  core.transition(handle, 'password_accepted', 102); core.transition(handle, 'otp_uncertain', 120);
+  const otp = {phase: 'otp_uncertain', page_epoch: f.action.pageEpoch, frame_epoch: f.action.frameEpoch,
+    url: source.roles.otp.url, method: 'POST', resource_type: 'XHR'};
+  f.action.nonce = core.armPermit(handle, otp, 120, source);
+  let continued = 0;
+  const policy = requestController({...f.options, source,
+    consume: (request, time) => {const result = core.consumePermit(handle, request, time); f.time(150); return result;},
+    continueRequest: () => {continued++;}});
+  policy.arm(f.action);
+  try {await assert.rejects(policy.paused(f.event()), /REQUEST_REJECTED/);}
+  finally {core.releasePrincipal(handle);}
+  assert.equal(continued, 0);
   const child = spawnSync(process.execPath, ['--import', path.resolve('tests/no-network.mjs'), path.resolve('tests/principal-child.mjs')],
     {env: {HOME: directory, PATH: '/usr/bin:/bin'}, encoding: 'utf8', timeout: 5000});
   assert.equal(child.status, 0); assert.equal(child.stdout.trim(), 'AUTH_PRINCIPAL_FENCED');
