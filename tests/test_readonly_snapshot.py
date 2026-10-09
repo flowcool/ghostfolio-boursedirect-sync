@@ -158,3 +158,37 @@ def test_cli_counts_only_readiness_false(monkeypatch, capsys):
     result = json.loads(stdout)
     assert result['snapshot_activities'] == 3 and result['import_ready'] is False
     assert 'synthetic.example' not in stdout and 'signature' not in stdout
+
+
+@pytest.mark.parametrize('alias', ['direct', 'hardlink'])
+def test_allowlist_config_alias_cannot_be_replaced_by_snapshot(monkeypatch, alias):
+    events, raw = setup(monkeypatch)
+    Path('outputs').mkdir(mode=0o755)
+    output = Path('outputs/ghostfolio-snapshot-' + hashlib.sha256(raw).hexdigest() + '.json')
+    config = Path('inputs/snapshot-config.yaml')
+    if alias == 'direct':
+        output.write_bytes(config.read_bytes())
+        config = output
+    else:
+        output.hardlink_to(config)
+    originals = {p: (p.read_bytes(), p.stat().st_mode) for p in (config, output)}
+    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+        bd.acquire_readonly_snapshot(config, '.', 100000, 10)
+    assert all((p.read_bytes(), p.stat().st_mode) == before for p, before in originals.items())
+    assert Path('outputs').stat().st_mode & 0o777 == 0o755
+    assert events == ['connect', 'GET', ('read', 100001), 'close']
+    assert not Path('state').exists()
+
+
+def test_collision_cli_logs_only_safe_code_and_preserves_prior_output(monkeypatch, capsys, caplog):
+    _, raw = setup(monkeypatch)
+    Path('outputs').mkdir()
+    output = Path('outputs/ghostfolio-snapshot-' + hashlib.sha256(raw).hexdigest() + '.json')
+    output.hardlink_to(Path('inputs/snapshot-config.yaml'))
+    before = output.read_bytes()
+    assert bd.main(['snapshot', '--config', 'inputs/snapshot-config.yaml', '--input-root', '.',
+                    '--max-bytes', '100000', '--timeout', '10']) == 1
+    assert output.read_bytes() == before
+    assert capsys.readouterr().out == ''
+    assert 'OUTPUT_INPUT_COLLISION' in caplog.text
+    assert 'synthetic.example' not in caplog.text and 'signature' not in caplog.text

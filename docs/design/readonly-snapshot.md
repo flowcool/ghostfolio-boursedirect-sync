@@ -44,6 +44,12 @@ Configuration and snapshots stay private under repository ignore rules. Save or
 copy the selected snapshot into the explicit review input root when preparing
 the review configuration; bind the complete-history declaration to its raw digest.
 
+Publication rejects resolved-path or existing inode aliases against the captured
+allowlist config with `OUTPUT_INPUT_COLLISION` before changing the output directory
+or replacing files. This preserves config/prior-output bytes and modes when
+input-root includes outputs. The guard runs after the single read-only GET because
+the destination name depends on the captured response digest; it adds no request.
+
 Tests forbid actual sockets and replace HTTPSConnection with a verified fake.
 They prove GET-only requests, TLS context, exact origin match, unsafe URLs/header
 injection rejection, no redirect/retry, bounded bodies, malformed/partial JSON

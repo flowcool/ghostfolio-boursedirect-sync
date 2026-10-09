@@ -1972,8 +1972,10 @@ def acquire_readonly_snapshot(config_path, input_root, max_bytes, timeout):
             connection.close()
     normalized = parse_remote_activity_snapshot(raw)
     digest = hashlib.sha256(raw).hexdigest()
-    output_root = private_directory("outputs")
-    atomic_private_bytes(output_root / ("ghostfolio-snapshot-" + digest + ".json"), raw)
+    output = Path("outputs") / ("ghostfolio-snapshot-" + digest + ".json")
+    reject_output_input_collision(output, [Path(config_path)])
+    private_directory("outputs")
+    atomic_private_bytes(output, raw)
     return {"snapshot_activities": len(normalized), "import_ready": False,
             "blockers": ["SNAPSHOT_REVIEW_REQUIRED", "COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED"]}
 

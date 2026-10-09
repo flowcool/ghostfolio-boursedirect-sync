@@ -16,6 +16,13 @@ documents do not prove complete historical import viability.
 
 ## Run locally
 
+Run commands from the repository root. The current working directory is the
+local workspace root: generated artifacts go to its `outputs/` and journals/locks
+to its `state/`, both covered by this repository's ignore rules. `--input-root`
+restricts source reads; even an absolute input root does not select an output or
+state root. Configuration and report arguments follow the working directory;
+references inside configuration follow the specified input root.
+
 Python 3.13 is the verified bench interpreter. Install runtime dependencies for
 inspection, or development dependencies to run tests:
 
