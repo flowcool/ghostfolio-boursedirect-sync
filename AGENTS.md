@@ -10,8 +10,9 @@ Global working agreement applies. Beads owns live work state.
   tool with note-matching, internal financial conversion, stable ledger identities
   and local `prepare`/`review` artifacts, exact wire bytes, uncertainty journals
   and conservative chronological holdings checks.
-  No classes or type hints; follow `.claude/rules/python-conventions.md`
-  and `.claude/rules/security.md`.
+  No classes or type hints; follow `.claude/rules/python-conventions.md`,
+  `.claude/rules/security.md` and `.claude/rules/delegation.md` (fleet delegation,
+  model right-sizing, infra handoff, convergence discipline).
 - Only local saved HTML is read; scripts, links and assets are never fetched.
   Optional Ghostfolio `snapshot` uses one exact-allowlisted HTTPS GET only;
   session credentials come from environment, never an authentication POST.
