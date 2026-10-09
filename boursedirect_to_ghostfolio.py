@@ -622,7 +622,10 @@ def parse_keyed_yaml(raw):
                     fail("YAML_DUPLICATE_KEY")
             elif isinstance(item, yaml.SequenceNode):
                 pending.extend((child, depth + 1) for child in item.value)
-        value = yaml.safe_load(contents)
+        try:
+            value = yaml.safe_load(contents)
+        except (KeyError, ValueError, IndexError, AttributeError):
+            fail("INVALID_KEYED_YAML")
     except (yaml.YAMLError, UnicodeError, RecursionError):
         fail("INVALID_KEYED_YAML")
     if not isinstance(value, dict):

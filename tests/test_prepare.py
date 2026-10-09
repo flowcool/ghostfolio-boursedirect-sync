@@ -136,6 +136,12 @@ def test_target_lock_prevents_concurrent_write():
     ('account: &owned {}\nmapping: *owned\n', 'YAML_ALIAS_NOT_SUPPORTED'),
     ('true: value\n', 'YAML_STRING_KEYS_REQUIRED'),
     ('!!python/object/apply:os.system [echo synthetic]\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!bool "maybe"\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!timestamp "2026-99-99"\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!timestamp "not-a-date"\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!int "nope"\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!int\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!float "nope"\n', 'INVALID_KEYED_YAML'),
 ])
 def test_unsafe_or_ambiguous_yaml_configuration_rejected(content, error):
     setup()
@@ -186,6 +192,19 @@ def test_cli_diagnostics_only_counts_and_blockers(capsys):
     assert status == 2 and summary['prepared_activities'] == 3
     assert 'FR000' not in output and 'synthetic-' not in output and '0.45' not in output
     assert summary['blockers'] == ['REMOTE_ADOPTION_UNVERIFIED', 'ISOLATED_API_CONTRACT_UNVERIFIED']
+
+
+def test_malformed_typed_yaml_cli_emits_only_fixed_code(capsys, caplog):
+    setup()
+    Path('inputs/import-config.yaml').write_text('schema_version: !!bool "private-invalid-value"\n')
+    status = bd.main(['prepare', '--config', 'inputs/import-config.yaml', '--input-root', 'inputs',
+                      '--max-bytes', '100000', '--max-depth', '32'])
+    output = capsys.readouterr()
+    assert status == 1
+    assert caplog.messages == ['Inspection failed: INVALID_KEYED_YAML']
+    assert 'private-invalid-value' not in output.out + output.err + caplog.text
+    assert 'Traceback' not in output.out + output.err + caplog.text
+    assert not Path('outputs').exists() and not Path('state').exists()
 
 
 def test_atomic_write_failure_retains_previous_artifact_and_cleans_temp(monkeypatch):
