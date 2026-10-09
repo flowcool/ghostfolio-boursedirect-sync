@@ -432,3 +432,186 @@ bundle, duplicate role/date entries are deliberately refused as ambiguous;
 there is NO automatic newest-revision selection. An operator can later qualify
 one exact completed run or separately review a revision-selection policy.
 Public documentation must state this conservative limitation.
+
+## Portable Bitwarden delivery amendment (2026-10-09)
+
+This is design-only scope for .84. It extends the initial-environment credential
+interface with a separately qualified delayed OTP provider; prior A/offline C
+implementation is unchanged. The grounded guarded-browser plan owns request
+control and runtime recovery. Neither this amendment nor its review authorizes
+vault access, seed export, container launch, broker login or Ghostfolio writes.
+
+### Inspected reuse evidence and explicit decision
+
+Read the infra exploration bridge/worker/runbook at `ac3f584` under owners
+`infra-1bqe` and `infra-jnvj`, without executing them. Its own runbook excludes a
+public runtime dependency. It supplies login/password through a child environment
+and delays item-ID TOTP through private socketpair IPC. Those are useful interface
+observations. Hardcoded host/image/SOPS paths, search-by-name selection, repeated
+TOTP fetches and resource-name cleanup do not meet portable delivery requirements.
+No code is copied. Implement fresh functional helpers against reviewed interfaces;
+any later third-party distribution requires pinned provenance/license review.
+
+The official [Bitwarden CLI documentation](https://bitwarden.com/help/cli/)
+describes API-key client environment, unlock via a named password environment,
+session environment, and exact-object `get` including item/TOTP. This is command
+source-grounding only: it does not prove an installed version, vault visibility,
+TOTP availability or safe container lifecycle. The exploration's CLI2026.6.0 is
+historical evidence, not a portable approved runtime. A delivery owner must pin
+and verify its exact CLI executable/image and provider behavior before use.
+
+Choose ONE configurable exact item UUID and fresh item-ID TOTP. Do not search/list
+by item name, fall back to another item/account or export its TOTP seed to the
+browser. Existing explicitly operator-provisioned initial environment OTP/seed
+mode remains supported by A; it is mutually exclusive with provider mode.
+The provider cannot supply an alternate broker endpoint or a seed fallback.
+
+### Private configuration and account binding
+
+A strict keyed YAML provider configuration holds schema version, exact vault
+HTTPS origin, item UUID, expected item name, exact expected HTTPS broker login
+URI, expected canonical principal hash, and path/hash references to the existing
+import configuration. That importer configuration owns source-account identity
+and portfolio mapping; do not duplicate or infer those values from a vault title.
+All values are explicit operator records. No credential, TOTP, session or seed
+belongs in configuration, Git, Beads, logs or public artifacts.
+
+Use the exact selected UUID in `bw get item`; validate returned ID/type,
+name, one characterized login URI, nonempty username/password and TOTP availability
+against configuration. Require returned username's existing `principal()` hash
+and enrolled installation to match the expected binding. The worker additionally
+parses the selected TOTP field privately and requires the supported SHA1/30s/
+6digits profile and strict valid Base32 secret. Explicit URI parameters must
+match; omitted URI parameters use only pinned documented CLI defaults verified
+in provider qualification. HOTP/counter, unknown algorithm/digits/period,
+malformed secret/URI or unproved defaults disable TOTP. Seed and raw TOTP URI
+never leave the worker; downstream receives only an attested supported profile
+and bounded code response. Mere field presence is insufficient.
+Extra/ambiguous URI selection, missing fields or wrong binding disables the session. Ignore neither
+a changed login nor a missing prior enrollment. No lookup example is real evidence.
+
+Credentials may be fetched privately before acquiring the login lock, but no
+browser starts and no credential reaches it until the canonical principal lock,
+existing enrollment/journal, account binding, source/runtime/egress gates and
+durable allocation receipt are verified. Multiple portfolios share that principal
+namespace. Container replacement must use the same separately provisioned
+persistent canonical auth root and retained installation/journals; a fresh HOME
+or empty mount cannot silently create a new enrollment or bypass uncertainty.
+A changed/missing root or existing unresolved allocation/attempt stops normally.
+
+### Two isolated runtimes and secret transfer
+
+A portable trusted supervisor owns a short-lived non-root vault-worker container
+and the separately guarded non-root browser/collector container. Neither contains
+SSH, Komodo, SOPS-path or private host assumptions. Deployment, secret-store wiring
+and network exposure are handed to infra; local implementation never changes them.
+The supervisor receives explicitly provisioned vault API client/unlock credentials
+through its initial environment only. It forwards only required fields to the
+trusted worker over an anonymous private pipe after exact owned runtime startup.
+No password/session/value in argv, Docker create/exec environment metadata,
+plain env file, bind-mounted secret file, public port or shared vault appdata.
+The worker internally provides the CLI's required environment for fixed commands.
+
+The worker has private ephemeral appdata/tmpfs, minimal child environment,
+no shared production session, no `bw serve`, no inherited broker/Ghostfolio/Beads
+credentials and no automatic login/unlock/sync retry. Its bounded fixed commands
+perform one login, one unlock, one sync and one exact item retrieval. Required
+vault-origin redirects/resources must be characterized by the runtime owner;
+egress refuses all other routes. The browser separately has broker-only egress
+and never sees vault API/unlock credentials, BW_SESSION, raw item JSON or seed.
+The provider's full item response remains transient private worker memory only.
+
+Both runtimes use disabled container log collection for secret-bearing private
+stdio and bounded captured child errors that become fixed public codes. Core
+dumps/diagnostic dumps and shell tracing are disabled by the delivery owner.
+The trusted parent/host/daemon can observe process memory and private pipes; this
+is a boundary against accidental disclosure, not protection from those owners.
+Public output contains only fixed codes/counts and opaque run handles.
+
+Login/password arrive once at collector initialization through the private pipe;
+its trusted supervisor constructs the collector child process's initial minimal
+BD_LOGIN/BD_PASSWORD environment inside its runtime. The browser subprocess gets
+no credential environment. The launcher does not pass secrets as container API
+configuration. Environment-only means the application reads its initial process
+environment; it is not a claim that environment values are invisible to its owner.
+
+### One-use delayed OTP channel
+
+Provider mode inherits ONE anonymous private IPC descriptor; operator commands
+cannot name a socket, provider command, item ID, vault URI or secret. A fixed
+bounded request contains run nonce and OTP-stage nonce only. Supervisor binds
+those to its already validated item/principal/account, observed challenge and
+canonical retained attempt. A second request, wrong run/stage, concurrent call,
+malformed frame, timeout or provider disconnect refuses; no refresh/retry loop.
+
+After exact characterized challenge observation and before credential fill,
+request fresh `bw get totp <exact-item-id>` once. A trusted wrapper brackets that
+single command with UTC request-start/completion samples. Require a six-digit
+code, ordered request-start<=completion<=receipt-time, all in the same30s step,
+start age<=20s and at least5s remaining at receipt and immediately before OTP
+arming/fill. Runtime qualification must verify provider and collector share the
+trusted host clock; reversed/skewed/rollover samples refuse rather than claim
+code provenance. Use request-start as conservative issued-at input to A's
+existing pure OTP validator. Bind the OTP action privately to that observed step
+and its absolute expiration. After every awaited transition/arm persistence,
+revalidate the same timing constraints immediately before fill. The later
+request guard checks the same step and at least5s remaining before consumption
+and AFTER its fsync acknowledgement immediately BEFORE continuation. Generic A
+permit45s lifetime cannot override this stricter expiry. Clock reversal/skew,
+rollover or insufficient remaining time fences/refuses permanently; no refresh,
+second provider call or replacement code. This OTP expiry check is a separate
+owning implementation change to the guarded controller, with held-consumption/
+clock-crossing regression evidence before composition. Never alter or refresh
+process.env to simulate a new initial-environment code. A callback-only provider mode accepts this explicit
+bounded result through a separate interface, leaving the old initial-env mode
+intact. Neither timestamp nor nonce alone authenticates an untrusted provider.
+
+After validating OTP timing and challenge, durably transition to otp_uncertain
+and arm its exact request permit BEFORE fill; the guarded controller consumes
+before continuation. Provider failure or timing refusal sends no new OTP continuation. Before the
+OTP transition, retain password_accepted; after transition/arm/consumption,
+retain otp_uncertain and any consumed permit without backward transition.
+All such states remain fenced; a prior continuation cannot be recalled. Clear only in-memory
+secret references after use; JavaScript/CLI memory erasure is not guaranteed.
+Successful authenticated DOM/location evidence still owns durable success; a
+valid OTP response or HTTP200 is not authentication success.
+
+### Owned lifecycle, rollback and acceptance owners
+
+The same pre-create durable allocation intent and pre-start exact full-ID receipt
+contract from the grounded browser plan applies separately to each runtime and
+any newly owned network. Keep daemon/resource identity and image/ownership pins.
+Creation has no auto-start or restart policy; secret transfer follows the durable
+receipt and observed startup only. Kill after create/before receipt may leave a
+stopped orphan and blocks replay; name/label discovery grants no removal authority.
+Stop worker/collector exact groups/resources before closing live private pipes;
+verify exit/removal and preserve failed/uncertain cleanup receipts. Failed daemon
+access/ownership proof remains a blocker, not a successful rollback. Do not modify
+production BillCollector, Puppet, vault items or any existing service/network.
+
+Rollback code/design through scoped commit revert; stop/remove ONLY verified
+newly owned full IDs under their explicit runtime authority. Preserve principal
+journals, allocation receipts, previous capture runs and private source bindings.
+No login or financial mutation is undone by code rollback.
+
+After exact Astra approval, create separate linked owners for:
+
+- Pure exact-item/binding and bounded one-use delayed-OTP helpers: synthetic-only,
+  network/child-forbidden validation; bad/ambiguous items, skew/rollover/staleness,
+  concurrency, secret redaction and unchanged initial-env mode must discriminate.
+- Guarded-controller OTP step/expiry enforcement: preserve initial-env/provider
+  modes, revalidate after durable awaits and immediately before continuation,
+  reject clock reversal/skew/rollover and held-persistence expiry without retry.
+  Synthetic clock/held-callback tests own these decisions before composition.
+- Portable supervisor/worker and owned-lifecycle composition: final-code
+  isolated fake-vault/browser proof with no shared mounts/state/real domains or
+  secrets; exact pinned runtime, pre-start kill windows, no secret argv/container
+  metadata/logging, no retries and complete exact-resource cleanup evidence.
+  Real vault visibility, actual broker source and dedicated production egress
+  remain separate operational gates; synthetic success cannot close them.
+
+Each component owns only its evidence. .84 closes on inspected reuse/provenance
+limits, this complete reviewed contract and linked atomic owners, never on delivered
+Bitwarden integration. The root epic retains actual end-to-end delivery; .70
+source, .25 financial history, guarded reusable browser composition, portable
+runtime/egress and exact-head pre-merge security/external PR review remain gates.
