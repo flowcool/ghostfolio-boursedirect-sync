@@ -650,24 +650,38 @@ def atomic_private_yaml(path, value):
 
 def atomic_private_bytes(path, raw):
     path = Path(path)
-    if path.is_symlink():
-        fail("SYMLINK_PRIVATE_FILE")
-    temporary = path.with_name("." + path.name + "." + uuid.uuid4().hex)
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    temporary = "." + path.name + "." + uuid.uuid4().hex
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    created = False
     try:
-        with os.fdopen(descriptor, "wb") as stream:
+        try:
+            existing = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and stat.S_ISLNK(existing.st_mode):
+            fail("SYMLINK_PRIVATE_FILE")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory)
+        created = True
+        try:
+            stream = os.fdopen(descriptor, "wb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        with stream:
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
+        os.fsync(directory)
+    finally:
         try:
-            os.fsync(directory)
+            if created:
+                try:
+                    os.unlink(temporary, dir_fd=directory)
+                except FileNotFoundError:
+                    pass
         finally:
             os.close(directory)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
 
 
 def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
