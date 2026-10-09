@@ -714,6 +714,240 @@ def preparation_configuration(config_raw, max_bytes, max_depth):
     return config
 
 
+def capture_period(role, period):
+    if type(period) is not str or role not in ("statement", "note"):
+        fail("INVALID_CAPTURE_PERIOD")
+    pattern = r"[0-9]{4}-[0-9]{2}" if role == "statement" else r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
+    if not re.fullmatch(pattern, period):
+        fail("INVALID_CAPTURE_PERIOD")
+    try:
+        datetime.strptime(period, "%Y-%m" if role == "statement" else "%Y-%m-%d")
+    except ValueError:
+        fail("INVALID_CAPTURE_PERIOD")
+
+
+def parse_capture_document(raw, role, period, account_ref, max_depth):
+    capture_period(role, period)
+    html = decode_document(raw)
+    parsed = parse_statement(html, max_depth) if role == "statement" else parse_contract_note(html, max_depth)
+    if parsed["account_ref"] != account_ref:
+        fail("CAPTURE_ACCOUNT_CONFLICT")
+    if role == "statement":
+        if parsed["period"] != period:
+            fail("CAPTURE_PERIOD_CONFLICT")
+    elif not parsed["notes"] or any(n["date"].isoformat() != period for n in parsed["notes"]):
+        fail("CAPTURE_PERIOD_CONFLICT")
+    return parsed
+
+
+def filter_capture_dom(raw, role, period, account_ref, max_bytes, max_depth):
+    """Financial DOM only; not original HTTP bytes or authenticated freshness."""
+    if type(max_bytes) is not int or max_bytes <= 0 or type(max_depth) is not int or max_depth <= 0:
+        fail("INVALID_CAPTURE_LIMITS")
+    if type(raw) is not bytes or len(raw) > min(max_bytes, 4 * 1024 * 1024):
+        fail("CAPTURE_SIZE_LIMIT")
+    before = parse_capture_document(raw, role, period, account_ref, max_depth)
+    soup = BeautifulSoup(decode_document(raw), "html.parser")
+    for node in soup.find_all(["script", "style", "base", "form", "input", "button", "textarea",
+                               "select", "iframe", "frame", "link", "img", "object", "embed", "meta"]):
+        node.decompose()
+    for node in soup.find_all("a"):
+        node.unwrap()
+    for node in soup.find_all(string=lambda item: isinstance(item, Comment)):
+        node.extract()
+    for node in soup.find_all(string=lambda item: not item.strip()):
+        node.extract()
+    for node in soup.find_all(True):
+        node.attrs = {k: v for k, v in node.attrs.items() if k in ("colspan", "rowspan")}
+    meta = soup.new_tag("meta", charset="utf-8")
+    if soup.head is not None:
+        soup.head.insert(0, meta)
+    else:
+        soup.insert(0, meta)
+    filtered = str(soup).encode("utf-8")
+    if len(filtered) > min(max_bytes, 4 * 1024 * 1024):
+        fail("CAPTURE_SIZE_LIMIT")
+    if parse_capture_document(filtered, role, period, account_ref, max_depth) != before:
+        fail("CAPTURE_FILTER_CHANGED_LEDGER")
+    return filtered
+
+
+def validate_capture_ticket(ticket, entry, account_ref):
+    keys = {"account_ref", "role", "period", "origin_frame_epoch", "link_handle", "request_url",
+            "target_id", "loader_id", "commit_loader_id", "load_loader_id", "sequence"}
+    if not isinstance(ticket, dict) or set(ticket) != keys:
+        fail("INVALID_CAPTURE_TICKET")
+    if any(ticket[k] != v for k, v in (("account_ref", account_ref), ("role", entry["role"]),
+                                      ("period", entry["period"]))):
+        fail("CAPTURE_TICKET_CONFLICT")
+    for key in ("origin_frame_epoch", "link_handle", "target_id", "loader_id", "commit_loader_id", "load_loader_id"):
+        validate_account_key(ticket[key])
+    if ticket["loader_id"] != ticket["commit_loader_id"] or ticket["loader_id"] != ticket["load_loader_id"]:
+        fail("CAPTURE_TICKET_CONFLICT")
+    if type(ticket["sequence"]) is not int or not 1 <= ticket["sequence"] <= 1000:
+        fail("INVALID_CAPTURE_TICKET")
+    url = ticket["request_url"]
+    if type(url) is not str or len(url) > 4096 or not url.startswith("https://www.boursedirect.fr/"):
+        fail("INVALID_CAPTURE_TICKET_URL")
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        fail("INVALID_CAPTURE_TICKET_URL")
+    if (parts.scheme != "https" or parts.netloc != "www.boursedirect.fr" or parts.fragment
+            or any(c.isspace() or ord(c) < 32 for c in url) or "\\" in url
+            or re.search(r"%(?:2f|5c|2e)", parts.path, re.I) or any(p in (".", "..") for p in parts.path.split("/"))):
+        fail("INVALID_CAPTURE_TICKET_URL")
+
+
+def qualify_capture_bundle(manifest_raw, files, config_raw, max_bytes, max_depth):
+    """Pure saved-evidence qualification; tickets are trusted, unauthenticated input."""
+    if type(max_bytes) is not int or not 0 < max_bytes <= 4 * 1024 * 1024:
+        fail("CAPTURE_SIZE_LIMIT")
+    if type(max_depth) is not int or not 0 < max_depth <= 256:
+        fail("INVALID_CAPTURE_LIMITS")
+    if type(manifest_raw) is not bytes or len(manifest_raw) > min(max_bytes, 1024 * 1024):
+        fail("CAPTURE_MANIFEST_LIMIT")
+    config = preparation_configuration(config_raw, min(max_bytes, 1024 * 1024), max_depth)
+    manifest = parse_keyed_yaml(manifest_raw)
+    if (set(manifest) != {"schema_version", "artifact_kind", "status", "run_id", "account_key", "source_account_ref", "files"}
+            or type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1
+            or manifest["artifact_kind"] != "acquisition_bundle" or manifest["status"] != "complete"):
+        fail("INVALID_COMPLETE_CAPTURE_MANIFEST")
+    validate_account_key(manifest["run_id"])
+    account = config["account"]
+    if manifest["account_key"] != account["account_key"] or manifest["source_account_ref"] != account["source_account_ref"]:
+        fail("CAPTURE_ACCOUNT_CONFLICT")
+    entries = manifest["files"]
+    if not isinstance(entries, dict) or not 1 <= len(entries) <= 256 or not isinstance(files, dict) or set(files) != set(entries):
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    if any(type(raw) is not bytes or len(raw) > max_bytes for raw in files.values()):
+        fail("CAPTURE_SIZE_LIMIT")
+    if sum(map(len, files.values())) > 64 * 1024 * 1024:
+        fail("CAPTURE_TOTAL_LIMIT")
+    seen, sequences, statements, notes = set(), set(), {}, {}
+    for filename, entry in entries.items():
+        if type(filename) is not str or not re.fullmatch(r"capture-[0-9a-f-]{36}\.html", filename):
+            fail("INVALID_CAPTURE_FILENAME")
+        validate_account_key(filename[8:-5])
+        if not isinstance(entry, dict) or set(entry) != {"role", "period", "sha256", "provenance", "ticket"}:
+            fail("INVALID_CAPTURE_ENTRY")
+        capture_period(entry["role"], entry["period"])
+        key = (entry["role"], entry["period"])
+        if key in seen:
+            fail("DUPLICATE_CAPTURE_ROLE_PERIOD")
+        seen.add(key)
+        if entry["provenance"] != "browser_dom_utf8_filtered":
+            fail("CAPTURE_PROVENANCE_REQUIRED")
+        if type(entry["sha256"]) is not str or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
+            fail("INVALID_CAPTURE_DIGEST")
+        raw = files[filename]
+        if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+            fail("CAPTURE_DIGEST_CONFLICT")
+        validate_capture_ticket(entry["ticket"], entry, account["source_account_ref"])
+        sequence = entry["ticket"]["sequence"]
+        if sequence in sequences:
+            fail("DUPLICATE_CAPTURE_SEQUENCE")
+        sequences.add(sequence)
+        # Refiltering must be semantically identical and already free of active DOM.
+        filtered = filter_capture_dom(raw, entry["role"], entry["period"], account["source_account_ref"], max_bytes, max_depth)
+        if raw != filtered:
+            fail("CAPTURE_NOT_FILTERED_UTF8")
+        if entry["role"] == "statement":
+            statements[entry["period"]] = filename
+        else:
+            notes[entry["period"]] = filename
+    if not statements or any(day[:7] not in statements for day in notes):
+        fail("CAPTURE_MONTH_COVERAGE_CONFLICT")
+    documents = {}
+    captures = {}
+    for month, filename in sorted(statements.items()):
+        matching = [notes[day] for day in sorted(notes) if day[:7] == month]
+        if not matching:
+            fail("CAPTURE_NOTES_MISSING")
+        alias = "month-" + month
+        documents[alias] = {"statement": filename, "notes": matching}
+        captures[alias] = {"statement": files[filename], "notes": [files[n] for n in matching]}
+    proposal = {**config, "documents": documents}
+    proposed_raw = yaml.safe_dump(proposal, sort_keys=False).encode("utf-8")
+    result = compute_prepared_sources(proposed_raw, captures, max_bytes, max_depth)
+    return {"configuration": proposal, "report": {"schema_version": 1,
+        "artifact_kind": "qualified_capture_proposal_not_import", "import_ready": False,
+        "freshness_verified": False, "source_authenticity_verified": False,
+        "manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+        "configuration_sha256": hashlib.sha256(config_raw).hexdigest(),
+        "run_id": manifest["run_id"], "account_key": account["account_key"],
+        "file_count": len(files), "statement_periods": len(statements),
+        "prepared_activities": len(result["artifact"]["activities"]),
+        "files": {name: {"role": entry["role"], "period": entry["period"],
+                         "sha256": entry["sha256"], "sequence": entry["ticket"]["sequence"]}
+                  for name, entry in entries.items()}}}
+
+
+def capture_path_without_symlinks(path):
+    path = Path(os.path.abspath(path))
+    for ancestor in (path, *path.parents):
+        if ancestor.is_symlink():
+            fail("CAPTURE_SYMLINK_PATH")
+    return path
+
+
+def qualify_local_captures(manifest_path, config_path, input_root, output, max_bytes, max_depth):
+    if type(max_bytes) is not int or not 0 < max_bytes <= 4 * 1024 * 1024:
+        fail("CAPTURE_SIZE_LIMIT")
+    root = capture_path_without_symlinks(input_root).resolve(strict=True)
+    manifest_path = capture_path_without_symlinks(manifest_path)
+    config_path = capture_path_without_symlinks(config_path)
+    manifest_raw = read_local_bytes(manifest_path, root, min(max_bytes, 1024 * 1024))
+    config_raw = read_local_bytes(config_path, root, min(max_bytes, 1024 * 1024))
+    manifest = parse_keyed_yaml(manifest_raw)
+    entries = manifest.get("files")
+    if not isinstance(entries, dict) or not 1 <= len(entries) <= 256:
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    bundle = manifest_path.parent
+    if manifest_path.name != "manifest.yaml" or set(p.name for p in bundle.iterdir()) != {"manifest.yaml", "sources"}:
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    sources = capture_path_without_symlinks(bundle / "sources")
+    if not sources.is_dir() or set(p.name for p in sources.iterdir()) != set(entries):
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    paths = [manifest_path, config_path]
+    files = {}
+    total = 0
+    for filename in entries:
+        if type(filename) is not str or not re.fullmatch(r"capture-[0-9a-f-]{36}\.html", filename):
+            fail("INVALID_CAPTURE_FILENAME")
+        source = capture_path_without_symlinks(sources / filename)
+        files[filename] = read_local_bytes(source, root, min(max_bytes, 4 * 1024 * 1024))
+        total += len(files[filename])
+        if total > 64 * 1024 * 1024:
+            fail("CAPTURE_TOTAL_LIMIT")
+        paths.append(source)
+    destination = capture_path_without_symlinks(output)
+    reject_output_input_collision(destination, paths)
+    if destination.exists():
+        fail("CAPTURE_OUTPUT_EXISTS")
+    if destination.is_relative_to(root) or root.is_relative_to(destination):
+        fail("CAPTURE_OUTPUT_INPUT_TREE_CONFLICT")
+    parent = destination.parent
+    mode = parent.stat()
+    if not parent.is_dir() or mode.st_uid != os.getuid() or stat.S_IMODE(mode.st_mode) & 0o077:
+        fail("CAPTURE_OUTPUT_PARENT_NOT_PRIVATE")
+    qualified = qualify_capture_bundle(manifest_raw, files, config_raw, max_bytes, max_depth)
+    for entry in qualified["configuration"]["documents"].values():
+        entry["statement"] = str(sources / entry["statement"])
+        entry["notes"] = [str(sources / n) for n in entry["notes"]]
+    # Exclusive directory publication never replaces an input, prior proposal, or alias.
+    destination.mkdir(mode=0o700)
+    atomic_private_yaml(destination / "prepare-proposal.yaml", qualified["configuration"])
+    atomic_private_yaml(destination / "qualification.yaml", qualified["report"])
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return {k: qualified["report"][k] for k in ("import_ready", "freshness_verified", "source_authenticity_verified",
+                                               "file_count", "statement_periods", "prepared_activities")}
+
+
 def compute_prepared_sources(config_raw, documents, max_bytes, max_depth):
     """Pure current-config derivation; no historical config authenticity claim."""
     config = preparation_configuration(config_raw, max_bytes, max_depth)
@@ -2498,6 +2732,13 @@ def main(argv=None):
     prepare.add_argument("--input-root", required=True)
     prepare.add_argument("--max-bytes", type=int, required=True)
     prepare.add_argument("--max-depth", type=int, required=True)
+    captures = subparsers.add_parser("qualify-captures", help="Qualify a completed local bundle into a private prepare proposal")
+    captures.add_argument("--manifest", required=True)
+    captures.add_argument("--config", required=True)
+    captures.add_argument("--input-root", required=True)
+    captures.add_argument("--output", required=True, help="New directory outside the input tree, with an existing private parent")
+    captures.add_argument("--max-bytes", type=int, required=True)
+    captures.add_argument("--max-depth", type=int, required=True)
     review = subparsers.add_parser("review", help="Reconcile prepared activities against saved history without network")
     review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
     review.add_argument("--input-root", required=True)
@@ -2539,6 +2780,10 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "qualify-captures":
+            print(json.dumps(qualify_local_captures(args.manifest, args.config, args.input_root,
+                                                   args.output, args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
         if args.command == "apply":
             dry_run = os.environ.get("DRY_RUN", "1")
             if dry_run not in ("0", "1"):

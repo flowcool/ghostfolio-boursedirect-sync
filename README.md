@@ -298,3 +298,8 @@ The portable acquisition [authority core](docs/design/acquisition-core.md) now
 provides offline principal fencing and one-use authentication permits. It does
 not connect to Bourse Direct; the browser driver still needs its separately
 reviewed capability proof. Source collection remains an operator-run activity.
+
+Completed saved acquisition bundles can be checked with the offline
+[`qualify-captures` command](docs/design/acquisition-bundles.md). It creates a new
+private prepare proposal from explicit existing mappings, preserves input files,
+and grants neither browser freshness nor import readiness.
