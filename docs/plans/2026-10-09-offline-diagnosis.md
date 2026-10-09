@@ -38,7 +38,7 @@ candidate predicate. An owned-marker mismatch must not disappear into no-candida
 diagnostics. The report describes conflicts; it is not a resolution or a delivery
 plan. Do not copy the snapshot's full raw records/comments into the report.
 
-Write `outputs/diagnosis-<account-key>.yaml` atomically with0600 in0700 outputs,
+Write `outputs/diagnosis-<account-key>.yaml` atomically with 0600 in 0700 outputs,
 under the existing target preparation lock. Bind config/prepared/snapshot hashes
 and source digests, with schema_version1, explicit diagnostic artifact kind and
 `import_ready=false`. No wire field/body, holdings coverage verdict, adoption,
@@ -46,7 +46,7 @@ new-activity list or write intent may be generated. Transient existing numeric
 validation may remain; no deliverable wire artifact is emitted or persisted.
 
 Stdout contains counts, fixed codes and readiness false only. A readable diagnosis
-exits2; invalid input exits1. Candidate absence is a bounded observation, not proof
+exits 2; invalid input exits 1. Candidate absence is a bounded observation, not proof
 of duplicate absence, mapping correctness, date provenance or complete history.
 Error text must not expose paths, account identifiers, comments or financial values.
 Before publication, reject an output destination resolving to any captured

@@ -129,7 +129,7 @@ inventing a complete-history assertion or adoption resolutions:
 
 It saves a private candidate/discrepancy report with exact input provenance. Exact
 matches are observations, and missing matches never declare new imports. No wire,
-adoption, holdings verdict or write intent is emitted. Success exits2 with readiness
+adoption, holdings verdict or write intent is emitted. Success exits 2 with readiness
 false. The strict review below requires the separately established evidence.
 
 Save a complete Ghostfolio activity-list JSON and reviewed acquisition-history
