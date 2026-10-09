@@ -33,8 +33,11 @@ def publish(path, content):
 def fixture_archive():
     buffer = io.BytesIO()
     hashes = {}
-    sources = [ROOT / 'collector/lab/first-request.mjs'] + [
-        ROOT / ('collector/capability-' + name + '.mjs') for name in ['pipe', 'ordering', 'bootstrap']]
+    sources = [ROOT / ('collector/' + name) for name in [
+        'lab/first-request.mjs', 'lab/restart-principal.mjs',
+        'lab/capture-document.mjs', 'core.mjs',
+        'capability-pipe.mjs', 'capability-ordering.mjs',
+        'capability-bootstrap.mjs', 'capability-policy.mjs']]
     with tarfile.open(fileobj=buffer, mode='w') as archive:
         for path in sources:
             content = path.read_bytes()
@@ -44,6 +47,20 @@ def fixture_archive():
             info.mode = 0o400
             info.size = len(content)
             archive.addfile(info, io.BytesIO(content))
+        dependency = ROOT / 'collector/node_modules/yaml'
+        version = json.loads((dependency / 'package.json').read_text())['version']
+        assert version == '2.9.1', 'FIXTURE_DEPENDENCY_PIN_MISMATCH'
+        for path in sorted(dependency.rglob('*')):
+            assert not path.is_symlink(), 'FIXTURE_DEPENDENCY_SYMLINK'
+            if path.is_file():
+                content = path.read_bytes()
+                relative = 'proof/node_modules/yaml/' + str(path.relative_to(dependency))
+                hashes[relative] = hashlib.sha256(content).hexdigest()
+                info = tarfile.TarInfo(relative)
+                info.uid = info.gid = 1000
+                info.mode = 0o400
+                info.size = len(content)
+                archive.addfile(info, io.BytesIO(content))
     return buffer.getvalue(), hashes
 
 
@@ -51,6 +68,7 @@ def run(mode, profile, output, archive, hashes):
     name = 'owned-cdp-first-request-' + uuid.uuid4().hex
     identifier = None
     receipt = {'mode': mode, 'image': IMAGE, 'profile_sha256': PROFILE_SHA,
+               'runner_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                'source_sha256': hashes, 'cleanup_verified': False, 'browser_proven': False}
     try:
         created = docker(['create', '--name', name, '--label', 'proof.owner=' + name,
@@ -73,6 +91,7 @@ def run(mode, profile, output, archive, hashes):
         result = docker(['start', '-a', identifier], timeout=55)
         publish(output / (mode + '-stdout.bytes'), result.stdout[:1048576])
         publish(output / (mode + '-stderr.bytes'), result.stderr[:1048576])
+        assert len(result.stdout) <= 1048576 and len(result.stderr) <= 1048576, 'FIXTURE_OUTPUT_LIMIT'
         assert result.returncode == 0, 'FIXTURE_FAILED'
         evidence = json.loads(result.stdout)
         assert evidence['mode'] == mode and evidence['passed'] and evidence['owned_browser_exit']
@@ -89,12 +108,13 @@ def run(mode, profile, output, archive, hashes):
                                                  '--format', '{{.ID}}']).stdout.strip()
         publish(output / (mode + '-receipt.json'), json.dumps(receipt, indent=2).encode())
     assert receipt['cleanup_verified'], 'FIXTURE_CLEANUP_UNVERIFIED'
-    print(mode + ': PASS; exact owned cleanup verified; full qualification remains false')
+    print(mode + ': PASS; exact owned cleanup verified; full qualification remains false', flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--profile', type=Path, required=True, help='Exact qualified Playwright seccomp file')
+    parser.add_argument('--scenario', action='append', help='Optional fixed synthetic scenario subset')
     parser.add_argument('--output', type=Path, required=True, help='New private evidence directory')
     args = parser.parse_args()
     profile = args.profile.resolve()
@@ -103,7 +123,10 @@ def main():
     assert image['Id'] == IMAGE and image['Config']['Labels']['bd.cdp-capability'] == '415a78dfcc5444e3902473da5af2fd07'
     args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     archive, hashes = fixture_archive()
-    for mode in ['permitted', 'denied', 'negative', 'popup', 'popup-negative']:
+    modes = ['permitted', 'denied', 'negative', 'popup', 'popup-negative', 'frame', 'frame-negative', 'worker', 'worker-negative', 'shared-worker', 'shared-worker-negative', 'service-worker', 'service-worker-negative', 'redirect307', 'redirect307-negative', 'redirect308', 'redirect308-negative', 'second-auth', 'second-auth-negative', 'http-auth', 'concurrent', 'concurrent-negative', 'fsync-failure', 'browser-crash', 'pipe-loss', 'forced-stop', 'late-guard-negative', 'capture']
+    selected = args.scenario or modes
+    assert all(mode in modes for mode in selected) and len(set(selected)) == len(selected), 'FIXTURE_MODE_REJECTED'
+    for mode in selected:
         run(mode, profile, args.output, archive, hashes)
 
 

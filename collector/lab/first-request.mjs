@@ -1,34 +1,65 @@
 // Opt-in synthetic browser experiment. Copied into an owned network-none container.
 // This establishes only the listed dispatch scenarios, never complete qualification.
 import http from 'node:http';
-import {spawn} from 'node:child_process';
+import fs from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import * as core from './core.mjs';
+import {spawn, spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {capabilityPipe} from './capability-pipe.mjs';
 import {orderingExperiment} from './capability-ordering.mjs';
+import {proveCapture} from './capture-document.mjs';
 import {bootstrapExperiment} from './capability-bootstrap.mjs';
 
 const mode = process.argv[2];
-if (!['permitted', 'denied', 'negative', 'popup', 'popup-negative'].includes(mode)
+const modes = ['permitted', 'denied', 'negative', 'popup', 'popup-negative', 'frame', 'frame-negative', 'worker', 'worker-negative', 'shared-worker', 'shared-worker-negative', 'service-worker', 'service-worker-negative', 'redirect307', 'redirect307-negative', 'redirect308', 'redirect308-negative', 'second-auth', 'second-auth-negative', 'http-auth', 'concurrent', 'concurrent-negative', 'fsync-failure', 'browser-crash', 'pipe-loss', 'forced-stop', 'late-guard-negative', 'capture'];
+if (!modes.includes(mode)
     || process.version !== 'v20.19.2') throw new Error('FIXTURE_RUNTIME_REJECTED');
-const counts = {}, trace = [];
-let forbidden = 0, allowed = 0, consumed = false;
+const counts = {}, trace = [], documentEvents = [];
+let captureEvidence, documentVariant=0, queuedForbidden=0, releaseQueued;
+const queuedReady=new Promise(resolve=>{releaseQueued=resolve;});
+let forbidden = 0, allowed = 0, durableConsumes = 0, consumed = false, challenges = 0, cancelled = 0, policyPauses = 0;
 const popup = mode.startsWith('popup');
 const negative = mode.endsWith('negative');
+const scenario = mode.replace(/-negative$/, '');
+function rootDocument() {
+  if (scenario === 'capture') return '<main>invented replacement navigation</main>';
+  if (scenario === 'late-guard') return `<script>fetch('/forbidden',{method:'POST'})</script>`;
+  if (popup) return '<form id=f method=POST action=/forbidden target=_blank><input name=x value=fixture></form><script>f.submit()</script>';
+  if (scenario === 'frame') return `<iframe srcdoc="<form id=f method=POST action=/forbidden></form><script>f.submit()</script>"></iframe>`;
+  if (scenario === 'worker') return `<script>new Worker('/forbidden')</script>`;
+  if (scenario === 'shared-worker') return `<script>new SharedWorker('/forbidden')</script>`;
+  if (scenario === 'service-worker') return `<script>navigator.serviceWorker.register('/forbidden')</script>`;
+  if (scenario.startsWith('redirect')) return `<script>fetch('/allowed',{method:'POST'})</script>`;
+  if (scenario === 'second-auth') return `<script>fetch('/allowed',{method:'POST'}).then(()=>fetch('/allowed',{method:'POST'}))</script>`;
+  if (scenario === 'concurrent') return `<script>fetch('/allowed',{method:'POST'});fetch('/allowed',{method:'POST'})</script>`;
+  if (['fsync-failure','browser-crash'].includes(scenario)) return `<script>fetch('/allowed',{method:'POST'})</script>`;
+  if (['pipe-loss','forced-stop'].includes(scenario)) return `<script>fetch('/forbidden',{method:'POST'});fetch('/forbidden',{method:'POST'})</script>`;
+  if (scenario === 'http-auth') return `<script>fetch('/challenge')</script>`;
+  return `<script>fetch('${mode === 'permitted' ? '/allowed' : '/forbidden'}',{method:'POST'})</script>`;
+}
 const server = http.createServer((request, response) => {
-  if (request.url === '/root') {
+  if (request.url === '/document') {
     response.setHeader('content-type', 'text/html');
-    response.end(popup
-      ? '<form id=f method=POST action=/forbidden target=_blank><input name=x value=fixture></form><script>f.submit()</script>'
-      : `<script>fetch('${mode === 'permitted' ? '/allowed' : '/forbidden'}',{method:'POST'})</script>`);
+    const account=documentVariant===2?'invented-other-account':'synthetic-account';
+    const day=documentVariant===3?'2026-09-18':'2026-09-17';
+    const role=documentVariant===4?'invented-other-role':'statement';
+    const operation=documentVariant===5?'unknown':'known';
+    response.end(`<main data-account=${account} data-day=${day} data-role=${role} data-operation=${operation}>identical invented document</main>`);
+  } else if (request.url === '/root') {
+    response.setHeader('content-type', 'text/html');
+    response.end(rootDocument());
   } else {
-    if (request.url === '/forbidden') forbidden++;
+    if (request.url === '/forbidden') {forbidden++;response.setHeader('content-type','application/javascript');}
+    if (request.url === '/challenge') {challenges++;response.writeHead(401, {'WWW-Authenticate': 'Basic realm=synthetic'});}
+    if (request.url === '/allowed' && scenario.startsWith('redirect')) response.writeHead(Number(scenario.slice(8)), {Location: '/forbidden'});
     if (request.url === '/allowed') allowed++;
     response.end('fixture');
   }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
-let bootstrap, ordering, exited = false, stopped, stderrBytes = 0;
+let bootstrap, ordering, owner, rootFrame, authority, requestQueue=Promise.resolve(), restartedFenced=false, fsyncFailed=false, forceKilled=false, crashed=false, lost=false, exited = false, stopped, stderrBytes = 0;
 const child = spawn('/opt/chrome-linux64/chrome', [
   '--headless=new', '--no-startup-window', '--remote-debugging-pipe',
   '--disable-background-networking', '--disable-extensions',
@@ -36,15 +67,17 @@ const child = spawn('/opt/chrome-linux64/chrome', [
   '--disable-default-apps', '--disable-popup-blocking', '--no-first-run', '--no-default-browser-check',
 ], {detached: true, env: {PATH: '/usr/bin:/bin', HOME: '/home/fixture'},
   stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe']});
-const exit = once(child, 'exit').then(() => {exited = true;});
+const exit = once(child, 'exit').then(() => {exited = true; record({lifecycle:'owned-exit'});});
 function stopOwned() {
   if (!stopped) stopped = (async () => {
+    record({lifecycle:'stop-owned',fenced:ordering.fenced()});
     if (!exited) {
+      if(mode==='forced-stop')process.kill(-child.pid,'SIGSTOP');
       process.kill(-child.pid, 'SIGTERM');
       let timer;
       await Promise.race([exit, new Promise(resolve => {timer = setTimeout(resolve, 5000);})]);
       clearTimeout(timer);
-      if (!exited) {process.kill(-child.pid, 'SIGKILL'); await exit;}
+      if (!exited) {forceKilled=true;process.kill(-child.pid, 'SIGKILL'); await exit;}
     }
     return true;
   })();
@@ -61,27 +94,60 @@ const pipe = capabilityPipe({
   },
   onEvent: event => {
     if (ordering.fenced()) return;
+    if (mode === 'capture' && ['Network.requestWillBeSent','Page.frameNavigated','Page.lifecycleEvent','Fetch.requestPaused'].includes(event.method)) {
+      if(documentEvents.length>=1000)throw new Error('FIXTURE_DOCUMENT_LIMIT');
+      documentEvents.push(structuredClone(event));
+    }
     counts[event.method] = (counts[event.method] || 0) + 1;
     if (event.method.startsWith('Target.')) record({event: event.method,
       type: event.params.targetInfo?.type, waiting: event.params.waitingForDebugger});
-    if (!event.sessionId && ['Target.targetCreated', 'Target.attachedToTarget'].includes(event.method)) {
+    if (['Target.targetCreated', 'Target.attachedToTarget'].includes(event.method)) {
       // Deliberately unsafe popup negative control, restricted to invented fixture.
-      if (mode === 'popup-negative' && bootstrap.ready()) {
+      if (negative && bootstrap.ready()) {
         if (event.method === 'Target.attachedToTarget') {
           pipe.registerSession(event.params.sessionId);
           void pipe.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId).catch(() => {});
         }
       } else bootstrap.event(event);
     }
+    if (event.method === 'Fetch.authRequired') {void ordering.cancelHttpAuth(event.sessionId,event.params.requestId).then(()=>cancelled++).catch(()=>{});}
     if (event.method === 'Fetch.requestPaused') {
+      policyPauses++;
       const request = event.params.request;
-      record({pause: new URL(request.url).pathname, method: request.method});
-      const navigation = [origin + '/root', origin + '/favicon.ico'].includes(request.url) && request.method === 'GET';
-      const permitted = request.url === origin + '/allowed' && request.method === 'POST' && !consumed;
-      if (permitted) consumed = true;
-      if (navigation || permitted) {
-        void pipe.send('Fetch.continueRequest', {requestId: event.params.requestId}, event.sessionId).catch(() => {});
-      } else void ordering.abort().catch(() => {});
+      record({pause: new URL(request.url).pathname, method: request.method, resource: event.params.resourceType, ownedFrame: event.params.frameId === rootFrame, redirect: event.params.redirectedRequestId !== undefined});
+      if(['pipe-loss','forced-stop'].includes(mode)&&new URL(request.url).pathname==='/forbidden'){
+        queuedForbidden++;if(queuedForbidden===2)releaseQueued();
+      }
+      const params=structuredClone(event.params), session=event.sessionId;
+      requestQueue=requestQueue.then(async()=>{
+        if(ordering.fenced())return;
+        const request=params.request;
+        const navigation=session===owner.sessionId&&params.frameId===rootFrame&&[origin+'/root',origin+'/document',origin+'/favicon.ico',...(scenario==='http-auth'?[origin+'/challenge']:[])].includes(request.url)&&request.method==='GET'&&params.redirectedRequestId===undefined;
+        const permitted=request.url===origin+'/allowed'&&request.method==='POST'&&!consumed&&params.resourceType==='XHR'&&params.redirectedRequestId===undefined&&session===owner.sessionId&&params.frameId===rootFrame;
+        if(['pipe-loss','forced-stop'].includes(mode)&&request.url===origin+'/forbidden'){
+          let timer;
+          await Promise.race([queuedReady,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('FIXTURE_QUEUE_INCONCLUSIVE')),2000);})]);
+          clearTimeout(timer);
+        }
+        if(navigation){await pipe.send('Fetch.continueRequest',{requestId:params.requestId},session);return;}
+        if(permitted){
+          consumed=true;
+          if(authority){
+            const realFsync=fs.fsyncSync;
+            try{
+              if(mode==='fsync-failure')fs.fsyncSync=()=>{fsyncFailed=true;throw new Error('FIXTURE_FSYNC_FAILURE');};
+              core.consumePermit(authority.handle,{...authority.request,method:request.method,resource_type:params.resourceType},101);durableConsumes++;
+            }finally{fs.fsyncSync=realFsync;}
+          }
+          if(mode==='browser-crash'){
+            crashed=true;process.kill(-child.pid,'SIGKILL');await exit;
+            await ordering.abort();return;
+          }
+          await pipe.send('Fetch.continueRequest',{requestId:params.requestId},session);
+        }else if(mode==='pipe-loss'){
+          lost=true;child.stdio[4].destroy();
+        }else await ordering.abort();
+      }).catch(async()=>{await ordering.abort();});
     }
   },
   fence: () => {void ordering.abort().catch(() => {});},
@@ -92,29 +158,72 @@ child.stderr.on('data', bytes => {
 });
 child.stdio[4].on('data', bytes => {try {pipe.receive(bytes);} catch { /* Pipe has already fenced. */ }});
 child.stdio[4].on('end', () => pipe.lost());
+child.stdio[4].on('close', () => pipe.lost());
 ordering = orderingExperiment({
   send: (method, params, session) => negative && method === 'Fetch.enable'
     ? Promise.resolve({}) : pipe.send(method, params, session),
   installRoutes: () => {}, stopOwned,
-  closePipe: () => {child.stdio[3].destroy(); child.stdio[4].destroy();},
+  closePipe: () => {record({lifecycle:'close-pipe',exited});child.stdio[3].destroy(); child.stdio[4].destroy();},
 });
 bootstrap = bootstrapExperiment({send: pipe.send, registerSession: pipe.registerSession,
   initialize: ordering.initialize, stop: ordering.abort});
 pipe.armEvents();
 let failure;
 try {
-  const owner = await bootstrap.start();
-  try {await pipe.send('Page.navigate', {url: origin + '/root'}, owner.sessionId);} catch { /* Rejection may stop navigation. */ }
+  owner = await bootstrap.start();
+  rootFrame=(await pipe.send('Page.getFrameTree',{},owner.sessionId)).frameTree.frame.id;
+  if(['concurrent','fsync-failure','browser-crash'].includes(mode)){
+    core.enroll('SYNTHETIC-CAPABILITY');const handle=core.acquirePrincipal('SYNTHETIC-CAPABILITY');
+    core.startAttempt(handle,100);core.transition(handle,'password_uncertain',100);
+    const source={schema_version:1,origin:core.ORIGIN,roles:{password:{url:core.ORIGIN+'/synthetic-capability-password',method:'POST',resource_type:'XHR',evidence:'invented isolated loopback fixture'},app_method:null,otp:null}};
+    const permit={phase:'password_uncertain',page_epoch:randomUUID(),frame_epoch:randomUUID(),url:source.roles.password.url,method:'POST',resource_type:'XHR'};
+    const nonce=core.armPermit(handle,permit,100,source);authority={handle,request:{...permit,nonce,redirect:false}};
+  }
+  if(mode==='capture'){
+    captureEvidence=await proveCapture({pipe,owner,rootFrame,origin,events:documentEvents,setDocumentVariant:value=>{documentVariant=value;}});
+  }else{
+    try {await pipe.send('Page.navigate', {url: origin + '/root'}, owner.sessionId);} catch { /* Rejection may stop navigation. */ }
+    if(mode==='late-guard-negative'){
+      await new Promise(resolve=>setTimeout(resolve,500));
+      await pipe.send('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}],handleAuthRequests:true},owner.sessionId);
+    }
+  }
   // Bounded observation is a fixture measurement, never uncertain-write resolution.
   await new Promise(resolve => setTimeout(resolve, 1000));
 } catch {
   failure = 'FIXTURE_STARTUP_FAILED';
 } finally {
-  await ordering.abort();
+  await ordering.abort();await requestQueue;
+  if(authority){
+    core.releasePrincipal(authority.handle);
+    const restarted=spawnSync(process.execPath,['/home/fixture/proof/restart-principal.mjs'],{env:{PATH:'/usr/bin:/bin',HOME:'/home/fixture'},encoding:'utf8',timeout:10000,maxBuffer:32768});
+    restartedFenced=restarted.status===0&&restarted.stdout.trim()==='FIXTURE_RESTART_FENCED';
+  }
   await new Promise(resolve => server.close(resolve));
 }
-const passed = !failure && (negative ? forbidden === 1 && allowed === 0
-  : mode === 'permitted' ? allowed === 1 && forbidden === 0 : forbidden === 0 && allowed === 0);
+let expectedAllowed = ['permitted','concurrent'].includes(mode) || scenario.startsWith('redirect') || scenario === 'second-auth' ? 1 : 0;
+if (negative && ['second-auth','concurrent'].includes(scenario)) expectedAllowed = 2;
+const expectedForbidden = negative && !['second-auth','concurrent'].includes(scenario) ? 1 : 0;
+const pauses=trace.filter(item=>item.pause);
+let signal=true;
+if(!negative){
+  if(scenario==='popup')signal=(counts['Target.attachedToTarget']||0)>=2;
+  else if(['worker','shared-worker','service-worker'].includes(scenario))signal=trace.some(item=>['Target.targetCreated','Target.attachedToTarget'].includes(item.event)&&item.type===scenario.replace('-','_')&&(item.event==='Target.targetCreated'||item.waiting===true));
+  else if(scenario==='frame')signal=pauses.some(item=>item.pause==='/forbidden'&&item.method==='POST'&&item.resource==='Document'&&item.ownedFrame===false);
+  else if(scenario.startsWith('redirect'))signal=pauses.some(item=>item.pause==='/forbidden'&&item.redirect===true);
+  else if(['second-auth','concurrent'].includes(scenario))signal=pauses.filter(item=>item.pause==='/allowed'&&item.method==='POST').length===2;
+  else if(['denied','pipe-loss','forced-stop'].includes(scenario))signal=pauses.some(item=>item.pause==='/forbidden'&&item.method==='POST');
+}
+const passed = signal && !failure && (mode==='concurrent' ? consumed && allowed<=1 : allowed===expectedAllowed) && forbidden === expectedForbidden
+  && (mode !== 'capture' || captureEvidence?.passed === true)
+  && trace.some(item=>item.lifecycle==='stop-owned'&&item.fenced===true)
+  && trace.findIndex(item=>item.lifecycle==='owned-exit') < trace.findIndex(item=>item.lifecycle==='close-pipe')
+  && (scenario !== 'http-auth' || challenges === 1 && cancelled === 1)
+  && (!authority || restartedFenced && durableConsumes===(mode==='fsync-failure'?0:1))
+  && (mode !== 'fsync-failure' || fsyncFailed)
+  && (mode !== 'browser-crash' || crashed)
+  && (mode !== 'pipe-loss' || lost && queuedForbidden===2)
+  && (mode !== 'forced-stop' || forceKilled && queuedForbidden===2);
 console.log(JSON.stringify({mode, node: process.version, passed, failure, allowed, forbidden,
-  owned_browser_exit: exited, counts, trace, browser_proven: false}));
+  owned_browser_exit: exited, signal, durableConsumes, queuedForbidden, restartedFenced,fsyncFailed,forceKilled,crashed,lost, challenges, cancelled, policyPauses, counts, trace, captureEvidence, browser_proven: false}));
 if (!passed) process.exitCode = 1;

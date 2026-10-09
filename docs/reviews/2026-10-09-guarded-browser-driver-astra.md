@@ -291,3 +291,70 @@ The qualified runtime removes the previous sandbox blocker; reusable B stays
 HOLD until complete proof and subsequent exact-hash design approval. No broker
 or Ghostfolio request was sent, and ordinary pytest/npm tests never start this
 opt-in Docker fixture.
+
+## Expanded real capability evidence (author experiment, 2026-10-09)
+
+The same opt-in harness now runs 28 fixed scenarios under the qualified image
+and seccomp pins. This is author implementation evidence, not a new Astra verdict
+or an independent security/PR review. The reviewed plan remains byte-identical.
+The runner copies the synthetic modules, existing durable authority core and
+installed pinned `yaml@2.9.1`; it records each copied file's SHA256 and its own
+SHA256. No source configuration, credentials, volumes or shared database enter
+the container. The core's invented role metadata is never a browser destination;
+only the exact invented loopback request is mapped to that offline authority.
+
+Guarded root and same-origin child-frame POSTs, popup POSTs, worker/shared-worker/
+service-worker requests, 307/308 replay and the second authentication POST have
+zero forbidden server dispatch. Corresponding unguarded controls actually reach
+the server; the second-auth and concurrent controls dispatch twice. Worker
+rejection can occur on discovery or on a paused attachment, depending on the
+observed ordering. The proof accepts either exact worker-type rejection signal,
+without resuming it. Cross-origin/OOPIF support is not delivered by this fixture.
+The late-installation negative control resumes before installing Fetch, waits
+500 ms, and observes one forbidden dispatch before installing the guard.
+
+In this exact runtime `Fetch.requestPaused` reports the fixture's JavaScript
+`fetch()` POST as `XHR`. The synthetic contract pins that observed value and
+passes the native method/resource type into durable consumption. Concurrent
+pauses consume exactly one durable permit and dispatch at most once: fatal
+rejection of the second pause can stop the browser before even the first request
+reaches the server. Separate permitted-root evidence proves positive dispatch.
+Injected fsync failure has no continuation or server POST. A Chrome group crash
+after durable consumption and before continuation also has no POST. A fresh Node
+process reads the fixture's journal and refuses a new attempt in all three
+durable cases. This uses only the newly owned principal, never shared state.
+
+Pipe-loss and forced-stop scenarios wait until two forbidden requests are
+actually paused. The former destroys the read pipe as explicit failure injection;
+the latter stops the process group so TERM cannot succeed, exercising bounded
+KILL escalation. Both retain zero forbidden server dispatch. The trace confirms
+synchronous fencing before owned stop and observed browser exit before deliberate
+teardown pipe closure. The outer runner verifies and removes the exact labelled
+container, covering any remaining descendants independently of browser exit.
+
+`collector/lab/capture-document.mjs` arms the capture experiment before navigation,
+binds native session/frame ownership, correlates Fetch.networkId with the actual
+Network request ID and loader, and requires ordered frame commit and loader-bound
+load. A fixed driver-owned DOM expression serializes invented markers/body; frame
+and loader checks bracket serialization. Two identical documents have distinct
+native request/loader IDs. Four additional real documents exercise wrong account,
+day, role and unknown-operation markers. A real replacement navigation invalidates
+the second capture's loader. Adversarial replays derived from these native events
+reject the previous commit/load, missing loader, wrong identity/epoch and a
+DOMContentLoaded event used in place of load. These derived cases are identified
+as policy replays, not fabricated additional browser events or real financial
+document/source-acceptance evidence.
+
+Private receipts remain under ignored `tmp/cdp-real-proof/`; ordinary pytest/npm
+tests still forbid networking and do not invoke Docker or Chrome. Every runtime
+report retains `browser_proven=false`: local capability evidence does not approve
+reusable B, source roles, online egress or broker access. Exact publication evidence
+and the subsequent grounded reusable-design approval remain separate gates.
+
+Verification for this increment: all 28 scenarios in `final-matrix-9` passed;
+the subsequent capture-only change (arm before navigation and explicit native
+event-order check) passed in `final-capture-10`. All corresponding exact container
+IDs were independently absent after cleanup. The required Python suite passed
+993 tests in 80.31 seconds; the network-forbidden collector suite passed 155
+tests with zero failures in 2535.969294 ms. Beads `.71` retains the private receipt
+locations, commit anchors and publication acceptance ownership.
