@@ -114,7 +114,39 @@ def test_each_local_capture_obeys_reader_boundary(tmp_path, capsys, caplog, kind
     before = retained()
     assert invoke(pin, **kwargs) == 1
     assert capsys.readouterr().out == ""
+    codes = {"outside": "INPUT_OUTSIDE_ROOT", "oversized": "INPUT_TOO_LARGE",
+             "symlink": "SYMLINK_INPUT", "directory": "INPUT_NOT_REGULAR"}
+    if kind in codes:
+        assert codes[kind] in caplog.text
     assert str(tmp_path) not in caplog.text
+    assert retained() == before
+
+
+@pytest.mark.parametrize("role", ["review", "config", "snapshot"])
+@pytest.mark.parametrize("kind", ["outside", "oversized"])
+def test_reader_guard_rejects_otherwise_valid_capture(tmp_path, role, kind):
+    fixture()
+    path = Path("inputs/" + {"review": "report.yaml", "config": "review.yaml",
+                            "snapshot": "snapshot.json"}[role])
+    raw = path.read_bytes()
+    before = retained()
+    if kind == "outside":
+        external = tmp_path / "outside-valid.bytes"
+        external.write_bytes(raw)
+        path = external
+        limit, code = len(raw), "INPUT_OUTSIDE_ROOT"
+    else:
+        limit, code = len(raw) - 1, "INPUT_TOO_LARGE"
+    with pytest.raises(RuntimeError, match="^" + code + "$"):
+        bd.read_local_bytes(path, "inputs", limit)
+    # The same unmodified bytes are accepted with the relevant boundary widened.
+    assert bd.read_local_bytes(path, tmp_path, len(raw)) == raw
+    if role == "snapshot":
+        assert isinstance(json.loads(raw), dict)
+    else:
+        assert isinstance(bd.parse_keyed_yaml(raw), dict)
+    if kind == "outside":
+        external.unlink()
     assert retained() == before
 
 

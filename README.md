@@ -224,7 +224,8 @@ the public HTTPS command is tested with fake responses and forbidden real socket
 The importer consumes saved HTML; unattended broker collection is outside its
 design. Unsupported periods and uncertain legacy matches block; `apply` defaults to offline preview and optional private export. Personal
 documents, configuration, outputs and journals stay ignored and private. Synthetic
-CI verifies each PR; CodeRabbit triggering, review and merge are managed externally.
+CI verifies each PR; PR review and CodeRabbit triggering are managed externally.
+The authorized agent integrates checked PRs and manages releases.
 PRs remain open while independent project work continues.
 
 ## Reproduce the synthetic import lifecycle
