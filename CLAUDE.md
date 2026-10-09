@@ -15,6 +15,12 @@ Pure [wire helpers](docs/design/offline-wire.md) produce exact numeric UTC revie
 bytes and compare POST acceptance; they do not send requests or grant readiness.
 Local [write intent helpers](docs/design/write-intents.md) persist uncertainty
 before a future dispatch; empty readback cannot clear the account fence.
+The [frozen review boundary](docs/design/frozen-review-validation.md) recomputes
+complete typed reports; `check-review` exposes it as a read-only operator check.
+An external report hash proves bytes, not approval or source authenticity.
+The [frozen lab sequence](docs/design/frozen-lab-sequence.md) preflights all
+single-row bodies and chains confirmed events with durable observer evidence;
+it remains a trusted owned fixture path, without production transport or authority.
 The [single-event lab core](docs/design/single-event-lab-dispatch.md) holds both
 locks through trusted injected GET/POST/readback and exact transition confirmation;
 it has no apply CLI or production endpoint and does not grant financial readiness.

@@ -1681,6 +1681,42 @@ def validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_
     return expected
 
 
+def dispatch_frozen_lab_review(state_root, binding, review_raw, review_sha256,
+                               config_raw, captures, max_bytes, request, observe_confirmation):
+    """Trusted owned-lab sequence only; no production transport or authorization."""
+    artifact = validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes)
+    validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
+    binding = dict(binding)
+    if any(binding[k] != artifact[k] for k in ("account_key", "target_account_id")):
+        fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    if not callable(request) or not callable(observe_confirmation):
+        fail("INVALID_LAB_SEQUENCE_CALLBACK")
+    if artifact["holdings"]["shortages"] or artifact["adoption"]["candidates"]:
+        fail("LAB_SEQUENCE_FINANCIAL_REVIEW_BLOCKED")
+    prepared = validated_prepared_review(captures["prepared"])["activities"]
+    baseline = captures["snapshot"]
+    proposal = artifact["wire"]
+    if proposal is None:
+        return {"accepted_events": 0, "readback": baseline, "import_ready": False}
+    full = {"body": proposal["body_utf8"].encode(), "sha256": proposal["sha256"], "import_ready": False}
+    expected = reviewed_wire_rows(full)
+    wires = []
+    for marker, row in expected.items():
+        wire = build_wire_payload({marker: prepared[marker]})
+        if len(wire["body"]) > max_bytes or reviewed_wire_rows(wire) != {marker: row}:
+            fail("LAB_SEQUENCE_WIRE_CONFLICT")
+        wires.append(wire)
+    for ordinal, wire in enumerate(wires):
+        result = dispatch_single_lab_intent(state_root, binding, wire, baseline, max_bytes, request)
+        readback = result["readback"]
+        try:
+            observe_confirmation(ordinal, dict(wire), baseline, readback)
+        except Exception:
+            raise RuntimeError("LAB_SEQUENCE_OBSERVER_FAILED") from None
+        baseline = readback
+    return {"accepted_events": len(wires), "readback": baseline, "import_ready": False}
+
+
 def check_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
     """Read-only operator capture and verification; no publication or authority."""
     if type(max_bytes) is not int or max_bytes <= 0:

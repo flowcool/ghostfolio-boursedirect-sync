@@ -112,3 +112,8 @@ The runner now verifies the initial report through the shared
 [frozen review validator](frozen-review-validation.md) before any source dispatch.
 Its private frozen capture archive remains available for cold replay after cleanup;
 the fixture-controlled hash is not human production approval.
+
+The dispatch loop delegates to [frozen lab orchestration](frozen-lab-sequence.md).
+The controller archives attempts through its request callback and successful
+provenance/readback through the post-confirmation observer. Observer failure stops
+later events while retaining the confirmed journal; finally owned cleanup still runs.
