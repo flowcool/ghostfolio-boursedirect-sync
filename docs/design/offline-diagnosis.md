@@ -34,7 +34,7 @@ selection is independent of eligibility. No candidate means only
 `NO_CANDIDATE_IN_BOUNDED_CHECK`, never a new import. No history, mapping, date or
 identity proof is inferred from that absence or from exact similarity.
 
-Output is atomic0600 within0700 outputs under the existing target preparation lock.
+Output is atomic 0600 within 0700 outputs under the existing target preparation lock.
 Resolved destination/input collisions, including existing hard-link aliases, reject
 before replacement. The comparison budget is one million source/remote pairs and
 at most ten thousand candidate references are materialized; encoded
@@ -46,8 +46,8 @@ There is no emitted wire body, new-activity list, adoption resolution, holdings
 verdict or write intent. Shared preparation validation may transiently validate
 numeric wire representation in memory; those bytes do not enter this artifact.
 The diagnostic artifact kind and `import_ready=false` explicitly exclude delivery.
-Stdout reports counts and fixed blocker codes only; success exits2, invalid input
-exits1. Read the private report locally rather than pasting account/financial data.
+Stdout reports counts and fixed blocker codes only; success exits 2, invalid input
+exits 1. Read the private report locally rather than pasting account/financial data.
 
 Tests use synthetic isolated files and forbid sockets and adoption/holdings/intent/
 snapshot transport calls. Rollback: revert scoped code/tests/docs and retain private
