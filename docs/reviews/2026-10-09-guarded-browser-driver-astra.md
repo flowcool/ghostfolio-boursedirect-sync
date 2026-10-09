@@ -221,3 +221,31 @@ popup/frame/worker handling, durable concurrent permits and loader freshness
 remain required under the owning issue. The existing sandbox runtime blocker
 and reusable B HOLD are unchanged. Subagent execution evidence is recorded on
 `.71`; it is not an independent design/PR review or real Chrome qualification.
+
+## Composed offline capability evidence (author implementation)
+
+The same approved experiment now includes callback-only NUL-framed transport,
+startup ownership binding, and fixed invented request/capture fixtures. Transport
+tests enforce strict UTF-8, exact command/session replies, bounded pending work,
+input/output/startup queues, command/session deadlines and synchronous event
+routing. Fatal transport failures compose with the ordering fence; owned exit
+confirmation precedes intentional pipe closure. Startup holds an early paused
+attachment until the exact create-target reply binds ownership, and rejects
+pre-existing, unpaused, second-page, worker and iframe targets. Aborting releases
+an attachment wait without initialization.
+
+The fixed fixture serializes concurrent authentication requests and requires
+successful durable consumption before its one continuation. Redirects, stale
+epochs and foreign targets cannot consume or continue. Isolated composition
+tests use the existing offline authority core with a private owned temporary
+directory, fsync failure injection and controller restart: persistence failure
+prevents continuation and uncertain delivery remains fenced after reacquisition.
+Capture requires matching request, frame commit and loader-load events plus the
+ticket account/day/epochs; DOM markers alone cannot satisfy it.
+
+These tests dispatch no real request and launch no browser. Invented fixtures and
+simulated protocol frames do not establish Chrome's initial request suspension,
+real worker/frame interception, server counters, process crash recovery or actual
+loader freshness. Every returned qualification remains `browser_proven=false`.
+The real sandbox prerequisite, real positive/negative controls and all browser
+acceptance remain open; the reviewed plan and Astra verdict are unchanged.
