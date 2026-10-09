@@ -164,6 +164,22 @@ the public HTTPS command is tested with fake responses and forbidden real socket
 
 This is an offline diagnostic tool, not a delivered automatic sync. Unsupported
 periods and uncertain legacy matches block; no `apply` command exists. Personal
-documents, configuration, outputs and journals stay ignored and private. Independent
-agent PR reviews and synthetic CI are the validation evidence while the repository
-is private; CodeRabbit is not assumed to run in that state.
+documents, configuration, outputs and journals stay ignored and private. Synthetic
+CI verifies each PR; CodeRabbit triggering, review and merge are managed externally.
+PRs remain open while independent project work continues.
+
+## Reproduce the synthetic import lifecycle
+
+On a trusted Linux lab host with local Docker and the pinned cached images, the
+opt-in [disposable acceptance runner](docs/design/disposable-acceptance.md) creates
+its own synthetic account and resources:
+
+```sh
+.venv/bin/python scripts/disposable_acceptance.py --run-disposable-lab
+```
+
+It verifies exact three-trade acceptance/readback and a zero-new second review,
+then compensates its owned activities and removes its resources. It accepts no
+production endpoint or credentials. Ordinary pytest/CI never launches the lab.
+Prerequisites, provider dependency, retained private evidence and cleanup limits
+are documented in the linked contract. The application still has no apply command.

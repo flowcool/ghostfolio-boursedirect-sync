@@ -27,6 +27,9 @@ isolated evidence, not production authorization or complete delivery acceptance.
 The [synthetic import lifecycle](docs/design/synthetic-import-lifecycle.md) joins
 saved document preparation to exact lab acceptance/readback and a zero-new second
 review. Real legacy history and an application dispatcher remain separate gates.
+The opt-in [portable disposable runner](docs/design/disposable-acceptance.md)
+reproduces that fixture lifecycle using newly owned local Docker resources only;
+ordinary pytest/CI never starts it and no production endpoint option exists.
 Complete activity-import viability requires saved source evidence; synthetic parser
 tests cannot establish it. See the [probe contract](docs/design/offline-probe.md).
 
