@@ -90,3 +90,29 @@ test('unused permit is bounded, schema exact and clock cannot reverse',()=>isola
  const h=prepare(),p=contract(h);assert.throws(()=>c.armPermit(h,p,99,source));
  assert.throws(()=>c.armPermit(h,{...p,body:'secret'},100,source));c.releasePrincipal(h);
 }));
+
+test('strict command action rejects coercible nonstrings',()=>{
+ for(const action of [['login'],['otp'],{},null,1,true])assert.throws(()=>c.command(JSON.stringify({action})),/COMMAND_INVALID/);
+});
+test('empty fragment is forbidden',()=>assert.throws(()=>c.brokerUrl(c.ORIGIN+'/#'),/BROKER_URL_INVALID/));
+test('diagnostics reject unknown uppercase prefix and token-shaped error',()=>{
+ for(const message of ['AUTH_SECRET_VALUE','AUTH_STATE_INVALID_EXTRA','PRIVATE_TOKEN_ABC','AUTH_',42])assert.equal(c.diagnostic({message}).code,'ACQUISITION_FAILED');
+});
+test('each new private directory syncs its parent before the next creation',()=>isolated(home=>{
+ const original={mkdir:fs.mkdirSync,open:fs.openSync,sync:fs.fsyncSync};const events=[],descriptors=new Map();
+ fs.mkdirSync=(name,...args)=>{const result=original.mkdir(name,...args);events.push(['mkdir',name]);return result;};
+ fs.openSync=(name,...args)=>{const fd=original.open(name,...args);descriptors.set(fd,String(name));return fd;};
+ fs.fsyncSync=fd=>{events.push(['sync',descriptors.get(fd)]);return original.sync(fd);};
+ try{c.enroll('SYNTHETIC');}finally{fs.mkdirSync=original.mkdir;fs.openSync=original.open;fs.fsyncSync=original.sync;}
+ const parents=[home,path.join(home,'.local'),path.join(home,'.local','state'),path.join(home,'.local','state','ghostfolio-boursedirect-sync')];
+ for(const parent of parents){const index=events.findIndex(e=>e[0]==='mkdir'&&path.dirname(e[1])===parent);assert.ok(index>=0);assert.deepEqual(events[index+1],['sync',parent]);}
+}));
+test('parent-directory fsync failure stops enrollment before journal or action',()=>isolated(home=>{
+ const real=fs.fsyncSync;let returned=false;fs.fsyncSync=()=>{throw new Error('synthetic parent sync failure');};
+ try{assert.throws(()=>{c.enroll('SYNTHETIC');returned=true;});}finally{fs.fsyncSync=real;}
+ assert.equal(returned,false);assert.equal(fs.existsSync(path.join(home,'.local','state')),false);
+}));
+test('Worker cannot suppress the network preload',async()=>{
+ const {Worker}=await import('node:worker_threads');
+ assert.throws(()=>new Worker('throw new Error("never starts")',{eval:true,execArgv:[]}),/TEST_WORKER_FORBIDDEN/);
+});

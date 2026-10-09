@@ -10,6 +10,17 @@ const LIMIT = 1048576;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const STATES = new Set(['enrolled', 'password_uncertain', 'password_accepted', 'otp_uncertain', 'authenticated', 'closed_success', 'blocked']);
+const PUBLIC_CODES = new Set([
+  'ACQUISITION_BOUND_INVALID', 'ACQUISITION_FAILED', 'ACQUISITION_SCHEMA_INVALID',
+  'AUTH_ALREADY_ENROLLED', 'AUTH_ATTEMPT_LIMIT', 'AUTH_CLOCK_REVERSED', 'AUTH_HANDLE_CLOSED',
+  'AUTH_PERMIT_BLOCKED', 'AUTH_PERMIT_INVALID', 'AUTH_PRINCIPAL_FENCED', 'AUTH_PRINCIPAL_LOCKED',
+  'AUTH_PUBLICATION_REJECTED', 'AUTH_REQUEST_REJECTED', 'AUTH_SOURCE_ROLE_DISABLED',
+  'AUTH_STATE_INVALID', 'AUTH_STATE_TOO_LARGE', 'AUTH_SUCCESS_WITHOUT_REQUEST', 'AUTH_TRANSITION_INVALID',
+  'BROKER_URL_INVALID', 'COMMAND_INVALID', 'COMMAND_TOO_LARGE', 'LOGIN_IDENTITY_INVALID',
+  'OTP_INPUT_MISSING', 'OTP_MODES_CONFLICT', 'OTP_NEAR_EXPIRY', 'OTP_SECRET_INVALID', 'OTP_STALE',
+  'PRIVATE_FILE_INVALID', 'PRIVATE_PATH_INVALID', 'PRIVATE_PATH_MISSING', 'PRIVATE_PERMISSIONS_INVALID',
+  'SOURCE_CONTRACT_INVALID',
+]);
 export function fail(code) { throw new Error(code); }
 function exact(value, keys, code = 'ACQUISITION_SCHEMA_INVALID') {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join('|') !== [...keys].sort().join('|')) fail(code);
@@ -22,7 +33,7 @@ export function principal(login) {
 export function brokerUrl(value) {
   if (typeof value !== 'string' || value.length > 4096) fail('BROKER_URL_INVALID');
   let url; try { url = new URL(value); } catch { fail('BROKER_URL_INVALID'); }
-  if (url.origin !== ORIGIN || url.username || url.password || url.hash || url.href !== value || /%2f|%5c|%2e/i.test(url.pathname)) fail('BROKER_URL_INVALID');
+  if (url.origin !== ORIGIN || url.username || url.password || value.includes('#') || url.href !== value || /%2f|%5c|%2e/i.test(url.pathname)) fail('BROKER_URL_INVALID');
   return url;
 }
 export function command(raw) {
@@ -31,7 +42,7 @@ export function command(raw) {
   const shapes = {inspect:['action'], login:['action'], 'app-method':['action'], otp:['action'], close:['action'],
     navigate:['action','view'], select:['action','handle'], calendar:['action','direction'],
     open:['action','handle'], capture:['action','kind','period']};
-  if (!value || !Object.hasOwn(shapes,value.action)) fail('COMMAND_INVALID');
+  if (!value || typeof value.action !== 'string' || !Object.hasOwn(shapes,value.action)) fail('COMMAND_INVALID');
   exact(value, shapes[value.action], 'COMMAND_INVALID');
   if (value.action==='navigate' && !['statements','notes','history'].includes(value.view)) fail('COMMAND_INVALID');
   if (['select','open'].includes(value.action) && (typeof value.handle!=='string' || !UUID.test(value.handle))) fail('COMMAND_INVALID');
@@ -44,7 +55,12 @@ export function privateDirectory(directory, create=false) {
   let current=path.parse(directory).root;
   for (const part of directory.slice(current.length).split(path.sep).filter(Boolean)) {
     current=path.join(current,part);
-    if (!fs.existsSync(current)) { if (!create) fail('PRIVATE_PATH_MISSING'); fs.mkdirSync(current,{mode:0o700}); }
+    if (!fs.existsSync(current)) {
+      if (!create) fail('PRIVATE_PATH_MISSING');
+      fs.mkdirSync(current,{mode:0o700});
+      const parent=fs.openSync(path.dirname(current),fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
+      try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
+    }
     const info=fs.lstatSync(current);
     if (!info.isDirectory() || info.isSymbolicLink()) fail('PRIVATE_PATH_INVALID');
   }
@@ -200,7 +216,7 @@ export function otpFromEnvironment(env,now) {
 
 export function diagnostic(error) {
   const code=error?.message;
-  return {ok:false,code:typeof code==='string'&&/^(AUTH|ACQUISITION|BROKER|COMMAND|LOGIN|OTP|PRIVATE|SOURCE)_[A-Z_]+$/.test(code)?code:'ACQUISITION_FAILED',import_ready:false};
+  return {ok:false,code:typeof code==='string'&&PUBLIC_CODES.has(code)?code:'ACQUISITION_FAILED',import_ready:false};
 }
 
 export function totp(value,now) {
