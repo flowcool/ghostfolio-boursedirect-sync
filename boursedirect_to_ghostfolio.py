@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 HEADERS = ("Date", "Désignation", "Débit (€)", "Crédit (€)")
 VERIFICATION_REFERENCE_LIMIT = 10000
 VERIFICATION_DECIMAL_CHAR_LIMIT = 4096
+FROZEN_REVIEW_PRECISION_LIMIT = 10000
 
 
 def fail(code):
@@ -1611,22 +1612,41 @@ def diagnose_local_snapshot(config_path, input_root, max_bytes):
             "remote_candidates": len(evidence), "import_ready": False, "blockers": artifact["blockers"]}
 
 
-def review_local_snapshot(config_path, input_root, max_bytes):
-    """Private end-to-end offline review; exact bytes, no remote calls or intent."""
-    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+def review_capture_configuration(config_raw):
     config = parse_keyed_yaml(config_raw)
-    keys = {"schema_version", "prepared", "snapshot", "resolutions", "history_evidence"}
-    if set(config) != keys or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+    roles = ("prepared", "snapshot", "resolutions", "history_evidence")
+    if (set(config) != {"schema_version", *roles} or type(config["schema_version"]) is not int
+            or config["schema_version"] != 1
+            or any(not isinstance(config[k], str) or not config[k].strip() for k in roles)):
         fail("INVALID_REVIEW_CONFIGURATION")
-    captures = {}
-    for key in ("prepared", "snapshot", "resolutions", "history_evidence"):
-        if not isinstance(config[key], str) or not config[key].strip():
-            fail("INVALID_REVIEW_CONFIGURATION")
-        captures[key] = read_local_bytes(Path(input_root) / config[key], input_root, max_bytes)
+    return config
+
+
+def compute_offline_review(config_raw, captures, max_bytes):
+    """Side-effect-free bounded computation at current eligibility time."""
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_FROZEN_REVIEW_BYTE_LIMIT")
+    roles = {"prepared", "snapshot", "resolutions", "history_evidence"}
+    if type(captures) is not dict or set(captures) != roles:
+        fail("INVALID_FROZEN_REVIEW_CAPTURES")
+    for raw in (config_raw, *captures.values()):
+        if type(raw) is not bytes or len(raw) > max_bytes:
+            fail("FROZEN_REVIEW_INPUT_LIMIT_EXCEEDED")
+    review_capture_configuration(config_raw)
     prepared = validated_prepared_review(captures["prepared"])
     activities = prepared["activities"]
     resolutions = parse_keyed_yaml(captures["resolutions"])
     history = parse_keyed_yaml(captures["history_evidence"])
+    remote = bounded_remote_snapshot(captures["snapshot"], max_bytes)
+    target = prepared["target_account_id"]
+    symbols = {a["symbol"] for a in activities.values()}
+    quantities = [Decimal(a["quantity"]) for a in activities.values()]
+    quantities.extend(r["quantity"] for r in remote if r["target_account_id"] == target
+                      and r["symbol"] in symbols and r["kind"] in ("BUY", "SELL"))
+    precision = max(28, sum(len(q.as_tuple().digits) + abs(q.as_tuple().exponent)
+                            for q in quantities) + 8)
+    if precision > min(FROZEN_REVIEW_PRECISION_LIMIT, max_bytes):
+        fail("FROZEN_REVIEW_PRECISION_LIMIT_EXCEEDED")
     coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history)
     adoption = coverage["adoption"]
     new = {marker: activities[marker] for marker in adoption["new"]}
@@ -1641,12 +1661,39 @@ def review_local_snapshot(config_path, input_root, max_bytes):
                 "holdings": {k: v for k, v in coverage.items() if k != "adoption"},
                 "wire": None if wire is None else {"body_utf8": wire["body"].decode("utf-8"),
                                                     "sha256": wire["sha256"], "activity_count": len(new)}}
-    output = Path("outputs") / ("review-" + prepared["account_key"] + ".yaml")
+    return artifact
+
+
+def validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes):
+    """Compare externally pinned report bytes with a full typed recomputation."""
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_FROZEN_REVIEW_BYTE_LIMIT")
+    if type(review_raw) is not bytes or len(review_raw) > max_bytes:
+        fail("FROZEN_REVIEW_INPUT_LIMIT_EXCEEDED")
+    if (not isinstance(review_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", review_sha256)
+            or hashlib.sha256(review_raw).hexdigest() != review_sha256):
+        fail("FROZEN_REVIEW_DIGEST_CONFLICT")
+    observed = parse_keyed_yaml(review_raw)
+    expected = compute_offline_review(config_raw, captures, max_bytes)
+    # Restricted YAML graphs preserve scalar types and sequence order; only key order normalizes.
+    if yaml.safe_dump(observed, sort_keys=True, allow_unicode=True) != yaml.safe_dump(expected, sort_keys=True, allow_unicode=True):
+        fail("FROZEN_REVIEW_CONTENT_CONFLICT")
+    return expected
+
+
+def review_local_snapshot(config_path, input_root, max_bytes):
+    """Private end-to-end offline review; exact bytes, no remote calls or intent."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = review_capture_configuration(config_raw)
+    captures = {k: read_local_bytes(Path(input_root) / config[k], input_root, max_bytes)
+                for k in ("prepared", "snapshot", "resolutions", "history_evidence")}
+    artifact = compute_offline_review(config_raw, captures, max_bytes)
+    output = Path("outputs") / ("review-" + artifact["account_key"] + ".yaml")
     reject_output_input_collision(output, [Path(config_path),
                                   *(Path(input_root) / config[k] for k in ("prepared", "snapshot", "resolutions", "history_evidence"))])
     private_directory("outputs")
     state = private_directory("state")
-    target = hashlib.sha256(prepared["target_account_id"].encode("utf-8")).hexdigest()
+    target = hashlib.sha256(artifact["target_account_id"].encode("utf-8")).hexdigest()
     lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     try:
         if not stat.S_ISREG(os.fstat(lock).st_mode):
@@ -1658,8 +1705,8 @@ def review_local_snapshot(config_path, input_root, max_bytes):
         atomic_private_yaml(output, artifact)
     finally:
         os.close(lock)
-    return {"new_activities": len(new), "owned_activities": len(adoption["owned"]),
-            "adopted_activities": len(adoption["adopted"]), "holdings_shortfalls": len(coverage["shortages"]),
+    return {"new_activities": len(artifact["adoption"]["new"]), "owned_activities": len(artifact["adoption"]["owned"]),
+            "adopted_activities": len(artifact["adoption"]["adopted"]), "holdings_shortfalls": len(artifact["holdings"]["shortages"]),
             "import_ready": False, "blockers": artifact["blockers"]}
 
 

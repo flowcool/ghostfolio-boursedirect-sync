@@ -107,3 +107,8 @@ security review and application delivery remain separate gates.
 Rollback: ownership-checked teardown of exact newly created resources, retain
 journals, revert the scoped development runner/tests/docs commit. Activity
 compensation does not restore asset-profile or market-data side effects.
+
+The runner now verifies the initial report through the shared
+[frozen review validator](frozen-review-validation.md) before any source dispatch.
+Its private frozen capture archive remains available for cold replay after cleanup;
+the fixture-controlled hash is not human production approval.

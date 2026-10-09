@@ -231,7 +231,7 @@ def test_startup_requires_cached_pins_no_pull_and_version_before_auth(monkeypatc
     assert os.environ['TZ'] == 'Europe/Paris'
 
 
-@pytest.mark.parametrize('failure', ['none', 'first-intent', 'second-post-timeout'])
+@pytest.mark.parametrize('failure', ['none', 'first-intent', 'second-post-timeout', 'frozen-report-tamper'])
 def test_complete_synthetic_lifecycle_preserves_stages_and_stops_on_failure(monkeypatch, tmp_path, failure):
     account_id = str(uuid.uuid4())
     monkeypatch.setattr(lab, 'accounts', {'A': account_id})
@@ -255,7 +255,20 @@ def test_complete_synthetic_lifecycle_preserves_stages_and_stops_on_failure(monk
             raise TimeoutError('Synthetic lost response after creation')
         return 201, json.dumps({'activities': returned}).encode()
     monkeypatch.setattr(lab, 'request', request)
-    if failure == 'first-intent':
+    if failure == 'frozen-report-tamper':
+        original = lab.bd.validate_frozen_review
+        def tampered(raw, pin, config, captures, limit):
+            report = lab.bd.parse_keyed_yaml(raw)
+            report['holdings']['shortages'] = [{'invented': True}]
+            changed = lab.bd.yaml.safe_dump(report).encode()
+            # Even a freshly matching external pin cannot approve changed semantics.
+            return original(changed, lab.hashlib.sha256(changed).hexdigest(), config, captures, limit)
+        monkeypatch.setattr(lab.bd, 'validate_frozen_review', tampered)
+        with pytest.raises(RuntimeError, match='^FROZEN_REVIEW_CONTENT_CONFLICT$'):
+            lab.run(lab)
+        assert len(posts) == 1
+        assert not list((tmp_path / 'state').glob('writes-*'))
+    elif failure == 'first-intent':
         def failure(*args, **kwargs):
             raise OSError('Synthetic persistence failure')
         monkeypatch.setattr(lab.bd, '_persist_write_transition_locked', failure)
@@ -287,6 +300,13 @@ def test_complete_synthetic_lifecycle_preserves_stages_and_stops_on_failure(monk
         assert history['snapshot_sha256'] == lab.hashlib.sha256((tmp_path / 'inputs/snapshot-0.json').read_bytes()).hexdigest()
         assert repeat['input_sha256']['snapshot'] == lab.hashlib.sha256((tmp_path / 'inputs/snapshot-6.json').read_bytes()).hexdigest()
         assert repeat['wire'] is None and len(repeat['adoption']['owned']) == 3
+        frozen = tmp_path / 'inputs/frozen-review'
+        config_raw = (frozen / 'config.yaml').read_bytes()
+        captures = {k: (frozen / (k + '.bytes')).read_bytes()
+                    for k in ('prepared', 'snapshot', 'resolutions', 'history_evidence')}
+        pin = lab.bd.parse_keyed_yaml((frozen / 'pin.yaml').read_bytes())['review_sha256']
+        replay = lab.bd.validate_frozen_review((frozen / 'review.yaml').read_bytes(), pin, config_raw, captures, 1000000)
+        assert replay == initial  # Still valid after compensation overwrites live snapshot/history.
         assert (tmp_path / 'inputs/initial-prepared.yaml').read_bytes() == (tmp_path / 'inputs/repeat-prepared.yaml').read_bytes()
         assert all((tmp_path / ('inputs/snapshot-' + str(n) + '.json')).exists() for n in (0, 3, 6))
         assert not (tmp_path / 'inputs/auth-response.json').exists()

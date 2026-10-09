@@ -429,15 +429,32 @@ def run(lab):
         summary = bd.review_local_snapshot('inputs/review.yaml', 'inputs', 1000000)
         if summary['new_activities'] != 3 or summary['holdings_shortfalls'] or summary['import_ready'] is not False:
             raise RuntimeError('LAB_LIFECYCLE_INITIAL_REVIEW_FAILED')
-        report = bd.parse_keyed_yaml(Path('outputs/review-' + account_key + '.yaml').read_bytes())
-        bd.atomic_private_bytes(inputs / 'initial-review.yaml', Path('outputs/review-' + account_key + '.yaml').read_bytes())
+        # Trusted fixture controller captures once; this pin is not human approval.
+        report_raw = Path('outputs/review-' + account_key + '.yaml').read_bytes()
+        config_raw = bd.read_local_bytes(inputs / 'review.yaml', inputs, 1000000)
+        captured_config = bd.review_capture_configuration(config_raw)
+        captures = {k: bd.read_local_bytes(inputs / captured_config[k], inputs, 1000000)
+                    for k in ('prepared', 'snapshot', 'resolutions', 'history_evidence')}
+        report_pin = hashlib.sha256(report_raw).hexdigest()
+        report = bd.validate_frozen_review(report_raw, report_pin, config_raw, captures, 1000000)
+        if report['holdings']['shortages'] or len(report['adoption']['new']) != 3:
+            raise RuntimeError('LAB_LIFECYCLE_FROZEN_REVIEW_BLOCKED')
+        prepared = bd.validated_prepared_review(captures['prepared'])
+        frozen = bd.private_directory(inputs / 'frozen-review')
+        bd.atomic_private_bytes(frozen / 'config.yaml', config_raw)
+        bd.atomic_private_bytes(frozen / 'review.yaml', report_raw)
+        for role, raw in captures.items():
+            bd.atomic_private_bytes(frozen / (role + '.bytes'), raw)
+        bd.atomic_private_yaml(frozen / 'pin.yaml', {'schema_version': 1, 'review_sha256': report_pin,
+                                                   'authority': 'owned_fixture_controller_not_human_approval'})
+        bd.atomic_private_bytes(inputs / 'initial-review.yaml', report_raw)
         wire = report['wire']
         reviewed = {'body': wire['body_utf8'].encode(), 'sha256': wire['sha256'], 'import_ready': False}
         if len(bd.reviewed_wire_rows(reviewed)) != 3:
             raise RuntimeError('LAB_LIFECYCLE_WIRE_FAILED')
         dispatch_root = inputs / 'dispatch'
         dispatch_root.mkdir(mode=0o700)
-        baseline = (inputs / 'snapshot.json').read_bytes()
+        baseline = captures['snapshot']
         attempts = 0
         target = hashlib.sha256(binding['target_account_id'].encode()).hexdigest()
         lab.emit('LAB_LIFECYCLE_REVIEW', prepared=3, new=3, holdings_shortfalls=0, dispatch_mode='single_event')
