@@ -255,3 +255,8 @@ inherit our single-event uncertainty/readback protocol.
 DRY_RUN absent or1 forces preview even with `--execute`;0 without execute also
 previews. Other values fail. `DRY_RUN=0` plus execute currently refuses at the
 application execution gate. No destination credential or network is accessed.
+
+The [bounded HTTPS adapter](docs/design/https-request-adapter.md) is implemented
+for future qualified execution: fixed GET/import one-event requests, exact origin,
+verified TLS, bounded responses and no retries. It uses an existing environment
+session bearer; no authentication exchange or public execution route is enabled.
