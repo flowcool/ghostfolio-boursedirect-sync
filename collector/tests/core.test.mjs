@@ -86,6 +86,34 @@ test('failed fsync prevents trusted continuation',()=>isolated(()=>{
  try{assert.throws(()=>{c.consumePermit(h,request(p,n),101);dispatched++;});}finally{fs.fsyncSync=real;}
  assert.equal(dispatched,0);c.releasePrincipal(h);
 }));
+for(const operation of ['rmdirSync','openSync','fsyncSync','closeSync']){
+ test(`release ${operation} failure revokes stale handle before ownership can move`,()=>isolated(()=>{
+  const h=prepare(),p=contract(h),nonce=c.armPermit(h,p,100,source);
+  const filename=path.join(h.directory,'journal.yaml'),before=fs.readFileSync(filename);
+  const real=fs[operation],failure=new Error('synthetic release failure');
+  fs[operation]=(...args)=>{
+   if(operation==='closeSync')real(...args);
+   throw failure;
+  };
+  try{assert.throws(()=>c.releasePrincipal(h),error=>error===failure);}finally{fs[operation]=real;}
+  assert.throws(()=>c.startAttempt(h,102),/AUTH_HANDLE_CLOSED/);
+  assert.throws(()=>c.transition(h,'blocked',102),/AUTH_HANDLE_CLOSED/);
+  assert.throws(()=>c.consumePermit(h,request(p,nonce),102),/AUTH_HANDLE_CLOSED/);
+  assert.throws(()=>c.armPermit(h,p,102,source),/AUTH_HANDLE_CLOSED/);
+  assert.deepEqual(fs.readFileSync(filename),before);
+  if(operation==='rmdirSync'){
+   assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_LOCKED/);
+   c.releasePrincipal(h);
+   assert.equal(fs.existsSync(h.lock),true);
+  }else{
+   const next=c.acquirePrincipal('synthetic');
+   c.releasePrincipal(h);
+   assert.equal(fs.existsSync(next.lock),true);
+   assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_LOCKED/);
+   c.releasePrincipal(next);
+  }
+ }));
+}
 test('unused permit is bounded, schema exact and clock cannot reverse',()=>isolated(()=>{
  const h=prepare(),p=contract(h);assert.throws(()=>c.armPermit(h,p,99,source));
  assert.throws(()=>c.armPermit(h,{...p,body:'secret'},100,source));c.releasePrincipal(h);
