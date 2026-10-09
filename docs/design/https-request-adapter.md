@@ -22,8 +22,10 @@ Connection creation/send/response/header/read faults produce fixed codes without
 private exception chaining; every created connection is closed once. Close failure
 also produces a fixed failure, retaining any earlier safe failure. Lost POST
 responses, including close errors, cannot authorize retry under the core's already
-persisted uncertainty fence. The adapter has no public execution route yet and the
-existing snapshot command remains unchanged. Ordinary tests forbid sockets and
+persisted uncertainty fence. The separately reviewed
+[qualified application route](qualified-application.md) now constructs this adapter
+after source/report/declaration preflight; the GET-only snapshot command remains
+unchanged. Ordinary tests forbid sockets and
 prove composition with the real core through fakeHTTPS, not live acceptance.
 
 Rollback scoped implementation revert. New external HTTP/credential code still

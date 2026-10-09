@@ -488,8 +488,48 @@ def run(lab):
             bd.atomic_private_bytes(inputs / ('snapshot-' + str(4 + ordinal) + '.json'), readback)
             lab.emit('LAB_LIFECYCLE_SINGLE_ACCEPTED', ordinal=ordinal, accepted=1,
                      full_readback_count=4 + ordinal, exact_body=True, positively_resolved=True)
-        result = bd.dispatch_frozen_lab_review('state', binding, report_raw, report_pin,
-            config_raw, captures, 1000000, dispatch_request, observe_confirmation)
+        prepare_raw = bd.read_local_bytes(inputs / 'prepare.yaml', inputs, 1000000)
+        documents, document_paths = bd.capture_preparation_sources(prepare_raw, inputs, 1000000, 32)
+        declaration = {'schema_version': 1,
+            'artifact_kind': 'operator_execution_declaration_not_authenticated_approval',
+            'review_sha256': report_pin, 'prepare_config': 'prepare.yaml',
+            'prepare_config_sha256': hashlib.sha256(prepare_raw).hexdigest(),
+            'allowed_origin': 'https://owned-fixture.invalid', **binding,
+            'snapshot_sha256': hashlib.sha256(captures['snapshot']).hexdigest(),
+            'destination_version': '3.81.0', 'display_timezone': 'Europe/Paris',
+            'confirmations': {name: {'confirmed': True, 'confirmed_by': 'owned synthetic fixture controller',
+                'reference': 'newly owned disposable fixture, not real operator authorization'}
+                for name in ('source_acceptance', 'destination_validation', 'security_review',
+                             'recovery_procedure', 'exclusive_access', 'write_authorization')}}
+        declaration_raw = bd.yaml.safe_dump(declaration, sort_keys=False).encode()
+        application_bundle = {'declaration': declaration_raw,
+            'declaration_sha256': hashlib.sha256(declaration_raw).hexdigest(),
+            'review': report_raw, 'review_sha256': report_pin, 'config': config_raw,
+            'captures': captures, 'prepare_config': prepare_raw, 'documents': documents}
+        result = bd.dispatch_qualified_application('state', 'outputs', application_bundle,
+            1000000, 32, dispatch_request, observe_confirmation,
+            input_paths=[inputs / 'prepare.yaml', inputs / 'review.yaml',
+                         *[inputs / captured_config[k] for k in captures], *document_paths])
+        archives = list(Path('outputs').glob('application-*'))
+        if len(archives) != 1:
+            raise RuntimeError('LAB_LIFECYCLE_APPLICATION_ARCHIVE_MISSING')
+        manifest = bd.read_keyed_yaml(archives[0] / 'manifest.yaml', archives[0], 1000000)
+        archived_roles = {role: bd.read_local_bytes(archives[0] / entry['file'], archives[0], 1000000)
+                          for role, entry in manifest['roles'].items()}
+        if any(hashlib.sha256(archived_roles[role]).hexdigest() != entry['sha256']
+               for role, entry in manifest['roles'].items()):
+            raise RuntimeError('LAB_LIFECYCLE_APPLICATION_ARCHIVE_CONFLICT')
+        archived_bundle = {'declaration': archived_roles['declaration'],
+            'declaration_sha256': manifest['declaration_sha256'], 'review': archived_roles['review'],
+            'review_sha256': manifest['review_sha256'], 'config': archived_roles['config'],
+            'captures': {k: archived_roles[k] for k in captures},
+            'prepare_config': archived_roles['prepare_config'],
+            'documents': {alias: {'statement': archived_roles[entry['statement']],
+                'notes': [archived_roles[role] for role in entry['notes']]}
+                for alias, entry in manifest['documents'].items()}}
+        bd.validate_qualified_application(archived_bundle, 1000000, 32)
+        lab.emit('LAB_LIFECYCLE_APPLICATION_ARCHIVE', complete=True, cold_replay=True,
+                 authority='synthetic_fixture_not_production')
         if result['accepted_events'] != 3 or result['import_ready'] is not False:
             raise RuntimeError('LAB_LIFECYCLE_ACCEPTANCE_FAILED')
         journal = bd.read_keyed_yaml(Path('state/writes-' + target + '.yaml'), 'state', 1000000)
@@ -512,6 +552,19 @@ def run(lab):
             raise RuntimeError('LAB_LIFECYCLE_REPEAT_READINESS_CONFLICT')
         bd.atomic_private_bytes(inputs / 'repeat-prepared.yaml', prepared_path.read_bytes())
         bd.atomic_private_bytes(inputs / 'repeat-review.yaml', Path('outputs/review-' + account_key + '.yaml').read_bytes())
+        repeat_raw = Path('outputs/review-' + account_key + '.yaml').read_bytes()
+        repeat_captures = {k: bd.read_local_bytes(inputs / captured_config[k], inputs, 1000000) for k in captures}
+        repeat_declaration = dict(declaration)
+        repeat_declaration['review_sha256'] = hashlib.sha256(repeat_raw).hexdigest()
+        repeat_declaration['snapshot_sha256'] = hashlib.sha256(repeat_captures['snapshot']).hexdigest()
+        repeat_declaration_raw = bd.yaml.safe_dump(repeat_declaration, sort_keys=False).encode()
+        repeat_bundle = {**application_bundle, 'review': repeat_raw,
+            'review_sha256': repeat_declaration['review_sha256'], 'captures': repeat_captures,
+            'declaration': repeat_declaration_raw,
+            'declaration_sha256': hashlib.sha256(repeat_declaration_raw).hexdigest()}
+        repeated = bd.dispatch_qualified_application('state', 'outputs', repeat_bundle, 1000000, 32, None)
+        if repeated['accepted_events'] != 0 or len(list(Path('outputs').glob('application-*'))) != 1:
+            raise RuntimeError('LAB_LIFECYCLE_APPLICATION_REPEAT_CONFLICT')
         lab.emit('LAB_LIFECYCLE_REPEAT', new=0, owned=3, wire_absent=True, second_post_sent=False, identities_unchanged=True)
     finally:
         os.chdir(PROJECT)

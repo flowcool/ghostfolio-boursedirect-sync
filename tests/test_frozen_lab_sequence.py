@@ -107,7 +107,7 @@ def test_later_wire_defect_is_rejected_before_first_core_call(monkeypatch):
         return wire
     monkeypatch.setattr(bd, "build_wire_payload", changed)
     def forbidden(*args, **kwargs): raise AssertionError("All wires preflight before core")
-    monkeypatch.setattr(bd, "dispatch_single_lab_intent", forbidden)
+    monkeypatch.setattr(bd, "_dispatch_single_intent", forbidden)
     with pytest.raises(RuntimeError): dispatch(data)
     assert not Path("sequence-state").exists()
 
