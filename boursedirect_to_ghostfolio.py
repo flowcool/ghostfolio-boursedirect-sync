@@ -877,7 +877,10 @@ def qualify_capture_bundle(manifest_raw, files, config_raw, max_bytes, max_depth
         "configuration_sha256": hashlib.sha256(config_raw).hexdigest(),
         "run_id": manifest["run_id"], "account_key": account["account_key"],
         "file_count": len(files), "statement_periods": len(statements),
-        "prepared_activities": len(result["artifact"]["activities"]), "files": entries}}
+        "prepared_activities": len(result["artifact"]["activities"]),
+        "files": {name: {"role": entry["role"], "period": entry["period"],
+                         "sha256": entry["sha256"], "sequence": entry["ticket"]["sequence"]}
+                  for name, entry in entries.items()}}}
 
 
 def capture_path_without_symlinks(path):

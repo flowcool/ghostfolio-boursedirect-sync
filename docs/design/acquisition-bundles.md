@@ -58,6 +58,11 @@ an exclusive directory (0700) and atomic files (0600); `qualification.yaml` is
 published last. On publication failure, retain the incomplete directory and use
 a new output name after investigating. There is no automatic cleanup or overwrite.
 
+The report projects each capture to its neutral filename, role, period, SHA256
+and ticket sequence. Raw account references, request URLs and full tickets remain
+only in the authoritative private input manifest, whose digest the report pins.
+This minimizes duplication; both reports and input manifests remain private.
+
 Inspect both output files before using `prepare-proposal.yaml` with the existing
 `prepare` command. Give `prepare` an explicit common input root that contains both
 this saved proposal and its referenced source files (the project root in the
