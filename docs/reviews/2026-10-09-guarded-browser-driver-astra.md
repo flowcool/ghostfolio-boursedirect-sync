@@ -249,3 +249,45 @@ real worker/frame interception, server counters, process crash recovery or actua
 loader freshness. Every returned qualification remains `browser_proven=false`.
 The real sandbox prerequisite, real positive/negative controls and all browser
 acceptance remain open; the reviewed plan and Astra verdict are unchanged.
+
+## Initial real dispatch evidence (author experiment, 2026-10-09)
+
+Infra runtime owner `infra-66vf` qualified the existing exact Chrome image using
+the pinned Playwright crawling seccomp profile. The paired opt-in probe retains
+the default-profile sandbox failure as a negative control; `chrome://sandbox`
+reports the namespace layer, PID/network namespaces and Seccomp-BPF/TSYNC active
+under that profile. AppArmor, nonroot identity and network-none isolation remain
+in place. Infra commit `fbe0d1d` owns the reproducible sandbox probe; the source
+issue records exact runtime/profile pins and private cleanup receipts.
+
+The opt-in `scripts/run-cdp-first-request.py` copies only four synthetic modules
+into newly owned network-none containers without mounts or real credentials.
+`collector/lab/first-request.mjs` uses actual Node20.19.2, Chrome148.0.7778.97,
+NUL-framed CDP, acknowledged bootstrap guards and a loopback HTTP counter.
+The five initial scenarios passed with positively observed browser exit and
+exact container removal:
+
+- A permitted root POST reaches the server exactly once; forbidden count zero.
+- A forbidden root POST is intercepted before dispatch; server count zero.
+- Omitting Fetch installation in the negative control dispatches that POST once.
+- A form POST popup actually creates a second paused attachment, is rejected,
+  and does not reach the forbidden endpoint.
+- The popup negative control deliberately resumes the second attachment without
+  guards and dispatches the forbidden POST once. Popup blocking is disabled in
+  both controls so an absent popup cannot masquerade as containment.
+
+Initial exploration omitted extension suppression and correctly failed when
+Chrome announced a component service worker. The retained fixture suppresses
+extensions/component extensions per the existing design; no target rejection
+policy was weakened. Private prototype receipts remain diagnostic evidence.
+
+This is a partial executable proof, not a new Astra verdict or independent PR
+review. Every report retains `browser_proven=false`. The fixture's in-memory
+one-use counter does not establish the real durable-principal integration gate.
+Frames/workers, redirects307/308, HTTP-auth cancellation, concurrent durable
+permits/fsync failures, process crash/restart, pipe loss/forced-stop dispatch and
+actual loader/account/date freshness still retain acceptance ownership in `.71`.
+The qualified runtime removes the previous sandbox blocker; reusable B stays
+HOLD until complete proof and subsequent exact-hash design approval. No broker
+or Ghostfolio request was sent, and ordinary pytest/npm tests never start this
+opt-in Docker fixture.
