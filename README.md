@@ -63,8 +63,8 @@ For a saved statement and its daily notes:
 The JSON contains matching counts and blocker codes. Account mismatches and
 invalid notes fail with exit 1; missing, extra or ambiguous matches block with
 exit 2. Exact matching never infers currency or silently discards duplicate trades.
-Even complete matching leaves `import_ready=false`: there is no activity export
-or Ghostfolio write command. The limits above are example local budgets.
+Even complete matching leaves `import_ready=false`: inspection alone does not
+export activities or write Ghostfolio. The limits above are example local budgets.
 
 
 ## Prepare an offline review plan
@@ -94,7 +94,7 @@ local preparation. These artifacts contain private financial details and are
 actual activity adoption, historical holdings and destination validation remain
 unverified. The isolated API/date/number and recovery evidence describes synthetic
 laboratories only.
-No `apply` command exists. See the [preparation contract](docs/design/offline-preparation.md).
+The `apply` command provides offline preview/export; execution remains gated. See the [preparation contract](docs/design/offline-preparation.md).
 
 Pure offline [adoption helpers](docs/design/offline-adoption.md) validate complete
 saved Ghostfolio snapshots and propose explicit reconciliation of existing manual
@@ -163,7 +163,7 @@ all-existing or shortfall report can verify without becoming dispatchable.
 
 The `review` command writes a private reconciliation artifact and exact new-activity wire body,
 with readiness false. Stdout contains counts and blockers only. It never fetches,
-sends or changes Ghostfolio; there is no apply command.
+sends or changes Ghostfolio; application execution remains gated.
 
 ## Observe retained write-intent evidence offline
 
@@ -212,7 +212,7 @@ runtime route described in [FINDINGS.md](FINDINGS.md#16-actual-destination-read-
 the public HTTPS command is tested with fake responses and forbidden real sockets.
 
 This is an offline diagnostic tool, not a delivered automatic sync. Unsupported
-periods and uncertain legacy matches block; no `apply` command exists. Personal
+periods and uncertain legacy matches block; `apply` defaults to offline preview and optional private export. Personal
 documents, configuration, outputs and journals stay ignored and private. Synthetic
 CI verifies each PR; CodeRabbit triggering, review and merge are managed externally.
 PRs remain open while independent project work continues.
@@ -231,4 +231,27 @@ It verifies exact three-trade acceptance/readback and a zero-new second review,
 then compensates its owned activities and removes its resources. It accepts no
 production endpoint or credentials. Ordinary pytest/CI never launches the lab.
 Prerequisites, provider dependency, retained private evidence and cleanup limits
-are documented in the linked contract. The application still has no apply command.
+are documented in the linked contract. Application execution remains gated.
+
+## Preview an application and export its manual proposal
+
+The [operator application](docs/design/operator-application.md) is offline by default:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py apply \
+  --config inputs/review-config.yaml --review inputs/review-report.yaml \
+  --review-sha256 YOUR_EXTERNALLY_RECORDED_REPORT_SHA256 \
+  --input-root inputs --max-bytes 1048576 \
+  --export outputs/manual-import-proposal.json
+```
+
+Config role references in this example are relative to inputs. Omit export for a
+read-only diagnostic preview. Success exits2 with counts and readinessfalse. Export
+requires clean chronological holdings and new activities; actual unresolved legacy
+inputs cannot be silently exported. The private JSON is exact Ghostfolio import
+format, but is a proposal: no upload occurs and a manual batch upload would not
+inherit our single-event uncertainty/readback protocol.
+
+DRY_RUN absent or1 forces preview even with `--execute`;0 without execute also
+previews. Other values fail. `DRY_RUN=0` plus execute currently refuses at the
+application execution gate. No destination credential or network is accessed.

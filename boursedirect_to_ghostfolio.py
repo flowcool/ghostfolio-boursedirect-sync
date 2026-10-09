@@ -1717,21 +1717,82 @@ def dispatch_frozen_lab_review(state_root, binding, review_raw, review_sha256,
     return {"accepted_events": len(wires), "readback": baseline, "import_ready": False}
 
 
-def check_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
-    """Read-only operator capture and verification; no publication or authority."""
+def capture_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
     if type(max_bytes) is not int or max_bytes <= 0:
         fail("INVALID_FROZEN_REVIEW_BYTE_LIMIT")
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
     review_raw = read_local_bytes(review_path, input_root, max_bytes)
     config = review_capture_configuration(config_raw)
-    captures = {k: read_local_bytes(Path(input_root) / config[k], input_root, max_bytes)
-                for k in ("prepared", "snapshot", "resolutions", "history_evidence")}
-    artifact = validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes)
+    paths = [Path(config_path), Path(review_path)]
+    captures = {}
+    for key in ("prepared", "snapshot", "resolutions", "history_evidence"):
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    return validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes), paths
+
+
+def frozen_review_summary(artifact):
     return {"review_verified": True, "new_activities": len(artifact["adoption"]["new"]),
             "owned_activities": len(artifact["adoption"]["owned"]),
             "adopted_activities": len(artifact["adoption"]["adopted"]),
             "holdings_shortfalls": len(artifact["holdings"]["shortages"]),
             "import_ready": False, "blockers": artifact["blockers"]}
+
+
+def check_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
+    """Read-only operator capture and verification; no publication or authority."""
+    artifact, _ = capture_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes)
+    return frozen_review_summary(artifact)
+
+
+def validate_proposal_destination(destination, input_paths):
+    """Validate every local publication boundary before permission/file mutation."""
+    path = Path(destination)
+    root = Path("outputs").absolute()
+    try:
+        absolute = path.absolute()
+        if any(p.is_symlink() for p in (absolute, *absolute.parents, root)):
+            fail("SYMLINK_PROPOSAL_PATH")
+        resolved = path.resolve()
+        if not resolved.is_relative_to(root.resolve()) or resolved == root.resolve():
+            fail("PROPOSAL_OUTSIDE_OUTPUTS")
+        if root.exists() and not root.is_dir():
+            fail("INVALID_PROPOSAL_DIRECTORY")
+        if path.parent.absolute() != root and not path.parent.is_dir():
+            fail("INVALID_PROPOSAL_DIRECTORY")
+        if path.exists() and not path.is_file():
+            fail("INVALID_PROPOSAL_FILE")
+        reject_output_input_collision(path, input_paths)
+    except OSError:
+        raise RuntimeError("INVALID_PROPOSAL_PATH") from None
+    return path
+
+
+def preview_local_application(config_path, review_path, review_sha256, input_root, max_bytes,
+                              export_path=None, execute=False):
+    """Default offline application preview; export is a proposal, never acceptance."""
+    dry_run = os.environ.get("DRY_RUN", "1")
+    if dry_run not in ("0", "1"):
+        fail("INVALID_DRY_RUN")
+    if execute and dry_run == "0":
+        fail("APPLICATION_EXECUTION_GATE_REQUIRED")
+    artifact, paths = capture_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes)
+    result = {**frozen_review_summary(artifact), "dry_run": True, "proposal_exported": False}
+    if export_path is not None:
+        if artifact["holdings"]["shortages"] or artifact["adoption"]["candidates"]:
+            fail("APPLICATION_FINANCIAL_REVIEW_BLOCKED")
+        if artifact["wire"] is None:
+            fail("NO_NEW_ACTIVITIES_TO_EXPORT")
+        body = artifact["wire"]["body_utf8"].encode()
+        if len(body) > max_bytes:
+            fail("APPLICATION_PROPOSAL_LIMIT_EXCEEDED")
+        destination = validate_proposal_destination(export_path, paths)
+        private_directory("outputs")
+        if destination.parent.absolute() != Path("outputs").absolute():
+            destination.parent.chmod(0o700)
+        atomic_private_bytes(destination, body)
+        result["proposal_exported"] = True
+    return result
 
 
 def review_local_snapshot(config_path, input_root, max_bytes):
@@ -2081,6 +2142,14 @@ def main(argv=None):
     review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
     review.add_argument("--input-root", required=True)
     review.add_argument("--max-bytes", type=int, required=True)
+    apply = subparsers.add_parser("apply", help="Offline preview and private import proposal; execution remains gated")
+    apply.add_argument("--config", required=True)
+    apply.add_argument("--review", required=True)
+    apply.add_argument("--review-sha256", required=True)
+    apply.add_argument("--input-root", required=True)
+    apply.add_argument("--max-bytes", type=int, required=True)
+    apply.add_argument("--export", help="Optional private manual proposal under outputs, not an import")
+    apply.add_argument("--execute", action="store_true", help="DRY_RUN overrides this; execution gate remains closed")
     check = subparsers.add_parser("check-review", help="Verify a pinned saved review offline without writing files")
     check.add_argument("--config", required=True)
     check.add_argument("--review", required=True)
@@ -2106,6 +2175,10 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "apply":
+            print(json.dumps(preview_local_application(args.config, args.review, args.review_sha256,
+                args.input_root, args.max_bytes, export_path=args.export, execute=args.execute), sort_keys=True))
+            return 2
         if args.command == "check-review":
             print(json.dumps(check_local_frozen_review(args.config, args.review, args.review_sha256,
                                                        args.input_root, args.max_bytes), sort_keys=True))
