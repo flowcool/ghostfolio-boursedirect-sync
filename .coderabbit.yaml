@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
+inheritance: true
+reviews:
+  profile: chill
+  poem: false
+  in_progress_fortune: false
+  review_status: true
+  auto_review:
+    enabled: true
+    # Work is delivered as stacked PRs, often drafts: review every base branch,
+    # not only the default one.
+    drafts: true
+    base_branches:
+      - ".*"
+  # Mono-file, no-docstring convention; the warning is noise on every PR.
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+  # Compact one-line style and "exits2"-style prose are deliberate here.
+  tools:
+    ruff:
+      enabled: false
+    languagetool:
+      enabled: false
+  path_instructions:
+    - path: "boursedirect_to_ghostfolio.py"
+      instructions: >-
+        Untrusted broker HTML and operator YAML: fail closed with fixed error
+        codes, never guess encodings, dates or decimals. Check exact Decimal
+        handling, stable ledger identities and idempotence across partial
+        imports and restarts, journal/lock/atomic-write behavior, exact wire
+        bytes and numeric preservation, and that no token, session bearer,
+        account identifier or document text reaches logs, errors or artifacts.
+        Any network code must keep an exact HTTPS origin allowlist, reject
+        redirects and never write without a durable uncertain-intent fence.
+        State and output paths must not silently depend on the working directory.
+    - path: "scripts/disposable_acceptance.py"
+      instructions: >-
+        Opt-in disposable lab only. It must never accept a production endpoint
+        or credential, must own and verify every Docker resource it creates,
+        and must clean up independently of scenario failures.
+    - path: "scripts/label_pr_release.py"
+      instructions: >-
+        CI helper run by a pull_request_target workflow with a write token: it
+        may only read the event payload and add release-note labels through the
+        GitHub API, must never execute or import pull request content, and must
+        never log the token.
+    - path: "tests/**/*.py"
+      instructions: >-
+        Synthetic data only, sockets forbidden, no credentials. Prefer
+        assertions that fail if a safety guard is removed; flag guards with no
+        test and tests that would pass on broken code.
+    - path: ".github/**"
+      instructions: >-
+        Actions pinned by commit SHA, least-privilege permissions, no
+        pull_request_target with untrusted checkout (it is used only by
+        pr-release-labels.yml, which must never check out the PR head), no
+        secrets in PR workflows.
+chat:
+  art: false
