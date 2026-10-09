@@ -39,11 +39,17 @@ reviews:
         Any network code must keep an exact HTTPS origin allowlist, reject
         redirects and never write without a durable uncertain-intent fence.
         State and output paths must not silently depend on the working directory.
-    - path: "scripts/**/*.py"
+    - path: "scripts/disposable_acceptance.py"
       instructions: >-
         Opt-in disposable lab only. It must never accept a production endpoint
         or credential, must own and verify every Docker resource it creates,
         and must clean up independently of scenario failures.
+    - path: "scripts/label_pr_release.py"
+      instructions: >-
+        CI helper run by a pull_request_target workflow with a write token: it
+        may only read the event payload and add release-note labels through the
+        GitHub API, must never execute or import pull request content, and must
+        never log the token.
     - path: "tests/**/*.py"
       instructions: >-
         Synthetic data only, sockets forbidden, no credentials. Prefer
@@ -52,6 +58,8 @@ reviews:
     - path: ".github/**"
       instructions: >-
         Actions pinned by commit SHA, least-privilege permissions, no
-        pull_request_target with untrusted checkout, no secrets in PR workflows.
+        pull_request_target with untrusted checkout (it is used only by
+        pr-release-labels.yml, which must never check out the PR head), no
+        secrets in PR workflows.
 chat:
   art: false

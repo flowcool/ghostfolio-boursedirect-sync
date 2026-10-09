@@ -21,7 +21,9 @@ ecosystem to `dependabot.yml` and `javascript-typescript` to CodeQL.
 
 `release.yml` groups GitHub's generated notes by label. `pr-release-labels.yml`
 adds `feature`, `fix`, `documentation`, `maintenance` and `breaking-change` from a
-conventional PR title; it is advisory and never a required check. A
+conventional PR title; it is advisory and never a required check. It runs on
+`pull_request_target` (base-branch workflow and script, write token, also for fork
+PRs) and must never check out or execute the PR head. A
 `breaking-change` or `compat` PR needs a filled "Release impact" section.
 
 ## CodeRabbit
