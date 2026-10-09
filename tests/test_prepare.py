@@ -140,6 +140,7 @@ def test_target_lock_prevents_concurrent_write():
     ('schema_version: !!timestamp "2026-99-99"\n', 'INVALID_KEYED_YAML'),
     ('schema_version: !!timestamp "not-a-date"\n', 'INVALID_KEYED_YAML'),
     ('schema_version: !!int "nope"\n', 'INVALID_KEYED_YAML'),
+    ('schema_version: !!int\n', 'INVALID_KEYED_YAML'),
     ('schema_version: !!float "nope"\n', 'INVALID_KEYED_YAML'),
 ])
 def test_unsafe_or_ambiguous_yaml_configuration_rejected(content, error):
