@@ -148,6 +148,10 @@ describes configuration and explicit manual-adoption resolutions.
   --config inputs/review-config.yaml --input-root inputs --max-bytes 1048576
 ```
 
+The [frozen validation boundary](docs/design/frozen-review-validation.md) shares
+this calculation and verifies externally pinned saved reports against captured
+inputs. It proves computational equivalence, with readiness still false.
+
 It writes a private reconciliation artifact and exact new-activity wire body,
 with readiness false. Stdout contains counts and blockers only. It never fetches,
 sends or changes Ghostfolio; there is no apply command.
