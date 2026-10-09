@@ -231,7 +231,7 @@ def test_startup_requires_cached_pins_no_pull_and_version_before_auth(monkeypatc
     assert os.environ['TZ'] == 'Europe/Paris'
 
 
-@pytest.mark.parametrize('failure', ['none', 'first-intent', 'second-post-timeout', 'frozen-report-tamper'])
+@pytest.mark.parametrize('failure', ['none', 'first-intent', 'second-post-timeout', 'frozen-report-tamper', 'confirmed-observer'])
 def test_complete_synthetic_lifecycle_preserves_stages_and_stops_on_failure(monkeypatch, tmp_path, failure):
     account_id = str(uuid.uuid4())
     monkeypatch.setattr(lab, 'accounts', {'A': account_id})
@@ -255,7 +255,21 @@ def test_complete_synthetic_lifecycle_preserves_stages_and_stops_on_failure(monk
             raise TimeoutError('Synthetic lost response after creation')
         return 201, json.dumps({'activities': returned}).encode()
     monkeypatch.setattr(lab, 'request', request)
-    if failure == 'frozen-report-tamper':
+    if failure == 'confirmed-observer':
+        write = lab.bd.atomic_private_bytes
+        def fail_archive(path, raw):
+            if Path(path).name == 'event-0.readback.json':
+                raise OSError('Private synthetic archive path')
+            return write(path, raw)
+        monkeypatch.setattr(lab.bd, 'atomic_private_bytes', fail_archive)
+        with pytest.raises(RuntimeError, match='^LAB_SEQUENCE_OBSERVER_FAILED$'):
+            lab.run(lab)
+        assert len(posts) == 2  # Seed plus confirmed first source; no later event.
+        paths = list((tmp_path / 'state').glob('writes-*'))
+        journal = lab.bd.parse_keyed_yaml(paths[0].read_bytes())
+        assert [i['state'] for i in journal['intents'].values()] == ['confirmed']
+        assert not (tmp_path / 'inputs/dispatch/event-1.wire.json').exists()
+    elif failure == 'frozen-report-tamper':
         original = lab.bd.validate_frozen_review
         def tampered(raw, pin, config, captures, limit):
             report = lab.bd.parse_keyed_yaml(raw)
