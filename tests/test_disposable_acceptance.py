@@ -265,6 +265,7 @@ def test_complete_synthetic_lifecycle_preserves_stages_and_fences_failed_persist
         assert len(posts) == 2  # Seed plus one source POST, never a repeat.
         initial = lab.bd.parse_keyed_yaml((tmp_path / 'inputs/initial-review.yaml').read_bytes())
         repeat = lab.bd.parse_keyed_yaml((tmp_path / 'inputs/repeat-review.yaml').read_bytes())
+        assert repeat['input_sha256']['snapshot'] == lab.hashlib.sha256((tmp_path / 'inputs/snapshot-6.json').read_bytes()).hexdigest()
         assert initial['wire']['body_utf8'].encode() == posts[1]
         assert repeat['wire'] is None and len(repeat['adoption']['owned']) == 3
         assert (tmp_path / 'inputs/initial-prepared.yaml').read_bytes() == (tmp_path / 'inputs/repeat-prepared.yaml').read_bytes()
