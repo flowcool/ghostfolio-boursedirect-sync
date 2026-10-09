@@ -1,0 +1,15 @@
+{
+  "name": "boursedirect-source-collector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --import ./tests/no-network.mjs --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  }
+}
