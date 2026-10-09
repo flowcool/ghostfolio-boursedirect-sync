@@ -143,10 +143,11 @@ function readJournal(handle) {
 }
 export function releasePrincipal(handle) {
   if(handle.released)return;
+  // Revoke authority before any release operation can fail or ownership can move.
+  handle.released=true;
   fs.rmdirSync(handle.lock);
   const parent=fs.openSync(handle.directory,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
-  handle.released=true;
 }
 export function startAttempt(handle,now) {
   integer(now,0,Number.MAX_SAFE_INTEGER);const state=readJournal(handle);
