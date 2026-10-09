@@ -82,7 +82,7 @@ Before implementation, review the following concrete design:
    exchange operate solely on that owned loopback app and put resulting lab
    access/session tokens into process environment. Use stdlib `http.client`
    directly: no proxies, netrc, redirects or HTTP retry adapter. Bound every
-   response to1048576 bytes plus one sentinel byte and use a fixed 45 s timeout;
+   response to 1048576 bytes plus one sentinel byte and use a fixed 45 s timeout;
    reject redirects, oversized bodies and malformed JSON with fixed codes.
    The size/timeout are the exercised private-controller budgets, not universal
    API limits. Reject unexpected content encoding; validate every returned ID
