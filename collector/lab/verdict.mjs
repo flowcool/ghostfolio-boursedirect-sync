@@ -11,8 +11,9 @@ export function fixtureVerdict(e, contract) {
   const trace=e.trace??[], pauses=trace.filter(item=>item.pause), counts=e.counts??{};
   const exit=trace.findIndex(item=>item.lifecycle==='owned-exit');
   const close=trace.findIndex(item=>item.lifecycle==='close-pipe');
-  check(trace.some(item=>item.lifecycle==='stop-owned'&&item.fenced===true)
-    &&exit>=0&&close>exit&&trace[close].exited===true,'FIXTURE_TEARDOWN_ORDER');
+  const stop=trace.findIndex(item=>item.lifecycle==='stop-owned');
+  check(stop>=0&&trace[stop].fenced===true&&exit>stop
+    &&close>exit&&trace[close].exited===true,'FIXTURE_TEARDOWN_ORDER');
   let signal=true;
   const scenario=contract.family;
   if(scenario==='popup')signal=(counts['Target.attachedToTarget']??0)>=2;

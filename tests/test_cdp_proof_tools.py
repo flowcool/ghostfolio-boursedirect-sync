@@ -30,13 +30,15 @@ def result(code=0, stdout=b'', stderr=b''):
     return subprocess.CompletedProcess([], code, stdout, stderr)
 
 
-@pytest.mark.parametrize('inspection', ['empty', 'timeout'])
+@pytest.mark.parametrize('inspection', ['empty', 'timeout', 'nonzero'])
 def test_inspection_failure_still_removes_exact_created_id(runner, monkeypatch, inspection):
     identifier = 'a' * 64
     calls = []
     def docker(args, **kwargs):
         calls.append(args)
         if args[0] == 'inspect':
+            if inspection == 'nonzero':
+                return result(1, stdout=json.dumps([{'Id': identifier, 'Config': {'Labels': {'proof.owner': 'owned-name'}}}]).encode())
             if inspection == 'timeout':
                 raise subprocess.TimeoutExpired([], 20)
             if inspection == 'empty':
@@ -124,6 +126,22 @@ def test_security_checks_are_not_assert_statements(runner):
         runner.require(False, 'PIN_REJECTED')
 
 
+def test_invalid_create_output_preserves_uncertainty_without_untrusted_removal(runner, monkeypatch, tmp_path):
+    calls = []
+    def docker(args, **kwargs):
+        calls.append(args)
+        return result(stdout=b'foreign-name' if args[0] == 'create' else b'')
+    monkeypatch.setattr(runner, 'docker', docker)
+    with pytest.raises(RuntimeError, match='^FIXTURE_ID_INVALID$'):
+        runner.run('permitted', tmp_path / 'profile', tmp_path, b'', {})
+    receipt = json.loads((tmp_path / 'permitted-receipt.json').read_text())
+    assert receipt['execution_error'] == 'FIXTURE_EXECUTION_FAILED'
+    assert receipt['cleanup_verified'] is False
+    assert receipt['cleanup_errors'] == ['FIXTURE_ID_INVALID']
+    assert 'container' not in receipt
+    assert not any(args[0] in ['inspect', 'rm', 'start', 'cp'] for args in calls)
+
+
 @pytest.fixture
 def proof(monkeypatch):
     module = load('consolidate-cdp-proof')
@@ -202,6 +220,22 @@ def test_explicit_capture_replacement_requires_identical_common_pins(proof, tmp_
     assert summary['capture_replaced'] is True and summary['receipts'] == 29
     mutate(extra, 'capture', lambda r: r['source_sha256'].update({'first-request.mjs': 'changed'}))
     with pytest.raises(RuntimeError, match='PROOF_REPLACEMENT_COMMON_PIN_MISMATCH'):
+        proof.consolidate(matrix, extra)
+
+
+@pytest.mark.parametrize('with_replacement', [False, True])
+def test_container_identity_cannot_be_reused_across_any_receipts(proof, tmp_path, with_replacement):
+    matrix = tmp_path / 'matrix'
+    receipts(proof, matrix)
+    if with_replacement:
+        extra = replacement(proof, tmp_path)
+        original = json.loads((matrix / 'capture-receipt.json').read_text())
+        mutate(extra, 'capture', lambda r: r.update(container=original['container']))
+    else:
+        extra = None
+        original = json.loads((matrix / 'permitted-receipt.json').read_text())
+        mutate(matrix, 'capture', lambda r: r.update(container=original['container']))
+    with pytest.raises(RuntimeError, match='^PROOF_CONTAINER_REUSED$'):
         proof.consolidate(matrix, extra)
 
 

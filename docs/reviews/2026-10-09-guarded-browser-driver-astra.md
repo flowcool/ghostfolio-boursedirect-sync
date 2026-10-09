@@ -403,3 +403,26 @@ from source issue; sibling-copy alignment is handed off separately.
 These changes harden the same approved synthetic experiment. Reusable B,
 actual source/credential/egress gates and independent external review remain
 separate; every report retains `browser_proven=false`.
+
+
+### Current-head teardown review correction (author evidence)
+
+The subsequent CodeRabbit and Claude reviews of `6e211bf` identified a valid
+ordering gap in the pure fixture verdict: a fenced `stop-owned` recorded after
+`owned-exit` could qualify when pipe closure was correctly ordered. The evaluator
+now requires `stop-owned < owned-exit < close-pipe`, with the first stop fenced
+and pipe closure reporting exit. A focused regression independently rejects late,
+missing and unfenced stops; removing the stop-before-exit guard makes it fail.
+
+Python regressions now reject reused container IDs both across selected matrix
+receipts and across an explicit replacement and its superseded capture receipt.
+Removing the identity guard makes both tests fail because no error is raised.
+A nonzero inspection return cannot establish ownership even with plausible JSON.
+Malformed create output retains a durable failed receipt and cleanup uncertainty;
+it never grants authority to remove an unvalidated ID or a discovered resource.
+That improbable case remains unqualified rather than broadening removal authority.
+
+These are author corrections within the existing synthetic proof contract, not a
+new Astra verdict or production-browser qualification. Exact-current private
+receipts must be regenerated after the evaluator pin changes. Existing reader
+root feedback remains disproved; shared sibling routing is owned by `infra-d4cl`.

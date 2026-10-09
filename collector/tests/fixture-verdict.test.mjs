@@ -68,6 +68,17 @@ test('missing exit and reordered teardown cannot qualify',()=>{
   e.trace=[{lifecycle:'close-pipe',exited:true},{lifecycle:'owned-exit'},{lifecycle:'stop-owned',fenced:true}];
   assert.equal(fixtureVerdict(e,scenarios.permitted).passed,false);
 });
+test('stop must be fenced before exit independently of pipe close ordering',()=>{
+  for(const trace of [
+    [{lifecycle:'owned-exit'},{lifecycle:'close-pipe',exited:true},{lifecycle:'stop-owned',fenced:true}],
+    [{lifecycle:'owned-exit'},{lifecycle:'stop-owned',fenced:true},{lifecycle:'close-pipe',exited:true}],
+    [{lifecycle:'stop-owned',fenced:false},{lifecycle:'owned-exit'},{lifecycle:'close-pipe',exited:true}],
+    [{lifecycle:'owned-exit'},{lifecycle:'close-pipe',exited:true}],
+  ]){
+    const e=observation('permitted');e.trace=trace;
+    assert.ok(fixtureVerdict(e,scenarios.permitted).failures.includes('FIXTURE_TEARDOWN_ORDER'));
+  }
+});
 test('explicit failure, cancellation, restart and capture failure reject',()=>{
   for(const [mode,key,value] of [['permitted','failure','FIXTURE_STARTUP_FAILED'],
     ['permitted','owned_browser_exit',false],['http-auth','cancelled',0],
