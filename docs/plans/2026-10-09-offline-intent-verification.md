@@ -14,7 +14,7 @@ binding/state, fetches data, exports wire bytes nor dispatches/replays requests.
 Positive evidence is an observation, never a changed journal or readiness grant.
 
 The public [owned lab](../design/disposable-acceptance.md) provides both complete
-count6 and post-compensation count0 saved snapshots plus its retained confirmed
+count 6 and post-compensation count 0 saved snapshots plus its retained confirmed
 journal. That permits actual saved-data command verification without production
 access. The existing full journal validator, wire validator, remote normalizer,
 fingerprint, private publication and target lock mechanisms were inspected.
@@ -38,12 +38,13 @@ marker across **all** accounts, types and active contexts. Do not filter conflic
 before evaluation. Marker occurrence alone is insufficient; no financial
 similarity, time window or manual adoption participates.
 
-Limit total expected marker references and total materialized candidate references
-independently to10000, with encoded output bounded by the explicit max-bytes
+Limit total expected marker references and total materialized candidate/evidence
+references, including independent journal-ID evidence references for
+`resolution.accepted`, independently to 10000, with encoded output bounded by the explicit max-bytes
 budget. Count reused historical markers and duplicate remote rows before building
 each intent's candidate map; fail before the one-over reference is materialized.
 Bound every normalized remote Decimal's prospective fixed-point rendering to
-4096characters (or max-bytes if smaller), using its tuple/sign/digit/exponent
+4096 characters (or max-bytes if smaller), using its tuple/sign/digit/exponent
 shape before canonical formatting or fingerprinting. Reject oversized scientific
 exponents without expanding their zeroes. Bound the whole normalized snapshot,
 including unrelated rows, before comparing/rendering any financial evidence.
@@ -104,11 +105,11 @@ No output wire/resolution candidate, authorization or replay instruction.
 
 Check resolved-path/existing-inode collision against all three captured inputs
 before publication. Use existing private atomic bytes/fsync/rename under the
-same target preparation lock. Outputs0600/directories0700. The command may create
+same target preparation lock. Outputs: 0600; directories: 0700. The command may create
 its local lock/output, but no original journal or binding is replaced. Previous
 output survives invalid input, lock conflict, size/budget failure and collision.
 Stdout contains counts, fixed codes and readiness only, never IDs/financial values.
-Readable observation exits2; invalid input or publication failure exits1.
+Readable observation exits with status 2; invalid input or publication failure exits with status 1.
 
 ## Gate4 — verification and delivery
 
@@ -123,7 +124,7 @@ claims, private permissions/safe stdout and **unchanged journal bytes**.
 Prove no call to persist_write_transition or any socket/transport occurs.
 
 Run required full pytest and inspect semantic diff/numstat. Then run verify on
-the retained **synthetic owned lab** journal with count6 and count0 snapshots:
+the retained **owned synthetic lab** journal with count 6 and count 0 snapshots:
 the confirmed journal remains byte-identical and each result accurately separates
 recorded acceptance from current presence. No new lab or production call needed.
 Audit reachable Git history before publishing open stacked PR; leave CodeRabbit
