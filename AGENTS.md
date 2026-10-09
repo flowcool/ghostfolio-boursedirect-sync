@@ -56,3 +56,11 @@ Interactive broker source acquisition is authorized under the
 [acquisition amendment](docs/design/online-source-inspection.md); unattended
 scraping remains outside the design. No production writes or pushes without
 applicable explicit authorization. Later financial/API behavior must pass the gates.
+
+## Agent skills
+
+For engineering-skill workflows, read the shared Beads tracker, triage-label,
+and domain-doc rules in `docs/agents/`:
+[`issue-tracker.md`](docs/agents/issue-tracker.md),
+[`triage-labels.md`](docs/agents/triage-labels.md), and
+[`domain.md`](docs/agents/domain.md).

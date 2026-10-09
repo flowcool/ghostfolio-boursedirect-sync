@@ -94,3 +94,20 @@ Florent's explicit request. Never version private inputs, outputs or configurati
 Pure current-config preparation replay: [contract](docs/design/preparation-source-replay.md).
 
 Qualified application and complete private run archive: [operator workflow](docs/design/qualified-application.md).
+
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in the shared Beads tracker, scoped with
+`project=ghostfolio-boursedirect-sync`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The default canonical triage labels are used with Beads. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain-doc layout. See
+`docs/agents/domain.md`.
