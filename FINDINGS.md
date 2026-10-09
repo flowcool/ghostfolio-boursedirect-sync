@@ -771,4 +771,45 @@ reachable-history private-data audits. Private input/output/state remains ignore
 PRs stay open; CodeRabbit triggering, review and merge are managed externally.
 Independent development continues without waiting for those reviews. No broker
 or production Ghostfolio mutation occurred during these benches; no application
-apply command exists and real source/history/production gates remain separate.
+apply command existed in those original benches. The subsequent qualified route
+is described below; real source/history/production gates remain separate.
+
+
+## 19. Qualified application and source replay
+
+The strict first importer now provides a complete operator path from saved HTML
+through preparation, snapshot reconciliation, preview and explicitly qualified
+single-event application. The [qualified design](docs/plans/2026-10-09-qualified-application.md)
+was independently approved by Astra after two corrections: current config
+qualification must not claim absent historical config provenance, and a complete
+run evidence bundle must survive before the first request.
+
+Pure preparation replay compares complete typed activities, IDs and ordered raw
+source hashes. An evidence-reference-only config change cannot be detected as a
+historical change by the old prepared schema; current config bytes are separately
+pinned in the exact execution declaration. That unsigned declaration records
+external operator responsibility, not reviewer authentication or proof of
+security/recovery/exclusivity/version truth.
+
+`apply` defaults to offline preview. Effective execution requires DRY_RUN0,
+explicit execute and a separately pinned declaration plus complete source/frozen
+preflight. Complete private run captures are durable before any request; each
+sole POST is uncertainty-fenced and positively confirmed only after exact
+acceptance and full readback. Timeout or observer failure stops without retry,
+retaining confirmed and uncertain evidence. All-existing/null wire has no
+credentials, request, state or archive effect. No DELETE option was added.
+See the [operator workflow](docs/design/qualified-application.md).
+
+Socket-forbidden local verification passed938 tests, including93 qualified
+application cases plus the existing source, intent, transport, preservation and
+owned-runner tests. The final newly owned3.81.0 rehearsal passed three source
+POSTs/three confirmations/count6, complete archive cold replay, zero-new repeat,
+compensation of six owned activities/count0 and exact resource cleanup.
+68 retained files had0600 permissions and directories0700. These are synthetic
+fixtures and trusted local HTTP callbacks, not actual HTTPS destination acceptance.
+Public HTTPS composition is verified through mocked connections.
+
+No production activity was written or authorized. Actual historical coverage,
+legacy date/fee/adoption acceptance and external security/recovery/exclusivity
+proofs remain required before a real run; implemented capability does not settle
+those financial facts. PR review and merging remain external to this session.

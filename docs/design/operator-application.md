@@ -3,9 +3,10 @@
 `apply --config FILE --review FILE --review-sha256 HEX --input-root DIR
 --max-bytes N [--export outputs/FILE.json] [--execute]` is an offline application
 preview. DRY_RUN absent or1 forces preview;0 without execute still previews.
-Other spellings fail. Explicit execute withDRY_RUN0 currently refuses before any
-input read with `APPLICATION_EXECUTION_GATE_REQUIRED`; the later qualified
-execution controller has a separate design gate. This is an explicit v0 boundary.
+Other spellings fail. Explicit execute withDRY_RUN0 delegates to the separately
+[qualified controller](qualified-application.md); without its externally pinned
+declaration it refuses with `APPLICATION_EXECUTION_GATE_REQUIRED`. This document
+describes the preview/export branch; its authority never permits dispatch.
 
 The command captures six bounded local files once, validates the externally pinned
 complete frozen review and prints only counts/blockers/dry_runtrue/readinessfalse.
@@ -30,4 +31,4 @@ inherit the single-event application's acceptance/fence protocol. Unsupported
 source periods, actual legacy/adoption/history and production/security/recovery
 remain gates. Retain proposals under ignored outputs; never version them.
 Rollback scoped code revert; retain private evidence and outputs. No remote effect
-is caused by this command. [Approved design](../plans/2026-10-09-operator-application.md).
+is caused by the preview/export branch. [Approved design](../plans/2026-10-09-operator-application.md).

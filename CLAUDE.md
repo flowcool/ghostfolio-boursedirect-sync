@@ -25,10 +25,12 @@ single-row bodies and chains confirmed events with durable observer evidence;
 it remains a trusted owned fixture path, without production transport or authority.
 The [bounded HTTPS adapter](docs/design/https-request-adapter.md) supports fixed
 GET and canonical one-event POST via environment session bearer; its factory does
-not connect and no public execution route invokes it yet. It is not permission.
+not connect. Qualified `apply` invokes it only after complete source/report/
+declaration preflight. Its existence is not permission.
 The [single-event lab core](docs/design/single-event-lab-dispatch.md) holds both
 locks through trusted injected GET/POST/readback and exact transition confirmation;
-it has no apply CLI or production endpoint and does not grant financial readiness.
+its protocol is shared by the separately qualified application controller and
+does not itself grant financial readiness or production authority.
 The [offline verify command](docs/design/offline-intent-verification.md) observes
 retained journals and saved snapshots without resolution, fence mutation or
 capture-freshness claims; recorded settlement remains distinct from row presence.
@@ -46,7 +48,8 @@ API and uncertain-write scenarios at the observed destination version; it remain
 isolated evidence, not production authorization or complete delivery acceptance.
 The [synthetic import lifecycle](docs/design/synthetic-import-lifecycle.md) joins
 saved document preparation to exact lab acceptance/readback and a zero-new second
-review. Real legacy history and an application dispatcher remain separate gates.
+review. Qualified application is implemented separately; real legacy history
+and external run permission remain gates.
 The opt-in [portable disposable runner](docs/design/disposable-acceptance.md)
 reproduces that fixture lifecycle using newly owned local Docker resources only;
 ordinary pytest/CI never starts it and no production endpoint option exists.
@@ -89,3 +92,5 @@ Florent's explicit request. Never version private inputs, outputs or configurati
 - Beads owns current status and dependency gates; do not duplicate them in repository guidance.
 
 Pure current-config preparation replay: [contract](docs/design/preparation-source-replay.md).
+
+Qualified application and complete private run archive: [operator workflow](docs/design/qualified-application.md).

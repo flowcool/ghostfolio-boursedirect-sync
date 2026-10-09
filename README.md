@@ -1,7 +1,8 @@
 # ghostfolio-boursedirect-sync
 
-Offline preparation and reconciliation tools for a Bourse Direct → Ghostfolio
-document importer. The implemented `inspect` command reads monthly statement
+A strict EUR BUY/SELL document importer for Bourse Direct → Ghostfolio, with
+offline preparation/reconciliation, default preview and explicitly qualified
+single-event application. The implemented `inspect` command reads monthly statement
 HTML, preserves aligned ledger slots and checks cash controls with Decimal.
 Optional `--notes` inputs inspect daily contract notes and match trades exactly.
 Inspection does not submit activities or contact either service. A pure internal
@@ -44,7 +45,8 @@ Saved note layout and exact enrichment are evidenced for one month; explicit EUR
 and security mappings are evidenced for that private sample. Complete historical
 coverage and legacy adoption remain gates. Florent approved a
 strict BUY/SELL first version with unsupported periods blocked and existing
-Ghostfolio acquisitions used for adoption; that importer is not delivered yet.
+Ghostfolio acquisitions used for adoption. Actual history, dates, fees and explicit
+adoption still require acceptance before a real run.
 Florent has also authorized agent-led interactive collection through a private
 browser; its [acquisition amendment](docs/design/online-source-inspection.md)
 defines authentication, document privacy and infrastructure boundaries.
@@ -94,7 +96,8 @@ local preparation. These artifacts contain private financial details and are
 actual activity adoption, historical holdings and destination validation remain
 unverified. The isolated API/date/number and recovery evidence describes synthetic
 laboratories only.
-The `apply` command provides offline preview/export; execution remains gated. See the [preparation contract](docs/design/offline-preparation.md).
+The `apply` command provides default offline preview/export and a separately
+[qualified execution route](docs/design/qualified-application.md). See the [preparation contract](docs/design/offline-preparation.md).
 
 Pure offline [adoption helpers](docs/design/offline-adoption.md) validate complete
 saved Ghostfolio snapshots and propose explicit reconciliation of existing manual
@@ -211,8 +214,8 @@ authentication POST exists. Actual read-only evidence used the authorized privat
 runtime route described in [FINDINGS.md](FINDINGS.md#16-actual-destination-read-only-evidence);
 the public HTTPS command is tested with fake responses and forbidden real sockets.
 
-This is an offline diagnostic tool, not a delivered automatic sync. Unsupported
-periods and uncertain legacy matches block; `apply` defaults to offline preview and optional private export. Personal
+The importer consumes saved HTML; unattended broker collection is outside its
+design. Unsupported periods and uncertain legacy matches block; `apply` defaults to offline preview and optional private export. Personal
 documents, configuration, outputs and journals stay ignored and private. Synthetic
 CI verifies each PR; CodeRabbit triggering, review and merge are managed externally.
 PRs remain open while independent project work continues.
@@ -231,7 +234,8 @@ It verifies exact three-trade acceptance/readback and a zero-new second review,
 then compensates its owned activities and removes its resources. It accepts no
 production endpoint or credentials. Ordinary pytest/CI never launches the lab.
 Prerequisites, provider dependency, retained private evidence and cleanup limits
-are documented in the linked contract. Application execution remains gated.
+are documented in the linked contract. The runner now exercises qualified application
+with explicitly synthetic declarations and complete archive cold replay.
 
 ## Preview an application and export its manual proposal
 
@@ -253,10 +257,31 @@ format, but is a proposal: no upload occurs and a manual batch upload would not
 inherit our single-event uncertainty/readback protocol.
 
 DRY_RUN absent or1 forces preview even with `--execute`;0 without execute also
-previews. Other values fail. `DRY_RUN=0` plus execute currently refuses at the
-application execution gate. No destination credential or network is accessed.
+previews. Other values fail. `DRY_RUN=0` plus execute requires the separately
+qualified declaration and source replay described below. Preview accesses no
+destination credential or network.
 
 The [bounded HTTPS adapter](docs/design/https-request-adapter.md) is implemented
 for future qualified execution: fixed GET/import one-event requests, exact origin,
 verified TLS, bounded responses and no retries. It uses an existing environment
-session bearer; no authentication exchange or public execution route is enabled.
+session bearer; no authentication exchange exists. The qualified route below
+constructs this adapter only after complete preflight.
+
+
+## Qualified application under explicit operator responsibility
+
+A complete future execution route is available through `apply --execute` with
+`DRY_RUN=0`, an externally pinned execution declaration, source/config/report
+replay and complete private evidence retention before any request. The
+[operator workflow](docs/design/qualified-application.md) describes exact arguments,
+external proof boundaries, version/timezone scope, no-op behavior and recovery.
+The [declaration template](examples/execution-declaration.yaml) has placeholders
+and false confirmations. Credentials remain environment-only. No production
+execution has been performed or authorized in this project session.
+
+Each event is fenced before its sole POST and confirmed only after complete
+acceptance plus exact readback. Later failure keeps partial evidence and stops;
+no retry, resume, DELETE or automatic compensation is offered. Actual legacy
+history/date/fee/adoption acceptance and external security/recovery/exclusivity
+reviews are required separately from successful synthetic tests. Exit0 means a
+completed nonempty positively confirmed run, exit2 a diagnostic, exit1 failure.
