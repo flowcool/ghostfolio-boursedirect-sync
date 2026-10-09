@@ -6,6 +6,7 @@ import dgram from 'node:dgram';
 import http from 'node:http';
 import https from 'node:https';
 import child from 'node:child_process';
+import workers from 'node:worker_threads';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {syncBuiltinESMExports} from 'node:module';
@@ -16,6 +17,7 @@ for(const method of Object.keys(dns.promises))if(/^(lookup|resolve|reverse)/.tes
 net.Socket.prototype.connect=forbidden;net.connect=forbidden;net.createConnection=forbidden;
 tls.connect=forbidden;http.request=forbidden;http.get=forbidden;https.request=forbidden;https.get=forbidden;
 globalThis.fetch=forbidden;globalThis.WebSocket=forbidden;
+workers.Worker=function(){throw new Error('TEST_WORKER_FORBIDDEN');};
 const ownedDirectory=path.dirname(fileURLToPath(import.meta.url));
 const originalSpawn=child.spawnSync;
 child.spawnSync=(executable,args,options)=>{

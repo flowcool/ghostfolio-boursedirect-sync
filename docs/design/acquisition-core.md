@@ -31,7 +31,8 @@ and observation are trusted helper inputs here, not a browser-origin guarantee.
 A crash or failed persistence retains an unfinished state and fences the next
 attempt. Closed success alone permits a separate later deliberate attempt.
 Locks are private mkdir entries; journal publication uses fresh exclusive temporary
-files, fsync, rename and parent-directory fsync. Existing hard-link/symlink aliases,
+files, fsync, rename and parent-directory fsync. Each newly created auth-directory
+ancestor also fsyncs its parent before enrollment can succeed. Existing hard-link/symlink aliases,
 wrong modes/owners and invalid schemas refuse. Partial enrollment is retained and
 requires manual recovery, never automatic erasure to facilitate a retry.
 
@@ -40,7 +41,7 @@ OTP, never both. It enforces integer clock, same30-second step, age at most20s,
 not future and at least5s remaining. TOTP is strict Base32/SHA1/30s/six digits.
 The pure `totp` arithmetic helper is separately verified with RFC6238 reference
 vectors; it alone is not the operational near-expiry gate. No seed was retrieved.
-`diagnostic` is the sole public error shape: allowlisted fixed codes and readiness
+`diagnostic` is the sole public error shape: literal allowlisted fixed codes and readiness
 false; low-level filesystem/parser errors must pass through it, not be printed.
 
 Run `npm ci --prefix collector --ignore-scripts --no-audit --no-fund`, then
