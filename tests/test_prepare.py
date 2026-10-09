@@ -212,10 +212,10 @@ def test_atomic_write_failure_retains_previous_artifact_and_cleans_temp(monkeypa
     run()
     before = artifact().read_bytes()
     real_replace = os.replace
-    def replace(source, target):
-        if Path(target).parent.name == 'outputs':
+    def replace(source, target, **kwargs):
+        if Path(target).name == artifact().name:
             raise OSError('synthetic disk failure')
-        return real_replace(source, target)
+        return real_replace(source, target, **kwargs)
     monkeypatch.setattr(bd.os, 'replace', replace)
     with pytest.raises(OSError):
         run()
