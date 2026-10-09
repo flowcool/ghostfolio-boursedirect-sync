@@ -3,8 +3,8 @@ updates:
   # Grouped so interdependent updates (e.g. beautifulsoup4 + soupsieve) are
   # tested and reviewed together. Major versions stay separate PRs. A release is
   # proposed only once it is 14 days old. Security updates ignore the cooldown.
-  # The importer ships no container image, so there is no Docker ecosystem; add
-  # an npm entry for /collector when it gains a package manifest.
+  # The importer ships no container image, so there is no Docker ecosystem.
+  # /collector now owns a pinned npm runtime manifest.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -29,3 +29,16 @@ updates:
       github-actions:
         patterns:
           - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/collector"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 14
+    groups:
+      collector-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
