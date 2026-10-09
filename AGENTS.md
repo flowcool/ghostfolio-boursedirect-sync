@@ -31,8 +31,10 @@ Global working agreement applies. Beads owns live work state.
 
 ## Pull request workflow
 
-- Leave pull requests open. Florent's external workflow owns CodeRabbit triggers
-  and final merge; do not trigger the bot or merge autonomously.
+- Florent's external workflow owns PR review and CodeRabbit triggers; do not
+  trigger the bot or substitute agent review for the required external review.
+  This agent owns merges and releases under Florent's authorization. Preserve
+  merge ancestry, required checks and explicit security/release gates.
 - Do not spawn PR-review subagents. Run local verification and record exact CI
   evidence; CodeRabbit supplies PR review externally. Historical independent
   reviews remain valid evidence for the exact heads they inspected.
