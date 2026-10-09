@@ -168,3 +168,32 @@ source acceptance, online egress/delivery, real secret provisioning, security
 review and production authorization remain separate. No broker or Ghostfolio
 production write is authorized. Knowledge verdict: **Used and sufficient**,
 unchanged from the narrow indexed lookup above. Parent owns commit and Beads.
+
+## Playwright candidate evidence (2026-10-09, author follow-up)
+
+Florent clarified that the suggested reuse candidate was Playwright. A bounded
+Luna primary-source lookup found that [context routing](https://playwright.dev/docs/api/class-browsercontext#browser-context-route)
+can cover popup initial requests, whereas page routing cannot. Context routing
+has a documented service-worker bypass; blocking service workers is an explicit
+option. Context redirect behavior remains unverified in this lookup.
+
+The inspected historical source sample is Playwright v1.56.1 at
+`54c711571a37de525377e6f3d3608c3e029b1829`, not a current-version claim.
+[Page initialization](https://github.com/microsoft/playwright/blob/54c711571a37de525377e6f3d3608c3e029b1829/packages/playwright-core/src/server/chromium/crPage.ts#L527-L564)
+collects network initialization and `Runtime.runIfWaitingForDebugger` in the same
+`Promise.all`.
+[Network session initialization](https://github.com/microsoft/playwright/blob/54c711571a37de525377e6f3d3608c3e029b1829/packages/playwright-core/src/server/chromium/crNetworkManager.ts#L87-L93)
+also awaits enablement and interception together. This sample does not establish
+a sequential interception-acknowledgement-before-resume guarantee; it is not
+proof of a runtime escape or a defect in current Playwright.
+
+The official [launch option](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-chromium-sandbox)
+defaults Chromium sandboxing to false. The [Docker guide](https://playwright.dev/docs/docker#crawling-and-scraping)
+recommends a separate user and seccomp policy for untrusted crawling. Runtime
+qualification remains separately owned by infra; these sources authorize no
+host-security change or sandbox fallback.
+
+The existing synthetic raw-CDP capability experiment remains approved; reusable
+B remains held. This author evidence note does not change the Astra verdict or
+the reviewed plan, approve a Playwright driver, or substitute for real ordered
+guard tests. Beads `.71` records exact lookup findings and unresolved limits.
