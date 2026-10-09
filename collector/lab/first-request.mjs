@@ -1,6 +1,8 @@
 // Opt-in synthetic browser experiment. Copied into an owned network-none container.
 // This establishes only the listed dispatch scenarios, never complete qualification.
 import http from 'node:http';
+import {parse} from 'yaml';
+import {fixtureVerdict} from './verdict.mjs';
 import fs from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import * as core from './core.mjs';
@@ -12,7 +14,8 @@ import {proveCapture} from './capture-document.mjs';
 import {bootstrapExperiment} from './capability-bootstrap.mjs';
 
 const mode = process.argv[2];
-const modes = ['permitted', 'denied', 'negative', 'popup', 'popup-negative', 'frame', 'frame-negative', 'worker', 'worker-negative', 'shared-worker', 'shared-worker-negative', 'service-worker', 'service-worker-negative', 'redirect307', 'redirect307-negative', 'redirect308', 'redirect308-negative', 'second-auth', 'second-auth-negative', 'http-auth', 'concurrent', 'concurrent-negative', 'fsync-failure', 'browser-crash', 'pipe-loss', 'forced-stop', 'late-guard-negative', 'capture'];
+const scenarios=parse(fs.readFileSync(new URL('./scenarios.yaml',import.meta.url),'utf8'));
+const modes=Object.keys(scenarios);
 if (!modes.includes(mode)
     || process.version !== 'v20.19.2') throw new Error('FIXTURE_RUNTIME_REJECTED');
 const counts = {}, trace = [], documentEvents = [];
@@ -201,29 +204,10 @@ try {
   }
   await new Promise(resolve => server.close(resolve));
 }
-let expectedAllowed = ['permitted','concurrent'].includes(mode) || scenario.startsWith('redirect') || scenario === 'second-auth' ? 1 : 0;
-if (negative && ['second-auth','concurrent'].includes(scenario)) expectedAllowed = 2;
-const expectedForbidden = negative && !['second-auth','concurrent'].includes(scenario) ? 1 : 0;
-const pauses=trace.filter(item=>item.pause);
-let signal=true;
-if(!negative){
-  if(scenario==='popup')signal=(counts['Target.attachedToTarget']||0)>=2;
-  else if(['worker','shared-worker','service-worker'].includes(scenario))signal=trace.some(item=>['Target.targetCreated','Target.attachedToTarget'].includes(item.event)&&item.type===scenario.replace('-','_')&&(item.event==='Target.targetCreated'||item.waiting===true));
-  else if(scenario==='frame')signal=pauses.some(item=>item.pause==='/forbidden'&&item.method==='POST'&&item.resource==='Document'&&item.ownedFrame===false);
-  else if(scenario.startsWith('redirect'))signal=pauses.some(item=>item.pause==='/forbidden'&&item.redirect===true);
-  else if(['second-auth','concurrent'].includes(scenario))signal=pauses.filter(item=>item.pause==='/allowed'&&item.method==='POST').length===2;
-  else if(['denied','pipe-loss','forced-stop'].includes(scenario))signal=pauses.some(item=>item.pause==='/forbidden'&&item.method==='POST');
-}
-const passed = signal && !failure && (mode==='concurrent' ? consumed && allowed<=1 : allowed===expectedAllowed) && forbidden === expectedForbidden
-  && (mode !== 'capture' || captureEvidence?.passed === true)
-  && trace.some(item=>item.lifecycle==='stop-owned'&&item.fenced===true)
-  && trace.findIndex(item=>item.lifecycle==='owned-exit') < trace.findIndex(item=>item.lifecycle==='close-pipe')
-  && (scenario !== 'http-auth' || challenges === 1 && cancelled === 1)
-  && (!authority || restartedFenced && durableConsumes===(mode==='fsync-failure'?0:1))
-  && (mode !== 'fsync-failure' || fsyncFailed)
-  && (mode !== 'browser-crash' || crashed)
-  && (mode !== 'pipe-loss' || lost && queuedForbidden===2)
-  && (mode !== 'forced-stop' || forceKilled && queuedForbidden===2);
-console.log(JSON.stringify({mode, node: process.version, passed, failure, allowed, forbidden,
-  owned_browser_exit: exited, signal, durableConsumes, queuedForbidden, restartedFenced,fsyncFailed,forceKilled,crashed,lost, challenges, cancelled, policyPauses, counts, trace, captureEvidence, browser_proven: false}));
-if (!passed) process.exitCode = 1;
+const evidence={mode, node:process.version, failure, allowed, forbidden,
+  owned_browser_exit:exited, durableConsumes, queuedForbidden, restartedFenced,
+  fsyncFailed, forceKilled, crashed, lost, challenges, cancelled, policyPauses,
+  counts, trace, captureEvidence, browser_proven:false};
+const verdict=fixtureVerdict(evidence,scenarios[mode]);
+console.log(JSON.stringify({...evidence,...verdict}));
+if(!verdict.passed)process.exitCode=1;

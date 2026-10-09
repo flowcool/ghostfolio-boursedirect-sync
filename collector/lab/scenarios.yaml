@@ -1,0 +1,170 @@
+permitted:
+  allowed: 1
+  forbidden: 0
+  negative: false
+  family: permitted
+  durable: false
+denied:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: denied
+  durable: false
+negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: negative
+  durable: false
+popup:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: popup
+  durable: false
+popup-negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: popup
+  durable: false
+frame:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: frame
+  durable: false
+frame-negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: frame
+  durable: false
+worker:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: worker
+  durable: false
+worker-negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: worker
+  durable: false
+shared-worker:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: shared-worker
+  durable: false
+shared-worker-negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: shared-worker
+  durable: false
+service-worker:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: service-worker
+  durable: false
+service-worker-negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: service-worker
+  durable: false
+redirect307:
+  allowed: 1
+  forbidden: 0
+  negative: false
+  family: redirect307
+  durable: false
+redirect307-negative:
+  allowed: 1
+  forbidden: 1
+  negative: true
+  family: redirect307
+  durable: false
+redirect308:
+  allowed: 1
+  forbidden: 0
+  negative: false
+  family: redirect308
+  durable: false
+redirect308-negative:
+  allowed: 1
+  forbidden: 1
+  negative: true
+  family: redirect308
+  durable: false
+second-auth:
+  allowed: 1
+  forbidden: 0
+  negative: false
+  family: second-auth
+  durable: false
+second-auth-negative:
+  allowed: 2
+  forbidden: 0
+  negative: true
+  family: second-auth
+  durable: false
+http-auth:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: http-auth
+  durable: false
+concurrent:
+  allowed:
+  - 0
+  - 1
+  forbidden: 0
+  negative: false
+  family: concurrent
+  durable: true
+concurrent-negative:
+  allowed: 2
+  forbidden: 0
+  negative: true
+  family: concurrent
+  durable: false
+fsync-failure:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: fsync-failure
+  durable: true
+browser-crash:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: browser-crash
+  durable: true
+pipe-loss:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: pipe-loss
+  durable: false
+forced-stop:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: forced-stop
+  durable: false
+late-guard-negative:
+  allowed: 0
+  forbidden: 1
+  negative: true
+  family: late-guard
+  durable: false
+capture:
+  allowed: 0
+  forbidden: 0
+  negative: false
+  family: capture
+  durable: false

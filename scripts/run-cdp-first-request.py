@@ -9,12 +9,20 @@ from pathlib import Path
 import subprocess
 import tarfile
 import uuid
+import re
+import yaml
 
 
 IMAGE = 'sha256:11b6dc0eb079e10e625ff8de54af6018100289b51fa500e72196adfca8233df8'
 PROFILE_SHA = 'cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849'
 BASE = ['/usr/bin/docker', '--host', 'unix:///var/run/docker.sock']
 ROOT = Path(__file__).resolve().parents[1]
+SCENARIOS = yaml.safe_load((ROOT / 'collector/lab/scenarios.yaml').read_text())
+
+
+def require(condition, code='FIXTURE_REJECTED'):
+    if not condition:
+        raise RuntimeError(code)
 
 
 def docker(args, timeout=20):
@@ -35,7 +43,7 @@ def fixture_archive():
     hashes = {}
     sources = [ROOT / ('collector/' + name) for name in [
         'lab/first-request.mjs', 'lab/restart-principal.mjs',
-        'lab/capture-document.mjs', 'core.mjs',
+        'lab/capture-document.mjs', 'lab/verdict.mjs', 'lab/scenarios.yaml', 'core.mjs',
         'capability-pipe.mjs', 'capability-ordering.mjs',
         'capability-bootstrap.mjs', 'capability-policy.mjs']]
     with tarfile.open(fileobj=buffer, mode='w') as archive:
@@ -49,9 +57,9 @@ def fixture_archive():
             archive.addfile(info, io.BytesIO(content))
         dependency = ROOT / 'collector/node_modules/yaml'
         version = json.loads((dependency / 'package.json').read_text())['version']
-        assert version == '2.9.1', 'FIXTURE_DEPENDENCY_PIN_MISMATCH'
+        require(version == '2.9.1', 'FIXTURE_DEPENDENCY_PIN_MISMATCH')
         for path in sorted(dependency.rglob('*')):
-            assert not path.is_symlink(), 'FIXTURE_DEPENDENCY_SYMLINK'
+            require(not path.is_symlink(), 'FIXTURE_DEPENDENCY_SYMLINK')
             if path.is_file():
                 content = path.read_bytes()
                 relative = 'proof/node_modules/yaml/' + str(path.relative_to(dependency))
@@ -64,50 +72,91 @@ def fixture_archive():
     return buffer.getvalue(), hashes
 
 
+def cleanup_owned(identifier, name, receipt):
+    """Remove only the full ID returned by this invocation's successful create."""
+    errors = []
+    receipt['cleanup_verified'] = False
+    if identifier and re.fullmatch(r'[0-9a-f]{64}', identifier):
+        contradictory_owner = False
+        try:
+            result = docker(['inspect', identifier])
+            require(result.returncode == 0, 'FIXTURE_OWNER_INSPECT_FAILED')
+            details = json.loads(result.stdout)[0]
+            receipt['owner_verified'] = (details['Id'] == identifier
+                and details['Config']['Labels']['proof.owner'] == name)
+            if not receipt['owner_verified']:
+                contradictory_owner = True
+                errors.append('FIXTURE_OWNER_MISMATCH')
+        except Exception:
+            receipt['owner_verified'] = False
+            errors.append('FIXTURE_OWNER_INSPECT_FAILED')
+        # A transient failure cannot revoke our create ID; contradictory ownership can.
+        if not contradictory_owner:
+            try:
+                removed = docker(['rm', '-f', identifier])
+                receipt['remove_returncode'] = removed.returncode
+                if removed.returncode != 0:
+                    errors.append('FIXTURE_REMOVE_FAILED')
+            except Exception:
+                errors.append('FIXTURE_REMOVE_FAILED')
+    elif identifier:
+        errors.append('FIXTURE_ID_INVALID')
+    try:
+        listed = docker(['ps', '-a', '--filter', 'name=^/' + name + '$', '--format', '{{.ID}}'])
+        require(listed.returncode == 0, 'FIXTURE_ABSENCE_CHECK_FAILED')
+        receipt['cleanup_verified'] = not errors and not listed.stdout.strip()
+    except Exception:
+        errors.append('FIXTURE_ABSENCE_CHECK_FAILED')
+    receipt['cleanup_errors'] = errors
+
+
 def run(mode, profile, output, archive, hashes):
     name = 'owned-cdp-first-request-' + uuid.uuid4().hex
     identifier = None
     receipt = {'mode': mode, 'image': IMAGE, 'profile_sha256': PROFILE_SHA,
                'runner_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                'source_sha256': hashes, 'cleanup_verified': False, 'browser_proven': False}
+    original_error = None
     try:
         created = docker(['create', '--name', name, '--label', 'proof.owner=' + name,
                           '--network', 'none', '--user', '1000:1000', '--memory', '768m',
                           '--cpus', '1', '--pids-limit', '256', '--shm-size', '128m',
                           '--security-opt', 'seccomp=' + str(profile), '--entrypoint', '/usr/bin/node',
                           IMAGE, '/home/fixture/proof/first-request.mjs', mode])
-        assert created.returncode == 0, 'FIXTURE_CREATE_FAILED'
+        require(created.returncode == 0, 'FIXTURE_CREATE_FAILED')
         identifier = created.stdout.decode().strip()
+        require(re.fullmatch(r'[0-9a-f]{64}', identifier) is not None, 'FIXTURE_ID_INVALID')
+        receipt['container'] = identifier
         details = json.loads(docker(['inspect', identifier]).stdout)[0]
-        assert details['Id'] == identifier and details['Config']['Labels']['proof.owner'] == name
-        assert details['HostConfig']['NetworkMode'] == 'none' and not details['Mounts']
-        assert not details['HostConfig']['Privileged'] and not details['HostConfig']['CapAdd']
-        assert details['Config']['User'] == '1000:1000'
+        require(details['Id'] == identifier and details['Config']['Labels']['proof.owner'] == name)
+        require(details['HostConfig']['NetworkMode'] == 'none' and not details['Mounts'])
+        require(not details['HostConfig']['Privileged'] and not details['HostConfig']['CapAdd'])
+        require(details['Config']['User'] == '1000:1000')
         receipt.update(container=identifier, apparmor=details['AppArmorProfile'],
                        security_options=details['HostConfig']['SecurityOpt'])
         copied = subprocess.run(BASE + ['cp', '-', identifier + ':/home/fixture'], input=archive,
                                 env={'PATH': '/usr/bin:/bin'}, capture_output=True, timeout=20)
-        assert copied.returncode == 0, 'FIXTURE_COPY_FAILED'
+        require(copied.returncode == 0, 'FIXTURE_COPY_FAILED')
         result = docker(['start', '-a', identifier], timeout=55)
         publish(output / (mode + '-stdout.bytes'), result.stdout[:1048576])
         publish(output / (mode + '-stderr.bytes'), result.stderr[:1048576])
-        assert len(result.stdout) <= 1048576 and len(result.stderr) <= 1048576, 'FIXTURE_OUTPUT_LIMIT'
-        assert result.returncode == 0, 'FIXTURE_FAILED'
+        require(len(result.stdout) <= 1048576 and len(result.stderr) <= 1048576, 'FIXTURE_OUTPUT_LIMIT')
+        require(result.returncode == 0, 'FIXTURE_FAILED')
         evidence = json.loads(result.stdout)
-        assert evidence['mode'] == mode and evidence['passed'] and evidence['owned_browser_exit']
-        assert evidence['browser_proven'] is False
+        require(evidence['mode'] == mode and evidence['passed'] and evidence['owned_browser_exit'])
+        require(evidence['browser_proven'] is False)
         if mode.startswith('popup'):
-            assert evidence['counts'].get('Target.attachedToTarget', 0) >= 2, 'POPUP_CONTROL_INCONCLUSIVE'
+            require(evidence['counts'].get('Target.attachedToTarget', 0) >= 2, 'POPUP_CONTROL_INCONCLUSIVE')
         receipt['evidence'] = evidence
+    except Exception as error:
+        original_error = error
+        receipt['execution_error'] = 'FIXTURE_EXECUTION_FAILED'
     finally:
-        if identifier:
-            details = json.loads(docker(['inspect', identifier]).stdout)[0]
-            assert details['Id'] == identifier and details['Config']['Labels']['proof.owner'] == name
-            assert docker(['rm', '-f', identifier]).returncode == 0, 'FIXTURE_CLEANUP_FAILED'
-        receipt['cleanup_verified'] = not docker(['ps', '-a', '--filter', 'name=^/' + name + '$',
-                                                 '--format', '{{.ID}}']).stdout.strip()
+        cleanup_owned(identifier, name, receipt)
         publish(output / (mode + '-receipt.json'), json.dumps(receipt, indent=2).encode())
-    assert receipt['cleanup_verified'], 'FIXTURE_CLEANUP_UNVERIFIED'
+    if original_error is not None:
+        raise original_error
+    require(receipt['cleanup_verified'], 'FIXTURE_CLEANUP_UNVERIFIED')
     print(mode + ': PASS; exact owned cleanup verified; full qualification remains false', flush=True)
 
 
@@ -118,14 +167,14 @@ def main():
     parser.add_argument('--output', type=Path, required=True, help='New private evidence directory')
     args = parser.parse_args()
     profile = args.profile.resolve()
-    assert hashlib.sha256(profile.read_bytes()).hexdigest() == PROFILE_SHA, 'PROFILE_PIN_MISMATCH'
+    require(hashlib.sha256(profile.read_bytes()).hexdigest() == PROFILE_SHA, 'PROFILE_PIN_MISMATCH')
     image = json.loads(docker(['image', 'inspect', IMAGE]).stdout)[0]
-    assert image['Id'] == IMAGE and image['Config']['Labels']['bd.cdp-capability'] == '415a78dfcc5444e3902473da5af2fd07'
+    require(image['Id'] == IMAGE and image['Config']['Labels']['bd.cdp-capability'] == '415a78dfcc5444e3902473da5af2fd07')
     args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     archive, hashes = fixture_archive()
-    modes = ['permitted', 'denied', 'negative', 'popup', 'popup-negative', 'frame', 'frame-negative', 'worker', 'worker-negative', 'shared-worker', 'shared-worker-negative', 'service-worker', 'service-worker-negative', 'redirect307', 'redirect307-negative', 'redirect308', 'redirect308-negative', 'second-auth', 'second-auth-negative', 'http-auth', 'concurrent', 'concurrent-negative', 'fsync-failure', 'browser-crash', 'pipe-loss', 'forced-stop', 'late-guard-negative', 'capture']
+    modes = list(SCENARIOS)
     selected = args.scenario or modes
-    assert all(mode in modes for mode in selected) and len(set(selected)) == len(selected), 'FIXTURE_MODE_REJECTED'
+    require(all(mode in modes for mode in selected) and len(set(selected)) == len(selected), 'FIXTURE_MODE_REJECTED')
     for mode in selected:
         run(mode, profile, args.output, archive, hashes)
 

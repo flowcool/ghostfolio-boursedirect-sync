@@ -358,3 +358,48 @@ IDs were independently absent after cleanup. The required Python suite passed
 993 tests in 80.31 seconds; the network-forbidden collector suite passed 155
 tests with zero failures in 2535.969294 ms. Beads `.71` retains the private receipt
 locations, commit anchors and publication acceptance ownership.
+
+## Bench regression and consolidation follow-up (author implementation)
+
+The browser experiment now imports a pure `fixtureVerdict` evaluator and a
+single keyed `collector/lab/scenarios.yaml` catalogue shared with the Python
+runner. Offline tests exercise each scenario, historical expectation mistakes,
+missing stimuli, cancellation/authority failures, capture evidence and teardown
+order. They start no browser or Docker resource. Live reports also contain fixed
+verdict failure codes; containment policy and the approved plan are unchanged.
+
+`scripts/consolidate-cdp-proof.py` rechecks full coverage, current source and
+runner hashes, runtime pins, ownership/removal receipts and every observation
+through that same evaluator. It reads receipts and runs only the fixed pure Node
+evaluator. Docker absence inspection is explicitly opt-in and read-only:
+
+```sh
+.venv/bin/python scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/<matrix>
+.venv/bin/python scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/<matrix> --verify-owned-absence
+```
+
+An explicit `--replace-capture <directory>` accepts exactly one capture receipt
+with the same inventory, runner and common source pins; only the capture module
+hash may change. Both original and replacement must pass, all other modes must
+retain the original common pins, and the final capture must match current files.
+The summary retains selected receipt hashes, the superseded capture hash and
+validator hashes. This checks provenance consistency, not source authenticity or
+independent browser attestation. Original receipts are never rewritten; historic
+receipts from a different runner revision cannot qualify the current tool.
+
+PR39 review findings are addressed with explicit Python runtime checks that
+remain active under `-O`. Cleanup records the full create ID before inspection,
+attempts its removal even when inspection is temporarily unavailable, records
+cleanup failures, publishes a receipt and preserves the original execution
+exception. Explicit contradictory ownership blocks removal and qualification;
+the review suggestion to remove even a foreign-labelled resource is not adopted.
+Synthetic response-injection tests cover these distinctions without touching
+Docker or shared state. The reader-boundary "Major" finding is a false positive:
+the test fixture changes into `tmp_path`, so `inputs/` is beneath the accepted
+root; all six exact-boundary cases pass unchanged. Agent-helper installation is
+documented, and shared infrastructure routing distinguishes destination epic
+from source issue; sibling-copy alignment is handed off separately.
+
+These changes harden the same approved synthetic experiment. Reusable B,
+actual source/credential/egress gates and independent external review remain
+separate; every report retains `browser_proven=false`.
