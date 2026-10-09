@@ -1,8 +1,8 @@
 # Portable owned disposable acceptance runner
 
 This development-only runner reproduces the supported three-trade fixture chain
-on an isolated local Ghostfolio3.81.0. The application CLI gains no apply command
-or production readiness from this bench. Design authority:
+on an isolated local Ghostfolio3.81.0. The application CLI gains no production permission
+or financial readiness from this bench. Design authority:
 [approved plan](../plans/2026-10-09-portable-lab-acceptance.md) and
 [Astra report](../reviews/2026-10-09-portable-lab-acceptance-astra.md).
 Single-event delivery follows the
@@ -112,3 +112,14 @@ The runner now verifies the initial report through the shared
 [frozen review validator](frozen-review-validation.md) before any source dispatch.
 Its private frozen capture archive remains available for cold replay after cleanup;
 the fixture-controlled hash is not human production approval.
+
+The dispatch loop now delegates to [qualified application](qualified-application.md)
+with an explicitly synthetic declaration and original preparation/config/raw sources.
+It durably archives the complete qualification bundle before the first request,
+verifies cold replay from archived bytes, and invokes the same qualified no-op
+controller for the repeated review. The trusted local HTTP fixture is not a live
+HTTPS-adapter proof. Earlier [frozen lab orchestration](frozen-lab-sequence.md)
+remains a separate trusted wrapper around the shared protocol sequence.
+The controller archives attempts through its request callback and successful
+provenance/readback through the post-confirmation observer. Observer failure stops
+later events while retaining the confirmed journal; finally owned cleanup still runs.

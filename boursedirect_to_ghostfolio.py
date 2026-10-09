@@ -685,10 +685,15 @@ def atomic_private_bytes(path, raw):
             os.close(directory)
 
 
-def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
-    config = read_keyed_yaml(config_path, input_root, max_bytes)
-    input_paths = [Path(config_path)]
-    if set(config) != {"schema_version", "account", "mappings", "documents"} or config["schema_version"] != 1:
+def preparation_configuration(config_raw, max_bytes, max_depth):
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_SIZE_LIMIT")
+    if type(max_depth) is not int or max_depth <= 0:
+        fail("INVALID_DEPTH_LIMIT")
+    if type(config_raw) is not bytes or len(config_raw) > max_bytes:
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "account", "mappings", "documents"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
         fail("INVALID_PREPARATION_CONFIGURATION")
     account = config["account"]
     if not isinstance(account, dict) or set(account) != {"source_account_ref", "account_key", "target_account_id"}:
@@ -699,10 +704,6 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
     entries = config["documents"]
     if not isinstance(entries, dict) or not entries:
         fail("PREPARATION_DOCUMENTS_MISSING")
-    plans = []
-    snapshots = []
-    raw_digests = {}
-    seen_periods = set()
     for alias, entry in entries.items():
         if not isinstance(alias, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", alias):
             fail("INVALID_DOCUMENT_ALIAS")
@@ -710,21 +711,272 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
             fail("INVALID_DOCUMENT_CONFIGURATION")
         if not isinstance(entry["statement"], str) or not isinstance(entry["notes"], list) or not entry["notes"] or not all(isinstance(n, str) for n in entry["notes"]):
             fail("INVALID_DOCUMENT_CONFIGURATION")
-        statement_path = Path(input_root) / entry["statement"]
-        input_paths.append(statement_path)
-        html, digest = read_document(statement_path, input_root, max_bytes)
-        statement = parse_statement(html, max_depth)
+    return config
+
+
+def capture_period(role, period):
+    if type(period) is not str or role not in ("statement", "note"):
+        fail("INVALID_CAPTURE_PERIOD")
+    pattern = r"[0-9]{4}-[0-9]{2}" if role == "statement" else r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
+    if not re.fullmatch(pattern, period):
+        fail("INVALID_CAPTURE_PERIOD")
+    try:
+        datetime.strptime(period, "%Y-%m" if role == "statement" else "%Y-%m-%d")
+    except ValueError:
+        fail("INVALID_CAPTURE_PERIOD")
+
+
+def parse_capture_document(raw, role, period, account_ref, max_depth):
+    capture_period(role, period)
+    html = decode_document(raw)
+    parsed = parse_statement(html, max_depth) if role == "statement" else parse_contract_note(html, max_depth)
+    if parsed["account_ref"] != account_ref:
+        fail("CAPTURE_ACCOUNT_CONFLICT")
+    if role == "statement":
+        if parsed["period"] != period:
+            fail("CAPTURE_PERIOD_CONFLICT")
+    elif not parsed["notes"] or any(n["date"].isoformat() != period for n in parsed["notes"]):
+        fail("CAPTURE_PERIOD_CONFLICT")
+    return parsed
+
+
+def filter_capture_dom(raw, role, period, account_ref, max_bytes, max_depth):
+    """Financial DOM only; not original HTTP bytes or authenticated freshness."""
+    if type(max_bytes) is not int or max_bytes <= 0 or type(max_depth) is not int or max_depth <= 0:
+        fail("INVALID_CAPTURE_LIMITS")
+    if type(raw) is not bytes or len(raw) > min(max_bytes, 4 * 1024 * 1024):
+        fail("CAPTURE_SIZE_LIMIT")
+    before = parse_capture_document(raw, role, period, account_ref, max_depth)
+    soup = BeautifulSoup(decode_document(raw), "html.parser")
+    for node in soup.find_all(["script", "style", "base", "form", "input", "button", "textarea",
+                               "select", "iframe", "frame", "link", "img", "object", "embed", "meta"]):
+        node.decompose()
+    for node in soup.find_all("a"):
+        node.unwrap()
+    for node in soup.find_all(string=lambda item: isinstance(item, Comment)):
+        node.extract()
+    for node in soup.find_all(string=lambda item: not item.strip()):
+        node.extract()
+    for node in soup.find_all(True):
+        node.attrs = {k: v for k, v in node.attrs.items() if k in ("colspan", "rowspan")}
+    meta = soup.new_tag("meta", charset="utf-8")
+    if soup.head is not None:
+        soup.head.insert(0, meta)
+    else:
+        soup.insert(0, meta)
+    filtered = str(soup).encode("utf-8")
+    if len(filtered) > min(max_bytes, 4 * 1024 * 1024):
+        fail("CAPTURE_SIZE_LIMIT")
+    if parse_capture_document(filtered, role, period, account_ref, max_depth) != before:
+        fail("CAPTURE_FILTER_CHANGED_LEDGER")
+    return filtered
+
+
+def validate_capture_ticket(ticket, entry, account_ref):
+    keys = {"account_ref", "role", "period", "origin_frame_epoch", "link_handle", "request_url",
+            "target_id", "loader_id", "commit_loader_id", "load_loader_id", "sequence"}
+    if not isinstance(ticket, dict) or set(ticket) != keys:
+        fail("INVALID_CAPTURE_TICKET")
+    if any(ticket[k] != v for k, v in (("account_ref", account_ref), ("role", entry["role"]),
+                                      ("period", entry["period"]))):
+        fail("CAPTURE_TICKET_CONFLICT")
+    for key in ("origin_frame_epoch", "link_handle", "target_id", "loader_id", "commit_loader_id", "load_loader_id"):
+        validate_account_key(ticket[key])
+    if ticket["loader_id"] != ticket["commit_loader_id"] or ticket["loader_id"] != ticket["load_loader_id"]:
+        fail("CAPTURE_TICKET_CONFLICT")
+    if type(ticket["sequence"]) is not int or not 1 <= ticket["sequence"] <= 1000:
+        fail("INVALID_CAPTURE_TICKET")
+    url = ticket["request_url"]
+    if type(url) is not str or len(url) > 4096 or not url.startswith("https://www.boursedirect.fr/"):
+        fail("INVALID_CAPTURE_TICKET_URL")
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        fail("INVALID_CAPTURE_TICKET_URL")
+    if (parts.scheme != "https" or parts.netloc != "www.boursedirect.fr" or parts.fragment
+            or any(c.isspace() or ord(c) < 32 for c in url) or "\\" in url
+            or re.search(r"%(?:2f|5c|2e)", parts.path, re.I) or any(p in (".", "..") for p in parts.path.split("/"))):
+        fail("INVALID_CAPTURE_TICKET_URL")
+
+
+def qualify_capture_bundle(manifest_raw, files, config_raw, max_bytes, max_depth):
+    """Pure saved-evidence qualification; tickets are trusted, unauthenticated input."""
+    if type(max_bytes) is not int or not 0 < max_bytes <= 4 * 1024 * 1024:
+        fail("CAPTURE_SIZE_LIMIT")
+    if type(max_depth) is not int or not 0 < max_depth <= 256:
+        fail("INVALID_CAPTURE_LIMITS")
+    if type(manifest_raw) is not bytes or len(manifest_raw) > min(max_bytes, 1024 * 1024):
+        fail("CAPTURE_MANIFEST_LIMIT")
+    config = preparation_configuration(config_raw, min(max_bytes, 1024 * 1024), max_depth)
+    manifest = parse_keyed_yaml(manifest_raw)
+    if (set(manifest) != {"schema_version", "artifact_kind", "status", "run_id", "account_key", "source_account_ref", "files"}
+            or type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1
+            or manifest["artifact_kind"] != "acquisition_bundle" or manifest["status"] != "complete"):
+        fail("INVALID_COMPLETE_CAPTURE_MANIFEST")
+    validate_account_key(manifest["run_id"])
+    account = config["account"]
+    if manifest["account_key"] != account["account_key"] or manifest["source_account_ref"] != account["source_account_ref"]:
+        fail("CAPTURE_ACCOUNT_CONFLICT")
+    entries = manifest["files"]
+    if not isinstance(entries, dict) or not 1 <= len(entries) <= 256 or not isinstance(files, dict) or set(files) != set(entries):
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    if any(type(raw) is not bytes or len(raw) > max_bytes for raw in files.values()):
+        fail("CAPTURE_SIZE_LIMIT")
+    if sum(map(len, files.values())) > 64 * 1024 * 1024:
+        fail("CAPTURE_TOTAL_LIMIT")
+    seen, sequences, statements, notes = set(), set(), {}, {}
+    for filename, entry in entries.items():
+        if type(filename) is not str or not re.fullmatch(r"capture-[0-9a-f-]{36}\.html", filename):
+            fail("INVALID_CAPTURE_FILENAME")
+        validate_account_key(filename[8:-5])
+        if not isinstance(entry, dict) or set(entry) != {"role", "period", "sha256", "provenance", "ticket"}:
+            fail("INVALID_CAPTURE_ENTRY")
+        capture_period(entry["role"], entry["period"])
+        key = (entry["role"], entry["period"])
+        if key in seen:
+            fail("DUPLICATE_CAPTURE_ROLE_PERIOD")
+        seen.add(key)
+        if entry["provenance"] != "browser_dom_utf8_filtered":
+            fail("CAPTURE_PROVENANCE_REQUIRED")
+        if type(entry["sha256"]) is not str or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
+            fail("INVALID_CAPTURE_DIGEST")
+        raw = files[filename]
+        if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+            fail("CAPTURE_DIGEST_CONFLICT")
+        validate_capture_ticket(entry["ticket"], entry, account["source_account_ref"])
+        sequence = entry["ticket"]["sequence"]
+        if sequence in sequences:
+            fail("DUPLICATE_CAPTURE_SEQUENCE")
+        sequences.add(sequence)
+        # Refiltering must be semantically identical and already free of active DOM.
+        filtered = filter_capture_dom(raw, entry["role"], entry["period"], account["source_account_ref"], max_bytes, max_depth)
+        if raw != filtered:
+            fail("CAPTURE_NOT_FILTERED_UTF8")
+        if entry["role"] == "statement":
+            statements[entry["period"]] = filename
+        else:
+            notes[entry["period"]] = filename
+    if not statements or any(day[:7] not in statements for day in notes):
+        fail("CAPTURE_MONTH_COVERAGE_CONFLICT")
+    documents = {}
+    captures = {}
+    for month, filename in sorted(statements.items()):
+        matching = [notes[day] for day in sorted(notes) if day[:7] == month]
+        if not matching:
+            fail("CAPTURE_NOTES_MISSING")
+        alias = "month-" + month
+        documents[alias] = {"statement": filename, "notes": matching}
+        captures[alias] = {"statement": files[filename], "notes": [files[n] for n in matching]}
+    proposal = {**config, "documents": documents}
+    proposed_raw = yaml.safe_dump(proposal, sort_keys=False).encode("utf-8")
+    result = compute_prepared_sources(proposed_raw, captures, max_bytes, max_depth)
+    return {"configuration": proposal, "report": {"schema_version": 1,
+        "artifact_kind": "qualified_capture_proposal_not_import", "import_ready": False,
+        "freshness_verified": False, "source_authenticity_verified": False,
+        "manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+        "configuration_sha256": hashlib.sha256(config_raw).hexdigest(),
+        "run_id": manifest["run_id"], "account_key": account["account_key"],
+        "file_count": len(files), "statement_periods": len(statements),
+        "prepared_activities": len(result["artifact"]["activities"]),
+        "files": {name: {"role": entry["role"], "period": entry["period"],
+                         "sha256": entry["sha256"], "sequence": entry["ticket"]["sequence"]}
+                  for name, entry in entries.items()}}}
+
+
+def capture_path_without_symlinks(path):
+    path = Path(os.path.abspath(path))
+    for ancestor in (path, *path.parents):
+        if ancestor.is_symlink():
+            fail("CAPTURE_SYMLINK_PATH")
+    return path
+
+
+def qualify_local_captures(manifest_path, config_path, input_root, output, max_bytes, max_depth):
+    if type(max_bytes) is not int or not 0 < max_bytes <= 4 * 1024 * 1024:
+        fail("CAPTURE_SIZE_LIMIT")
+    root = capture_path_without_symlinks(input_root).resolve(strict=True)
+    manifest_path = capture_path_without_symlinks(manifest_path)
+    config_path = capture_path_without_symlinks(config_path)
+    manifest_raw = read_local_bytes(manifest_path, root, min(max_bytes, 1024 * 1024))
+    config_raw = read_local_bytes(config_path, root, min(max_bytes, 1024 * 1024))
+    manifest = parse_keyed_yaml(manifest_raw)
+    entries = manifest.get("files")
+    if not isinstance(entries, dict) or not 1 <= len(entries) <= 256:
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    bundle = manifest_path.parent
+    if manifest_path.name != "manifest.yaml" or set(p.name for p in bundle.iterdir()) != {"manifest.yaml", "sources"}:
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    sources = capture_path_without_symlinks(bundle / "sources")
+    if not sources.is_dir() or set(p.name for p in sources.iterdir()) != set(entries):
+        fail("CAPTURE_FILE_INVENTORY_CONFLICT")
+    paths = [manifest_path, config_path]
+    files = {}
+    total = 0
+    for filename in entries:
+        if type(filename) is not str or not re.fullmatch(r"capture-[0-9a-f-]{36}\.html", filename):
+            fail("INVALID_CAPTURE_FILENAME")
+        source = capture_path_without_symlinks(sources / filename)
+        files[filename] = read_local_bytes(source, root, min(max_bytes, 4 * 1024 * 1024))
+        total += len(files[filename])
+        if total > 64 * 1024 * 1024:
+            fail("CAPTURE_TOTAL_LIMIT")
+        paths.append(source)
+    destination = capture_path_without_symlinks(output)
+    reject_output_input_collision(destination, paths)
+    if destination.exists():
+        fail("CAPTURE_OUTPUT_EXISTS")
+    if destination.is_relative_to(root) or root.is_relative_to(destination):
+        fail("CAPTURE_OUTPUT_INPUT_TREE_CONFLICT")
+    parent = destination.parent
+    mode = parent.stat()
+    if not parent.is_dir() or mode.st_uid != os.getuid() or stat.S_IMODE(mode.st_mode) & 0o077:
+        fail("CAPTURE_OUTPUT_PARENT_NOT_PRIVATE")
+    qualified = qualify_capture_bundle(manifest_raw, files, config_raw, max_bytes, max_depth)
+    for entry in qualified["configuration"]["documents"].values():
+        entry["statement"] = str(sources / entry["statement"])
+        entry["notes"] = [str(sources / n) for n in entry["notes"]]
+    # Exclusive directory publication never replaces an input, prior proposal, or alias.
+    destination.mkdir(mode=0o700)
+    atomic_private_yaml(destination / "prepare-proposal.yaml", qualified["configuration"])
+    atomic_private_yaml(destination / "qualification.yaml", qualified["report"])
+    directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return {k: qualified["report"][k] for k in ("import_ready", "freshness_verified", "source_authenticity_verified",
+                                               "file_count", "statement_periods", "prepared_activities")}
+
+
+def compute_prepared_sources(config_raw, documents, max_bytes, max_depth):
+    """Pure current-config derivation; no historical config authenticity claim."""
+    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    entries = config["documents"]
+    account = config["account"]
+    if not isinstance(documents, dict) or set(documents) != set(entries):
+        fail("INVALID_PREPARATION_CAPTURES")
+    # Check every capture before parsing even the first HTML document.
+    for alias, entry in entries.items():
+        capture = documents[alias]
+        if (not isinstance(capture, dict) or set(capture) != {"statement", "notes"}
+                or not isinstance(capture["notes"], list)
+                or len(capture["notes"]) != len(entry["notes"])):
+            fail("INVALID_PREPARATION_CAPTURES")
+        for raw in [capture["statement"], *capture["notes"]]:
+            if type(raw) is not bytes or len(raw) > max_bytes:
+                fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    plans = []
+    snapshots = []
+    raw_digests = {}
+    seen_periods = set()
+    for alias in entries:
+        capture = documents[alias]
+        statement_raw = capture["statement"]
+        statement = parse_statement(decode_document(statement_raw), max_depth)
         if statement["period"] in seen_periods:
             fail("DUPLICATE_STATEMENT_PERIOD")
         seen_periods.add(statement["period"])
-        notes = []
-        note_digests = []
-        for path in entry["notes"]:
-            note_path = Path(input_root) / path
-            input_paths.append(note_path)
-            note_html, note_digest = read_document(note_path, input_root, max_bytes)
-            notes.append(parse_contract_note(note_html, max_depth))
-            note_digests.append(note_digest)
+        notes = [parse_contract_note(decode_document(raw), max_depth) for raw in capture["notes"]]
         activities = convert_matched_trades(statement, notes, account, config["mappings"])
         snapshot = ledger_identity(statement, account["account_key"])
         identities = {e["source_slot"]: e["id"] for e in snapshot["events"]}
@@ -735,8 +987,51 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
             output["document_alias"] = alias
             plans.append(output)
         snapshots.append(snapshot)
-        raw_digests[alias] = {"statement": digest, "notes": note_digests}
+        raw_digests[alias] = {"statement": hashlib.sha256(statement_raw).hexdigest(),
+                              "notes": [hashlib.sha256(raw).hexdigest() for raw in capture["notes"]]}
     plans.sort(key=lambda a: (a["operation_date"], a["id"]))
+    artifact = {"schema_version": 1, "artifact_kind": "internal_activity_review_not_api_payload",
+                "import_ready": False, "blockers": ["REMOTE_ADOPTION_UNVERIFIED", "ISOLATED_API_CONTRACT_UNVERIFIED"],
+                "account_key": account["account_key"], "target_account_id": account["target_account_id"],
+                "source_digests": raw_digests, "activities": {a["id"]: a for a in plans}}
+    return {"artifact": artifact, "snapshots": snapshots}
+
+
+def validate_prepared_sources(prepared_raw, config_raw, documents, max_bytes, max_depth):
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_SIZE_LIMIT")
+    if type(prepared_raw) is not bytes or len(prepared_raw) > max_bytes:
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    result = compute_prepared_sources(config_raw, documents, max_bytes, max_depth)
+    observed = parse_keyed_yaml(prepared_raw)
+    expected = result["artifact"]
+    if yaml.safe_dump(observed, sort_keys=True, allow_unicode=True) != yaml.safe_dump(expected, sort_keys=True, allow_unicode=True):
+        fail("PREPARED_SOURCE_CONTENT_CONFLICT")
+    return expected
+
+
+def capture_preparation_sources(config_raw, input_root, max_bytes, max_depth):
+    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    documents = {}
+    input_paths = []
+    for alias, entry in config["documents"].items():
+        statement_path = Path(input_root) / entry["statement"]
+        note_paths = [Path(input_root) / path for path in entry["notes"]]
+        input_paths.extend([statement_path, *note_paths])
+        documents[alias] = {"statement": read_local_bytes(statement_path, input_root, max_bytes),
+                            "notes": [read_local_bytes(path, input_root, max_bytes) for path in note_paths]}
+    return documents, input_paths
+
+
+def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    documents, document_paths = capture_preparation_sources(config_raw, input_root, max_bytes, max_depth)
+    input_paths = [Path(config_path), *document_paths]
+    computed = compute_prepared_sources(config_raw, documents, max_bytes, max_depth)
+    artifact = computed["artifact"]
+    snapshots = computed["snapshots"]
+    account = config["account"]
     state = Path("state")
     output_root = Path("outputs")
     target = hashlib.sha256(account["target_account_id"].encode("utf-8")).hexdigest()
@@ -777,16 +1072,12 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
         for snapshot in snapshots:
             journal = register_statement_snapshot(journal, snapshot)
         journal["binding"] = binding
-        artifact = {"schema_version": 1, "artifact_kind": "internal_activity_review_not_api_payload",
-                    "import_ready": False, "blockers": ["REMOTE_ADOPTION_UNVERIFIED", "ISOLATED_API_CONTRACT_UNVERIFIED"],
-                    "account_key": account["account_key"], "target_account_id": account["target_account_id"],
-                    "source_digests": raw_digests, "activities": {a["id"]: a for a in plans}}
         # Persist revision guard first. Failed artifact write can be retried safely;
         # neither file is evidence that an external activity was created.
         atomic_private_yaml(binding_path, binding)
         atomic_private_yaml(journal_path, journal)
         atomic_private_yaml(artifact_path, artifact)
-        return {"prepared_activities": len(plans), "statement_periods": len(snapshots),
+        return {"prepared_activities": len(artifact["activities"]), "statement_periods": len(snapshots),
                 "import_ready": False, "blockers": artifact["blockers"]}
     finally:
         if namespace_lock is not None:
@@ -1348,8 +1639,8 @@ def _dispatch_snapshot(raw, max_bytes):
     return semantic
 
 
-def dispatch_single_lab_intent(state_root, binding, reviewed, baseline_raw, max_bytes, request):
-    """Trusted owned-lab callback only; no apply CLI or production authorization."""
+def _dispatch_single_intent(state_root, binding, reviewed, baseline_raw, max_bytes, request):
+    """Protocol core; caller owns source qualification and invocation authority."""
     if type(max_bytes) is not int or max_bytes <= 0:
         fail("INVALID_LAB_DISPATCH_LIMIT")
     if not isinstance(reviewed, dict) or not isinstance(reviewed.get("body"), bytes) or len(reviewed["body"]) > max_bytes:
@@ -1698,6 +1989,342 @@ def validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_
     return expected
 
 
+def dispatch_single_lab_intent(state_root, binding, reviewed, baseline_raw, max_bytes, request):
+    """Trusted owned-lab adapter; never supplies production authority."""
+    return _dispatch_single_intent(state_root, binding, reviewed, baseline_raw, max_bytes, request)
+
+
+def dispatch_frozen_lab_review(state_root, binding, review_raw, review_sha256,
+                               config_raw, captures, max_bytes, request, observe_confirmation):
+    """Trusted owned-lab sequence only; no production transport or authorization."""
+    artifact = validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes)
+    validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
+    binding = dict(binding)
+    if any(binding[k] != artifact[k] for k in ("account_key", "target_account_id")):
+        fail("WRITE_JOURNAL_BINDING_CONFLICT")
+    if not callable(request) or not callable(observe_confirmation):
+        fail("INVALID_LAB_SEQUENCE_CALLBACK")
+    if artifact["holdings"]["shortages"] or artifact["adoption"]["candidates"]:
+        fail("LAB_SEQUENCE_FINANCIAL_REVIEW_BLOCKED")
+    prepared = validated_prepared_review(captures["prepared"])["activities"]
+    baseline = captures["snapshot"]
+    proposal = artifact["wire"]
+    if proposal is None:
+        return {"accepted_events": 0, "readback": baseline, "import_ready": False}
+    full = {"body": proposal["body_utf8"].encode(), "sha256": proposal["sha256"], "import_ready": False}
+    expected = reviewed_wire_rows(full)
+    wires = []
+    for marker, row in expected.items():
+        wire = build_wire_payload({marker: prepared[marker]})
+        if len(wire["body"]) > max_bytes or reviewed_wire_rows(wire) != {marker: row}:
+            fail("LAB_SEQUENCE_WIRE_CONFLICT")
+        wires.append(wire)
+    return _dispatch_review_sequence(state_root, binding, wires, baseline, max_bytes,
+                                     request, observe_confirmation)
+
+
+def _dispatch_review_sequence(state_root, binding, wires, baseline, max_bytes,
+                              request, observe_confirmation):
+    for ordinal, wire in enumerate(wires):
+        result = _dispatch_single_intent(state_root, binding, wire, baseline, max_bytes, request)
+        readback = result["readback"]
+        try:
+            observe_confirmation(ordinal, dict(wire), baseline, readback)
+        except Exception:
+            raise RuntimeError("LAB_SEQUENCE_OBSERVER_FAILED") from None
+        baseline = readback
+    return {"accepted_events": len(wires), "readback": baseline, "import_ready": False}
+
+
+def capture_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_FROZEN_REVIEW_BYTE_LIMIT")
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    review_raw = read_local_bytes(review_path, input_root, max_bytes)
+    config = review_capture_configuration(config_raw)
+    paths = [Path(config_path), Path(review_path)]
+    captures = {}
+    for key in ("prepared", "snapshot", "resolutions", "history_evidence"):
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    return validate_frozen_review(review_raw, review_sha256, config_raw, captures, max_bytes), paths
+
+
+def frozen_review_summary(artifact):
+    return {"review_verified": True, "new_activities": len(artifact["adoption"]["new"]),
+            "owned_activities": len(artifact["adoption"]["owned"]),
+            "adopted_activities": len(artifact["adoption"]["adopted"]),
+            "holdings_shortfalls": len(artifact["holdings"]["shortages"]),
+            "import_ready": False, "blockers": artifact["blockers"]}
+
+
+def check_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes):
+    """Read-only operator capture and verification; no publication or authority."""
+    artifact, _ = capture_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes)
+    return frozen_review_summary(artifact)
+
+
+def validate_proposal_destination(destination, input_paths):
+    """Validate every local publication boundary before permission/file mutation."""
+    path = Path(destination)
+    root = Path("outputs").absolute()
+    try:
+        absolute = path.absolute()
+        if any(p.is_symlink() for p in (absolute, *absolute.parents, root)):
+            fail("SYMLINK_PROPOSAL_PATH")
+        resolved = path.resolve()
+        if not resolved.is_relative_to(root.resolve()) or resolved == root.resolve():
+            fail("PROPOSAL_OUTSIDE_OUTPUTS")
+        if root.exists() and not root.is_dir():
+            fail("INVALID_PROPOSAL_DIRECTORY")
+        if path.parent.absolute() != root and not path.parent.is_dir():
+            fail("INVALID_PROPOSAL_DIRECTORY")
+        if path.exists() and not path.is_file():
+            fail("INVALID_PROPOSAL_FILE")
+        reject_output_input_collision(path, input_paths)
+    except OSError:
+        raise RuntimeError("INVALID_PROPOSAL_PATH") from None
+    return path
+
+
+def preview_local_application(config_path, review_path, review_sha256, input_root, max_bytes,
+                              export_path=None, execute=False):
+    """Default offline application preview; export is a proposal, never acceptance."""
+    dry_run = os.environ.get("DRY_RUN", "1")
+    if dry_run not in ("0", "1"):
+        fail("INVALID_DRY_RUN")
+    if execute and dry_run == "0":
+        fail("APPLICATION_EXECUTION_GATE_REQUIRED")
+    artifact, paths = capture_local_frozen_review(config_path, review_path, review_sha256, input_root, max_bytes)
+    result = {**frozen_review_summary(artifact), "dry_run": True, "proposal_exported": False}
+    if export_path is not None:
+        if artifact["holdings"]["shortages"] or artifact["adoption"]["candidates"]:
+            fail("APPLICATION_FINANCIAL_REVIEW_BLOCKED")
+        if artifact["wire"] is None:
+            fail("NO_NEW_ACTIVITIES_TO_EXPORT")
+        body = artifact["wire"]["body_utf8"].encode()
+        if len(body) > max_bytes:
+            fail("APPLICATION_PROPOSAL_LIMIT_EXCEEDED")
+        destination = validate_proposal_destination(export_path, paths)
+        private_directory("outputs")
+        if destination.parent.absolute() != Path("outputs").absolute():
+            destination.parent.chmod(0o700)
+        atomic_private_bytes(destination, body)
+        result["proposal_exported"] = True
+    return result
+
+
+def validate_qualified_application(bundle, max_bytes, max_depth):
+    """Pure source/report/declaration consistency; external statements are not proofs."""
+    keys = {"declaration", "declaration_sha256", "review", "review_sha256", "config",
+            "captures", "prepare_config", "documents"}
+    if not isinstance(bundle, dict) or set(bundle) != keys:
+        fail("INVALID_APPLICATION_BUNDLE")
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_SIZE_LIMIT")
+    raw = bundle["declaration"]
+    if type(raw) is not bytes or len(raw) > max_bytes:
+        fail("APPLICATION_DECLARATION_LIMIT_EXCEEDED")
+    pin = bundle["declaration_sha256"]
+    if (not isinstance(pin, str) or not re.fullmatch(r"[0-9a-f]{64}", pin)
+            or hashlib.sha256(raw).hexdigest() != pin):
+        fail("APPLICATION_DECLARATION_DIGEST_CONFLICT")
+    declaration = parse_keyed_yaml(raw)
+    fields = {"schema_version", "artifact_kind", "review_sha256", "prepare_config",
+              "prepare_config_sha256", "allowed_origin", "account_key", "target_account_id",
+              "snapshot_sha256", "destination_version", "display_timezone", "confirmations"}
+    if (set(declaration) != fields or type(declaration["schema_version"]) is not int
+            or declaration["schema_version"] != 1
+            or declaration["artifact_kind"] != "operator_execution_declaration_not_authenticated_approval"):
+        fail("INVALID_APPLICATION_DECLARATION")
+    for field in fields - {"schema_version", "confirmations"}:
+        if not isinstance(declaration[field], str) or not declaration[field].strip():
+            fail("INVALID_APPLICATION_DECLARATION")
+    if Path(declaration["prepare_config"]).is_absolute():
+        fail("INVALID_APPLICATION_PREPARATION_PATH")
+    validated_ghost_origin(declaration["allowed_origin"])
+    if declaration["destination_version"] != "3.81.0" or declaration["display_timezone"] not in ("Europe/Paris", "Europe/Zurich"):
+        fail("APPLICATION_DESTINATION_SCOPE_UNVERIFIED")
+    confirmations = declaration["confirmations"]
+    names = {"source_acceptance", "destination_validation", "security_review",
+             "recovery_procedure", "exclusive_access", "write_authorization"}
+    if not isinstance(confirmations, dict) or set(confirmations) != names:
+        fail("APPLICATION_EXTERNAL_CONFIRMATIONS_REQUIRED")
+    for record in confirmations.values():
+        if (not isinstance(record, dict) or set(record) != {"confirmed", "confirmed_by", "reference"}
+                or record["confirmed"] is not True
+                or any(not isinstance(record[k], str) or not record[k].strip() for k in ("confirmed_by", "reference"))):
+            fail("APPLICATION_EXTERNAL_CONFIRMATIONS_REQUIRED")
+    prepare_raw = bundle["prepare_config"]
+    if type(prepare_raw) is not bytes or len(prepare_raw) > max_bytes:
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    if (not re.fullmatch(r"[0-9a-f]{64}", declaration["prepare_config_sha256"])
+            or hashlib.sha256(prepare_raw).hexdigest() != declaration["prepare_config_sha256"]):
+        fail("APPLICATION_PREPARATION_DIGEST_CONFLICT")
+    artifact = validate_frozen_review(bundle["review"], bundle["review_sha256"],
+                                     bundle["config"], bundle["captures"], max_bytes)
+    if (declaration["review_sha256"] != bundle["review_sha256"]
+            or any(declaration[k] != artifact[k] for k in ("account_key", "target_account_id"))
+            or declaration["snapshot_sha256"] != artifact["input_sha256"]["snapshot"]):
+        fail("APPLICATION_DECLARATION_CONTEXT_CONFLICT")
+    validate_prepared_sources(bundle["captures"]["prepared"], prepare_raw,
+                              bundle["documents"], max_bytes, max_depth)
+    binding = {k: declaration[k] for k in ("account_key", "target_account_id")}
+    validate_write_journal({"schema_version": 1, "binding": binding, "intents": {}})
+    if artifact["holdings"]["shortages"] or artifact["adoption"]["candidates"]:
+        fail("APPLICATION_FINANCIAL_REVIEW_BLOCKED")
+    prepared = validated_prepared_review(bundle["captures"]["prepared"])["activities"]
+    wires = []
+    if artifact["wire"] is not None:
+        proposal = artifact["wire"]
+        full = {"body": proposal["body_utf8"].encode(), "sha256": proposal["sha256"], "import_ready": False}
+        for marker, row in reviewed_wire_rows(full).items():
+            wire = build_wire_payload({marker: prepared[marker]})
+            if len(wire["body"]) > max_bytes or reviewed_wire_rows(wire) != {marker: row}:
+                fail("APPLICATION_WIRE_CONFLICT")
+            wires.append(wire)
+    return {"artifact": artifact, "declaration": declaration, "binding": binding, "wires": wires}
+
+
+def validate_application_destinations(state_root, archive_root, archive, binding, input_paths):
+    target = hashlib.sha256(binding["target_account_id"].encode()).hexdigest()
+    state = Path(state_root).absolute()
+    root = Path(archive_root).absolute()
+    archive = Path(archive).absolute()
+    for directory in (state, root, archive):
+        if any(p.is_symlink() for p in (directory, *directory.parents)):
+            fail("SYMLINK_APPLICATION_DIRECTORY")
+        if directory.exists() and not directory.is_dir():
+            fail("INVALID_APPLICATION_DIRECTORY")
+    if archive.parent != root or archive.exists():
+        fail("APPLICATION_ARCHIVE_NOT_NEW")
+    for name in ("prepare-" + target + ".lock", "account-" + binding["account_key"] + ".lock",
+                 "write-binding-" + binding["account_key"] + ".yaml", "writes-" + target + ".yaml"):
+        destination = state / name
+        reject_output_input_collision(destination, input_paths)
+        if destination.is_symlink():
+            fail("SYMLINK_APPLICATION_STATE")
+        if destination.exists() and not destination.is_file():
+            fail("INVALID_APPLICATION_STATE")
+    # New generated children cannot alias inputs unless the archive/root already exists.
+    for destination in (state, root, archive):
+        reject_output_input_collision(destination, input_paths)
+
+
+def initialize_application_archive(archive_root, archive, bundle, max_bytes, max_depth):
+    private_directory(archive_root)
+    Path(archive).mkdir(mode=0o700)
+    archive = Path(archive)
+    roles = {"declaration": bundle["declaration"], "review": bundle["review"],
+             "config": bundle["config"], "prepare_config": bundle["prepare_config"], **bundle["captures"]}
+    documents = {}
+    for index, (alias, captures) in enumerate(bundle["documents"].items()):
+        statement = "source-" + str(index) + "-statement"
+        notes = ["source-" + str(index) + "-note-" + str(n) for n in range(len(captures["notes"]))]
+        roles[statement] = captures["statement"]
+        roles.update(zip(notes, captures["notes"]))
+        documents[alias] = {"statement": statement, "notes": notes}
+    manifest = {"schema_version": 1, "artifact_kind": "application_run_evidence_not_approval",
+                "run_id": archive.name, "max_bytes": max_bytes, "max_depth": max_depth,
+                "declaration_sha256": bundle["declaration_sha256"],
+                "review_sha256": bundle["review_sha256"], "documents": documents,
+                "roles": {role: {"file": role + ".bytes", "sha256": hashlib.sha256(raw).hexdigest()}
+                          for role, raw in roles.items()}}
+    # Ownership/evidence manifest precedes role files; incomplete archives remain visible.
+    atomic_private_yaml(archive / "manifest.yaml", manifest)
+    for role, raw in roles.items():
+        atomic_private_bytes(archive / (role + ".bytes"), raw)
+    # Persist archive's entry in its parent before any request callback.
+    for directory in (Path(archive_root), Path(archive_root).parent):
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
+def dispatch_qualified_application(state_root, archive_root, bundle, max_bytes, max_depth,
+                                   request, observe_confirmation=None, input_paths=()):
+    qualification = validate_qualified_application(bundle, max_bytes, max_depth)
+    wires = qualification["wires"]
+    baseline = bundle["captures"]["snapshot"]
+    if not wires:
+        return {"accepted_events": 0, "readback": baseline, "import_ready": False}
+    if not callable(request) or (observe_confirmation is not None and not callable(observe_confirmation)):
+        fail("INVALID_APPLICATION_CALLBACK")
+    # Immutable captures and freshly computed wires/binding are detached before callbacks.
+    binding = qualification["binding"]
+    archive = Path(archive_root) / ("application-" + uuid.uuid4().hex)
+    validate_application_destinations(state_root, archive_root, archive, binding, input_paths)
+    initialize_application_archive(archive_root, archive, bundle, max_bytes, max_depth)
+    batch_pin = qualification["artifact"]["wire"]["sha256"]
+    def observer(ordinal, wire, before, after):
+        prefix = archive / ("event-" + str(ordinal))
+        atomic_private_bytes(prefix.with_suffix(".wire.json"), wire["body"])
+        atomic_private_bytes(prefix.with_suffix(".readback.json"), after)
+        atomic_private_yaml(prefix.with_suffix(".provenance.yaml"), {
+            "schema_version": 1, "run_id": archive.name, "ordinal": ordinal,
+            "wire_sha256": wire["sha256"], "proposal_batch_sha256": batch_pin,
+            "baseline_sha256": hashlib.sha256(before).hexdigest(),
+            "readback_sha256": hashlib.sha256(after).hexdigest()})
+        if observe_confirmation is not None:
+            observe_confirmation(ordinal, dict(wire), before, after)
+    return _dispatch_review_sequence(state_root, binding, wires, baseline, max_bytes, request, observer)
+
+
+def capture_local_application(config_path, review_path, review_sha256, execution_path,
+                              execution_sha256, input_root, max_bytes, max_depth):
+    if execution_path is None or execution_sha256 is None:
+        fail("APPLICATION_EXECUTION_GATE_REQUIRED")
+    paths = [Path(config_path), Path(review_path), Path(execution_path)]
+    config_raw, review_raw, declaration_raw = [read_local_bytes(path, input_root, max_bytes) for path in paths]
+    config = review_capture_configuration(config_raw)
+    captures = {}
+    for role in ("prepared", "snapshot", "resolutions", "history_evidence"):
+        path = Path(input_root) / config[role]
+        paths.append(path)
+        captures[role] = read_local_bytes(path, input_root, max_bytes)
+    # Validate declaration pin before using its preparation path to read another file.
+    if (not isinstance(execution_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", execution_sha256)
+            or hashlib.sha256(declaration_raw).hexdigest() != execution_sha256):
+        fail("APPLICATION_DECLARATION_DIGEST_CONFLICT")
+    declaration = parse_keyed_yaml(declaration_raw)
+    path = declaration.get("prepare_config")
+    if not isinstance(path, str) or not path.strip() or Path(path).is_absolute():
+        fail("INVALID_APPLICATION_PREPARATION_PATH")
+    prepare_path = Path(input_root) / path
+    prepare_raw = read_local_bytes(prepare_path, input_root, max_bytes)
+    documents, document_paths = capture_preparation_sources(prepare_raw, input_root, max_bytes, max_depth)
+    paths.extend([prepare_path, *document_paths])
+    bundle = {"declaration": declaration_raw, "declaration_sha256": execution_sha256,
+              "review": review_raw, "review_sha256": review_sha256, "config": config_raw,
+              "captures": captures, "prepare_config": prepare_raw, "documents": documents}
+    return bundle, paths
+
+
+def execute_local_application(config_path, review_path, review_sha256, input_root, max_bytes,
+                              execution_path, execution_sha256, max_depth, timeout, export_path=None):
+    if export_path is not None:
+        fail("APPLICATION_EXECUTE_EXPORT_CONFLICT")
+    if type(timeout) is not int or not 1 <= timeout <= 120:
+        fail("INVALID_APPLICATION_TIMEOUT")
+    bundle, paths = capture_local_application(config_path, review_path, review_sha256, execution_path,
+                                             execution_sha256, input_root, max_bytes, max_depth)
+    qualified = validate_qualified_application(bundle, max_bytes, max_depth)
+    result = {**frozen_review_summary(qualified["artifact"]), "dry_run": False,
+              "accepted_events": 0, "proposal_exported": False}
+    if not qualified["wires"]:
+        return result
+    # Validate all writable namespaces before credentials, mkdir or permission changes.
+    candidate = Path("outputs") / ("application-" + uuid.uuid4().hex)
+    validate_application_destinations("state", "outputs", candidate, qualified["binding"], paths)
+    request = make_ghostfolio_request(qualified["declaration"]["allowed_origin"], max_bytes, timeout)
+    dispatched = dispatch_qualified_application("state", "outputs", bundle, max_bytes, max_depth,
+                                                request, input_paths=paths)
+    result["accepted_events"] = dispatched["accepted_events"]
+    return result
+
+
 def review_local_snapshot(config_path, input_root, max_bytes):
     """Private end-to-end offline review; exact bytes, no remote calls or intent."""
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
@@ -1979,6 +2606,70 @@ def validated_ghost_origin(value):
     return parsed.hostname, port or 443
 
 
+def make_ghostfolio_request(allowed_origin, max_bytes, timeout):
+    """Bounded fixed-path adapter, not execution authorization; factory never connects."""
+    if type(timeout) is not int or not 1 <= timeout <= 120 or type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_GHOST_REQUEST_LIMITS")
+    host, port = validated_ghost_origin(allowed_origin)
+    origin = os.environ.get("GHOST_HOST")
+    validated_ghost_origin(origin)
+    if origin != allowed_origin:
+        fail("GHOST_ORIGIN_NOT_ALLOWLISTED")
+    bearer = os.environ.get("GHOST_SESSION_BEARER")
+    if not isinstance(bearer, str) or len(bearer) > 16384 or not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", bearer):
+        fail("GHOST_SESSION_BEARER_REQUIRED")
+    def request(method, path, body):
+        if (method, path) == ("GET", "/api/v1/activities"):
+            if body is not None:
+                fail("GHOST_REQUEST_GET_BODY_REJECTED")
+            expected_status = 200
+        elif (method, path) == ("POST", "/api/v1/import"):
+            _dispatch_json(body, max_bytes)
+            rows = reviewed_wire_rows({"body": body, "sha256": hashlib.sha256(body).hexdigest(), "import_ready": False})
+            if len(rows) != 1:
+                fail("GHOST_REQUEST_SINGLE_ACTIVITY_REQUIRED")
+            expected_status = 201
+        else:
+            fail("GHOST_REQUEST_PATH_REJECTED")
+        connection, response_data, error_code = None, None, None
+        try:
+            connection = http.client.HTTPSConnection(host, port, timeout=timeout, context=ssl.create_default_context())
+            headers = {"Authorization": "Bearer " + bearer, "Accept": "application/json", "Accept-Encoding": "identity"}
+            if method == "POST":
+                headers["Content-Type"] = "application/json"
+            connection.request(method, path, body=body, headers=headers)
+            response = connection.getresponse()
+            if type(response.status) is not int:
+                error_code = "GHOST_REQUEST_STATUS_REJECTED"
+            elif 300 <= response.status < 400:
+                error_code = "GHOST_REQUEST_REDIRECT_REJECTED"
+            elif response.status != expected_status:
+                error_code = "GHOST_REQUEST_STATUS_REJECTED"
+            elif response.getheader("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+                error_code = "GHOST_REQUEST_CONTENT_TYPE_REJECTED"
+            elif response.getheader("Content-Encoding", "identity").strip().lower() != "identity":
+                error_code = "GHOST_REQUEST_ENCODING_REJECTED"
+            else:
+                raw = response.read(max_bytes + 1)
+                if type(raw) is not bytes or len(raw) > max_bytes:
+                    error_code = "GHOST_REQUEST_RESPONSE_LIMIT_OR_TYPE"
+                else:
+                    response_data = (response.status, raw)
+        except Exception:
+            error_code = "GHOST_REQUEST_TRANSPORT_FAILED"
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    if error_code is None:
+                        error_code = "GHOST_REQUEST_CLOSE_FAILED"
+        if error_code is not None:
+            fail(error_code)
+        return response_data
+    return request
+
+
 def acquire_readonly_snapshot(config_path, input_root, max_bytes, timeout):
     """Only GET; never exchanges tokens, follows redirects, retries or imports."""
     if type(timeout) is not int or not 1 <= timeout <= 120 or type(max_bytes) is not int or max_bytes <= 0:
@@ -2041,10 +2732,35 @@ def main(argv=None):
     prepare.add_argument("--input-root", required=True)
     prepare.add_argument("--max-bytes", type=int, required=True)
     prepare.add_argument("--max-depth", type=int, required=True)
+    captures = subparsers.add_parser("qualify-captures", help="Qualify a completed local bundle into a private prepare proposal")
+    captures.add_argument("--manifest", required=True)
+    captures.add_argument("--config", required=True)
+    captures.add_argument("--input-root", required=True)
+    captures.add_argument("--output", required=True, help="New directory outside the input tree, with an existing private parent")
+    captures.add_argument("--max-bytes", type=int, required=True)
+    captures.add_argument("--max-depth", type=int, required=True)
     review = subparsers.add_parser("review", help="Reconcile prepared activities against saved history without network")
     review.add_argument("--config", required=True, help="Local keyed review YAML inside input root")
     review.add_argument("--input-root", required=True)
     review.add_argument("--max-bytes", type=int, required=True)
+    apply = subparsers.add_parser("apply", help="Preview or explicitly qualified single-event application")
+    apply.add_argument("--config", required=True)
+    apply.add_argument("--review", required=True)
+    apply.add_argument("--review-sha256", required=True)
+    apply.add_argument("--input-root", required=True)
+    apply.add_argument("--max-bytes", type=int, required=True)
+    apply.add_argument("--export", help="Optional private manual proposal under outputs, not an import")
+    apply.add_argument("--execute", action="store_true", help="Request execution under a separately pinned declaration; DRY_RUN overrides")
+    apply.add_argument("--execution", help="Private external operator declaration inside input root")
+    apply.add_argument("--execution-sha256", help="External declaration content pin, not authentication")
+    apply.add_argument("--max-depth", help="Explicit HTML nesting budget for execution only")
+    apply.add_argument("--timeout", help="Explicit bounded HTTPS timeout for execution only")
+    check = subparsers.add_parser("check-review", help="Verify a pinned saved review offline without writing files")
+    check.add_argument("--config", required=True)
+    check.add_argument("--review", required=True)
+    check.add_argument("--review-sha256", required=True, help="External nonsecret content pin; not approval")
+    check.add_argument("--input-root", required=True)
+    check.add_argument("--max-bytes", type=int, required=True)
     diagnose = subparsers.add_parser("diagnose", help="Describe saved candidates without adoption or import claims")
     diagnose.add_argument("--config", required=True)
     diagnose.add_argument("--input-root", required=True)
@@ -2064,6 +2780,33 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "qualify-captures":
+            print(json.dumps(qualify_local_captures(args.manifest, args.config, args.input_root,
+                                                   args.output, args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
+        if args.command == "apply":
+            dry_run = os.environ.get("DRY_RUN", "1")
+            if dry_run not in ("0", "1"):
+                fail("INVALID_DRY_RUN")
+            if args.execute and dry_run == "0":
+                if args.execution is None or args.execution_sha256 is None:
+                    fail("APPLICATION_EXECUTION_GATE_REQUIRED")
+                try:
+                    max_depth, timeout = int(args.max_depth), int(args.timeout)
+                except (TypeError, ValueError):
+                    fail("APPLICATION_EXECUTION_LIMITS_REQUIRED")
+                result = execute_local_application(args.config, args.review, args.review_sha256,
+                    args.input_root, args.max_bytes, args.execution, args.execution_sha256,
+                    max_depth, timeout, export_path=args.export)
+                print(json.dumps(result, sort_keys=True))
+                return 0 if result["accepted_events"] else 2
+            print(json.dumps(preview_local_application(args.config, args.review, args.review_sha256,
+                args.input_root, args.max_bytes, export_path=args.export, execute=args.execute), sort_keys=True))
+            return 2
+        if args.command == "check-review":
+            print(json.dumps(check_local_frozen_review(args.config, args.review, args.review_sha256,
+                                                       args.input_root, args.max_bytes), sort_keys=True))
+            return 2
         if args.command == "rollback-plan":
             print(json.dumps(plan_local_compensation(args.config, args.input_root, args.max_bytes), sort_keys=True))
             return 2
