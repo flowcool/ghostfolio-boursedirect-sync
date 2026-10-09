@@ -14,6 +14,11 @@ const forbidden=()=>{throw new Error('TEST_NETWORK_FORBIDDEN');};
 dgram.createSocket=forbidden;
 for(const method of Object.keys(dns))if(/^(lookup|resolve|reverse)/.test(method)&&typeof dns[method]==='function')dns[method]=forbidden;
 for(const method of Object.keys(dns.promises))if(/^(lookup|resolve|reverse)/.test(method)&&typeof dns.promises[method]==='function')dns.promises[method]=forbidden;
+for(const Resolver of [dns.Resolver,dns.promises.Resolver]){
+  for(let prototype=Resolver.prototype;prototype&&prototype!==Object.prototype;prototype=Object.getPrototypeOf(prototype)){
+    for(const method of Object.getOwnPropertyNames(prototype))if(/^(lookup|resolve|reverse)/.test(method)&&typeof prototype[method]==='function')prototype[method]=forbidden;
+  }
+}
 net.Socket.prototype.connect=forbidden;net.connect=forbidden;net.createConnection=forbidden;
 tls.connect=forbidden;http.request=forbidden;http.get=forbidden;https.request=forbidden;https.get=forbidden;
 globalThis.fetch=forbidden;globalThis.WebSocket=forbidden;
