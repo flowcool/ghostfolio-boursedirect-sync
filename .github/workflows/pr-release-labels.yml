@@ -1,0 +1,34 @@
+name: PR release labels
+
+# Advisory: labels a PR from its conventional title so GitHub's generated release
+# notes (.github/release.yml) are grouped. Never a required check, never fails.
+#
+# pull_request_target runs this workflow file and script from the BASE branch with
+# a write-capable GITHUB_TOKEN, also for fork PRs (a plain pull_request run would
+# get a read-only token there). Never check out or execute the pull request head
+# in this workflow: the only PR data used is the event payload (title, labels,
+# body), parsed as data by scripts/label_pr_release.py.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      # Default ref for pull_request_target is the base branch, never the PR head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Label from title
+        run: python3 scripts/label_pr_release.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
