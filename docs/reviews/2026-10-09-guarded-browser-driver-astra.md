@@ -197,3 +197,27 @@ The existing synthetic raw-CDP capability experiment remains approved; reusable
 B remains held. This author evidence note does not change the Astra verdict or
 the reviewed plan, approve a Playwright driver, or substitute for real ordered
 guard tests. Beads `.71` records exact lookup findings and unresolved limits.
+
+## Synthetic ordering experiment (author implementation evidence)
+
+`collector/capability-ordering.mjs` is the first mock-only part of the approved
+capability experiment. It imports no browser, network, child-process or source
+loader. Injected callbacks model route installation, sequential guard
+acknowledgements, resume, owned exit confirmation and pipe closure. The retained
+result explicitly states `browser_proven=false`. It is not a browser driver,
+bounded CDP pipe implementation, full target/request policy or runtime authority.
+
+Network/child-forbidden tests hold each guard acknowledgement independently,
+then observe whether resume is attempted. The deliberately parallel negative
+control must record one forbidden dispatch while the held interception remains
+unacknowledged; that counter is a simulated signal, not a browser server count.
+Other scenarios reject unpaused attachments, stop pending initialization,
+refuse pipe closure without positive owned-exit confirmation, and cancel HTTP
+auth explicitly before stopping, including cancellation failure and wrong session.
+
+This mock verifies the ordering primitive and the negative-control detector.
+The real sandboxed positive/negative experiment, bounded transport, unexpected
+popup/frame/worker handling, durable concurrent permits and loader freshness
+remain required under the owning issue. The existing sandbox runtime blocker
+and reusable B HOLD are unchanged. Subagent execution evidence is recorded on
+`.71`; it is not an independent design/PR review or real Chrome qualification.
