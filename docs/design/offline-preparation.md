@@ -38,6 +38,13 @@ changes need a reviewed migration. Journals store normalized source fingerprints
 raw input SHA256 digests are separate artifact provenance. The journal never
 claims that a Ghostfolio activity exists or that an API request succeeded.
 
+The shared publisher pins the parent directory once with no-follow open and uses
+that descriptor for temporary creation, rename, directory fsync and cleanup.
+Parent-path replacement after acquisition cannot redirect these operations.
+Caller collision checks and cooperative directory ownership remain required;
+this does not protect against arbitrary same-user mutation before acquisition or
+inside the opened directory. See the [reviewed amendment](../plans/2026-10-09-pinned-publication-directory.md).
+
 After successful validation, the binding/revision guard is persisted before the
 review artifact. Each write uses an exclusive temporary file, fsync, atomic rename
 and directory fsync. There is no multi-file transaction: if artifact writing
