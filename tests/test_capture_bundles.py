@@ -91,6 +91,35 @@ def test_pure_qualification_preserves_inputs_and_requires_no_readiness():
     assert all(result['report'][k] is False for k in ('import_ready', 'freshness_verified', 'source_authenticity_verified'))
 
 
+def test_report_minimizes_tickets_without_changing_source_or_proposal():
+    manifest, files, config = local()
+    sentinel = 'SYNTHETIC_PRIVATE_QUERY_VALUE'
+    for entry in manifest['files'].values():
+        entry['ticket']['request_url'] += '?session=' + sentinel
+    manifest_path = Path('inputs/bundle/manifest.yaml')
+    manifest_path.write_bytes(encoded(manifest))
+    captured = [manifest_path, Path('inputs/config.yaml'),
+                *[Path('inputs/bundle/sources', name) for name in files]]
+    before = {path: (path.read_bytes(), path.stat().st_ino) for path in captured}
+    run()
+    raw = Path('outputs/proposal/qualification.yaml').read_bytes()
+    report = yaml.safe_load(raw)
+    assert sentinel.encode() not in raw
+    assert config['account']['source_account_ref'].encode() not in raw
+    assert b'request_url' not in raw and b'ticket:' not in raw
+    assert report['manifest_sha256'] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    assert set(report['files']) == set(files)
+    for name, entry in report['files'].items():
+        assert set(entry) == {'role', 'period', 'sha256', 'sequence'}
+        assert entry['sha256'] == hashlib.sha256(files[name]).hexdigest()
+        assert entry['sequence'] == manifest['files'][name]['ticket']['sequence']
+        assert entry['role'] == manifest['files'][name]['role']
+        assert entry['period'] == manifest['files'][name]['period']
+    summary = bd.prepare_local_plan('outputs/proposal/prepare-proposal.yaml', '.', 100000, 32)
+    assert summary['prepared_activities'] == 3
+    assert {path: (path.read_bytes(), path.stat().st_ino) for path in captured} == before
+
+
 def test_filter_strips_active_elements_attributes_comments_and_preserves_slots():
     raw = (FIXTURES / 'statement-paired-synthetic.html').read_bytes()
     raw = raw.replace(b'<body>', b'<body onload="TOKEN"><script>TOKEN</script><form><input value="TOKEN"></form><iframe src="TOKEN"></iframe><a href="TOKEN">Print</a>')
