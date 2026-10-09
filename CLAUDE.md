@@ -87,3 +87,5 @@ Florent's explicit request. Never version private inputs, outputs or configurati
 - Review owner: `infra-4g8u.2` (Astra); user scope approval owner: `infra-4g8u.3`; source feasibility owner: `infra-4g8u.4`.
 - Offline-probe owner: `infra-4g8u.7`; source matrix: [source-contract.yaml](docs/design/source-contract.yaml).
 - Beads owns current status and dependency gates; do not duplicate them in repository guidance.
+
+Pure current-config preparation replay: [contract](docs/design/preparation-source-replay.md).

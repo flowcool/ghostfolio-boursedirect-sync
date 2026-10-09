@@ -685,10 +685,15 @@ def atomic_private_bytes(path, raw):
             os.close(directory)
 
 
-def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
-    config = read_keyed_yaml(config_path, input_root, max_bytes)
-    input_paths = [Path(config_path)]
-    if set(config) != {"schema_version", "account", "mappings", "documents"} or config["schema_version"] != 1:
+def preparation_configuration(config_raw, max_bytes, max_depth):
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_SIZE_LIMIT")
+    if type(max_depth) is not int or max_depth <= 0:
+        fail("INVALID_DEPTH_LIMIT")
+    if type(config_raw) is not bytes or len(config_raw) > max_bytes:
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "account", "mappings", "documents"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
         fail("INVALID_PREPARATION_CONFIGURATION")
     account = config["account"]
     if not isinstance(account, dict) or set(account) != {"source_account_ref", "account_key", "target_account_id"}:
@@ -699,10 +704,6 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
     entries = config["documents"]
     if not isinstance(entries, dict) or not entries:
         fail("PREPARATION_DOCUMENTS_MISSING")
-    plans = []
-    snapshots = []
-    raw_digests = {}
-    seen_periods = set()
     for alias, entry in entries.items():
         if not isinstance(alias, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", alias):
             fail("INVALID_DOCUMENT_ALIAS")
@@ -710,21 +711,38 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
             fail("INVALID_DOCUMENT_CONFIGURATION")
         if not isinstance(entry["statement"], str) or not isinstance(entry["notes"], list) or not entry["notes"] or not all(isinstance(n, str) for n in entry["notes"]):
             fail("INVALID_DOCUMENT_CONFIGURATION")
-        statement_path = Path(input_root) / entry["statement"]
-        input_paths.append(statement_path)
-        html, digest = read_document(statement_path, input_root, max_bytes)
-        statement = parse_statement(html, max_depth)
+    return config
+
+
+def compute_prepared_sources(config_raw, documents, max_bytes, max_depth):
+    """Pure current-config derivation; no historical config authenticity claim."""
+    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    entries = config["documents"]
+    account = config["account"]
+    if not isinstance(documents, dict) or set(documents) != set(entries):
+        fail("INVALID_PREPARATION_CAPTURES")
+    # Check every capture before parsing even the first HTML document.
+    for alias, entry in entries.items():
+        capture = documents[alias]
+        if (not isinstance(capture, dict) or set(capture) != {"statement", "notes"}
+                or not isinstance(capture["notes"], list)
+                or len(capture["notes"]) != len(entry["notes"])):
+            fail("INVALID_PREPARATION_CAPTURES")
+        for raw in [capture["statement"], *capture["notes"]]:
+            if type(raw) is not bytes or len(raw) > max_bytes:
+                fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    plans = []
+    snapshots = []
+    raw_digests = {}
+    seen_periods = set()
+    for alias in entries:
+        capture = documents[alias]
+        statement_raw = capture["statement"]
+        statement = parse_statement(decode_document(statement_raw), max_depth)
         if statement["period"] in seen_periods:
             fail("DUPLICATE_STATEMENT_PERIOD")
         seen_periods.add(statement["period"])
-        notes = []
-        note_digests = []
-        for path in entry["notes"]:
-            note_path = Path(input_root) / path
-            input_paths.append(note_path)
-            note_html, note_digest = read_document(note_path, input_root, max_bytes)
-            notes.append(parse_contract_note(note_html, max_depth))
-            note_digests.append(note_digest)
+        notes = [parse_contract_note(decode_document(raw), max_depth) for raw in capture["notes"]]
         activities = convert_matched_trades(statement, notes, account, config["mappings"])
         snapshot = ledger_identity(statement, account["account_key"])
         identities = {e["source_slot"]: e["id"] for e in snapshot["events"]}
@@ -735,8 +753,51 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
             output["document_alias"] = alias
             plans.append(output)
         snapshots.append(snapshot)
-        raw_digests[alias] = {"statement": digest, "notes": note_digests}
+        raw_digests[alias] = {"statement": hashlib.sha256(statement_raw).hexdigest(),
+                              "notes": [hashlib.sha256(raw).hexdigest() for raw in capture["notes"]]}
     plans.sort(key=lambda a: (a["operation_date"], a["id"]))
+    artifact = {"schema_version": 1, "artifact_kind": "internal_activity_review_not_api_payload",
+                "import_ready": False, "blockers": ["REMOTE_ADOPTION_UNVERIFIED", "ISOLATED_API_CONTRACT_UNVERIFIED"],
+                "account_key": account["account_key"], "target_account_id": account["target_account_id"],
+                "source_digests": raw_digests, "activities": {a["id"]: a for a in plans}}
+    return {"artifact": artifact, "snapshots": snapshots}
+
+
+def validate_prepared_sources(prepared_raw, config_raw, documents, max_bytes, max_depth):
+    if type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_SIZE_LIMIT")
+    if type(prepared_raw) is not bytes or len(prepared_raw) > max_bytes:
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    result = compute_prepared_sources(config_raw, documents, max_bytes, max_depth)
+    observed = parse_keyed_yaml(prepared_raw)
+    expected = result["artifact"]
+    if yaml.safe_dump(observed, sort_keys=True, allow_unicode=True) != yaml.safe_dump(expected, sort_keys=True, allow_unicode=True):
+        fail("PREPARED_SOURCE_CONTENT_CONFLICT")
+    return expected
+
+
+def capture_preparation_sources(config_raw, input_root, max_bytes, max_depth):
+    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    documents = {}
+    input_paths = []
+    for alias, entry in config["documents"].items():
+        statement_path = Path(input_root) / entry["statement"]
+        note_paths = [Path(input_root) / path for path in entry["notes"]]
+        input_paths.extend([statement_path, *note_paths])
+        documents[alias] = {"statement": read_local_bytes(statement_path, input_root, max_bytes),
+                            "notes": [read_local_bytes(path, input_root, max_bytes) for path in note_paths]}
+    return documents, input_paths
+
+
+def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    documents, document_paths = capture_preparation_sources(config_raw, input_root, max_bytes, max_depth)
+    input_paths = [Path(config_path), *document_paths]
+    computed = compute_prepared_sources(config_raw, documents, max_bytes, max_depth)
+    artifact = computed["artifact"]
+    snapshots = computed["snapshots"]
+    account = config["account"]
     state = Path("state")
     output_root = Path("outputs")
     target = hashlib.sha256(account["target_account_id"].encode("utf-8")).hexdigest()
@@ -777,16 +838,12 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
         for snapshot in snapshots:
             journal = register_statement_snapshot(journal, snapshot)
         journal["binding"] = binding
-        artifact = {"schema_version": 1, "artifact_kind": "internal_activity_review_not_api_payload",
-                    "import_ready": False, "blockers": ["REMOTE_ADOPTION_UNVERIFIED", "ISOLATED_API_CONTRACT_UNVERIFIED"],
-                    "account_key": account["account_key"], "target_account_id": account["target_account_id"],
-                    "source_digests": raw_digests, "activities": {a["id"]: a for a in plans}}
         # Persist revision guard first. Failed artifact write can be retried safely;
         # neither file is evidence that an external activity was created.
         atomic_private_yaml(binding_path, binding)
         atomic_private_yaml(journal_path, journal)
         atomic_private_yaml(artifact_path, artifact)
-        return {"prepared_activities": len(plans), "statement_periods": len(snapshots),
+        return {"prepared_activities": len(artifact["activities"]), "statement_periods": len(snapshots),
                 "import_ready": False, "blockers": artifact["blockers"]}
     finally:
         if namespace_lock is not None:
