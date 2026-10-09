@@ -275,3 +275,12 @@ def test_invalid_diagnosis_cli_only_logs_safe_code(capsys, caplog):
     assert capsys.readouterr().out == ''
     assert 'INVALID_DIAGNOSIS_CONFIGURATION' in caplog.text
     assert config['private-extra-key'] not in caplog.text
+
+
+def test_diagnosis_rejects_existing_hardlink_to_captured_snapshot():
+    setup()
+    output().hardlink_to(Path('inputs/snapshot.json'))
+    before = private_files()
+    with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
+        run()
+    assert private_files() == before

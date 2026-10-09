@@ -48,6 +48,12 @@ the previous review. No intent journal or external activity is created.
 Stdout contains only counts, safe blocker codes and `import_ready=false`. Success
 exits2 (readable diagnostic review with remaining gates), invalid input exits1.
 All artifacts remain private; run from the repository so ignore rules apply.
+The output destination must not resolve to, or share an existing hard-link inode
+with, config/prepared/snapshot/resolutions/history-evidence input. Such collisions
+fail with `OUTPUT_INPUT_COLLISION` before publication, preserving captured inputs
+and the previous destination. This applies when input-root includes outputs too.
+Path-resolution failures use `INVALID_OUTPUT_PATH`; a symlink refused by atomic
+publication uses `SYMLINK_PRIVATE_FILE`. Neither logs the underlying path.
 Neither creating this file nor its digest authorizes apply. Source approval,
 actual destination/account/profile/date version, security review, production
 permission and independently verified recovery still stand. A review captures
