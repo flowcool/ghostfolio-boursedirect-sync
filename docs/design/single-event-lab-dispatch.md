@@ -53,6 +53,13 @@ boundary changes the map and conservatively aborts before POST or leaves an
 uncertain post-intent outcome; it is never treated as unchanged evidence.
 Intended future activities are rejected.
 
+Baseline and readback intentionally recalculate eligibility at each observation;
+there is no frozen `as_of` shared across the sequence. The fixed-clock regression
+`test_future_eligibility_boundary_is_conservative_semantic_drift` verifies that an
+unrelated future row becoming active stops at the initial GET without a POST.
+Freezing its earlier inactive status would change this conservative contract.
+This explains PR16 comment 4228766276; no clock behavior correction is required.
+
 Input and callback bodies have explicit byte bounds. Strict JSON/Decimal parsing
 rejects duplicate keys/nonfinite scalars and iteratively checks every numeric
 token's fixed-point shape before fingerprint/DTO comparison, including irrelevant
@@ -77,6 +84,14 @@ maximum, acceptance/readback mismatch, numeric bounds, persistence before/after
 publication and actual failed directory fsync. Existing persistence/verify tests
 remain required. Core evidence is owned by `infra-4g8u.50`; runner integration and
 actual single-event disposable execution are a separate acceptance deliverable.
+
+The current owned runner's zero-new review consumes a newly captured complete
+`snapshot.json` and matching `history.yaml` assertion. Its `snapshot(6)` call
+refreshes both before preparation/review; the assertion pins that snapshot's
+SHA256. The synthetic runner regression verifies the repeat report references
+`snapshot-6.json`, has three owned source rows and no wire, and sends no repeat
+POST. PR16 comment 4228766286 is therefore already satisfied by the current
+runner; the earlier reviewed planning artifact remains historical evidence.
 
 Rollback: revert the scoped code/tests/docs commit; retain journals and captures.
 No production changes, real broker activity, DELETE or production recovery is
