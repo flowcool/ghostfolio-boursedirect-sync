@@ -7,6 +7,15 @@ needs scoped Astra approval for a synthetic capability harness only. Reusable B
 remains HOLD until real isolated capability proof exists and a subsequent grounded
 reusable design receives exact-hash approval. Planning never replaces that proof.
 
+## Current amendment: grounded reusable B design
+
+The final section below is the current reusable B proposal. Earlier sections
+retain the exact synthetic-harness design as historical evidence; its approval
+was scoped to that experiment. The final section overrides broader OOPIF and
+multi-page suggestions for reusable v0. Reusable code requires a new exact-hash
+Astra approval; online enablement still requires independent source, runtime,
+egress, credential and security gates. No approval is inferred from this text.
+
 ## Grounded source and runtime pins
 
 Inspected once locally from upstream:
@@ -211,3 +220,173 @@ and captured evidence. Stop/clean only newly owned bench resources after exact-I
 and ownership verification. Runtime resources existing before the session are
 never changed. If this exact Chrome cannot prove initial request suspension,
 keep B held and report the failed mechanism; do not loosen the acceptance gate.
+
+## Final grounded reusable B proposal (2026-10-09)
+
+### Evidence and chosen scope
+
+The integrated synthetic proof has 28 scenarios and discriminating negative
+controls. The current-pinned consolidation command is:
+
+```sh
+.venv/bin/python scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/integration92-exact
+```
+
+It verifies retained receipt/source/runner/evaluator consistency without starting
+Chrome or Docker. Read-only `--verify-owned-absence` separately checks current
+absence. Private receipts remain private; the author evidence appendix in the
+existing Astra report describes observations and their limits. Integrated commit
+`d321b7b` contains the reviewed proof, including stop-before-exit regressions.
+Receipt hashes establish integrity, not independent source authenticity.
+
+Reuse the proven sole-controller raw NUL-framed pipe and ordered guards, with
+Chrome148.0.7778.97 and Node20.19.2 as the qualification baseline. The existing
+fixture image is `sha256:11b6dc0eb079e10e625ff8de54af6018100289b51fa500e72196adfca8233df8`;
+its seccomp profile SHA256 is
+`cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849`.
+These are test identities, not a published collector image or a portable online
+runtime. Future runtime changes need fresh qualification; do not accept a
+matching product string as executable provenance.
+
+Reusable v0 uses ONE root page per owned session, with same-origin in-process
+frames only. No OOPIF, additional page, broker popup, worker, service/shared
+worker or prerender resumes. Target discovery OR a paused attachment can reveal
+an unsupported worker; either is fatal. Browser/tab discovery is tolerated only
+under the bootstrap's explicit structural filter. Unexpected unpaused attachment
+is fatal. Root-target ownership must match createTarget's returned ID, including
+an attachment arriving before the reply. Reuse the existing one-root bootstrap;
+do not generalize its ownership correlation during this delivery.
+
+Do not support multiple precreated document pages in v0. After authentication,
+resolve the exact observed document link in an owned view frame without executing
+site script, then navigate the same root to that URL under a capture ticket.
+Returning to a source view is a new characterized guarded navigation. If actual
+broker behavior requires popup/reused-page/OOPIF support, leave that operation
+disabled under source acceptance rather than widening the policy.
+
+### Functional controller and authority boundaries
+
+The first implementation is a callback-only reusable request controller,
+without browser launcher, broker CLI, DOM evaluation, credential access or
+production contract loading. It accepts trusted injected durable authority,
+exact source-role tuples, owned frame/session/epoch bindings, clock, CDP send
+and stop callbacks. Every output states online readiness false. The caller cannot
+turn a qualification flag into permission. Synthetic fixture controllers remain
+separate: no test-only alternate origin or negative-control switch enters a
+public broker command.
+
+Controller state owns one current action, bounded seen request IDs, immutable
+source tuples, root/session binding and frame epochs. Clone and validate metadata
+before asynchronous queuing. Serialize ALL request decisions per principal,
+including navigation/assets and auth, with a bounded queue; overflow immediately
+fences the session. Recheck the fence after every await and before every outbound
+continuation/resume. Reject duplicate request IDs, unknown frame/session/epoch,
+missing metadata, changed permit nonce or phase, redirects and unrecognized role.
+No caller-supplied arbitrary CDP method, URL or JS is an operator interface.
+
+Read-only requests need exact characterized URL/method/native resource type and
+owned-frame role. No wildcard origin/path/static-asset allowance. Such roles are
+absent today and disabled; this design does not infer resource compatibility
+from successful synthetic navigation. Authentication uses existing
+`armPermit`/`consumePermit`: durable uncertainty and permit must precede any
+credential fill, permit consumption/fsync must precede continuation, and the
+nonce comes only from the outstanding driver action. No permit or continuation
+retry. Input-handler submission can arrive during fill and still needs the same
+armed permit. Unsupported app-method flow stays disabled rather than guessing
+an extra transition in the durable core.
+
+Pass Chrome's observed method and resource type unchanged. The experiment's
+JavaScript POST was `XHR`; never normalize `Fetch` to `XHR` or infer the broker's
+type from that observation. Refuse EVERY redirected request, including GET and
+307/308, before consuming auth authority. All HTTP authentication challenges
+receive CancelAuth, never credentials or Default, then fatal stop; the event
+route is installed before Fetch enablement. A second simultaneous auth pause
+fences immediately; the permitted first request may have dispatched zero or one
+time. Success cannot require exactly one in this race: the positive control
+separately proves possible dispatch. Consumed authority remains uncertain even
+when a local server or later listing sees nothing.
+
+### Startup, fatal stop and interruption recovery
+
+Keep the original bounded transport and sequential acknowledgement-before-resume
+sequence, including recursive auto-attach, service-worker bypass/cache disable,
+Page/lifecycle setup and all-request Fetch with HTTP-auth interception. Read-only
+metadata event routing is distinct from auth payloads: do not retain CDP postData,
+headers, cookies, credentials, unfiltered DOM or raw errors in journals or stdout.
+Only explicitly selected fixed event kinds/counts/runtime hashes are public.
+
+A fatal fence is synchronous and permanent. It blocks new actions, permit
+consumption, continuations and resume, then stops the launch-owned process group,
+observes exit and only then intentionally closes the pipe. Ordering must be
+`fence -> stop-owned -> owned-exit -> close-pipe`; failed exit proof never closes
+intentionally or reports successful cleanup. TERM5s/KILL and outer owned-container
+stop10s/KILL remain bounded and use launch-time exact identities only. Pipe loss
+uses the same stop sequence, but CDP alone cannot contain the disconnected interval.
+
+Runtime delivery must persist a private keyed YAML allocation intent BEFORE
+container creation, then persist/fsync a receipt binding the exact full create ID,
+immutable image/runtime identities and independently checked ownership BEFORE
+start or any credential transfer. An unresolved allocation intent forbids another
+session. Creation/start are distinct operations; no auto-start, restart policy or
+credential-bearing create environment. Kill/crash after create but before durable
+receipt can leave a stopped orphan: retain the uncertain allocation, block
+restart, report fixed cleanup uncertainty, and require separately authorized
+operator recovery. A matching name/label or discovered ID is not removal authority.
+This design deliberately makes no automatic recovery promise for that window.
+
+With a durable exact-ID receipt, recovery checks the same daemon/resource identity
+and contradictory ownership before any exact stop/removal. Incomplete or foreign
+ownership refuses mutation; persisted PID alone is insufficient across restart
+because of PID reuse. Lost journal, unreachable daemon, host restart and failed
+fsync remain blocked until independent evidence resolves them. Do not clear an
+auth principal's lock or uncertainty merely because the browser/container is absent.
+The delivery owner must prove kill points before create, after create/before
+receipt, after receipt/before start and during dispatch, including daemon failure.
+The callback-only controller cannot prove or implement this deployment contract.
+
+### Capture and source prerequisites
+
+Use native Fetch.networkId -> Network requestId/nonempty loaderId -> exact frame
+commit -> same-loader lifecycle load. Page.loadEventFired or DOMContentLoaded
+cannot qualify. Arm ticket before navigate, reject intervening navigation and
+bind root/session/frame/epochs both before and after one bounded serialization.
+Fresh identical bytes remain valid with distinct observed native loader chains.
+Wrong account/month/day/role, missing loader, stale commits and unknown operations
+refuse. Use opaque UUIDs for private offline ticket identities, retaining native
+bindings privately; never turn an offline manifest assertion into runtime proof.
+
+Existing Python filtering/parser/publication remains authoritative. Preserve
+config, source and previous-run path/inode boundaries and validate every note
+operation date. The manifest is last after file/parser/digest/fsync checks; no
+partial or duplicate role/date run qualifies. The synthetic marker DOM is not a
+financial-document adapter and cannot certify actual selectors/account evidence.
+
+Source owner .70 must independently characterize all enabled request roles,
+account selectors, authentication observations, exact popup-link decoding and
+actual financial-document shape. Existing seven disabled-role observations are
+not permission or guessed URLs. Credential delivery .84 remains independent.
+Dedicated egress with no alternate route must contain browser-process background,
+DNS and non-Fetch traffic before online launch; flags/interception are insufficient.
+No real broker request, secret export or financial write is authorized by this
+reusable design or its subsequent approval.
+
+### Acceptance ownership and implementation order
+
+The unchanged design owner .69 closes only on pinned protocol/runtime, complete
+startup/target/frame/worker/redirect/teardown design, isolated evidence plan and
+new exact-hash Astra approval. It owns no inherited online acceptance.
+
+After approval, create one atomic callback-controller owner: exact bounded request
+matrix, frame/session/epoch ownership, serialized durable permits, synchronous
+fencing, HTTP-auth cancellation and discriminating network/child-forbidden tests.
+It must retain disabled readiness and pass full Python/Node suites. Independent
+following owners cover runtime allocation/launch/crash recovery and browser/capture
+composition, each with synthetic-only real isolated proof for their final code.
+Those proofs are not inherited from the earlier harness. Source acceptance,
+portable credentials, egress/delivery, exact-head security and external PR review
+remain separate gates before an operator-commanded online session.
+
+Rollback is `git revert <scoped-commit>` for design/code; retain auth state,
+allocation intent/receipts and captures. No design or local controller rollback
+undoes an attempted login. No automatic removal, production migration, image
+publication, deployment or Ghostfolio write is part of this issue.

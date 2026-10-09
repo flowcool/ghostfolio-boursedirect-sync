@@ -426,3 +426,124 @@ These are author corrections within the existing synthetic proof contract, not a
 new Astra verdict or production-browser qualification. Exact-current private
 receipts must be regenerated after the evaluator pin changes. Existing reader
 root feedback remains disproved; shared sibling routing is owned by `infra-d4cl`.
+
+
+## Exact-hash re-review: grounded reusable B design
+
+Date: 2026-10-09. Reviewed plan SHA256:
+`6d9d0448907b80df6b5a4a02989bdaa2b65310d6bcc6b83a39436a80b56c55ef`.
+**APPROVE the grounded design and its first callback-only controller delivery.**
+No blocking design finding remains for that scope. This supersedes reusable B's
+previous design HOLD only for the implementation sequence in the final grounded
+section; it does not qualify an online driver or grant broker access. The final
+section is normative over the historical multi-page/OOPIF suggestions.
+
+This is independent DESIGN review, not PR review, an implementation security
+approval, or independent observation of a running browser. The controller may
+accept trusted injected authority and metadata, but has no launcher, operator
+broker command, source loader, DOM evaluator or credential reader. Its readiness
+remains false. Trusted callback inputs prove policy behavior only; subsequent
+composition must prove that native events, durable authority and the runtime
+actually supply those inputs. The plan makes this distinction sufficiently
+explicit and assigns separate acceptance owners rather than inheriting harness
+success as reusable-code qualification.
+
+### Assessment of the requested safety boundaries
+
+- **Startup and target ownership:** acknowledge browser auto-attach/discovery
+  before creating the sole blank root; associate an early attachment only with
+  createTarget's exact returned identity; require debugger waiting; install and
+  acknowledge every guard before resume. The inspected one-root bootstrap is
+  consistent with this restricted model. Only same-origin in-process frames are
+  supported. OOPIFs, other pages/popups, workers and prerenders remain fatal on
+  discovery or attachment, never a compatibility fallback. Browser/tab structural
+  discovery is not permission to accept another usable target. New runtime code
+  must retain bounds and fatal handling through startup, including queued events.
+- **Request authority and redirects:** immutable exact URL/method/native-type
+  tuples, explicit owned frame/session/epochs and one current driver action avoid
+  implicit same-origin or resource allowances. Native `XHR` in the experiment
+  cannot establish actual broker transport or justify coercing `Fetch`. All
+  redirects, including GET and method-preserving auth redirects, are refused
+  before auth consumption. Absent observed source roles remain disabled. The
+  stricter final redirect rule supersedes the earlier acquisition proposal's
+  conditional redirect allowance.
+- **Durable permits and concurrency:** arming uncertainty before fill and durable
+  consumption before continuation preserve the existing authority core. Metadata
+  is copied/validated before queuing, decisions are bounded and serialized, and
+  the fence is checked after each await before an outbound action. A second
+  simultaneous auth pause must fence at ingress rather than wait for the first
+  pending callback to finish. The permitted first request may dispatch zero or
+  one times; neither zero server count nor resource absence clears uncertainty.
+  Unsupported app-method transitions remain disabled; no extension to the core's
+  transition semantics is implied by accepting role metadata.
+- **HTTP challenges and fatal stop:** CancelAuth is mandatory, with no Default or
+  credential response. The synchronous-fence rule applies when the challenge is
+  received, before awaiting its cancellation acknowledgement; cancellation must
+  not leave other continuations/resumes enabled. This is an implementation
+  obligation under the current fatal-stop contract, not approval to copy the
+  experiment's `cancelHttpAuth` unchanged: that helper calls abort in `finally`.
+  An already-fenced cancellation/stop path must remain bounded and cannot reopen
+  authority. All fatal paths retain `fence -> stop-owned -> owned-exit ->
+  close-pipe`; failed exit evidence must not become successful cleanup. Physical
+  pipe loss still needs an independent egress boundary.
+- **Pre-start allocation and recovery:** a durable intent before create and an
+  independently checked exact-ID receipt before start/credential transfer close
+  the unsafe assumption that an in-memory create result survives a crash. The
+  create-before-receipt gap can leave a stopped orphan, but the explicit blocked
+  allocation and manual recovery boundary make no automatic cleanup claim.
+  Names/labels discovered later cannot grant removal authority. Exact-ID recovery
+  still checks daemon/resource identity and refuses contradictory or incomplete
+  ownership; a persisted PID alone is insufficient. Runtime kill-point and daemon
+  failure evidence remains mandatory under its following owner. The controller
+  neither implements nor proves that deployment contract.
+- **Capture:** same-root navigation avoids claiming support for unproved popup
+  ownership. Exact native request/loader/commit/load chains and epoch checks
+  bracketing bounded serialization preserve freshness even for identical bytes.
+  Existing parser/filter/publication checks remain authoritative for financial
+  shape, every note date and config/source/previous-run preservation. Offline
+  manifest agreement and synthetic marker DOM are explicitly insufficient to
+  establish runtime or actual broker-document authenticity.
+
+### Evidence, limits and acceptance handoff
+
+Read repository guidance, the acquisition/core/bundle contracts, the historical
+review and current grounded proposal. Inspected the synthetic bootstrap,
+ordering/request helpers, scenario catalogue, durable permit boundary and the
+receipt-consolidation code. The existing synthetic helper implementation is
+reference/evidence for the design, not the approved reusable implementation.
+
+Independently ran only this read-only consolidation:
+
+```sh
+.venv/bin/python -B scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/integration92-exact
+```
+
+It returned `passed=true`, `modes=28`, `receipts=28`,
+`current_pins_verified=true`, `capture_replaced=false`,
+`live_absence_verified=false`, and `browser_proven=false`. Validator SHA256 was
+`425768d24f16065e962bea99abaa0d0f755cd55ba48dab28640389f0803a2090`;
+the pure observation evaluator SHA256 was
+`c2d749c52ab3580c4d16b87f2abde52f205a1a788c86a68e192b09b087157a19`.
+This confirms consistency of the retained 28-scenario evidence and current source
+pins; it does not authenticate receipt authorship or rerun Chrome. The parent's
+separate current absence check is author evidence, not a check performed by this
+reviewer. No browser, Docker command, network request, credential, private broker
+HTML, production service or shared Beads state was accessed by this review.
+
+The first controller owner must supply discriminating network/child-forbidden
+checks, including held callbacks crossed by a fatal event, duplicate IDs,
+immutable queued metadata, bounded queues, simultaneous auth requests, HTTP-auth
+cancellation and persistence refusal. Complete Python/Node verification remains
+required. Later launch/recovery and capture-composition owners must prove their
+final code in separately isolated real fixtures; the earlier harness is not that
+proof. Source characterization, portable credential delivery, dedicated egress,
+exact-head security and external PR review retain their independent gates. No
+real login, secret export, production change or Ghostfolio write is authorized.
+
+Knowledge lookup followed the corpus and topical indexes to the stable
+`saved-input-report-preservation` concept, verified 2026-10-09 and fresh through
+2026-12-31, then checked its boundary against the owning acquisition-bundle
+contract. **Knowledge verdict: Used and sufficient.** No retrieval escalation or
+new portable runtime finding arose; design decisions stay in their canonical
+project artifacts. The reviewer appended only this section, preserving every
+prior report byte. Parent owns Beads, commits and terminal reconciliation.
