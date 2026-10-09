@@ -2093,6 +2093,70 @@ def validated_ghost_origin(value):
     return parsed.hostname, port or 443
 
 
+def make_ghostfolio_request(allowed_origin, max_bytes, timeout):
+    """Bounded fixed-path adapter, not execution authorization; factory never connects."""
+    if type(timeout) is not int or not 1 <= timeout <= 120 or type(max_bytes) is not int or max_bytes <= 0:
+        fail("INVALID_GHOST_REQUEST_LIMITS")
+    host, port = validated_ghost_origin(allowed_origin)
+    origin = os.environ.get("GHOST_HOST")
+    validated_ghost_origin(origin)
+    if origin != allowed_origin:
+        fail("GHOST_ORIGIN_NOT_ALLOWLISTED")
+    bearer = os.environ.get("GHOST_SESSION_BEARER")
+    if not isinstance(bearer, str) or len(bearer) > 16384 or not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", bearer):
+        fail("GHOST_SESSION_BEARER_REQUIRED")
+    def request(method, path, body):
+        if (method, path) == ("GET", "/api/v1/activities"):
+            if body is not None:
+                fail("GHOST_REQUEST_GET_BODY_REJECTED")
+            expected_status = 200
+        elif (method, path) == ("POST", "/api/v1/import"):
+            _dispatch_json(body, max_bytes)
+            rows = reviewed_wire_rows({"body": body, "sha256": hashlib.sha256(body).hexdigest(), "import_ready": False})
+            if len(rows) != 1:
+                fail("GHOST_REQUEST_SINGLE_ACTIVITY_REQUIRED")
+            expected_status = 201
+        else:
+            fail("GHOST_REQUEST_PATH_REJECTED")
+        connection, response_data, error_code = None, None, None
+        try:
+            connection = http.client.HTTPSConnection(host, port, timeout=timeout, context=ssl.create_default_context())
+            headers = {"Authorization": "Bearer " + bearer, "Accept": "application/json", "Accept-Encoding": "identity"}
+            if method == "POST":
+                headers["Content-Type"] = "application/json"
+            connection.request(method, path, body=body, headers=headers)
+            response = connection.getresponse()
+            if type(response.status) is not int:
+                error_code = "GHOST_REQUEST_STATUS_REJECTED"
+            elif 300 <= response.status < 400:
+                error_code = "GHOST_REQUEST_REDIRECT_REJECTED"
+            elif response.status != expected_status:
+                error_code = "GHOST_REQUEST_STATUS_REJECTED"
+            elif response.getheader("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+                error_code = "GHOST_REQUEST_CONTENT_TYPE_REJECTED"
+            elif response.getheader("Content-Encoding", "identity").strip().lower() != "identity":
+                error_code = "GHOST_REQUEST_ENCODING_REJECTED"
+            else:
+                raw = response.read(max_bytes + 1)
+                if type(raw) is not bytes or len(raw) > max_bytes:
+                    error_code = "GHOST_REQUEST_RESPONSE_LIMIT_OR_TYPE"
+                else:
+                    response_data = (response.status, raw)
+        except Exception:
+            error_code = "GHOST_REQUEST_TRANSPORT_FAILED"
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    if error_code is None:
+                        error_code = "GHOST_REQUEST_CLOSE_FAILED"
+        if error_code is not None:
+            fail(error_code)
+        return response_data
+    return request
+
+
 def acquire_readonly_snapshot(config_path, input_root, max_bytes, timeout):
     """Only GET; never exchanges tokens, follows redirects, retries or imports."""
     if type(timeout) is not int or not 1 <= timeout <= 120 or type(max_bytes) is not int or max_bytes <= 0:

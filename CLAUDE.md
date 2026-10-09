@@ -23,6 +23,9 @@ An external report hash proves bytes, not approval or source authenticity.
 The [frozen lab sequence](docs/design/frozen-lab-sequence.md) preflights all
 single-row bodies and chains confirmed events with durable observer evidence;
 it remains a trusted owned fixture path, without production transport or authority.
+The [bounded HTTPS adapter](docs/design/https-request-adapter.md) supports fixed
+GET and canonical one-event POST via environment session bearer; its factory does
+not connect and no public execution route invokes it yet. It is not permission.
 The [single-event lab core](docs/design/single-event-lab-dispatch.md) holds both
 locks through trusted injected GET/POST/readback and exact transition confirmation;
 it has no apply CLI or production endpoint and does not grant financial readiness.
