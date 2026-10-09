@@ -1535,18 +1535,8 @@ def review_local_snapshot(config_path, input_root, max_bytes):
             "import_ready": False, "blockers": artifact["blockers"]}
 
 
-def verify_local_intents(config_path, input_root, max_bytes):
-    """Saved observations only; never settle, rewrite or replay an intent."""
-    config_raw = read_local_bytes(config_path, input_root, max_bytes)
-    config = parse_keyed_yaml(config_raw)
-    if set(config) != {"schema_version", "journal", "snapshot"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
-        fail("INVALID_VERIFICATION_CONFIGURATION")
-    captures, paths = {}, [Path(config_path)]
-    for key in ("journal", "snapshot"):
-        if not isinstance(config[key], str) or not config[key].strip():
-            fail("INVALID_VERIFICATION_CONFIGURATION")
-        paths.append(Path(input_root) / config[key])
-        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+def observe_retained_intents(captures, max_bytes):
+    """Pure bounded observations from captured journal/snapshot bytes."""
     journal = parse_keyed_yaml(captures["journal"])
     validate_write_journal(journal)
     started = datetime.now(timezone.utc).isoformat()
@@ -1633,6 +1623,22 @@ def verify_local_intents(config_path, input_root, max_bytes):
             "exact_markers": sum(v["exactly_present"] for v in markers.values()),
             "absent_markers": sum(not v["candidate_ids"] for v in markers.values()),
             "all_expected_exactly_present": all(v["exactly_present"] for v in markers.values()), "markers": markers}
+    return journal, started, observations, evidence
+
+
+def verify_local_intents(config_path, input_root, max_bytes):
+    """Saved observations only; never settle, rewrite or replay an intent."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "journal", "snapshot"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+        fail("INVALID_VERIFICATION_CONFIGURATION")
+    captures, paths = {}, [Path(config_path)]
+    for key in ("journal", "snapshot"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            fail("INVALID_VERIFICATION_CONFIGURATION")
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    journal, started, observations, evidence = observe_retained_intents(captures, max_bytes)
     binding = journal["binding"]
     blockers = ["VERIFICATION_DOES_NOT_RESOLVE_INTENTS", "PRODUCTION_WRITES_NOT_AUTHORIZED"]
     artifact = {"schema_version": 1, "artifact_kind": "offline_intent_observation_not_resolution",
@@ -1663,6 +1669,95 @@ def verify_local_intents(config_path, input_root, max_bytes):
         "intents_with_all_expected_exactly_present": sum(v["all_expected_exactly_present"] for v in observations.values()),
         "observed_uncertain_intents": sum(v["recorded_state"] == "uncertain" for v in observations.values()),
         "import_ready": False, "blockers": blockers}
+
+
+def plan_local_compensation(config_path, input_root, max_bytes):
+    """Association candidates only; no creation proof, authorization or deletion."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if (set(config) != {"schema_version", "journal", "snapshot", "wire_sha256"}
+            or type(config["schema_version"]) is not int or config["schema_version"] != 1
+            or not isinstance(config["wire_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", config["wire_sha256"])):
+        fail("INVALID_COMPENSATION_CONFIGURATION")
+    captures, paths = {}, [Path(config_path)]
+    for key in ("journal", "snapshot"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            fail("INVALID_COMPENSATION_CONFIGURATION")
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    journal, started, observations, evidence = observe_retained_intents(captures, max_bytes)
+    digest = config["wire_sha256"]
+    if digest not in journal["intents"]:
+        fail("COMPENSATION_INTENT_NOT_RECORDED")
+    selected = journal["intents"][digest]
+    seen = observations[digest]
+    accepted = {} if selected["resolution"] is None else selected["resolution"]["accepted"]
+    codes, candidates, absent, unaccepted = set(), [], [], []
+    if any(i["state"] == "uncertain" for i in journal["intents"].values()):
+        codes.add("ACCOUNT_WRITE_UNCERTAIN")
+    associations = {}
+    for other_digest, intent in journal["intents"].items():
+        if intent["resolution"] is not None:
+            for marker, remote_id in intent["resolution"]["accepted"].items():
+                associations.setdefault(remote_id, []).append((other_digest, marker))
+    rows = reviewed_wire_rows({"body": selected["body"].encode(), "sha256": digest, "import_ready": False})
+    for ordinal, marker in enumerate(rows):
+        observation = seen["markers"][marker]
+        if marker not in accepted:
+            unaccepted.append(marker)
+            if selected["state"] == "quiescent" and observation["candidate_ids"]:
+                codes.add("UNACCEPTED_SELECTED_MARKER_PRESENT")
+            continue
+        conflicts = set(observation["codes"]) - {"EXACT_POSITIVE_READBACK", "OWNED_ACTIVITY_ABSENT_IN_CAPTURE"}
+        codes.update(conflicts)
+        if not observation["candidate_ids"]:
+            absent.append(marker)
+        remote_id = accepted[marker]
+        if observation["exactly_present"] and observation["candidate_ids"] == [remote_id]:
+            if len(associations[remote_id]) != 1:
+                codes.add("REMOTE_ID_SHARED_BY_RETAINED_INTENTS")
+            row = evidence[remote_id]
+            candidates.append({"marker": marker, "recorded_remote_id": remote_id,
+                "wire_ordinal": ordinal, "financial_fingerprint": activity_financial_fingerprint(row),
+                "observed_evidence": row})
+        elif observation["candidate_ids"] and not conflicts:
+            codes.add("ACCEPTED_ASSOCIATION_NOT_EXACT_IN_CAPTURE")
+    candidates.sort(key=lambda c: (c["observed_evidence"]["operation_date"], c["wire_ordinal"]), reverse=True)
+    if codes:
+        candidates = []
+    boundaries = ["CREATION_PROVENANCE_NOT_ESTABLISHED", "FRESH_REMOTE_REVALIDATION_REQUIRED",
+        "EXPLICIT_DELETE_AUTHORIZATION_REQUIRED", "PROFILE_AND_DATABASE_RECOVERY_UNPROVEN",
+        "PRODUCTION_WRITES_NOT_AUTHORIZED"]
+    binding = journal["binding"]
+    artifact = {"schema_version": 1, "artifact_kind": "offline_compensation_candidates_not_authorization",
+        "engine_contract": "strict-offline-compensation-candidates-v1", "binding": binding,
+        "selected_wire_sha256": digest, "selected_recorded_state": selected["state"],
+        "evaluation_started_at_utc": started,
+        "input_sha256": {k: hashlib.sha256(v).hexdigest() for k, v in {"config": config_raw, **captures}.items()},
+        "candidate_selection_unambiguous": not codes, "selection_codes": sorted(codes),
+        "accepted_absent_markers": absent, "unaccepted_markers": unaccepted,
+        "candidates": candidates, "deletion_authorized": False, "import_ready": False, "boundaries": boundaries}
+    raw = yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True).encode()
+    if len(raw) > max_bytes:
+        fail("COMPENSATION_OUTPUT_LIMIT_EXCEEDED")
+    output = Path("outputs") / ("rollback-plan-" + binding["account_key"] + ".yaml")
+    reject_output_input_collision(output, paths)
+    private_directory("outputs")
+    state = private_directory("state")
+    target = hashlib.sha256(binding["target_account_id"].encode()).hexdigest()
+    lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_COMPENSATION_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("COMPENSATION_TARGET_LOCKED")
+        atomic_private_bytes(output, raw)
+    finally:
+        os.close(lock)
+    return {"candidates": len(candidates), "accepted_absent": len(absent), "unaccepted": len(unaccepted),
+        "selection_codes": sorted(codes), "deletion_authorized": False, "import_ready": False, "boundaries": boundaries}
 
 
 def validated_ghost_origin(value):
@@ -1757,6 +1852,10 @@ def main(argv=None):
     verify.add_argument("--config", required=True)
     verify.add_argument("--input-root", required=True)
     verify.add_argument("--max-bytes", type=int, required=True)
+    compensation = subparsers.add_parser("rollback-plan", help="Inspect saved association candidates; no creation proof or deletion authority")
+    compensation.add_argument("--config", required=True)
+    compensation.add_argument("--input-root", required=True)
+    compensation.add_argument("--max-bytes", type=int, required=True)
     snapshot = subparsers.add_parser("snapshot", help="Save complete activity JSON with one allowlisted HTTPS GET")
     snapshot.add_argument("--config", required=True)
     snapshot.add_argument("--input-root", required=True)
@@ -1764,6 +1863,9 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "rollback-plan":
+            print(json.dumps(plan_local_compensation(args.config, args.input_root, args.max_bytes), sort_keys=True))
+            return 2
         if args.command == "verify":
             print(json.dumps(verify_local_intents(args.config, args.input_root, args.max_bytes), sort_keys=True))
             return 2

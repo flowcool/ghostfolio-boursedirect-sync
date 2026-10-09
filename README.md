@@ -159,6 +159,21 @@ Configuration has only schema_version1, journal and snapshot file references.
 Verification does not resolve journals, clear fences, fetch data or submit anything.
 Recorded settlement and presence in supplied bytes are separate observations.
 
+## Inspect compensation association candidates offline
+
+The [rollback-plan command](docs/design/offline-compensation-candidates.md) inspects
+one retained intent against saved readback:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py rollback-plan \
+  --config inputs/compensation.yaml --input-root inputs --max-bytes 1048576
+```
+
+Configuration adds the exact retained `wire_sha256` to schema1 journal/snapshot
+references. Uncertainty or identity conflicts suppress candidates. An exact
+association does not prove the importer created the row; deletion remains
+unauthorized. No request or journal change occurs.
+
 ## Save a read-only Ghostfolio snapshot
 
 The optional [GET-only snapshot command](docs/design/readonly-snapshot.md) requires
