@@ -24,6 +24,8 @@ import yaml
 
 log = logging.getLogger(__name__)
 HEADERS = ("Date", "Désignation", "Débit (€)", "Crédit (€)")
+VERIFICATION_REFERENCE_LIMIT = 10000
+VERIFICATION_DECIMAL_CHAR_LIMIT = 4096
 
 
 def fail(code):
@@ -1516,6 +1518,136 @@ def review_local_snapshot(config_path, input_root, max_bytes):
             "import_ready": False, "blockers": artifact["blockers"]}
 
 
+def verify_local_intents(config_path, input_root, max_bytes):
+    """Saved observations only; never settle, rewrite or replay an intent."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "journal", "snapshot"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+        fail("INVALID_VERIFICATION_CONFIGURATION")
+    captures, paths = {}, [Path(config_path)]
+    for key in ("journal", "snapshot"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            fail("INVALID_VERIFICATION_CONFIGURATION")
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    journal = parse_keyed_yaml(captures["journal"])
+    validate_write_journal(journal)
+    started = datetime.now(timezone.utc).isoformat()
+    try:
+        remote = parse_remote_activity_snapshot(captures["snapshot"])
+    except InvalidOperation:
+        fail("INVALID_REMOTE_ACTIVITY_JSON")
+    # Bound scientific exponent expansion before any fixed-point formatting.
+    for row in remote:
+        for key in ("quantity", "unit_price", "fee"):
+            number = row[key]
+            if not number:
+                continue
+            sign, digits, exponent = number.as_tuple()
+            point = len(digits) + exponent
+            length = (point if exponent >= 0 else len(digits) + 1 if point > 0 else 2 - exponent) + sign
+            if length > min(VERIFICATION_DECIMAL_CHAR_LIMIT, max_bytes):
+                fail("VERIFICATION_DECIMAL_LIMIT_EXCEEDED")
+    rows_by_id = {r["remote_id"]: r for r in remote}
+    rows_by_marker = {}
+    for row in remote:
+        rows_by_marker.setdefault(row["comment"], []).append(row)
+    originals = json.loads(captures["snapshot"], parse_float=Decimal, object_pairs_hook=unique_json_object)
+    timestamps = {r["id"]: r["date"] for r in originals["activities"]}
+    observations, evidence = {}, {}
+    expected_count = candidate_count = 0
+    fields = ("target_account_id", "operation_date", "kind", "symbol", "data_source", "price_currency")
+    def retain(row):
+        evidence[row["remote_id"]] = {**{k: row[k] for k in fields},
+            **{k: canonical_decimal(row[k]) for k in ("quantity", "unit_price", "fee")},
+            "original_timestamp": timestamps[row["remote_id"]], "active_at_evaluation": row["active"],
+            "date_context_verified": row["date_context_verified"],
+            "financial_context_verified": row["financial_context_verified"]}
+    for digest, intent in journal["intents"].items():
+        expected = reviewed_wire_rows({"body": intent["body"].encode(), "sha256": digest, "import_ready": False})
+        expected_count += len(expected)
+        if expected_count > VERIFICATION_REFERENCE_LIMIT:
+            fail("VERIFICATION_MARKER_LIMIT_EXCEEDED")
+        accepted = {} if intent["resolution"] is None else intent["resolution"]["accepted"]
+        markers = {}
+        for marker, sent in expected.items():
+            candidates = rows_by_marker.get(marker, [])
+            recorded_id = accepted.get(marker)
+            recorded_row = rows_by_id.get(recorded_id)
+            candidate_count += len(candidates) + (1 if recorded_row is not None and recorded_row not in candidates else 0)
+            if candidate_count > VERIFICATION_REFERENCE_LIMIT:
+                fail("VERIFICATION_CANDIDATE_LIMIT_EXCEEDED")
+            codes, exact = set(), False
+            if not candidates:
+                codes.add("OWNED_ACTIVITY_ABSENT_IN_CAPTURE")
+            elif len(candidates) > 1:
+                codes.add("OWNED_MARKER_DUPLICATE")
+            else:
+                row = candidates[0]
+                comparison = {"target_account_id": sent["accountId"], "operation_date": sent["date"][:10],
+                    "kind": sent["type"], "symbol": sent["symbol"], "data_source": sent["dataSource"],
+                    "price_currency": sent["currency"], "quantity": remote_decimal(sent["quantity"]),
+                    "unit_price": remote_decimal(sent["unitPrice"]), "fee": remote_decimal(sent["fee"])}
+                financial = activity_financial_fingerprint(row) == activity_financial_fingerprint(comparison)
+                context = row["active"] and row["date_context_verified"] and row["financial_context_verified"]
+                if not financial:
+                    codes.add("OWNED_ACTIVITY_FINANCIAL_CONFLICT")
+                if not context:
+                    codes.add("OWNED_ACTIVITY_CONTEXT_UNVERIFIED")
+                exact = financial and context
+                if exact:
+                    codes.add("EXACT_POSITIVE_READBACK")
+            if (recorded_row is not None and recorded_row["comment"] != marker
+                    or recorded_id is not None and any(r["remote_id"] != recorded_id for r in candidates)):
+                codes.add("JOURNALED_REMOTE_ID_CONFLICT")
+                exact = False
+            if intent["state"] == "quiescent" and marker not in accepted and candidates:
+                codes.add("PRESENT_MARKER_NOT_IN_RECORDED_ACCEPTED_SET")
+            for row in candidates:
+                retain(row)
+            if recorded_row is not None:
+                retain(recorded_row)
+            markers[marker] = {"candidate_ids": [r["remote_id"] for r in candidates],
+                "recorded_accepted_id": recorded_id,
+                "recorded_id_observed": recorded_row is not None,
+                "exactly_present": exact, "codes": sorted(codes)}
+        observations[digest] = {"recorded_state": intent["state"], "expected_markers": len(markers),
+            "present_markers": sum(bool(v["candidate_ids"]) for v in markers.values()),
+            "exact_markers": sum(v["exactly_present"] for v in markers.values()),
+            "absent_markers": sum(not v["candidate_ids"] for v in markers.values()),
+            "all_expected_exactly_present": all(v["exactly_present"] for v in markers.values()), "markers": markers}
+    binding = journal["binding"]
+    blockers = ["VERIFICATION_DOES_NOT_RESOLVE_INTENTS", "PRODUCTION_WRITES_NOT_AUTHORIZED"]
+    artifact = {"schema_version": 1, "artifact_kind": "offline_intent_observation_not_resolution",
+        "engine_contract": "strict-offline-intent-verification-v1", "import_ready": False,
+        "binding": binding, "evaluation_started_at_utc": started,
+        "input_sha256": {k: hashlib.sha256(v).hexdigest() for k, v in {"config": config_raw, **captures}.items()},
+        "intents": observations, "remote_evidence": evidence, "blockers": blockers}
+    raw = yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True).encode()
+    if len(raw) > max_bytes:
+        fail("VERIFICATION_OUTPUT_LIMIT_EXCEEDED")
+    output = Path("outputs") / ("verification-" + binding["account_key"] + ".yaml")
+    reject_output_input_collision(output, paths)
+    private_directory("outputs")
+    state = private_directory("state")
+    target = hashlib.sha256(binding["target_account_id"].encode()).hexdigest()
+    lock = os.open(state / ("prepare-" + target + ".lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode):
+            fail("INVALID_VERIFICATION_LOCK")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("VERIFICATION_TARGET_LOCKED")
+        atomic_private_bytes(output, raw)
+    finally:
+        os.close(lock)
+    return {"intents": len(observations),
+        "intents_with_all_expected_exactly_present": sum(v["all_expected_exactly_present"] for v in observations.values()),
+        "observed_uncertain_intents": sum(v["recorded_state"] == "uncertain" for v in observations.values()),
+        "import_ready": False, "blockers": blockers}
+
+
 def validated_ghost_origin(value):
     if not isinstance(value, str) or not value.isascii() or value != value.strip() or any(c.isspace() for c in value):
         fail("INVALID_GHOST_ORIGIN")
@@ -1604,6 +1736,10 @@ def main(argv=None):
     diagnose.add_argument("--config", required=True)
     diagnose.add_argument("--input-root", required=True)
     diagnose.add_argument("--max-bytes", type=int, required=True)
+    verify = subparsers.add_parser("verify", help="Observe retained intent evidence without resolving or sending")
+    verify.add_argument("--config", required=True)
+    verify.add_argument("--input-root", required=True)
+    verify.add_argument("--max-bytes", type=int, required=True)
     snapshot = subparsers.add_parser("snapshot", help="Save complete activity JSON with one allowlisted HTTPS GET")
     snapshot.add_argument("--config", required=True)
     snapshot.add_argument("--input-root", required=True)
@@ -1611,6 +1747,9 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "verify":
+            print(json.dumps(verify_local_intents(args.config, args.input_root, args.max_bytes), sort_keys=True))
+            return 2
         if args.command == "diagnose":
             print(json.dumps(diagnose_local_snapshot(args.config, args.input_root, args.max_bytes), sort_keys=True))
             return 2

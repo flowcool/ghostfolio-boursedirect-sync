@@ -145,6 +145,20 @@ It writes a private reconciliation artifact and exact new-activity wire body,
 with readiness false. Stdout contains counts and blockers only. It never fetches,
 sends or changes Ghostfolio; there is no apply command.
 
+## Observe retained write-intent evidence offline
+
+The [verify command](docs/design/offline-intent-verification.md) compares a retained
+journal with a saved snapshot and records exact presence/conflicts privately:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py verify \
+  --config inputs/verify.yaml --input-root inputs --max-bytes 1048576
+```
+
+Configuration has only schema_version1, journal and snapshot file references.
+Verification does not resolve journals, clear fences, fetch data or submit anything.
+Recorded settlement and presence in supplied bytes are separate observations.
+
 ## Save a read-only Ghostfolio snapshot
 
 The optional [GET-only snapshot command](docs/design/readonly-snapshot.md) requires
