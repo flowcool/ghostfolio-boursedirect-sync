@@ -331,3 +331,25 @@ operational_routing:
   authentication_performed: false
   limits: Proves the independently owned runtime routing boundary for source7ba0245;
     actual CLI/vault visibility and broker source are separate milestones.
+sdk_totp_defaults:
+  package: '@bitwarden/sdk-internal@0.2.0-main.841'
+  source_commit: c5d5bba159bd222321f3ecfd90f5ae6192c2c8eb
+  archive_integrity: sha512-zltcEuNPyOofCvUwLKY5PKLC/M5rNGkSCiUzl9wMybvq898c98GoCHQrJVCAkGbwSh2sIPC6NqLuMSe1tevu8g==
+  synthetic_default_equivalence_cases: 12
+  defaults:
+    algorithm: SHA1
+    digits: 6
+    period: 30
+  network_forbidden: true
+  discriminating_profile_controls: 3
+  wasm_sha256: 7ed0431cf5275f0bcb268bfafefc24cfb8ac4f840d5cc5b892d49b5ff08718ac
+  command: Socket-forbidden pinned SDK generate_totp on synthetic RFC6238 key; six
+    timestamps, raw key and missing-parameter URI, three changed-profile negative
+    controls
+  exit_code: 0
+  private_result: tmp/bitwarden-sdk-defaults.json
+  result_sha256: f51205d1a1d8132c3da693451ef4778292a06f278a6cc270c9e3e0d7ddee67f1
+  cli_link: CLI cli-v2026.6.0 package-lock pins SDK841; TotpService.getCode$ invokes
+    sdk.vault().totp().generate_totp
+  limits: Qualifies implicit profile arithmetic in the pinned SDK. No actual vault
+    item or real TOTP requested; operational clock/nonce gates remain independent.
