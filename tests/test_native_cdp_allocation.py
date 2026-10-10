@@ -189,13 +189,15 @@ def test_fsync_uncertainty_poisoned_handle_retains_lock_and_blocks_new_run(regis
     assert mutations == ([identifier] if phase == 'terminal-absence' else [])
 
 
-def test_fresh_competing_process_uses_fixed_registry_across_output_roots(registry):
+def test_fresh_competing_process_uses_fixed_registry_across_output_roots(registry, tmp_path):
     f = allocation(registry)
     module, _, handle, *_ = f
     script = ROOT / 'scripts/native_cdp_allocation.py'
     code = 'import runpy; m=runpy.run_path(' + repr(str(script)) + ');\ntry: m["acquire_registry"]()\nexcept RuntimeError as e: print(str(e))'
+    alternate_output = tmp_path / 'alternate-output'
+    alternate_output.mkdir()
     result = subprocess.run([sys.executable, '-c', code], env={'HOME': str(Path.home()), 'PATH': '/usr/bin:/bin'},
-                            cwd=ROOT / 'tmp', capture_output=True, text=True, timeout=5)
+                            cwd=alternate_output, capture_output=True, text=True, timeout=5)
     assert result.returncode == 0 and result.stdout.strip() == 'ALLOCATION_LOCKED'
     module.release_registry(handle)
 

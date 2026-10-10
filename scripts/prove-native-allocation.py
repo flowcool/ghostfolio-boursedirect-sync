@@ -90,10 +90,10 @@ def prove(stage, profile, output):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     checkpoint = output / 'checkpoint.json'
     try:
-        wait_for(lambda: checkpoint.exists() or child.poll() is not None)
+        wait_for(lambda: child.poll() is not None)
+        allocation.require(child.returncode == -signal.SIGKILL, 'ALLOCATION_PROOF_KILL_UNVERIFIED')
         allocation.require(checkpoint.exists(), 'ALLOCATION_PROOF_CHECKPOINT_MISSING')
         observed = json.loads(checkpoint.read_text())
-        allocation.require(child.wait(timeout=10) == -signal.SIGKILL, 'ALLOCATION_PROOF_KILL_UNVERIFIED')
     finally:
         if child.poll() is None:
             child.kill()
