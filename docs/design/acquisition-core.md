@@ -164,3 +164,13 @@ the resolved UUID for the single delayed TOTP. No whole-vault listing, fallback
 after a failed pinned lookup or automatic retry is added. Schema 1 retains its
 pre-pinned identity contract. Named resolution does not qualify live ownership,
 egress, enrollment, account configuration or source observations.
+
+The opt-in `scripts/qualify-bitwarden-cli.py --ssh <trusted-destination>` checks
+the existing pinned CLI in one newly owned container with fresh tmpfs appdata,
+no network, credentials or authentication. It retains one private pre-create
+intent and inspected full-ID receipt before start, then checks binary hash,
+version and the declared server read/set roundtrip. Cleanup re-reads the receipt,
+verifies the daemon and configuration, removes only that full ID and retains
+explicit absence evidence. Its fixed ignored evidence directory refuses a
+second allocation; uncertain intents remain for manual recovery. This metadata
+proof does not establish cloud API routing, vault visibility or qualified egress.
