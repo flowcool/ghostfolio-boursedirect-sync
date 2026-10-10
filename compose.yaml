@@ -1,0 +1,42 @@
+name: ghostfolio-boursedirect-sync
+
+services:
+  bitwarden-cli:
+    image: ${BITWARDEN_CLI_IMAGE:-archivage-bitwarden-cli}
+    pull_policy: never
+    # The image's default entrypoint authenticates and starts bw serve.
+    # Our source adapter invokes the CLI through private stdin instead.
+    entrypoint: ["/bin/sleep"]
+    command: ["infinity"]
+    user: "1000:1000"
+    read_only: true
+    restart: "no"
+    environment:
+      PATH: /usr/bin:/bin
+      HOME: /data
+      BITWARDENCLI_APPDATA_DIR: /data
+    tmpfs:
+      - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
+      - /tmp:rw,nosuid,nodev,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    ipc: private
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 64
+    ulimits:
+      core:
+        soft: 0
+        hard: 0
+    logging:
+      driver: none
+    healthcheck:
+      disable: true
+    labels:
+      proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
+    networks: [vault]
+
+networks:
+  vault:
+    external: true
+    name: ${VAULT_NETWORK:?Supply the separately qualified vault-only network}

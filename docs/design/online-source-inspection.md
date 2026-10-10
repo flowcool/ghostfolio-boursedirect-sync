@@ -69,6 +69,31 @@ for this session as permission for an unattended service.
    user's session/profile or stop unrelated writers. Source acceptance is owned
    by `infra-4g8u.4`; infrastructure capability alone does not satisfy G1.
 
+## Incremental application Compose decision
+
+On 2026-10-10 Florent clarified that vault access is a reusable project capability
+to establish first, rather than a one-off workaround for this exploration. The
+implementation starts from the future application's project-owned Docker Compose
+configuration, using the existing `archivage-bitwarden-cli` artifact as its first
+brick. The same Compose grows incrementally to include the browser and collector;
+subsequent stages reuse the established services, configuration and qualified
+evidence instead of recreating a separate exploration stack each time. This
+repository owns the Compose integration and acquisition code; infra supplies
+host, image availability, network and secret-provisioning wiring. Reuse the
+existing artifact and CLI adapter instead of building another worker or image.
+
+The vault-access milestone is one independent session resolving the unique live
+`boursedirect.fr` item, verifying its broker URI and required fields, with exact
+owned lifecycle and cleanup evidence. This milestone does not require tearing
+down and rebuilding the application stack for every later stage. Broker
+authentication and Ghostfolio account binding retain their separate gates.
+Application Compose ownership does not authorize reuse of BillCollector's live
+session/appdata or an unattended broker schedule. The concrete network and
+secret-provisioning wiring must satisfy the existing requirements before access.
+
+See the [domain vocabulary](../../GLOSSARY.md) and the
+[source-owned delivery contract](acquisition-core.md).
+
 ## Verification and rollback
 
 `infra-jnvj` records the existing Archivage Bitwarden CLI mechanism. Recreate its
