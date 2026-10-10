@@ -39,14 +39,14 @@ function rootDocument() {
   return '<script>fetch("' + path + '",{method:"POST"})</script>';
 }
 const server = http.createServer((request, response) => {
-  if (request.url === '/root') {response.setHeader('Content-Type', 'text/html'); response.end(rootDocument()); return;}
+  if (request.url === '/root') {response.setHeader('Content-Type', 'text/html'); response.end('<link rel=icon href="data:,">' + rootDocument()); return;}
   if (request.url === '/document') {
     response.setHeader('Content-Type', 'text/html');
     const account = scenario === 'capture-wrong-account' ? 'invented-other' : 'invented-account';
     const day = scenario === 'capture-wrong-day' ? '2026-09-18' : '2026-09-17';
     const role = scenario === 'capture-wrong-role' ? 'invented-other' : 'statement';
     const operation = scenario === 'capture-unknown-operation' ? 'unknown' : 'known';
-    response.end(`<main data-account=${account} data-day=${day} data-role=${role} data-operation=${operation}>identical invented bytes</main>`); return;
+    response.end(`<link rel=icon href="data:,"><main data-account=${account} data-day=${day} data-role=${role} data-operation=${operation}>identical invented bytes</main>`); return;
   }
   if (request.url === '/allowed') {
     allowed++;
@@ -157,7 +157,6 @@ ordering = orderingExperiment({send: (method, params, session) => negative && me
     permitNonce = composition.armPermit(handle, {phase: 'password_uncertain', page_epoch: pageEpoch,
       frame_epoch: rootEpoch, url: origin + '/allowed', method: 'POST', resource_type: 'XHR'}, 100, source);
     const reads = ['/root', '/document'].map(path => ({role: 'source', url: origin + path, method: 'GET', resourceType: 'Document'}));
-    reads.push({role: 'source', url: origin + '/favicon.ico', method: 'GET', resourceType: 'Image'});
     if (scenario === 'http-auth') reads.push({role: 'source', url: origin + '/challenge', method: 'GET', resourceType: 'XHR'});
     controller = composition.controller(handle, {binding: {targetId: nativeTarget, sessionId: session, pageEpoch,
       frames: {[rootFrame]: {epoch: rootEpoch, role: 'source'}}}, source, reads, now: () => 101,

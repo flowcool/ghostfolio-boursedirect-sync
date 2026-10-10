@@ -54,10 +54,12 @@ def test_absence_never_uses_generic_failed_inspection(runner, monkeypatch, stder
     assert runner.absent('a' * 64) is False
 
 
-def test_absence_requires_the_exact_daemon_resource_id(runner, monkeypatch):
+@pytest.mark.parametrize('prefix', ['Error: No such object: ', 'error: no such object: ',
+                                  'Error response from daemon: No such container: '])
+def test_absence_requires_the_exact_daemon_resource_id(runner, monkeypatch, prefix):
     identifier = 'a' * 64
     calls = []
-    monkeypatch.setattr(runner, 'docker', lambda args: calls.append(args) or result(1, b'[]\n', ('Error: No such object: ' + identifier).encode()))
+    monkeypatch.setattr(runner, 'docker', lambda args: calls.append(args) or result(1, b'[]\n', (prefix + identifier).encode()))
     assert runner.absent(identifier) is True
     assert calls == [['inspect', identifier]]
 

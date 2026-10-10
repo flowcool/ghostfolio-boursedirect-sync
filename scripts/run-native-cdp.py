@@ -75,7 +75,7 @@ def absent(identifier):
     if result.returncode == 0:
         return False
     stderr = result.stderr.decode('utf-8', errors='replace').strip()
-    exact = re.fullmatch(r'(?:Error: No such object: |Error response from daemon: No such (?:object|container): )' + identifier, stderr)
+    exact = re.fullmatch(r'(?:Error: No such object: |error: no such object: |Error response from daemon: No such (?:object|container): )' + identifier, stderr)
     return result.returncode == 1 and bool(exact) and result.stdout.strip() in (b'', b'[]')
 
 
