@@ -106,3 +106,36 @@ def test_allowed_tunnel_transfers_bytes_and_closes_both_streams():
         assert remote_output == b'synthetic-client-tls'
         assert closed and remote_closed
     asyncio.run(run())
+
+
+def test_connection_limit_closes_without_upstream_or_response(monkeypatch):
+    async def run():
+        reader, writer, output, closed = streams(b'')
+        active = set(range(proxy.CONNECTION_LIMIT))
+        async def forbidden(*args):
+            pytest.fail('Connection limit reached upstream handling')
+        monkeypatch.setattr(proxy, 'serve_connection', forbidden)
+        await proxy.accept(reader, writer, active)
+        assert closed == [True]
+        assert output == b''
+        assert len(active) == proxy.CONNECTION_LIMIT
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('failed', [False, True])
+def test_accept_releases_active_slot_after_handling(monkeypatch, failed):
+    async def run():
+        reader, writer, output, closed = streams(b'')
+        active = set()
+        async def handled(*args):
+            assert active == {asyncio.current_task()}
+            if failed:
+                raise RuntimeError('synthetic')
+        monkeypatch.setattr(proxy, 'serve_connection', handled)
+        if failed:
+            with pytest.raises(RuntimeError, match='synthetic'):
+                await proxy.accept(reader, writer, active)
+        else:
+            await proxy.accept(reader, writer, active)
+        assert active == set()
+    asyncio.run(run())

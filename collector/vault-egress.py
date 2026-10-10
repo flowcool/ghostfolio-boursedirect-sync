@@ -102,21 +102,25 @@ async def serve_connection(reader, writer, connect=upstream):
                     pass
 
 
+async def accept(reader, writer, active):
+    if len(active) >= CONNECTION_LIMIT:
+        writer.close()
+        return
+    task = asyncio.current_task()
+    active.add(task)
+    try:
+        await serve_connection(reader, writer)
+    finally:
+        active.discard(task)
+
+
 async def run():
     active = set()
 
-    async def accept(reader, writer):
-        if len(active) >= CONNECTION_LIMIT:
-            writer.close()
-            return
-        task = asyncio.current_task()
-        active.add(task)
-        try:
-            await serve_connection(reader, writer)
-        finally:
-            active.discard(task)
+    async def on_accept(reader, writer):
+        await accept(reader, writer, active)
 
-    server = await asyncio.start_server(accept, '0.0.0.0', 8080, limit=HEADER_LIMIT)
+    server = await asyncio.start_server(on_accept, '0.0.0.0', 8080, limit=HEADER_LIMIT)
     async with server:
         await server.serve_forever()
 

@@ -390,3 +390,19 @@ durable_session_cleanup:
     apps/cli/src/auth/commands/logout.command.ts and service-container.ts logout:
     keys/ciphers/folders/tokens/account removed'
   live_vault_access: false
+connection_limit_review:
+  review_comment: 4239114907
+  reviewed_commit: 9eb9a1cd2176826a64944f532eebe5a11cc6318c
+  inputs:
+    collector/vault-egress.py: 452d7132c0f014458b3ba774099152cb96abb41f02c4a871c4567c715d3ea0ec
+    tests/test_vault_egress.py: ec1dfc001af69f6bfe4d20094da756b38a19c816ec1fb1ee5070eec0b3b6a4fb
+  command: .venv/bin/python -m pytest -q tests/test_vault_egress.py
+  exit_code: 0
+  passed: 30
+  reused_verification: 'durable_session_cleanup.checks: remaining Python1162 and Node401
+    unchanged'
+  cases:
+  - Capacity closes with no response/upstream call
+  - Success and failure both release active slot
+  deployment_note: Actual routes_qualified evidence remains bound to prior deployed
+    helper hash; no new deployment proof inferred.
