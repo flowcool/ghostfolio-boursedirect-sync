@@ -9,18 +9,19 @@ import {bitwardenCli, sshCliTransport} from '../bitwarden-cli.mjs';
 import {vaultWorker, providerConfiguration} from '../vault-worker.mjs';
 import {principal} from '../core.mjs';
 import {executePrivate} from '../private-process.mjs';
+import {collectorEnvironment} from '../private-process.mjs';
 
 const credentials = {BW_CLIENTID:'SYNTHETIC_CLIENT', BW_CLIENTSECRET:'SYNTHETIC_API', BW_PASSWORD:'SYNTHETIC_UNLOCK'};
-function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault,egressProxy}={}) {
+function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=false,lookupFault,egressProxy}={}) {
   const calls = [], id = 'b'.repeat(64), itemId = randomUUID(); let stops = 0, allowed = true;
   const configuration = {schema_version:1, vaultOrigin:'https://vault.synthetic.invalid', binding:{itemId,name:'invented',
     uri:'https://www.boursedirect.fr/synthetic',principalHash:principal('SYNTHETIC'),accountConfig:{path:'/synthetic/account.yaml',sha256:'a'.repeat(64)}},
     cli:{path:'/usr/local/bin/bw',sha256:'c'.repeat(64),version:'synthetic-1',defaultsVerified:false}};
   const item = {id:itemId,type:1,name:'invented',login:{username:'SYNTHETIC',password:'SYNTHETIC_PASSWORD',
     uris:[{uri:configuration.binding.uri}],totp:'otpauth://totp/invented?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=SHA1&digits=6&period=30'}};
-  if(named){
-    item.name='boursedirect.fr'; configuration.schema_version=2;
-    configuration.binding={name:item.name,accountConfig:configuration.binding.accountConfig};
+  if(named || inspection){
+    item.name='boursedirect.fr'; configuration.schema_version=inspection ? 3 : 2;
+    configuration.binding=inspection ? {name:item.name} : {name:item.name,accountConfig:configuration.binding.accountConfig};
   }
   const adapter = bitwardenCli({configuration,containerId:id,egressProxy,attest:async value=>value===id && allowed,
     stopOwned:async value=>{assert.equal(value,id); stops++;}, transport:async (executable,args,env,timeout,input)=>{
@@ -36,6 +37,37 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault,eg
   const worker=vaultWorker({configuration,...adapter,appdata:'/data',now:()=>120});
   return {configuration,item,adapter,worker,calls,setAllowed:x=>{allowed=x;},stops:()=>stops};
 }
+test('independent vault inspection requires no importer binding and exports no broker secret',async()=>{
+  const f=fixture({inspection:true}),result=await f.worker.initialize(credentials);
+  assert.deepEqual(Object.keys(result).sort(),['itemId','online_ready','principalHash','profile','uri']);
+  for(const secret of ['SYNTHETIC','SYNTHETIC_PASSWORD','SYNTHETIC_SESSION','GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'])
+    assert.equal(JSON.stringify(result).includes(secret),false);
+  assert.equal(result.uri,f.item.login.uris[0].uri);
+  assert.equal(result.online_ready,false);
+  assert.throws(()=>collectorEnvironment(result,'/synthetic'),/PRIVATE_PROCESS_FAILED/);
+  const count=f.calls.length,expected={runNonce:randomUUID(),stageNonce:randomUUID()};
+  await assert.rejects(f.worker.code(expected,expected),/VAULT_WORKER_FAILED/);
+  await assert.rejects(f.adapter.execute('/usr/local/bin/bw',['get','totp',f.item.id],
+    {PATH:'/usr/bin:/bin',HOME:'/data',BITWARDENCLI_APPDATA_DIR:'/data',BW_SESSION:'SYNTHETIC_SESSION'}),/CLI_ADAPTER_FAILED/);
+  assert.equal(f.calls.length,count);assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
+});
+test('inspection cannot accept an account binding or relax acquisition account requirements',()=>{
+  const f=fixture({inspection:true});
+  assert.throws(()=>providerConfiguration({...f.configuration,binding:{...f.configuration.binding,
+    accountConfig:{path:'/synthetic/account.yaml',sha256:'a'.repeat(64)}}}),/VAULT_CONFIG_INVALID/);
+  assert.throws(()=>providerConfiguration({...f.configuration,schema_version:2}),/VAULT_CONFIG_INVALID/);
+});
+for(const [fault,lookupFault] of [
+  ['ambiguous',item=>JSON.stringify([item,item])],['deleted',item=>JSON.stringify([{...item,deletedDate:'synthetic'}])],
+  ['missing password',item=>{delete item.login.password;return JSON.stringify([item]);}],
+  ['unbound URI',item=>{item.login.uris[0].uri='https://foreign.invalid';return JSON.stringify([item]);}],
+  ['bad TOTP profile',item=>{item.login.totp+='&digits=8';return JSON.stringify([item]);}],
+])test('independent inspection keeps strict item validation: '+fault,async()=>{
+  const f=fixture({inspection:true,lookupFault});
+  await assert.rejects(f.worker.initialize(credentials),/^Error: VAULT_WORKER_FAILED$/);
+  assert.equal(f.stops(),1);assert.equal(f.calls.filter(x=>x.args.includes('lookup')).length,1);
+  assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
+});
 test('attested numeric proxy travels only in cleared CLI execution environment',async()=>{
   const f=fixture({egressProxy:'http://172.31.0.2:8080'});
   await f.worker.initialize(credentials);

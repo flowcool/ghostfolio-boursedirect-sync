@@ -1,5 +1,5 @@
 // Fixed-command worker engine. Only its trusted launcher can supply execution.
-import {selectWorkerItem, selectNamedWorkerItem, validateProviderCode} from './credential-provider.mjs';
+import {selectWorkerItem, selectNamedWorkerItem, inspectNamedVaultItem, validateProviderCode} from './credential-provider.mjs';
 import {brokerUrl} from './core.mjs';
 
 function exact(value, keys) {
@@ -16,18 +16,20 @@ function freeze(value) {Object.values(value).forEach(x => {if (x && typeof x ===
 export function providerConfiguration(value) {
   try {
     exact(value, ['schema_version', 'vaultOrigin', 'binding', 'cli']);
-    if (![1, 2].includes(value.schema_version)) throw new Error();
+    if (![1, 2, 3].includes(value.schema_version)) throw new Error();
     const url = new URL(value.vaultOrigin);
     if (url.protocol !== 'https:' || url.origin !== value.vaultOrigin || url.username || url.password) throw new Error();
     if (value.schema_version === 1) {
       exact(value.binding, ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
       uuid(value.binding.itemId); boundedText(value.binding.name); brokerUrl(value.binding.uri); hash(value.binding.principalHash);
     } else {
-      exact(value.binding, ['name', 'accountConfig']);
+      exact(value.binding, value.schema_version === 3 ? ['name'] : ['name', 'accountConfig']);
       if (value.binding.name !== 'boursedirect.fr') throw new Error();
     }
-    exact(value.binding.accountConfig, ['path', 'sha256']); boundedText(value.binding.accountConfig.path); hash(value.binding.accountConfig.sha256);
-    if (!value.binding.accountConfig.path.startsWith('/')) throw new Error();
+    if (value.schema_version !== 3) {
+      exact(value.binding.accountConfig, ['path', 'sha256']); boundedText(value.binding.accountConfig.path); hash(value.binding.accountConfig.sha256);
+      if (!value.binding.accountConfig.path.startsWith('/')) throw new Error();
+    }
     exact(value.cli, ['path', 'sha256', 'version', 'defaultsVerified']);
     if (typeof value.cli.path !== 'string' || !/^\/[A-Za-z0-9_./-]+$/.test(value.cli.path)) throw new Error();
     hash(value.cli.sha256); boundedText(value.cli.version);
@@ -70,13 +72,17 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
       const raw = await command(config.schema_version === 1 ? ['get', 'item', config.binding.itemId]
         : ['list', 'items', '--search', config.binding.name], {...base, BW_SESSION: session});
       // Full item/seed is scoped to worker memory and is never sent through IPC.
-      selected = (config.schema_version === 1 ? selectWorkerItem : selectNamedWorkerItem)(
+      selected = (config.schema_version === 1 ? selectWorkerItem
+        : config.schema_version === 2 ? selectNamedWorkerItem : inspectNamedVaultItem)(
         JSON.parse(raw), config.binding, config.cli.defaultsVerified);
+      if (config.schema_version === 3) session = undefined;
       return structuredClone(selected);
     } catch {failed = true; selected = session = undefined; throw new Error('VAULT_WORKER_FAILED');}
   }
   async function code(request, expected) {
-    if (!initialized || !selected || used || failed) {failed = true; throw new Error('VAULT_WORKER_FAILED');}
+    if (config.schema_version === 3 || !initialized || !selected || used || failed) {
+      failed = true; selected = session = undefined; throw new Error('VAULT_WORKER_FAILED');
+    }
     used = true;
     try {
       exact(request, ['runNonce', 'stageNonce']); exact(expected, ['runNonce', 'stageNonce']);

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import {isIP} from 'node:net';
 import {providerConfiguration} from './vault-worker.mjs';
-import {selectNamedWorkerItem} from './credential-provider.mjs';
+import {selectNamedWorkerItem, inspectNamedVaultItem} from './credential-provider.mjs';
 import {executePrivate} from './private-process.mjs';
 
 const shim = fs.readFileSync(new URL('./bitwarden-cli.sh', import.meta.url), 'utf8');
@@ -44,6 +44,7 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
       : ['list', 'items', '--search', config.binding.name], config.schema_version === 1 ? 'item' : 'lookup', ['BW_SESSION']],
     [['get', 'totp', config.binding.itemId], 'totp', ['BW_SESSION']],
   ];
+  if (config.schema_version === 3) steps.pop(); // No TOTP command in inspection mode.
   let index = 0, verified = false, busy = false, failed = false, stopping;
   async function refuse() {
     failed = true;
@@ -88,8 +89,10 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
       const extra = step[1] === 'server' ? [config.vaultOrigin] : step[1] === 'lookup' ? [config.binding.name]
         : ['item', 'totp'].includes(step[1]) ? [step[0][2]] : [];
       const result = await invoke(['/bin/sh', '-c', shim, 'vault-cli', step[1], ...extra], Buffer.from(input));
-      if (step[1] === 'lookup') {
+      if (step[1] === 'lookup' && config.schema_version !== 3) {
         steps[6][0][2] = selectNamedWorkerItem(JSON.parse(result.stdout), config.binding, config.cli.defaultsVerified).itemId;
+      } else if (step[1] === 'lookup') {
+        inspectNamedVaultItem(JSON.parse(result.stdout), config.binding, config.cli.defaultsVerified);
       }
       return result;
     } catch {return refuse();} finally {busy = false;}

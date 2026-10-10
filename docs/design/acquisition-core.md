@@ -195,3 +195,15 @@ cleanup. Syntax and offline refusal tests do not prove live egress. Real routing
 must be proved without secrets before independent vault access. Rollback reverts
 the scoped source commit and removes only newly receipted operational resources;
 never change shared services or discard authentication journals.
+
+Provider schema 3 implements the independent vault-access milestone from the
+interactive amendment. Its binding contains only the operator's exact
+`boursedirect.fr` name. It reuses the same executable pin, fixed private-stdin
+login/unlock/sync/search sequence and strict unique live item, URI, credential and
+TOTP-profile validation. Only private item/principal/URI/profile metadata is
+returned; no login, password, session or seed can be delivered to a collector.
+The worker discards its session after inspection, and both worker and adapter
+refuse TOTP commands in this mode. No importer config or broker enrollment is
+created or inferred. Acquisition schemas 1 and 2 retain their mandatory trusted
+account reference and broker gates. This separates qualification of the vault
+capability from actual broker authentication without weakening either boundary.

@@ -36,22 +36,35 @@ export function validateWorkerTotp(value, defaultsVerified = false) {
   } catch { throw new Error('PROVIDER_PROFILE_INVALID'); }
 }
 
+function workerFields(item, binding, defaultsVerified) {
+  uuid(binding.itemId); text(binding.name); brokerUrl(binding.uri);
+  if (!HASH.test(binding.principalHash)) throw new Error();
+  if (!item || item.id !== binding.itemId || item.name !== binding.name || item.type !== 1 || item.deletedDate) throw new Error();
+  const login = item.login;
+  if (!login || !Array.isArray(login.uris) || login.uris.length !== 1
+      || login.uris[0]?.uri !== binding.uri || principal(login.username) !== binding.principalHash) throw new Error();
+  text(login.username); text(login.password);
+  const profile = validateWorkerTotp(login.totp, defaultsVerified);
+  return {login: login.username, password: login.password, profile, itemId: binding.itemId,
+    principalHash: binding.principalHash, online_ready: false};
+}
+
+function namedIdentity(items, name) {
+  if (name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
+  const matches = items.filter(item => item?.name === name);
+  if (matches.length !== 1) throw new Error();
+  const item = matches[0], login = item.login;
+  if (!login || !Array.isArray(login.uris) || login.uris.length !== 1) throw new Error();
+  return {item, binding: {itemId: item.id, name, uri: login.uris[0]?.uri, principalHash: principal(login.username)}};
+}
+
 export function selectWorkerItem(item, binding, defaultsVerified = false) {
   try {
     exact(binding, ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
-    uuid(binding.itemId); text(binding.name); brokerUrl(binding.uri);
-    if (!HASH.test(binding.principalHash)) throw new Error();
     exact(binding.accountConfig, ['path', 'sha256']); text(binding.accountConfig.path);
     if (!HASH.test(binding.accountConfig.sha256)) throw new Error();
-    if (!item || item.id !== binding.itemId || item.name !== binding.name || item.type !== 1 || item.deletedDate) throw new Error();
-    const login = item.login;
-    if (!login || !Array.isArray(login.uris) || login.uris.length !== 1
-        || login.uris[0]?.uri !== binding.uri || principal(login.username) !== binding.principalHash) throw new Error();
-    text(login.username); text(login.password);
-    const profile = validateWorkerTotp(login.totp, defaultsVerified);
     // Only validated login fields/profile leave this worker helper; no raw item/seed.
-    return {login: login.username, password: login.password, profile, itemId: binding.itemId,
-      principalHash: binding.principalHash, accountConfig: structuredClone(binding.accountConfig), online_ready: false};
+    return {...workerFields(item, binding, defaultsVerified), accountConfig: structuredClone(binding.accountConfig)};
   } catch { throw new Error('PROVIDER_ITEM_INVALID'); }
 }
 
@@ -59,14 +72,20 @@ export function selectWorkerItem(item, binding, defaultsVerified = false) {
 export function selectNamedWorkerItem(items, binding, defaultsVerified = false) {
   try {
     exact(binding, ['name', 'accountConfig']);
-    if (binding.name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
-    const matches = items.filter(item => item?.name === binding.name);
-    if (matches.length !== 1) throw new Error();
-    const item = matches[0], login = item.login;
-    if (!login || !Array.isArray(login.uris) || login.uris.length !== 1) throw new Error();
-    const resolved = {itemId: item.id, name: binding.name, uri: login.uris[0]?.uri,
-      principalHash: principal(login.username), accountConfig: binding.accountConfig};
-    return selectWorkerItem(item, resolved, defaultsVerified);
+    const resolved = namedIdentity(items, binding.name);
+    return selectWorkerItem(resolved.item, {...resolved.binding, accountConfig: binding.accountConfig}, defaultsVerified);
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
+}
+
+// Independent vault qualification returns private identity/profile metadata only.
+// It cannot deliver broker credentials or create an importer account binding.
+export function inspectNamedVaultItem(items, binding, defaultsVerified = false) {
+  try {
+    exact(binding, ['name']);
+    const resolved = namedIdentity(items, binding.name);
+    const fields = workerFields(resolved.item, resolved.binding, defaultsVerified);
+    return {itemId: fields.itemId, principalHash: fields.principalHash,
+      uri: resolved.binding.uri, profile: fields.profile, online_ready: false};
   } catch {throw new Error('PROVIDER_ITEM_INVALID');}
 }
 

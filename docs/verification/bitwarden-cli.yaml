@@ -271,3 +271,63 @@ vault_egress:
     real_egress_proven: false
     live_vault_access: false
     broker_authentication: false
+independent_inspection:
+  kind: inspection-only-independent-vault-capability
+  schema_version: 3
+  inputs:
+    collector/credential-provider.mjs: 589043ee443ab9c0593a90fa4022f5fb3b0d770c57fd7ff5fad205573974fc7a
+    collector/vault-worker.mjs: 31da6578a59dc0b795e79e31ec4063178de0ebbdc7544c9ba2e573ac19233523
+    collector/bitwarden-cli.mjs: 62b29e4c2585f78621da4aa7e9c2f14d9b52877cade5c117d94f96d8fbdfbbef
+    collector/tests/bitwarden-cli.test.mjs: 050365c295e879ff1472fa6e6cd176024903b84ff247db72bf8ec4b37fd4d5ea
+    collector/private-process.mjs: 5803a0d33470cd059b2ef7f35ee090b39d6f6506ccad2907d856fbbf424a7da6
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  checks:
+    affected:
+      command: node --import ./tests/no-network.mjs --test tests/bitwarden-cli.test.mjs
+        tests/vault-worker.test.mjs tests/credential-provider.test.mjs
+      exit_code: 0
+      node_passed: 100
+      private_log: tmp/vault-inspection-node.log
+      log_sha256: 949403f68c02a72eab1068d778b40d00c2610fa5573bdfd995632e69dca55778
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      node_passed: 398
+      private_log: tmp/vault-inspection-full-node.log
+      log_sha256: 26181a35db9581d14ba6ea584638eb5b698aa24e90807f5b57eec54eec1bae78
+  reused_python:
+    record: vault_egress.checks.full_local
+    passed: 1160
+    scope: Importer/Python tests and vault CONNECT helper unchanged by the inspection-only
+      JavaScript mode.
+  invariants:
+  - Exact unique operator-named live item and canonical broker URI required
+  - Credential fields and strict supported TOTP profile validated only in worker memory
+  - Returned identity/profile metadata contains no broker login/password, vault session
+    or seed
+  - Worker discards session; worker and adapter refuse TOTP commands
+  - No account reference or enrollment manufactured; acquisition schemas1/2 unchanged
+  readiness:
+    live_vault_access: false
+    broker_authentication: false
+operational_routing:
+  owner: infra-9i9s
+  source_commit: 7ba0245308d2caf2b302728564298327a0a60b2c
+  receipt_sha256: cf594265aaf9d6addd931a6d331c0af99e26b2b858782ffe980665e084b31555
+  state: routes_qualified
+  command_exit_codes:
+    stage: 0
+    start: 0
+    probes: 0
+  observations:
+    allowed_connect_tls_verified: 2
+    allowed_http_status: 404
+    denied_connect: 4
+    direct_ipv4: denied
+    ipv6: denied
+    embedded_dns_tcp: denied
+    embedded_dns_udp: denied
+  credentials_supplied: false
+  authentication_performed: false
+  limits: Proves the independently owned runtime routing boundary for source7ba0245;
+    actual CLI/vault visibility and broker source are separate milestones.
