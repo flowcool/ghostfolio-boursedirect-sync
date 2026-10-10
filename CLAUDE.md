@@ -8,10 +8,11 @@ Before changing importer, acquisition, review or application behavior, use the
 [design index](docs/design/index.md) to select and read the owning contract.
 Beads owns current acceptance evidence and dependency gates.
 
-Start here: **[`FINDINGS.md`](FINDINGS.md)**, then the
+For source feasibility or provenance, consult [`FINDINGS.md`](FINDINGS.md).
+For the original scope rationale or numbered approval gates, consult the
 [manual document import proposal](docs/plans/2026-10-08-manual-document-import.md).
-Latest evidence supersedes earlier pending checkpoints. No CSV/Excel export is confirmed.
-Read the numbered approval and source gates before any implementation.
+Current contracts and recorded acceptance evidence govern later amendments;
+historical pending checkpoints are not current status. No CSV/Excel export is confirmed.
 Florent authorized interactive online source collection; see the
 [acquisition amendment](docs/design/online-source-inspection.md). The original
 manual-only proposal remains a historical reference.

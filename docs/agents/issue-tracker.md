@@ -28,8 +28,20 @@ Create a Beads issue following the conventions above.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the referenced record with `bd show <id>`, then inspect its comments and
-dependencies.
+Read the referenced record, then its relevant comments and direct dependencies.
+For backlog navigation, capture scoped JSON into ignored project-local `tmp/`
+and print only IDs, titles, statuses and dependency IDs first. Read descriptions
+and evidence only for selected issues. Keep full JSON available locally rather
+than printing recursive records into a truncated transcript.
+
+Example (each command must succeed before consuming its output):
+
+```bash
+set -euo pipefail
+mkdir -p tmp
+bd list --metadata-field project=ghostfolio-boursedirect-sync --json > tmp/issues.json
+python3 -c 'import json; rows=json.load(open("tmp/issues.json")); print("\n".join(str((r["id"], r["title"], r["status"])) for r in rows))'
+```
 
 ## Triage labels
 

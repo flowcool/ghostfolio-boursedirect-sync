@@ -1,7 +1,7 @@
 # ghostfolio-boursedirect-sync
 
-Read [CLAUDE.md](CLAUDE.md), [FINDINGS.md](FINDINGS.md), and the
-[reviewed plan](docs/plans/2026-10-08-manual-document-import.md).
+Read [CLAUDE.md](CLAUDE.md), then the scoped Beads issue and the owning contract
+selected through the [design index](docs/design/index.md).
 Global working agreement applies. Beads owns live work state.
 
 ## Architecture and validation
@@ -26,6 +26,10 @@ Global working agreement applies. Beads owns live work state.
 - Runtime dependencies: `requirements.txt`; development: `requirements-dev.txt`.
 - Required logic verification: `.venv/bin/python -m pytest -q`. Tests use synthetic
   inputs and forbid sockets. Never point tests at real Ghostfolio or shared state.
+- Before committing, run `bash scripts/verify-local.sh`; its documentation,
+  Python, collector and whitespace checks stop at the first failure. Record a
+  successful exit code before committing or closing work. For other required
+  checks, inspect each exit code before any dependent mutation.
 - Real inputs, configuration, output and journals are ignored; never commit
   personal account data. Logs contain codes and counts only.
 
