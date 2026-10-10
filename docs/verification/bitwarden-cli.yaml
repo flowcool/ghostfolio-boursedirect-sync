@@ -223,3 +223,51 @@ application_compose:
   remaining_wiring: Infra supplies image availability, enforced external vault-only
     network, private credential provisioning and independently receipted Compose container
     lifecycle before access.
+vault_egress:
+  kind: offline-vault-egress-integration
+  inputs:
+    collector/vault-egress.py: 2325ee9591e23276bfdcd474b9da52492cf288563f75670f45f712a620ef3ad3
+    collector/bitwarden-cli.mjs: aa12fa23f40b47b6f3361eed0a1ab23df6208885d4f8c71b6b7e9037c6db1249
+    collector/bitwarden-cli.sh: 2e7d28a273f74cad3e6cf8ce9e57267c46f6f7792f6099808b2eb7a64887042c
+    collector/vault-worker.mjs: 5768159c0ac51a1e72eb0ae55a50aa7aa6e9f034216b79977e3f3f891b98d6ba
+    collector/tests/bitwarden-cli.test.mjs: 7070f06e5fe64cdb1b5b3308437d396a862bfb5c86f3cf5530786b4555a50722
+    tests/test_vault_egress.py: 3c4fd98515a8d9ed6eca28c9fa2e6558741b7f9ea5ca0cb332f98e4da53608ca
+    compose.yaml: dc622b00288a300790bf54194424b4bd5abb39a3d3a78e97d65d3b7f418d7502
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+  runtime:
+    python: 3.13.5
+    node: v20.19.2
+  checks:
+    full_local:
+      command: bash scripts/verify-local.sh
+      exit_code: 0
+      python_passed: 1160
+      node_passed: 391
+      private_log: tmp/vault-egress-verification.log
+      log_sha256: 0902cc9d30de37c6cf4d608cc0585fa68bba1be6d38ea71aa0d167cae8cbb3b3
+    compose:
+      command: VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection VAULT_UPSTREAM_NETWORK=config-inspection-upstream
+        docker compose --env-file /dev/null -f compose.yaml config --format json
+      exit_code: 0
+      private_output: tmp/vault-egress-compose.json
+      output_sha256: 3eebd2aab9e868fc282986da64a0f3526450a402bde48c71802b25c9b745cb43
+  source_grounding:
+    repository: https://github.com/bitwarden/clients
+    commit: e6293ff2bc85123e9baaa998cf1543030ec5d9f0
+    tag: cli-v2026.6.0
+    proxy: apps/cli/src/platform/services/node-api.service.ts:49-57; lowercase http_proxy
+      or https_proxy, HttpsProxyAgent
+    routing: libs/common/src/platform/services/default-environment.service.ts; identity.bitwarden.com
+      and api.bitwarden.com
+  security_review:
+    kind: source-self-review
+    scope: CONNECT-only exact destinations; full DNS answer validation; literal-address
+      connect; bounded transport; no logs or TLS termination; proxy added only to
+      cleared CLI execution env; no secrets in Compose; external network namespace
+      enforcement remains infra-owned
+    external_review: Required before merge; source self-review does not replace CodeRabbit
+  readiness:
+    real_egress_proven: false
+    live_vault_access: false
+    broker_authentication: false

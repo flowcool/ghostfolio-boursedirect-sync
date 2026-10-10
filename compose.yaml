@@ -36,7 +36,37 @@ services:
       proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
     networks: [vault]
 
+  vault-egress:
+    image: python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
+    pull_policy: never
+    entrypoint: ["python3", "-I", "-B", "/opt/vault-egress.py"]
+    user: "1000:1000"
+    read_only: true
+    restart: "no"
+    volumes:
+      - ./collector/vault-egress.py:/opt/vault-egress.py:ro
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    ipc: private
+    mem_limit: 64m
+    cpus: 1
+    pids_limit: 32
+    ulimits:
+      core:
+        soft: 0
+        hard: 0
+    logging:
+      driver: none
+    healthcheck:
+      disable: true
+    labels:
+      proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
+    networks: [vault, vault-upstream]
+
 networks:
   vault:
     external: true
     name: ${VAULT_NETWORK:?Supply the separately qualified vault-only network}
+  vault-upstream:
+    external: true
+    name: ${VAULT_UPSTREAM_NETWORK:?Supply the separately owned proxy upstream network}

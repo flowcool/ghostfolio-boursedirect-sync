@@ -1,6 +1,7 @@
 // Source-owned seam to an already provisioned, durably owned CLI container.
 // Infra supplies runtime/access facts; no host, SSH, SOPS or network wiring here.
 import fs from 'node:fs';
+import {isIP} from 'node:net';
 import {providerConfiguration} from './vault-worker.mjs';
 import {selectNamedWorkerItem} from './credential-provider.mjs';
 import {executePrivate} from './private-process.mjs';
@@ -20,10 +21,19 @@ export function sshCliTransport(destination, execute = executePrivate) {
   };
 }
 
-export function bitwardenCli({configuration, containerId, attest, stopOwned, transport = executePrivate}) {
+export function bitwardenCli({configuration, containerId, attest, stopOwned, transport = executePrivate, egressProxy}) {
   const config = providerConfiguration(configuration);
   if (config.cli.path !== '/usr/local/bin/bw' || !/^[0-9a-f]{64}$/.test(containerId)
       || [attest, stopOwned, transport].some(x => typeof x !== 'function')) throw new Error('CLI_ADAPTER_INVALID');
+  if (egressProxy !== undefined) {
+    let proxy;
+    try {proxy = new URL(egressProxy);} catch {throw new Error('CLI_ADAPTER_INVALID');}
+    if (typeof egressProxy !== 'string' || isIP(proxy.hostname) !== 4
+        || egressProxy !== 'http://' + proxy.hostname + ':8080') throw new Error('CLI_ADAPTER_INVALID');
+  }
+  // A literal independently attested endpoint needs no worker DNS. Infrastructure
+  // must deny every direct route; setting a proxy alone is never confinement.
+  const executionEnv = {...base, ...(egressProxy === undefined ? {} : {https_proxy: egressProxy})};
   const steps = [
     [['--version'], 'version', []],
     [['config', 'server', config.vaultOrigin], 'server', []],
@@ -46,7 +56,7 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
     // minimal container env, disabled logs/core dumps and qualified egress.
     if (await attest(containerId, config.cli) !== true || failed) throw new Error();
     const result = await transport('/usr/bin/docker', ['exec', '-i', containerId, '/usr/bin/env', '-i',
-      ...Object.entries(base).map(([name, value]) => name + '=' + value), ...args],
+      ...Object.entries(executionEnv).map(([name, value]) => name + '=' + value), ...args],
     {PATH: '/usr/bin:/bin'}, 45000, input);
     if (failed || !result || result.status !== 0 || typeof result.stdout !== 'string'
         || typeof result.stderr !== 'string' || Buffer.byteLength(result.stdout) > 262144

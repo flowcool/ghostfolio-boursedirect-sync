@@ -319,16 +319,31 @@ commands and command-specific secrets through private stdin after owner attestat
 There are no published ports or production appdata mounts.
 
 `VAULT_OWNER` identifies the durable allocation, and `VAULT_NETWORK` names an
-existing independently qualified vault-only network supplied by infra. These are
+independently owned internal network supplied by infra. `VAULT_UPSTREAM_NETWORK`
+names the separately owned network used only by the `vault-egress` sidecar. These are
 non-secret deployment inputs. The external network declaration does not itself
 filter egress; actual allowed/denied routing must be proved before credential
 delivery. Missing inputs refuse configuration rather than create an unrestricted
 default network. Keep private provisioning outside versioned configuration.
 
+The small standard-library CONNECT proxy reuses the pinned existing Python image
+and accepts only `identity.bitwarden.com:443` and `api.bitwarden.com:443`. It
+refuses HTTP requests, ambiguous headers and any non-public DNS answer, connects
+to the validated literal address and retains no request logs. TLS remains between
+the CLI and Bitwarden. This is the current US-cloud routing scope; self-hosted and
+other cloud regions require their own explicit qualification. The runtime owner
+must deny all direct IPv4 and IPv6 worker routes, including Docker's embedded DNS,
+and permit only the proxy's exact internal IP and port. The adapter's optional
+`egressProxy` is that attested literal `http://IP:8080`; it supplies the lowercase
+`https_proxy` used by the pinned CLI. A proxy environment variable alone provides
+no network isolation. Prove allowed and refused routes without credentials before
+any private delivery.
+
 Validate configuration without contacting the Docker daemon:
 
 ```bash
 VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection \
+  VAULT_UPSTREAM_NETWORK=config-inspection-upstream \
   docker compose --env-file /dev/null -f compose.yaml config --quiet
 ```
 

@@ -11,7 +11,7 @@ import {principal} from '../core.mjs';
 import {executePrivate} from '../private-process.mjs';
 
 const credentials = {BW_CLIENTID:'SYNTHETIC_CLIENT', BW_CLIENTSECRET:'SYNTHETIC_API', BW_PASSWORD:'SYNTHETIC_UNLOCK'};
-function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault}={}) {
+function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault,egressProxy}={}) {
   const calls = [], id = 'b'.repeat(64), itemId = randomUUID(); let stops = 0, allowed = true;
   const configuration = {schema_version:1, vaultOrigin:'https://vault.synthetic.invalid', binding:{itemId,name:'invented',
     uri:'https://www.boursedirect.fr/synthetic',principalHash:principal('SYNTHETIC'),accountConfig:{path:'/synthetic/account.yaml',sha256:'a'.repeat(64)}},
@@ -22,7 +22,7 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault}={
     item.name='boursedirect.fr'; configuration.schema_version=2;
     configuration.binding={name:item.name,accountConfig:configuration.binding.accountConfig};
   }
-  const adapter = bitwardenCli({configuration,containerId:id,attest:async value=>value===id && allowed,
+  const adapter = bitwardenCli({configuration,containerId:id,egressProxy,attest:async value=>value===id && allowed,
     stopOwned:async value=>{assert.equal(value,id); stops++;}, transport:async (executable,args,env,timeout,input)=>{
       calls.push({executable,args,env,timeout,input});
       const mode=args[args.indexOf('vault-cli')+1];
@@ -36,6 +36,22 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault}={
   const worker=vaultWorker({configuration,...adapter,appdata:'/data',now:()=>120});
   return {configuration,item,adapter,worker,calls,setAllowed:x=>{allowed=x;},stops:()=>stops};
 }
+test('attested numeric proxy travels only in cleared CLI execution environment',async()=>{
+  const f=fixture({egressProxy:'http://172.31.0.2:8080'});
+  await f.worker.initialize(credentials);
+  assert.equal(f.calls.length,7);
+  for(const call of f.calls){
+    assert.equal(call.args.includes('https_proxy=http://172.31.0.2:8080'),true);
+    assert.deepEqual(call.env,{PATH:'/usr/bin:/bin'});
+    assert.equal(call.args.some(x=>x.startsWith('NO_PROXY=')),false);
+    for(const secret of Object.values(credentials))assert.equal(JSON.stringify(call.args).includes(secret),false);
+  }
+});
+for(const egressProxy of ['http://proxy:8080','http://172.31.0.2:80','http://172.31.0.2:8080/',
+  'http://user@172.31.0.2:8080','http://172.31.0.2:8080?bypass=yes','https://172.31.0.2:8080'])
+  test('proxy endpoint rejects inherited or ambiguous routing '+egressProxy,()=>{
+    assert.throws(()=>fixture({egressProxy}),/CLI_ADAPTER_INVALID/);
+  });
 test('authorized exact name resolves once and binds the delayed TOTP to its UUID',async()=>{
   const f=fixture({named:true}),selected=await f.worker.initialize(credentials);
   assert.equal(selected.itemId,f.item.id); assert.equal(selected.principalHash,principal('SYNTHETIC'));

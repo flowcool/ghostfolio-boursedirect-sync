@@ -174,3 +174,24 @@ verifies the daemon and configuration, removes only that full ID and retains
 explicit absence evidence. Its fixed ignored evidence directory refuses a
 second allocation; uncertain intents remain for manual recovery. This metadata
 proof does not establish cloud API routing, vault visibility or qualified egress.
+
+The incremental application Compose now includes a source-owned CONNECT-only
+vault egress helper using the already available pinned Python image. Its exact
+US-cloud destinations are grounded in official Bitwarden CLI tag
+`cli-v2026.6.0`, commit `e6293ff2bc85123e9baaa998cf1543030ec5d9f0`:
+`node-api.service.ts` reads lowercase `http_proxy` or `https_proxy` and constructs
+`HttpsProxyAgent`; the default environment supplies identity/API cloud origins.
+The CLI adapter accepts an optional attested numeric proxy endpoint and adds only
+`https_proxy` to its cleared execution environment. Worker credential sequencing
+and secret stdin delivery are unchanged.
+
+The helper bounds headers, concurrent connections, DNS answers and tunnel time;
+it refuses non-CONNECT requests, unrecognized authorities, ambiguous headers and
+non-public/transition addresses. It validates every DNS answer before connecting
+once to a literal address and does not terminate TLS or log traffic. Infra still
+owns the enforced worker network-namespace IPv4/IPv6 deny policy, exact proxy IP
+exception, denied embedded DNS, independent network/container receipts and
+cleanup. Syntax and offline refusal tests do not prove live egress. Real routing
+must be proved without secrets before independent vault access. Rollback reverts
+the scoped source commit and removes only newly receipted operational resources;
+never change shared services or discard authentication journals.
