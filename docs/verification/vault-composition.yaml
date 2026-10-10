@@ -256,3 +256,25 @@ incremental_host_sandbox_runner:
     passed: 415
     log_sha256: 6efb9ea62141d1fe96674a4131149d3f6ad1b33b36687393e4ca7a83b518a300
     private_log: tmp/browser-sandbox-node.log
+incremental_host_sandbox_first_observation:
+  source_commit: 22c2589
+  command: Owned network-none browser docker exec env -i PATH=/usr/bin:/bin HOME=/home/fixture
+    node source-owned browser-sandbox-proof.mjs
+  exit_code: 1
+  fixed_code: BROWSER_SANDBOX_NOT_QUALIFIED
+  failure_stage: unknown_generic_diagnostic
+  cleanup: exact_owned_browser_container_stopped_cli_and_proxy_unchanged
+  ugreen_sandbox_qualified: false
+sandbox_fixed_phase_diagnostics:
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: d65acaddc778d4a8fdd27d3425aea3eae3d952fc945a34832790104b8d25cf21
+  checks:
+    command: node --import ./collector/tests/no-network.mjs --test collector/tests/browser-sandbox-proof.test.mjs
+    exit_code: 0
+    passed: 7
+    syntax_exit_code: 0
+  reused_collector: incremental_host_sandbox_runner.full_collector_check passed415
+    on source22c2589; only fixed diagnostic phase capture changed afterward
+  failure_output: fixed code, fixed stage, sandbox-unavailable-message boolean; no
+    raw exception/stderr
+  actual_host_observation_pending: true

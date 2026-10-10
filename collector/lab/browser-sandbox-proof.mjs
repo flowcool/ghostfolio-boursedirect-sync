@@ -28,11 +28,13 @@ export function sandboxStatus(raw, baseline) {
     nested_pid_namespace: true, seccomp_filters: filters, baseline_seccomp_filters: parentFilters};
 }
 
+let stage = 'runtime_prerequisites', sandboxUnavailable = false;
 async function prove() {
   if (process.getuid() !== 1000 || fs.readdirSync('/sys/class/net').sort().join(',') !== 'lo')
     throw new Error('SANDBOX_RUNTIME_REFUSED');
   const profile = fs.mkdtempSync('/home/fixture/synthetic-sandbox-');
   const baseline = fs.readFileSync('/proc/self/status', 'utf8');
+  stage = 'chrome_launch';
   const child = spawn('/opt/chrome-headless-shell-linux64/chrome-headless-shell', [
     '--no-startup-window', '--remote-debugging-pipe', '--user-data-dir=' + profile,
     '--disable-background-networking', '--disable-extensions', '--disable-component-extensions-with-background-pages',
@@ -64,7 +66,11 @@ async function prove() {
   }
   function fence() {fenced = true; void stop().catch(() => {});}
   child.on('error', fence);
-  child.stderr.on('data', bytes => {stderrBytes += bytes.length; if (stderrBytes > 32768) fence();});
+  child.stderr.on('data', bytes => {
+    stderrBytes += bytes.length;
+    if (/No usable sandbox|Failed to move to new namespace|Operation not permitted/.test(bytes.toString())) sandboxUnavailable = true;
+    if (stderrBytes > 32768) fence();
+  });
   pipe = capabilityPipe({write: raw => new Promise((resolve, reject) => {
     child.stdio[3].write(raw, error => error ? reject(error) : resolve());
   }), onEvent: () => {}, fence, limits: {...PIPE_LIMITS, commandMs: 10000, sessionMs: 60000}});
@@ -72,12 +78,15 @@ async function prove() {
   child.stdio[4].on('end', () => {if (!exited) fence();});
   pipe.armEvents();
   try {
+    stage = 'chrome_version';
     const version = await pipe.send('Browser.getVersion');
     if (!/^(?:HeadlessChrome|Chrome)\/155\.0\.8059\.39$/.test(version.product)) throw new Error();
+    stage = 'synthetic_target';
     const target = await pipe.send('Target.createTarget', {url: 'about:blank'});
     const attached = await pipe.send('Target.attachToTarget', {targetId: target.targetId, flatten: true});
     pipe.registerSession(attached.sessionId);
     await pipe.send('Page.enable', {}, attached.sessionId);
+    stage = 'synthetic_document';
     await pipe.send('Page.navigate', {url: 'data:text/html,<title>SYNTHETIC_SANDBOX_PROOF</title>'}, attached.sessionId);
     let title;
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -86,6 +95,7 @@ async function prove() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     if (title?.result?.value !== 'SYNTHETIC_SANDBOX_PROOF') throw new Error();
+    stage = 'renderer_os_sandbox';
     const renderers = [];
     for (const name of fs.readdirSync('/proc').filter(value => /^\d+$/.test(value))) {
       try {
@@ -101,9 +111,13 @@ async function prove() {
       network_none: true, synthetic_document_rendered: true, renderer_count: renderers.length,
       renderer_sandbox: renderers, broker_requests: 0, credentials_read: false};
   } finally {
-    await stop(); // Observe owned browser exit before intentional pipe closure.
+    const failedStage = stage;
+    try {await stop();} catch {stage = 'owned_browser_exit'; throw new Error('SANDBOX_EXIT_UNVERIFIED');}
+    stage = failedStage;
+    // Observe owned browser exit before intentional pipe closure.
     pipe.lost();
   }
+  stage = 'owned_group_exit';
   const aliveOwnedGroup = () => fs.readdirSync('/proc').filter(value => /^\d+$/.test(value)).some(name => {
     try {
       const stat = fs.readFileSync('/proc/' + name + '/stat', 'utf8');
@@ -121,5 +135,6 @@ async function prove() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {console.log(JSON.stringify(await prove()));}
-  catch {console.error('BROWSER_SANDBOX_NOT_QUALIFIED'); process.exitCode = 1;}
+  catch {console.error(JSON.stringify({code: 'BROWSER_SANDBOX_NOT_QUALIFIED', stage,
+    sandbox_unavailable_message_observed: sandboxUnavailable})); process.exitCode = 1;}
 }
