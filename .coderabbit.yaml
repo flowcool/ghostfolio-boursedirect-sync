@@ -31,6 +31,18 @@ reviews:
     languagetool:
       enabled: false
   path_instructions:
+    - path: "collector/**/*.mjs"
+      instructions: >-
+        Read docs/design/acquisition-core.md and the functional controller and
+        native composition sections of
+        docs/plans/2026-10-09-guarded-browser-driver.md before assessing authority.
+        The broker callback-only controller accepts trusted injected callbacks;
+        it is not a sandbox for arbitrary same-process callers. The native
+        composition validates branded handles and binds the durable consumer
+        internally, rejecting replacement consume callbacks. Verify each
+        implementation against its own boundary. Distinguish an implementation
+        defect from a proposed change to the approved trust model; still report
+        concrete violations of that model and unsafe call sites.
     - path: "boursedirect_to_ghostfolio.py"
       instructions: >-
         Untrusted broker HTML and operator YAML: fail closed with fixed error
