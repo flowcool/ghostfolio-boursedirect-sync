@@ -547,3 +547,130 @@ contract. **Knowledge verdict: Used and sufficient.** No retrieval escalation or
 new portable runtime finding arose; design decisions stay in their canonical
 project artifacts. The reviewer appended only this section, preserving every
 prior report byte. Parent owns Beads, commits and terminal reconciliation.
+
+
+## Exact-hash design review: native synthetic composition amendment
+
+Date: 2026-10-10. Review owner: `infra-4g8u.99`.
+Reviewed the complete plan at commit
+`dc1c393b80177a599d452ded81ebd2900de28c77`, SHA256
+`49ddae6d63e66a4741e4e2c37df75ed4d72491b6a165eefafe6fd8e7306be66e`.
+The working plan was byte-identical to that committed object.
+
+**APPROVE the native synthetic composition DESIGN.** No blocking design finding
+or further plan amendment is required for this scoped implementation. The
+2026-10-10 amendment governs the internal synthetic composition; earlier approvals
+retain their original scopes. This verdict is neither PR review, final-code
+acceptance, runtime qualification nor permission to allocate a fixture or access
+the broker. Implementation and all final-code proof remain owned by `.94`.
+
+### Grounding and safety assessment
+
+The seam addresses an actual gap. `core.mjs` applies `brokerUrl` in source and
+stored-permit validation; `request-controller.mjs` imports those fixed validators
+and validates read URLs separately. The old `lab/first-request.mjs` consumes a
+broker-shaped saved request while Chrome requests a loopback URL, and
+`lab/capture-document.mjs` replaces session/frame/URL values with `FIXTURE`
+constants after native correlation. Those experiments cannot establish the new
+unchanged native composition, even where their individual controls passed.
+
+A module-private immutable policy shared by the real authority and controller is
+an appropriate internal seam. Keep the public broker signatures, origin, principal
+hash, fixed namespace and schema-1 journal format unchanged. The lab factory's
+literal canonical loopback origin, fixed invented principal, separate namespace,
+strict policy/origin/allocation journal binding and private handle identity make
+cross-use fail closed without exposing a configurable broker validator. This is
+a cooperation boundary under the existing same-user filesystem assumptions.
+Source cloning/freezing must cover nested values, and neither caller mutation nor
+an object with copied fields can acquire another instance's authority.
+
+Native URL/method/resource/session/frame/request/loader identities must pass
+through without fixture substitution. Local opaque epochs remain legitimate
+ownership metadata; they are not substitutes for CDP identities. The existing
+controller's exact event/action comparisons allow its consumer to use the already
+compared action tuple, but the composition must demonstrate that the tuple equals
+the native event. Do not fork the authority or decision algorithm into a permissive
+lab copy. Keep durable consumption before continuation and permanent fencing after
+fatal ingress, including a concurrent second authentication request or HTTP-auth
+challenge. The existing controller's synchronous `authRequired` fence is the
+required path; the older ordering helper's cancellation-then-abort behavior is
+not sufficient as the composition's sole challenge handler.
+
+The fixed host registry closes the alternate-output-directory bypass. Exclusive
+allocation/recovery, fsynced intent before create, independently verified full-ID
+receipt before copy/start, and immediate pre-start reinspection are a coherent
+fail-closed ordering. Registry/receipt loss, partial publication, daemon mismatch
+or uncertain ownership cannot become a fresh allocation or cleanup authority.
+The create-before-receipt window deliberately permits only a stopped orphan and
+manual reconciliation. Names, labels and later discovery never confer cleanup
+identity. A retained lock after a crash also requires manual reconciliation; no
+stale-lock expiry is implied by recovery support.
+
+The current runner is not compliant with that new contract: it retains the ID in
+memory, publishes its receipt after execution, can remove after failed inspection,
+and checks final absence by name. These are required replacement points under
+`.94`, not reasons to approve the old runner unchanged. Exact-ID absence must be
+a positive daemon observation, never a generic inspection failure. Cleanup does
+not clear authentication uncertainty. Failed terminal-absence fsync blocks the
+next allocation even after a resource is physically gone.
+
+Capture must arm its native ticket before navigation and correlate Fetch network
+ID, Network request/loader, commit and loader-bound load on the owned root. Keep
+ownership/epoch and active-loader checks around bounded serialization, including
+an intervening navigation with identical content. Synthetic account/day/role and
+operation markers test the fixture adapter only. The existing acquisition-bundle
+parser and publication-preservation contract remain the financial/source boundary.
+
+### Final-code acceptance handoff
+
+The `.94` owner must produce the amendment's evidence against its final executable
+sources; none is satisfied by this design verdict or historical harness receipts:
+
+- Discriminating broker/lab exclusion, forged/cross-instance handle, nested source
+  mutation, copied-journal and wrong-origin/allocation tests; unchanged broker
+  schema-1 compatibility; a fresh isolated process that refuses retained synthetic
+  uncertainty without reset or implicit reenrollment.
+- One positive native POST using the same durable consumer/controller algorithm,
+  with exactly one durable consumption before dispatch. Startup, unsupported
+  target/frame/worker, redirects, held callbacks, HTTP auth and concurrent/second
+  auth must prove ingress fencing and the original bounded stop ordering. The
+  race may dispatch zero or one times; the separate positive control proves one.
+- Native capture controls for missing/wrong/stale chains, changed ownership or
+  epoch, wrong markers and intervening navigation, plus identical bytes with
+  distinct fresh chains. Evidence must distinguish real events from derived
+  adversarial replays.
+- Isolated allocation kill points and fsync/daemon failures at intent, create,
+  receipt, start/dispatch and terminal absence. A competing process selecting a
+  different output directory must still be excluded. Missing/contradictory
+  ownership must produce no start, reallocation or removal; a verified receipt
+  permits only its exact-ID recovery under applicable authorization.
+- Final source/runtime/evaluator pins, retained private receipts and exact owned
+  absence for successful fixtures, plus the required complete local verification.
+  Uncertain cleanup keeps `.94` open. All readiness fields remain false.
+
+### Evidence and limits
+
+Read project guidance, the scoped review brief, the full owning plan, acquisition
+core/bundle contracts, the existing report, actual core/controller, sole-root
+bootstrap, ordered guards, bounded pipe, native capture helper, fixture runner,
+and relevant controller/core/composition/runner regression code. Hash/committed
+object comparison and initial Git status were read-only and successful. The
+parent reports `bash scripts/verify-local.sh` exit 0 with 1031 Python and 285 Node
+tests before this review; that is author evidence for existing code, not an
+independently rerun suite or evidence of the proposed implementation.
+
+No browser, Docker command, network request, credential, real broker document,
+production resource or shared-state test was used. This review makes no new
+vendor/runtime claim. Source characterization, credential delivery, isolated
+runtime authorization, egress, security and external PR review retain their
+separate gates. Rollback of this appended report is a scoped commit revert;
+retain every authentication journal, allocation record and private capture.
+
+Knowledge lookup followed corpus and Ghostfolio indexes to the stable
+`saved-input-report-preservation` concept (verified 2026-10-09, fresh through
+2026-12-31), checked against the owning acquisition-bundle contract. Lookup outcome:
+applicable. **Knowledge verdict: Used and sufficient.** The indexed path needed
+no retrieval escalation; these design decisions already belong in the canonical
+project plan/report and add no separate portable operational lesson. Only this
+section was appended, preserving all preceding report bytes. Parent owns Beads
+updates, complete verification, the scoped commit and terminal reconciliation.
