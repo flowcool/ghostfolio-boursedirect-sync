@@ -289,7 +289,7 @@ def run(scenario, image, chrome_version, profile_path, output, payload, hashes):
         selected = receive(worker)['selected']
         require(selected['itemId'] == binding['itemId'] and selected['principalHash'] == binding['principalHash']
                 and selected['accountConfig'] == binding['accountConfig'] and selected['online_ready'] is False)
-        require('totp' not in selected and not any(value in json.dumps(selected) for value in SECRETS[2:3] + SECRETS[4:]))
+        require('totp' not in selected and not any(value in json.dumps(selected) for value in SECRETS[:3] + SECRETS[4:]))
         # Existing enrollment and immutable account reference precede browser startup.
         require(private._read(output / 'enrollment.yaml') == enrollment)
         before_start(state, filename, 'browser', profile_path.read_bytes())

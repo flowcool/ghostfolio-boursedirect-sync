@@ -1,6 +1,7 @@
 """Isolated private files and fake daemon; no real runtime or shared state."""
 import copy
 import importlib.util
+import io
 import json
 import selectors
 import subprocess
@@ -82,6 +83,39 @@ def test_changed_runtime_cannot_start(fixture, change):
     with pytest.raises(RuntimeError, match='VAULT_RUNTIME_MISMATCH'):
         module.before_start(state, registry, 'worker', profile.read_bytes(), ops)
     assert module.private._read(registry)['resources']['worker']['state'] == 'receipted'
+
+
+def test_secret_in_unchecked_metadata_cannot_start(fixture):
+    module, state, registry, profile, _, _, details, ops, _ = fixture
+    allocate(fixture)
+    details['Config']['Hostname'] = 'SYNTHETIC_UNLOCK'
+    with pytest.raises(RuntimeError, match='VAULT_METADATA_LEAK'):
+        module.before_start(state, registry, 'worker', profile.read_bytes(), ops)
+    assert module.private._read(registry)['resources']['worker']['state'] == 'receipted'
+
+
+@pytest.mark.parametrize('secret', ['SYNTHETIC_API', 'SYNTHETIC_UNLOCK'])
+def test_worker_credentials_never_reach_browser_initialization(fixture, monkeypatch, secret):
+    module, _, registry, profile, image, _, _, _, _ = fixture
+    starts, messages = [], []
+    process = SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(), stderr=io.BytesIO(), wait=lambda **kwargs: 0)
+    monkeypatch.setattr(module, 'daemon', lambda: 'synthetic-daemon')
+    monkeypatch.setattr(module, 'allocate', lambda *args: 'b' * 64)
+    monkeypatch.setattr(module, 'docker', lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(module, 'before_start', lambda state, filename, role, profile: starts.append(role))
+    monkeypatch.setattr(module.subprocess, 'Popen', lambda *args, **kwargs: process)
+    monkeypatch.setattr(module, 'send', lambda process, value: messages.append(value))
+    monkeypatch.setattr(module, 'cleanup', lambda *args: None)
+    monkeypatch.setattr(module, 'sources', lambda: (b'invented', {'proof/lab/fake-bw.mjs': 'a' * 64}))
+    def selected(process):
+        binding = messages[0]['configuration']['binding']
+        return {'selected': {**binding, 'online_ready': False, 'password': 'SYNTHETIC_PASSWORD', 'extra': secret}}
+    monkeypatch.setattr(module, 'receive', selected)
+    with pytest.raises(RuntimeError, match='VAULT_COMPOSITION_INCOMPLETE'):
+        module.run('success', image, '155.0.8059.39', profile, registry.parent / 'leak-proof',
+                   b'invented', {'proof/lab/fake-bw.mjs': 'a' * 64})
+    assert starts == ['worker']
+    assert len(messages) == 1
 
 
 @pytest.mark.parametrize('phase', ['intent','receipt','start'])
