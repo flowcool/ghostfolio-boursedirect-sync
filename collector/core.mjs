@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {createHash, createHmac, randomUUID} from 'node:crypto';
 import {parseDocument, stringify} from 'yaml';
+import {BROKER_POLICY, policyUrl, requirePolicy} from './internal/source-policy.mjs';
 
 export const ORIGIN = 'https://www.boursedirect.fr';
 const LIMIT = 1048576;
@@ -30,12 +31,7 @@ export function principal(login) {
   if (typeof login !== 'string' || !/^[A-Za-z0-9._@-]{1,128}$/.test(login)) fail('LOGIN_IDENTITY_INVALID');
   return createHash('sha256').update('BD-AUTH-v1\n' + login.toUpperCase()).digest('hex');
 }
-export function brokerUrl(value) {
-  if (typeof value !== 'string' || value.length > 4096) fail('BROKER_URL_INVALID');
-  let url; try { url = new URL(value); } catch { fail('BROKER_URL_INVALID'); }
-  if (url.origin !== ORIGIN || url.username || url.password || value.includes('#') || url.href !== value || /%2f|%5c|%2e/i.test(url.pathname)) fail('BROKER_URL_INVALID');
-  return url;
-}
+export function brokerUrl(value) { return policyUrl(BROKER_POLICY,value); }
 export function command(raw) {
   if (typeof raw !== 'string' || Buffer.byteLength(raw) > 5120) fail('COMMAND_TOO_LARGE');
   let value; try { const doc=parseDocument(raw,{uniqueKeys:true}); if(doc.errors.length||doc.warnings.length)fail('COMMAND_INVALID'); value=JSON.parse(raw); } catch { fail('COMMAND_INVALID'); }
@@ -99,14 +95,23 @@ export function atomicPrivate(filename,value,{exclusive=false}={}) {
     try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
   } finally {if(fd!==undefined)fs.closeSync(fd); if(fs.existsSync(temp))fs.unlinkSync(temp);}
 }
-function authRoot() { return path.join(os.homedir(),'.local','state','ghostfolio-boursedirect-sync','auth'); }
-function location(login) { return path.join(authRoot(),principal(login)); }
-export function enroll(login) {
+export function authorityForPolicy(policy) {
+  requirePolicy(policy);
+  const lab=policy!==BROKER_POLICY, handles=new WeakMap(), url=value=>policyUrl(policy,value);
+  function owned(handle) {const data=handles.get(handle);if(!data)fail('AUTH_HANDLE_CLOSED');return data;}
+function authRoot() { return path.join(os.homedir(),'.local','state','ghostfolio-boursedirect-sync',...(lab?['synthetic-cdp','auth']:['auth'])); }
+function identity(login) {
+  if(!lab)return principal(login);
+  if(login!==undefined)fail('LOGIN_IDENTITY_INVALID');
+  return createHash('sha256').update('BD-SYNTHETIC-CDP-v1\nSYNTHETIC-NATIVE-CDP').digest('hex');
+}
+function location(login) { return path.join(authRoot(),identity(login)); }
+function enroll(login) {
   const root=privateDirectory(authRoot(),true), directory=location(login);
   if(fs.existsSync(directory)) fail('AUTH_ALREADY_ENROLLED');
   fs.mkdirSync(directory,{mode:0o700});
   // An interrupted enrollment leaves a directory that normal enrollment cannot erase.
-  const state={schema_version:1,principal:principal(login),installation_id:randomUUID(),attempts:{}};
+  const state={schema_version:lab?2:1,principal:identity(login),installation_id:randomUUID(),attempts:{},...(lab?{policy:policy.kind,origin:policy.origin,allocation_id:policy.allocation}:{})};
   atomicPrivate(path.join(directory,'journal.yaml'),state,{exclusive:true});
   const fd=fs.openSync(root,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
   return state.principal;
@@ -114,11 +119,12 @@ export function enroll(login) {
 function validPermit(p) {
   exact(p,['phase','attempt','page_epoch','frame_epoch','url','method','resource_type','nonce','deadline','consumed']);
   if(!['password_uncertain','otp_uncertain','password_accepted'].includes(p.phase) || !UUID.test(p.attempt) || !UUID.test(p.nonce) || !UUID.test(p.page_epoch) || !UUID.test(p.frame_epoch) || !['GET','POST'].includes(p.method) || !['Document','XHR','Fetch'].includes(p.resource_type) || typeof p.consumed!=='boolean') fail('AUTH_PERMIT_INVALID');
-  integer(p.deadline,0,Number.MAX_SAFE_INTEGER);brokerUrl(p.url);
+  integer(p.deadline,0,Number.MAX_SAFE_INTEGER);url(p.url);
 }
-export function validateJournal(state,id) {
-  exact(state,['schema_version','principal','installation_id','attempts']);
-  if(state.schema_version!==1 || typeof state.principal!=='string' || !HASH.test(state.principal) || state.principal!==id || !UUID.test(state.installation_id)) fail('AUTH_STATE_INVALID');
+function validateJournal(state,id) {
+  exact(state,['schema_version','principal','installation_id','attempts',...(lab?['policy','origin','allocation_id']:[])]);
+  if(lab&&(state.policy!==policy.kind||state.origin!==policy.origin||state.allocation_id!==policy.allocation))fail('AUTH_STATE_INVALID');
+  if(state.schema_version!==(lab?2:1) || typeof state.principal!=='string' || !HASH.test(state.principal) || state.principal!==id || !UUID.test(state.installation_id)) fail('AUTH_STATE_INVALID');
   if(!state.attempts || typeof state.attempts!=='object' || Array.isArray(state.attempts) || Object.keys(state.attempts).length>1000) fail('AUTH_STATE_INVALID');
   for(const [key,a] of Object.entries(state.attempts)) {
     exact(a,['state','started_at','updated_at','permit']);
@@ -128,37 +134,41 @@ export function validateJournal(state,id) {
   }
   return state;
 }
-export function acquirePrincipal(login) {
+function acquirePrincipal(login) {
   const directory=privateDirectory(location(login));const lock=path.join(directory,'lock');
   try{fs.mkdirSync(lock,{mode:0o700});}catch{fail('AUTH_PRINCIPAL_LOCKED');}
   const parent=fs.openSync(directory,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
-  const handle={directory,lock,principal:principal(login),attempt:null,released:false};
+  const data={directory,lock,principal:identity(login),attempt:null,released:false};
+  const handle=Object.freeze(Object.defineProperties({},Object.fromEntries(Object.keys(data).map(k=>[k,{enumerable:true,get:()=>data[k]}]))));
+  handles.set(handle,data);
   try{readJournal(handle);}catch(e){releasePrincipal(handle);throw e;}
   return handle;
 }
 function readJournal(handle) {
+  owned(handle);
   if(handle.released)fail('AUTH_HANDLE_CLOSED');
   return validateJournal(privateRead(path.join(handle.directory,'journal.yaml')),handle.principal);
 }
-export function releasePrincipal(handle) {
+function releasePrincipal(handle) {
+  const data=owned(handle);
   if(handle.released)return;
   // Revoke authority before any release operation can fail or ownership can move.
-  handle.released=true;
+  data.released=true;
   fs.rmdirSync(handle.lock);
   const parent=fs.openSync(handle.directory,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
 }
-export function startAttempt(handle,now) {
+function startAttempt(handle,now) {
   integer(now,0,Number.MAX_SAFE_INTEGER);const state=readJournal(handle);
   if(Object.values(state.attempts).some(a=>a.state!=='closed_success'))fail('AUTH_PRINCIPAL_FENCED');
   if(Object.keys(state.attempts).length>=1000)fail('AUTH_ATTEMPT_LIMIT');
   if(Object.values(state.attempts).some(a=>now<a.updated_at))fail('AUTH_CLOCK_REVERSED');
   const id=randomUUID();state.attempts[id]={state:'enrolled',started_at:now,updated_at:now,permit:null};
-  atomicPrivate(path.join(handle.directory,'journal.yaml'),state);handle.attempt=id;return id;
+  atomicPrivate(path.join(handle.directory,'journal.yaml'),state);owned(handle).attempt=id;return id;
 }
 const TRANSITIONS={enrolled:['password_uncertain','blocked'],password_uncertain:['password_accepted','blocked'],password_accepted:['otp_uncertain','blocked'],otp_uncertain:['authenticated','blocked'],authenticated:['closed_success','blocked'],closed_success:[],blocked:[]};
-export function transition(handle,next,now) {
+function transition(handle,next,now) {
   const state=readJournal(handle),a=state.attempts[handle.attempt];
   if(!a||!TRANSITIONS[a.state].includes(next))fail('AUTH_TRANSITION_INVALID');
   integer(now,a.updated_at,Number.MAX_SAFE_INTEGER);
@@ -166,25 +176,25 @@ export function transition(handle,next,now) {
   a.state=next;a.updated_at=now;a.permit=null;
   atomicPrivate(path.join(handle.directory,'journal.yaml'),state);return next;
 }
-export function validateSourceContract(source) {
+function validateSourceContract(source) {
   exact(source,['schema_version','origin','roles']);
-  if(source.schema_version!==1||source.origin!==ORIGIN)fail('SOURCE_CONTRACT_INVALID');
+  if(source.schema_version!==1||source.origin!==policy.origin)fail('SOURCE_CONTRACT_INVALID');
   exact(source.roles,['password','app_method','otp']);
   for(const [role,c] of Object.entries(source.roles)){
     if(c===null)continue;
-    exact(c,['url','method','resource_type','evidence']);brokerUrl(c.url);
+    exact(c,['url','method','resource_type','evidence']);url(c.url);
     if(!['GET','POST'].includes(c.method)||!['Document','XHR','Fetch'].includes(c.resource_type)||typeof c.evidence!=='string'||!c.evidence.trim()||c.evidence.length>1000)fail('SOURCE_CONTRACT_INVALID');
     if(role!=='app_method'&&c.method!=='POST')fail('SOURCE_CONTRACT_INVALID');
   }
   return source;
 }
-export function evaluateRequest(source,phase,request) {
+function evaluateRequest(source,phase,request) {
   validateSourceContract(source);exact(request,['url','method','resource_type','redirect']);
   const role={password_uncertain:'password',password_accepted:'app_method',otp_uncertain:'otp'}[phase];
   const c=role?source.roles[role]:null;
   return !!c&&request.redirect===false&&['url','method','resource_type'].every(k=>request[k]===c[k]);
 }
-export function armPermit(handle,contract,now,source) {
+function armPermit(handle,contract,now,source) {
   exact(contract,['phase','page_epoch','frame_epoch','url','method','resource_type']);
   if(!evaluateRequest(source,contract.phase,{url:contract.url,method:contract.method,resource_type:contract.resource_type,redirect:false}))fail('AUTH_SOURCE_ROLE_DISABLED');
   const state=readJournal(handle),a=state.attempts[handle.attempt];
@@ -194,7 +204,7 @@ export function armPermit(handle,contract,now,source) {
   // Contract is already independently characterized by the eventual source-contract owner.
   a.permit=permit;a.updated_at=now;atomicPrivate(path.join(handle.directory,'journal.yaml'),state);return permit.nonce;
 }
-export function consumePermit(handle,request,now) {
+function consumePermit(handle,request,now) {
   exact(request,['phase','page_epoch','frame_epoch','url','method','resource_type','nonce','redirect']);
   const state=readJournal(handle),a=state.attempts[handle.attempt],p=a?.permit;
   integer(now,0,Number.MAX_SAFE_INTEGER);
@@ -202,6 +212,20 @@ export function consumePermit(handle,request,now) {
   p.consumed=true;a.updated_at=now;atomicPrivate(path.join(handle.directory,'journal.yaml'),state);
   return true; // Trusted driver may continue only after this function returns.
 }
+  return Object.freeze({enroll,validateJournal,acquirePrincipal,releasePrincipal,startAttempt,transition,validateSourceContract,evaluateRequest,armPermit,consumePermit,
+    assertHandle:handle=>{const data=owned(handle);if(data.released)fail('AUTH_HANDLE_CLOSED');return true;}});
+}
+const brokerAuthority=authorityForPolicy(BROKER_POLICY);
+export function enroll(login) {return brokerAuthority.enroll(login);}
+export function validateJournal(state,id) {return brokerAuthority.validateJournal(state,id);}
+export function acquirePrincipal(login) {return brokerAuthority.acquirePrincipal(login);}
+export function releasePrincipal(handle) {return brokerAuthority.releasePrincipal(handle);}
+export function startAttempt(handle,now) {return brokerAuthority.startAttempt(handle,now);}
+export function transition(handle,next,now) {return brokerAuthority.transition(handle,next,now);}
+export function validateSourceContract(source) {return brokerAuthority.validateSourceContract(source);}
+export function evaluateRequest(source,phase,request) {return brokerAuthority.evaluateRequest(source,phase,request);}
+export function armPermit(handle,contract,now,source) {return brokerAuthority.armPermit(handle,contract,now,source);}
+export function consumePermit(handle,request,now) {return brokerAuthority.consumePermit(handle,request,now);}
 export function otpFromEnvironment(env,now) {
   integer(now,0,Number.MAX_SAFE_INTEGER);
   const remain=30-(now%30);if(remain<5)fail('OTP_NEAR_EXPIRY');

@@ -45,12 +45,13 @@ def fixture_archive():
         'lab/first-request.mjs', 'lab/restart-principal.mjs',
         'lab/capture-document.mjs', 'lab/verdict.mjs', 'lab/scenarios.yaml', 'core.mjs',
         'capability-pipe.mjs', 'capability-ordering.mjs',
-        'capability-bootstrap.mjs', 'capability-policy.mjs']]
+        'capability-bootstrap.mjs', 'capability-policy.mjs', 'internal/source-policy.mjs']]
     with tarfile.open(fileobj=buffer, mode='w') as archive:
         for path in sources:
             content = path.read_bytes()
             hashes[path.name] = hashlib.sha256(content).hexdigest()
-            info = tarfile.TarInfo('proof/' + path.name)
+            relative = 'internal/' + path.name if path.parent.name == 'internal' else path.name
+            info = tarfile.TarInfo('proof/' + relative)
             info.uid = info.gid = 1000
             info.mode = 0o400
             info.size = len(content)

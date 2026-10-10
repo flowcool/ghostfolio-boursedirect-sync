@@ -9,8 +9,8 @@ export const GUARDS = Object.freeze([
   ['Fetch.enable', {patterns: Object.freeze([Object.freeze({urlPattern: '*', requestStage: 'Request'})]), handleAuthRequests: true}],
 ].map(([method, params]) => Object.freeze([method, Object.freeze(params)])));
 
-export function orderingExperiment({send, installRoutes, stopOwned, closePipe}) {
-  if ([send, installRoutes, stopOwned, closePipe].some(f => typeof f !== 'function')) {
+export function orderingExperiment({send, installRoutes, stopOwned, closePipe, beforeResume = () => {}}) {
+  if ([send, installRoutes, stopOwned, closePipe, beforeResume].some(f => typeof f !== 'function')) {
     throw new Error('CAPABILITY_CALLBACK_REQUIRED');
   }
   let fenced = false, starting = false, ready = false, stop, ownedSession;
@@ -40,6 +40,8 @@ export function orderingExperiment({send, installRoutes, stopOwned, closePipe}) 
         // Fresh parameters prevent injected test callbacks from changing later runs.
         await send(method, structuredClone(params), sessionId);
       }
+      check();
+      await beforeResume(sessionId);
       check();
       await send('Runtime.runIfWaitingForDebugger', {}, sessionId);
       check(); ready = true;

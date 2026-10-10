@@ -1,5 +1,6 @@
 // Callback-only policy. No launcher, credentials, DOM, source loader or online CLI.
-import {brokerUrl, evaluateRequest, validateSourceContract} from './core.mjs';
+import {authorityForPolicy} from './core.mjs';
+import {BROKER_POLICY, policyUrl, requirePolicy} from './internal/source-policy.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TYPES = new Set(['Document', 'XHR', 'Fetch', 'Script', 'Stylesheet', 'Image', 'Font']);
@@ -17,9 +18,20 @@ function identifier(value) {
 function epoch(value) {
   if (typeof value !== 'string' || !UUID.test(value)) throw new Error('REQUEST_METADATA_INVALID');
 }
+function frozenClone(value) {
+  const clone = structuredClone(value);
+  function freeze(item) {
+    if (item && typeof item === 'object') {Object.values(item).forEach(freeze); Object.freeze(item);}
+    return item;
+  }
+  return freeze(clone);
+}
 
-export function requestController({binding, source, reads = [], consume, continueRequest, cancelAuth, stop, now,
+export function controllerForPolicy(policy, {binding, source, reads = [], consume, continueRequest, cancelAuth, stop, now,
                                    limits = REQUEST_LIMITS}) {
+  requirePolicy(policy);
+  const {evaluateRequest,validateSourceContract}=authorityForPolicy(policy);
+  const brokerUrl=value=>policyUrl(policy,value);
   let owner, contract, roles, budget;
   try {
     if ([consume, continueRequest, cancelAuth, stop, now].some(f => typeof f !== 'function')) throw new Error();
@@ -45,8 +57,8 @@ export function requestController({binding, source, reads = [], consume, continu
     for (const [key, max] of Object.entries(REQUEST_LIMITS)) {
       if (!Number.isSafeInteger(limits[key]) || limits[key] < 1 || limits[key] > max) throw new Error();
     }
-    owner = structuredClone(binding); contract = structuredClone(source);
-    roles = structuredClone(reads); budget = {...limits};
+    owner = frozenClone(binding); contract = frozenClone(source);
+    roles = frozenClone(reads); budget = {...limits};
   } catch { throw new Error('REQUEST_CONFIG_INVALID'); }
 
   let fenced = false, stopping, pending = 0, queue = Promise.resolve(), action, reserved = false, lastOtpClock;
@@ -182,3 +194,5 @@ export function requestController({binding, source, reads = [], consume, continu
   return {arm, paused, authRequired, abort,
     status: () => ({fenced, pending, seen: seen.size, online_ready: false, browser_proven: false, import_ready: false})};
 }
+
+export function requestController(options) { return controllerForPolicy(BROKER_POLICY,options); }
