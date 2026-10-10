@@ -315,3 +315,26 @@ sandbox_os_diagnostics:
     sandbox_qualified: false
   failure_output: fixed stage, renderer protection booleans/filter counts/namespace
     depth and bounded scan counters; no PIDs, cmdline or raw proc data
+sandbox_renderer_ancestry:
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: bd2546a7e9cf5922ea16a7123d514be3a41b2c0da34b60c075c118b3aa5a84c5
+    collector/tests/browser-sandbox-proof.test.mjs: c761a4741933813a9b1d7dbcc093e4f51e38291dcf8a1ee768d2b6cb2a413c80
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 425
+    log_sha256: 161b775255b36293a571644424452b36008f2a2f54e99fd7fc0008f969d5140f
+    diagnostic_only_followup: Fixed stages distinguish CDP inventory, ancestry and
+      OS status; node syntax and focused check repeated below.
+  previous_host_observation:
+    source_commit: 289cc51
+    stage: renderer_os_sandbox
+    owned_group_processes: 7
+    renderers_found: 0
+    proc_read_failures: 0
+    owned_browser_stopped: true
+  correction: CDP renderer IDs must be kernel descendants of the start-time-pinned
+    launched root; unrelated process groups and reused PIDs are excluded. Stop each
+    pinned descendant with identity recheck. Renderer protection thresholds remain
+    unchanged.
+  ugreen_sandbox_qualified: false

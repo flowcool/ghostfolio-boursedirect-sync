@@ -43,8 +43,45 @@ export function loopbackNamespace(raw) {
   return true;
 }
 
+export function processIdentity(raw) {
+  const match = /^(\d+) \(.*\) (.*)$/.exec(raw.trim());
+  const fields = match?.[2].split(/\s+/);
+  if (!match || fields.length < 20 || !/^[A-Z]$/.test(fields[0])
+      || ![match[1], fields[1], fields[2], fields[19]].every(value => /^\d+$/.test(value)))
+    throw new Error('SANDBOX_PROCESS_REFUSED');
+  const result = {pid: Number(match[1]), ppid: Number(fields[1]), group: Number(fields[2]),
+    start: fields[19], state: fields[0]};
+  if (![result.pid, result.ppid, result.group].every(Number.isSafeInteger) || result.pid < 2)
+    throw new Error('SANDBOX_PROCESS_REFUSED');
+  return result;
+}
+export function sameProcess(expected, current) {
+  return Boolean(expected && current && expected.pid === current.pid && expected.start === current.start);
+}
+export function ownedDescendants(rows, root) {
+  const table = new Map(rows.map(row => [row.pid, row]));
+  if (table.size !== rows.length || !sameProcess(root, table.get(root.pid)))
+    throw new Error('SANDBOX_OWNERSHIP_REFUSED');
+  const owned = new Map([[root.pid, table.get(root.pid)]]);
+  for (let pass = 0; pass < rows.length; pass++) {
+    const before = owned.size;
+    for (const row of rows) if (owned.has(row.ppid) && !owned.has(row.pid)) owned.set(row.pid, row);
+    if (before === owned.size) break;
+  }
+  return owned;
+}
+function readIdentity(pid) {
+  try {return processIdentity(fs.readFileSync('/proc/' + pid + '/stat', 'utf8'));}
+  catch (error) {if (error.code === 'ENOENT') return undefined; throw error;}
+}
+function processTable() {
+  const names = fs.readdirSync('/proc').filter(value => /^\d+$/.test(value) && Number(value) >= 2);
+  if (names.length > 256) throw new Error('SANDBOX_PROCESS_LIMIT');
+  return names.map(name => readIdentity(name)).filter(Boolean);
+}
+
 let stage = 'runtime_prerequisites', sandboxUnavailable = false;
-const osObservation = {owned_group_processes: 0, renderers_found: 0, renderer_status: [], proc_read_failures: 0};
+const osObservation = {owned_descendant_processes: 0, renderers_found: 0, renderer_status: [], proc_read_failures: 0};
 async function prove() {
   if (process.getuid() !== 1000) throw new Error('SANDBOX_RUNTIME_REFUSED');
   stage = 'network_namespace';
@@ -62,22 +99,48 @@ async function prove() {
   let exited = false, fenced = false, stopping, stderrBytes = 0, pipe, result;
   const exit = once(child, 'exit').then(() => {exited = true;});
   exit.catch(() => {});
+  const root = readIdentity(child.pid);
+  if (!root) throw new Error('SANDBOX_PROCESS_REFUSED');
+  const known = new Map([[root.pid, root]]);
+  function observeOwned() {
+    if (!sameProcess(root, readIdentity(root.pid))) return new Map();
+    const owned = ownedDescendants(processTable(), root);
+    for (const [pid, row] of owned) {
+      if (known.has(pid) && !sameProcess(known.get(pid), row)) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
+      known.set(pid, row);
+    }
+    return owned;
+  }
+  function liveOwned() {
+    return [...known.values()].filter(row => {
+      const current = readIdentity(row.pid);
+      return sameProcess(row, current) && !['Z', 'X'].includes(current.state);
+    });
+  }
+  function signalOwned(signal) {
+    // Identity is rechecked immediately before each signal; unrelated/reused PIDs are never targeted.
+    for (const row of [...known.values()].reverse()) {
+      const current = readIdentity(row.pid);
+      if (!sameProcess(row, current) || ['Z', 'X'].includes(current.state)) continue;
+      try {process.kill(row.pid, signal);} catch (error) {if (error.code !== 'ESRCH') throw error;}
+    }
+  }
   async function waitExit() {
-    let timer;
-    try {await Promise.race([exit, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('SANDBOX_EXIT_TIMEOUT')), 5000);
-    })]);} finally {clearTimeout(timer);}
+    for (let attempt = 0; attempt < 50; attempt++) {
+      if (exited && liveOwned().length === 0) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('SANDBOX_EXIT_TIMEOUT');
   }
   function stop() {
     stopping ??= (async () => {
-      if (!exited) {
-        process.kill(-child.pid, 'SIGTERM');
-        try {await waitExit();} catch {
-          if (!exited) process.kill(-child.pid, 'SIGKILL');
-          await waitExit();
-        }
+      observeOwned();
+      signalOwned('SIGTERM');
+      try {await waitExit();} catch {
+        signalOwned('SIGKILL');
+        await waitExit();
       }
-      if (!exited) throw new Error('SANDBOX_EXIT_UNVERIFIED');
+      if (!exited || liveOwned().length) throw new Error('SANDBOX_EXIT_UNVERIFIED');
     })();
     return stopping;
   }
@@ -112,24 +175,26 @@ async function prove() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     if (title?.result?.value !== 'SYNTHETIC_SANDBOX_PROOF') throw new Error();
-    stage = 'renderer_os_sandbox';
-    const renderers = [];
-    for (const name of fs.readdirSync('/proc').filter(value => /^\d+$/.test(value))) {
-      try {
-        const stat = fs.readFileSync('/proc/' + name + '/stat', 'utf8');
-        const group = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
-        const args = fs.readFileSync('/proc/' + name + '/cmdline', 'utf8').split('\0');
-        if (group !== child.pid) continue;
-        osObservation.owned_group_processes++;
-        if (!args.includes('--type=renderer')) continue;
-        osObservation.renderers_found++;
-        const rawStatus = fs.readFileSync('/proc/' + name + '/status', 'utf8');
-        osObservation.renderer_status.push(sandboxDetails(rawStatus, baseline));
-        renderers.push(sandboxStatus(rawStatus, baseline));
-      } catch (error) {
-        if (error.message === 'SANDBOX_STATUS_REFUSED') throw error;
-        if (error.code !== 'ENOENT') osObservation.proc_read_failures++;
-      }
+    stage = 'renderer_process_inventory';
+    const processes = await pipe.send('SystemInfo.getProcessInfo');
+    if (!Array.isArray(processes.processInfo) || processes.processInfo.length > 256)
+      throw new Error('SANDBOX_PROCESS_REFUSED');
+    const rendererIds = processes.processInfo.filter(row => row.type === 'renderer').map(row => row.id);
+    if (rendererIds.length === 0 || new Set(rendererIds).size !== rendererIds.length
+        || rendererIds.some(pid => !Number.isSafeInteger(pid) || pid < 2))
+      throw new Error('SANDBOX_PROCESS_REFUSED');
+    stage = 'renderer_ownership';
+    const owned = observeOwned(), renderers = [];
+    osObservation.owned_descendant_processes = owned.size;
+    osObservation.renderers_found = rendererIds.length;
+    for (const pid of rendererIds) {
+      const identity = owned.get(pid);
+      if (!identity || !sameProcess(identity, readIdentity(pid))) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
+      stage = 'renderer_os_sandbox';
+      const rawStatus = fs.readFileSync('/proc/' + pid + '/status', 'utf8');
+      if (!sameProcess(identity, readIdentity(pid))) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
+      osObservation.renderer_status.push(sandboxDetails(rawStatus, baseline));
+      renderers.push(sandboxStatus(rawStatus, baseline));
     }
     if (fenced || renderers.length === 0) throw new Error();
     result = {code: 'BROWSER_SANDBOX_QUALIFIED', chrome_version: '155.0.8059.39',
@@ -142,19 +207,10 @@ async function prove() {
     // Observe owned browser exit before intentional pipe closure.
     pipe.lost();
   }
-  stage = 'owned_group_exit';
-  const aliveOwnedGroup = () => fs.readdirSync('/proc').filter(value => /^\d+$/.test(value)).some(name => {
-    try {
-      const stat = fs.readFileSync('/proc/' + name + '/stat', 'utf8');
-      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      return Number(fields[2]) === child.pid && !['Z','X'].includes(fields[0]);
-    } catch (error) {if (error.code !== 'ENOENT') throw error; return false;}
-  });
-  for (let attempt = 0; attempt < 50 && aliveOwnedGroup(); attempt++)
-    await new Promise(resolve => setTimeout(resolve, 100));
-  if (aliveOwnedGroup()) throw new Error('SANDBOX_DESCENDANTS_UNVERIFIED');
+  stage = 'owned_descendant_exit';
+  if (liveOwned().length) throw new Error('SANDBOX_DESCENDANTS_UNVERIFIED');
   result.owned_browser_exit_verified = true;
-  result.owned_group_exit_verified = true;
+  result.owned_descendant_exit_verified = true;
   return result;
 }
 
