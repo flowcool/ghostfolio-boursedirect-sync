@@ -12,7 +12,7 @@ import {executePrivate} from '../private-process.mjs';
 import {collectorEnvironment} from '../private-process.mjs';
 
 const credentials = {BW_CLIENTID:'SYNTHETIC_CLIENT', BW_CLIENTSECRET:'SYNTHETIC_API', BW_PASSWORD:'SYNTHETIC_UNLOCK'};
-function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=false,lookupFault,egressProxy}={}) {
+function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=false,lookupFault,egressProxy,logoutFault,statusFault}={}) {
   const calls = [], id = 'b'.repeat(64), itemId = randomUUID(); let stops = 0, allowed = true;
   const configuration = {schema_version:1, vaultOrigin:'https://vault.synthetic.invalid', binding:{itemId,name:'invented',
     uri:'https://www.boursedirect.fr/synthetic',principalHash:principal('SYNTHETIC'),accountConfig:{path:'/synthetic/account.yaml',sha256:'a'.repeat(64)}},
@@ -27,11 +27,14 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=fal
     stopOwned:async value=>{assert.equal(value,id); stops++;}, transport:async (executable,args,env,timeout,input)=>{
       calls.push({executable,args,env,timeout,input});
       const mode=args[args.indexOf('vault-cli')+1];
+      if(mode==='logout' && logoutFault)return {status:1,stdout:'',stderr:'SYNTHETIC_PRIVATE_ERROR'};
       if(mode==='version' && holdVersion){onVersion();await holdVersion;}
       const stdout=args.includes('/usr/bin/sha256sum') ? (badHash?'d'.repeat(64):configuration.cli.sha256)+'  /usr/local/bin/bw\n'
         : mode==='version' ? 'synthetic-1\n' : mode==='unlock' ? 'SYNTHETIC_SESSION\n'
         : mode==='item' ? JSON.stringify(item) : mode==='lookup' ? lookupFault ? lookupFault(item) : JSON.stringify([item])
         : mode==='totp' ? '123456\n' : '';
+      if(mode==='status')return {status:0,stdout:statusFault ? JSON.stringify(statusFault)
+        : JSON.stringify({status:'unauthenticated',userId:null,userEmail:null,lastSync:null}),stderr:''};
       return {status:0,stdout,stderr:''};
     }});
   const worker=vaultWorker({configuration,...adapter,appdata:'/data',now:()=>120});
@@ -44,12 +47,23 @@ test('independent vault inspection requires no importer binding and exports no b
     assert.equal(JSON.stringify(result).includes(secret),false);
   assert.equal(result.uri,f.item.login.uris[0].uri);
   assert.equal(result.online_ready,false);
+  assert.deepEqual(f.calls.slice(-2).map(x=>x.args[x.args.indexOf('vault-cli')+1]),['logout','status']);
+  assert.equal(f.calls.slice(-2).every(x=>x.input.length===0),true);
   assert.throws(()=>collectorEnvironment(result,'/synthetic'),/PRIVATE_PROCESS_FAILED/);
   const count=f.calls.length,expected={runNonce:randomUUID(),stageNonce:randomUUID()};
   await assert.rejects(f.worker.code(expected,expected),/VAULT_WORKER_FAILED/);
   await assert.rejects(f.adapter.execute('/usr/local/bin/bw',['get','totp',f.item.id],
     {PATH:'/usr/bin:/bin',HOME:'/data',BITWARDENCLI_APPDATA_DIR:'/data',BW_SESSION:'SYNTHETIC_SESSION'}),/CLI_ADAPTER_FAILED/);
   assert.equal(f.calls.length,count);assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
+});
+for(const fault of ['logout','locked-status','identity-retained'])test('inspection fences unverified session cleanup '+fault,async()=>{
+  const f=fixture({inspection:true,logoutFault:fault==='logout',statusFault:fault==='locked-status'
+    ? {status:'locked'} : fault==='identity-retained' ? {status:'unauthenticated',userId:'SYNTHETIC'} : undefined});
+  await assert.rejects(f.worker.initialize(credentials),/VAULT_WORKER_FAILED/);
+  const count=f.calls.length;
+  await assert.rejects(f.worker.initialize(credentials),/VAULT_WORKER_FAILED/);
+  assert.equal(f.calls.length,count);
+  assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
 });
 test('inspection cannot accept an account binding or relax acquisition account requirements',()=>{
   const f=fixture({inspection:true});

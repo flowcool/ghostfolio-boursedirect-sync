@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize('mode,args,secrets,expected', [
     ('version', [], [], ['--version']),
+    ('logout', [], [], ['logout']),
+    ('status', [], [], ['status']),
     ('server', ['https://vault.synthetic.invalid'], [], ['config', 'server', 'https://vault.synthetic.invalid']),
     ('login', [], [('BW_CLIENTID', 'SYNTHETIC_CLIENT'), ('BW_CLIENTSECRET', 'SYNTHETIC_API')], ['login', '--apikey']),
     pytest.param('login', [], [('BW_CLIENTID', 'SYNTHETIC_CLIENT'), ('BW_CLIENTSECRET', 'SYNTHETIC_\'"$(false)_é')],

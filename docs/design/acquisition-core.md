@@ -202,8 +202,11 @@ interactive amendment. Its binding contains only the operator's exact
 login/unlock/sync/search sequence and strict unique live item, URI, credential and
 TOTP-profile validation. Only private item/principal/URI/profile metadata is
 returned; no login, password, session or seed can be delivered to a collector.
-The worker discards its session after inspection, and both worker and adapter
-refuse TOTP commands in this mode. No importer config or broker enrollment is
+The worker logs out and verifies an unauthenticated status with no retained user
+or sync identity before returning. It discards its session, and both worker and
+adapter refuse TOTP commands in this mode. The independently owned application
+services stay available for later stages; an unverified session cleanup fences
+the capability and requires exact affected-runtime shutdown. No importer config or broker enrollment is
 created or inferred. Acquisition schemas 1 and 2 retain their mandatory trusted
 account reference and broker gates. This separates qualification of the vault
 capability from actual broker authentication without weakening either boundary.

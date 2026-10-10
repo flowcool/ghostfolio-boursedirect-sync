@@ -75,7 +75,13 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
       selected = (config.schema_version === 1 ? selectWorkerItem
         : config.schema_version === 2 ? selectNamedWorkerItem : inspectNamedVaultItem)(
         JSON.parse(raw), config.binding, config.cli.defaultsVerified);
-      if (config.schema_version === 3) session = undefined;
+      if (config.schema_version === 3) {
+        await command(['logout'], base);
+        session = undefined;
+        const status = JSON.parse(await command(['status'], base));
+        if (status?.status !== 'unauthenticated' || ['userId', 'userEmail', 'lastSync'].some(
+          key => status[key] !== undefined && status[key] !== null)) throw new Error();
+      }
       return structuredClone(selected);
     } catch {failed = true; selected = session = undefined; throw new Error('VAULT_WORKER_FAILED');}
   }

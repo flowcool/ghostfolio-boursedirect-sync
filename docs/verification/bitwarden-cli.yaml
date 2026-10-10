@@ -353,3 +353,40 @@ sdk_totp_defaults:
     sdk.vault().totp().generate_totp
   limits: Qualifies implicit profile arithmetic in the pinned SDK. No actual vault
     item or real TOTP requested; operational clock/nonce gates remain independent.
+durable_session_cleanup:
+  kind: inspection-logout-with-services-retained
+  inputs:
+    collector/vault-worker.mjs: bd9079ed10dd0fa2e096d8a0c1034afb1b620dbb7a5e675c3844d53f31419393
+    collector/bitwarden-cli.mjs: 075cd8d77293a0a9703096eb719a8f8d3bf8f15f8e8696157e898c54fc6e9815
+    collector/bitwarden-cli.sh: 1bf789482c22d8d083af8d4e0772e5c70150eb3d3702665e7e3dfc1f9174140d
+    collector/tests/bitwarden-cli.test.mjs: 99513248f265d1855541d029cc7347c7e233606bdea83ebe583c8b9f736778df
+    tests/test_bitwarden_cli_shim.py: e392f14c0bd2df94f7ec6e5f1714243f9999412269748090bd7a5b023cf27263
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements.txt: c79be17433b0d60b772ab61dfe4ffc400eb9c53711e46a7c07e4ff86e9ae55c8
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+  checks:
+    python:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1162
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 401
+      private_log: tmp/vault-session-node.log
+      log_sha256: 043402ad686f4ff8f6cf3b5c8a5db78f499487db1c70cf4bf9852ab483ef68e7
+    documentation:
+      command: .venv/bin/python scripts/check-docs.py
+      exit_code: 0
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+  invariants:
+  - Inspection returns metadata only after logout and unauthenticated status with
+    no user/sync identity
+  - Services remain available after successful cleanup
+  - Failed cleanup fences the capability and stops only the exact affected CLI runtime
+  vendor_logout_source: 'bitwarden/clients e6293ff2bc85123e9baaa998cf1543030ec5d9f0;
+    apps/cli/src/auth/commands/logout.command.ts and service-container.ts logout:
+    keys/ciphers/folders/tokens/account removed'
+  live_vault_access: false

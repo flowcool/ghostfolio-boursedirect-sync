@@ -44,7 +44,10 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
       : ['list', 'items', '--search', config.binding.name], config.schema_version === 1 ? 'item' : 'lookup', ['BW_SESSION']],
     [['get', 'totp', config.binding.itemId], 'totp', ['BW_SESSION']],
   ];
-  if (config.schema_version === 3) steps.pop(); // No TOTP command in inspection mode.
+  if (config.schema_version === 3) {
+    steps[6] = [['logout'], 'logout', []];
+    steps.push([['status'], 'status', []]); // No TOTP command in inspection mode.
+  }
   let index = 0, verified = false, busy = false, failed = false, stopping;
   async function refuse() {
     failed = true;
