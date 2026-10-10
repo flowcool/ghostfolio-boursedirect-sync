@@ -720,3 +720,86 @@ No Docker/browser/network operation or Beads mutation was performed. Parent owns
 required local verification, the scoped commit and `.99` closure before runtime.
 **Knowledge verdict: Nothing durable.** This narrow identity delta belongs in
 its canonical plan, review and retained build records; it adds no portable lesson.
+
+
+## Exact-hash design delta review: supervised allocation interruption proof
+
+Date: 2026-10-10. Independent DESIGN review of the final owning plan SHA256
+`d5724ac0126b4eee2c1f737c1563b2c21079c3cf9fc9370e5d964061c5a1eb55`.
+**APPROVE the narrowly supervised laboratory interruption-proof design.**
+The earlier scoped HOLD is resolved: the worker now checks its exact private
+`output/home` and current parent PID against the invoking supervisor before
+accessing the registry, and the plan explicitly bounds the test-only recovery
+exception. This is cooperation against accidental cross-use, not a security
+boundary against hostile same-user code.
+
+Inspected the corrected `prove-native-allocation.py`, the relevant runner and
+allocation operations, and the native verdict's permitted-dispatch condition.
+The supervisor observes its same-invocation child exit by SIGKILL before retaining
+the old lock, acquiring fresh exclusion and reconciling that same allocation.
+The unreceipted full create ID comes from the fsynced checkpoint of that controlled
+create call; independent exact-ID inspection and durable receipt publication
+precede ordinary cleanup. Names, labels, discovered resources, expired locks or
+reconstructed authority after supervisor loss are not acceptable substitutes.
+Before-create intent remains retained and refuses another allocation. No restart,
+new allocation or ordinary runner recovery capability follows from this exception.
+
+The corrected dispatch checkpoint follows completion and validation of the native
+permitted run, then kills the worker before the ordinary runner receives and
+publishes its result. It therefore tests interruption after completed dispatch
+and before ordinary result publication, not a kill synchronized with a packet or
+an in-flight request. Preserve native observations, killed-state evidence,
+principal uncertainty and reconciliation receipts separately; do not present the
+supervisor's additional checkpoint authority as ordinary crash recovery evidence.
+
+This approval supplies design permission only. Final helper verification, a
+scoped commit before launch, applicable fixture authorization and observed runtime
+proof remain required under `.94`. The 32-mode matrix and interruption evidence
+retain distinct source pins and must not inherit historical receipts. All
+readiness flags remain false; no production, broker, deployment or financial
+permission is added. No runtime, Docker, network or shared-state operation was
+performed by this review. Only this section was appended, preserving every prior
+report byte. Parent owns verification, Beads and commit reconciliation.
+
+**Knowledge verdict: Nothing durable.** The bounded experiment and its evidence
+limits are recorded in the canonical project plan/report; no portable operational
+lesson or corpus change is introduced.
+
+
+## Exact-hash design delta review: retained allocation registry capacity
+
+Date: 2026-10-10. Final owning plan SHA256:
+`eb3f6516ec1bab5cebf9535e249a22358c07c83d88fd471d4a94a53386e84ad9`.
+**APPROVE this bounded registry-capacity and supervised lock-reconciliation
+design delta.** No blocking design finding remains. Raising serialized registry
+capacity from 1MiB to 32MiB retains the independent 1000-allocation,
+1000-source-entry, depth-16, strict-schema and private-file controls. These are
+maximum bounds, not a promise that every permitted combination fits. Future
+capacity exhaustion must still refuse without pruning receipts or resetting state.
+
+Inspected the exact plan appendix and the allocation diff, schema validation,
+publication and poisoned-handle ordering. `_publish` checks serialized length
+before creating its temporary file; `_save` already poisons the handle, and
+`begin_allocation` must succeed before the runner reaches create. This supports
+the reported failure mechanism. The reported 32 terminal rows and 1,019,046-byte
+live registry are parent evidence; this reviewer did not inspect or mutate it.
+
+The narrow same-session exception requires verified complete terminal-absence
+rows, proof that this failed attempt published no new intent and reached no
+create, and proof that no current/competing owner remains. Retain the original
+lock separately and preserve registry bytes; never infer recovery authority from
+lock age, successful test results or terminal rows alone. Unknown publication or
+resource outcome remains blocked. This approves neither a general lock-clearing
+command nor automatic recovery.
+
+Before reconciliation or launch, the owner must add discriminating finite-limit
+regression evidence, run complete local verification and commit the scoped change.
+The `.94` owner must rerun all 32 runtime modes with fresh receipts against the
+changed allocation-source digest; previous matrix passes cannot qualify it.
+All readiness flags remain false and existing resource/authorization boundaries
+remain unchanged. This is DESIGN review only, with no runtime, Docker, network,
+registry mutation or PR review performed. Only this section was appended and all
+prior report bytes were preserved. Parent owns evidence, Beads and commit closure.
+
+**Knowledge verdict: Nothing durable.** The bound and its qualified local failure
+mechanism belong in the canonical project plan/report and acceptance evidence.

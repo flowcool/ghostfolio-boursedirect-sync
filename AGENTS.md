@@ -47,6 +47,16 @@ Global working agreement applies. Beads owns live work state.
 - No Ghostfolio writes are authorized. Public v0 publication is authorized;
   private documents, runtime evidence and credentials must remain off Git.
 
+## Autonomous technical ownership
+
+Florent authorizes the agent to complete the agreed project scope autonomously,
+including required Astra design reviews and bounded infrastructure delegation
+(Sonnet for infrastructure). Resolve technical choices, review findings and
+recoverable laboratory failures without repeating permission requests. Carry
+existing approvals across sessions through their Beads evidence. Ask Florent
+only for genuinely new authority or indispensable information. Production,
+financial writes, publication/push and destructive-operation gates still apply.
+
 ## Durable work state
 
 - Root epic: `infra-4g8u`, metadata `project=ghostfolio-boursedirect-sync`.

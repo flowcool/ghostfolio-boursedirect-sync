@@ -53,6 +53,18 @@ def receipt(f):
     module.record_receipt(handle, 'invented-daemon', identity, identifier, details, profile)
 
 
+def test_registry_retains_large_hash_history_but_refuses_over_limit(registry, monkeypatch):
+    module, profile = registry
+    assert module._LIMIT == 33554432
+    path = module._root() / 'large-proof.yaml'
+    module._publish(path, {'synthetic': 'a' * 1100000})
+    assert len(module._read(path)['synthetic']) == 1100000
+    monkeypatch.setattr(module, '_LIMIT', 1200000)
+    with pytest.raises(RuntimeError, match='ALLOCATION_LIMIT'):
+        module._publish(path, {'synthetic': 'a' * module._LIMIT})
+    assert len(module._read(path)['synthetic']) == 1100000
+
+
 def test_full_id_receipt_is_durable_before_start_and_exact_cleanup(registry):
     f = allocation(registry)
     module, profile, handle, identity, identifier, details = f

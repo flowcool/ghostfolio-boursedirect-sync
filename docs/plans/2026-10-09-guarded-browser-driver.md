@@ -568,3 +568,31 @@ tag and attestation; no container or browser was launched. Rollback this pin
 change with its scoped commit revert. Image rollback belongs to infra: remove
 only `bd-native-cdp-recovery:infra-lnms` after verifying the exact recovered
 identity and that no container uses it; do not prune shared cached layers.
+
+### Supervised allocation interruption proof (2026-10-10)
+
+The opt-in development helper uses a newly owned private HOME per scenario,
+never the canonical host registry. The worker requires that exact HOME and its
+current supervisor PID before any registry operation. The supervisor creates
+and observes its own child in this invocation; it records fsynced full create
+IDs before interrupting unreceipted creation. After observed SIGKILL exit only,
+it retains the terminated lock separately, obtains a new exclusive lock and
+reconciles this same allocation with independent exact-ID inspection and the
+ordinary receipt/cleanup algorithm. This is an explicitly supervised laboratory
+exception to manual recovery, not ordinary runner recovery or stale-lock expiry.
+It permits no restart, discovered-resource cleanup, new allocation or recovery
+after loss of the supervisor. Before-create intents remain retained and refuse
+new allocations. Dispatch interruption occurs after completed native dispatch
+but before the runner publishes/validates its result, not at the network packet.
+Retain killed-state evidence, native observations and reconciliation separately.
+No HOME override or recovery option is added to the public native runner.
+
+The fixed host allocation registry retains complete exact source hash sets for
+every historical allocation. Its maximum serialized file size is 32MiB, with
+the existing 1000-allocation, 1000-source-entry-per-spec and depth/schema bounds
+unchanged. The original 1MiB bound exhausted after 32 terminal allocations and
+refused publication before create. This bounded increase neither discards prior
+receipts nor relaxes resource ownership. A supervised same-session failed
+publication lock may be retained separately only after verifying the complete
+registry has exclusively terminal absence rows, no new intent or Docker create
+was reached, and no competing owner; never remove locks by age or reset state.

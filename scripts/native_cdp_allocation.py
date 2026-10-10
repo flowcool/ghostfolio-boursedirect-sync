@@ -21,7 +21,7 @@ PROFILE_SHA = 'cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849'
 _HANDLES = {}
 _HASH = re.compile(r'[0-9a-f]{64}\Z')
 _UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z')
-_LIMIT = 1048576
+_LIMIT = 33554432
 
 
 def require(condition, code='ALLOCATION_REJECTED'):
