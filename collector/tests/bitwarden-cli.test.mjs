@@ -42,7 +42,7 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=fal
 }
 test('independent vault inspection requires no importer binding and exports no broker secret',async()=>{
   const f=fixture({inspection:true}),result=await f.worker.initialize(credentials);
-  assert.deepEqual(Object.keys(result).sort(),['itemId','online_ready','principalHash','profile','uri']);
+  assert.deepEqual(Object.keys(result).sort(),['broker_uri_count','itemId','online_ready','principalHash','profile','uri','uri_count']);
   for(const secret of ['SYNTHETIC','SYNTHETIC_PASSWORD','SYNTHETIC_SESSION','GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'])
     assert.equal(JSON.stringify(result).includes(secret),false);
   assert.equal(result.uri,f.item.login.uris[0].uri);
@@ -55,6 +55,16 @@ test('independent vault inspection requires no importer binding and exports no b
   await assert.rejects(f.adapter.execute('/usr/local/bin/bw',['get','totp',f.item.id],
     {PATH:'/usr/bin:/bin',HOME:'/data',BITWARDENCLI_APPDATA_DIR:'/data',BW_SESSION:'SYNTHETIC_SESSION'}),/CLI_ADAPTER_FAILED/);
   assert.equal(f.calls.length,count);assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
+});
+test('inspection with an inert URI alias still logs out and exports only origin metadata',async()=>{
+  const f=fixture({inspection:true,lookupFault:item=>{
+    item.login.uris.push({uri:'https://alias.synthetic.invalid/'}); return JSON.stringify([item]);
+  }});
+  const result=await f.worker.initialize(credentials);
+  assert.equal(result.uri_count,2); assert.equal(result.broker_uri_count,1);
+  assert.equal(result.uri,f.item.login.uris[0].uri);
+  assert.equal(JSON.stringify(result).includes('alias.synthetic'),false);
+  assert.deepEqual(f.calls.slice(-2).map(x=>x.args[x.args.indexOf('vault-cli')+1]),['logout','status']);
 });
 for(const fault of ['logout','locked-status','identity-retained'])test('inspection fences unverified session cleanup '+fault,async()=>{
   const f=fixture({inspection:true,logoutFault:fault==='logout',statusFault:fault==='locked-status'

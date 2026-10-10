@@ -406,3 +406,28 @@ connection_limit_review:
   - Success and failure both release active slot
   deployment_note: Actual routes_qualified evidence remains bound to prior deployed
     helper hash; no new deployment proof inferred.
+inspection_uri_aliases:
+  kind: inspection_only_origin_evidence_not_acquisition_binding
+  inputs:
+    collector/credential-provider.mjs: ed75b3c31c0d969e1daa6e6bc979b2e1132194c5e990f779d5561544a2312f17
+    collector/tests/credential-provider.test.mjs: aeb10a4f288f7710af33c407f1f311e7a601cb5436bded42c674438d450e8af3
+    collector/tests/bitwarden-cli.test.mjs: 99dae2c819207ac26d8935166030d74d3942569361ea1c3b7e002e120f693dc2
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 408
+    private_log: tmp/vault-alias-node.log
+    log_sha256: 2a24cc0810ed573f4104e4d4866dce76a5bbe90f1ffd5e53f589381c7124e723
+  reused_python: durable_session_cleanup.checks.python plus connection_limit_review;
+    Python/runtime unchanged by inspection-only provider adjustment
+  invariants:
+  - Exact unique item, bounded nonempty aliases, at least one canonical exact broker-origin
+    URI
+  - Alias values are never executed or exported; counts are inspection metadata only
+  - No acquisition URI or account binding selected; schemas1/2 single-bound-URI requirements
+    unchanged
+  - Successful inspection still requires logout and no-identity unauthenticated status
+  actual_trigger: One authorized vault observation found exact unique item and valid
+    fields/profile, but two URI entries caused single-URI validation refusal. Login/unlock/sync/lookup
+    succeeded; affected CLI stopped; no broker request.

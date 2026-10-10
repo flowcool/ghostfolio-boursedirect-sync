@@ -82,10 +82,24 @@ export function selectNamedWorkerItem(items, binding, defaultsVerified = false) 
 export function inspectNamedVaultItem(items, binding, defaultsVerified = false) {
   try {
     exact(binding, ['name']);
-    const resolved = namedIdentity(items, binding.name);
-    const fields = workerFields(resolved.item, resolved.binding, defaultsVerified);
+    if (binding.name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
+    const matches = items.filter(item => item?.name === binding.name);
+    if (matches.length !== 1) throw new Error();
+    const item = matches[0], aliases = item?.login?.uris;
+    if (!Array.isArray(aliases) || aliases.length < 1 || aliases.length > 16) throw new Error();
+    const canonical = [];
+    for (const alias of aliases) {
+      text(alias?.uri);
+      try {brokerUrl(alias.uri); canonical.push(alias.uri);} catch {}
+    }
+    if (canonical.length === 0) throw new Error();
+    // Inspection observes origin membership, not acquisition URI selection.
+    // Additional aliases are never executed or exported; schemas 1/2 stay strict.
+    const resolved = {itemId: item.id, name: binding.name, uri: canonical[0], principalHash: principal(item.login.username)};
+    const fields = workerFields({...item, login: {...item.login, uris: [{uri: resolved.uri}]}}, resolved, defaultsVerified);
     return {itemId: fields.itemId, principalHash: fields.principalHash,
-      uri: resolved.binding.uri, profile: fields.profile, online_ready: false};
+      uri: resolved.uri, uri_count: aliases.length, broker_uri_count: canonical.length,
+      profile: fields.profile, online_ready: false};
   } catch {throw new Error('PROVIDER_ITEM_INVALID');}
 }
 

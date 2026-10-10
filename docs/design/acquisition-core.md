@@ -200,7 +200,12 @@ Provider schema 3 implements the independent vault-access milestone from the
 interactive amendment. Its binding contains only the operator's exact
 `boursedirect.fr` name. It reuses the same executable pin, fixed private-stdin
 login/unlock/sync/search sequence and strict unique live item, URI, credential and
-TOTP-profile validation. Only private item/principal/URI/profile metadata is
+TOTP-profile validation. Inspection accepts a bounded list of inert item URI
+aliases only when at least one exact canonical broker-origin URI is present. The
+first observed canonical URI and alias counts are inspection metadata, not
+acquisition URI selection; other alias values are neither exported nor executed.
+Acquisition schemas 1/2 keep their single exact bound URI rule. Only private
+item/principal/URI/profile metadata is
 returned; no login, password, session or seed can be delivered to a collector.
 The worker logs out and verifies an unauthenticated status with no retained user
 or sync identity before returning. It discards its session, and both worker and
