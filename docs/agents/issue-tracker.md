@@ -46,3 +46,32 @@ python3 -c 'import json; rows=json.load(open("tmp/issues.json")); print("\n".joi
 ## Triage labels
 
 Use the canonical labels in `triage-labels.md` as Beads labels.
+
+## Following a pull request
+
+When actually waiting for CI or external review, use the existing GitHub CLI
+watch rather than repeatedly fetching checks, reviews and comments separately:
+
+```bash
+gh pr view PR --json headRefOid,state
+gh pr checks PR --watch --interval 45 --fail-fast
+```
+
+Inspect each exit code. Watch all checks, including CodeRabbit; `--required`
+can omit the external review. A failed check ends this wait for investigation.
+Keep independent authorized work moving when waiting is unnecessary. The watch
+belongs to the active session and is not background monitoring after it ends.
+
+After a completion or failure, fetch the current head and selected check metadata
+once. Then read new review bodies from `pulls/PR/reviews` and inline findings from
+`pulls/PR/comments` through `gh api`; save large responses under ignored `tmp/`.
+Review bodies can contain actionable findings outside the diff, even when no new
+inline thread exists. Track reviewed SHA and review/comment IDs in the owning
+Beads issue so already adjudicated findings are not processed again.
+
+A successful status alone does not prove the final head was reviewed: verify the
+review's `commit_id`, inspect its findings, and check unresolved threads before
+any authorized merge. Restart the wait after a new head is published. If Florent
+merges while review is pending, record that operator decision and the remaining
+review limitation explicitly. Bot triggering and merge authorization remain
+governed by `AGENTS.md`.
