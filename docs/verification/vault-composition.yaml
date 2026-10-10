@@ -278,3 +278,23 @@ sandbox_fixed_phase_diagnostics:
   failure_output: fixed code, fixed stage, sandbox-unavailable-message boolean; no
     raw exception/stderr
   actual_host_observation_pending: true
+sandbox_namespace_network_guard:
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: 592c616d433e3b4954432b856319d071c3b254fd135cd714b50cd797d942e9b2
+    collector/tests/browser-sandbox-proof.test.mjs: 5eb673a6379322855968fe0f4033b33acae1c86ef98f93be7fb1d0dfd52fc990
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 420
+    private_log: tmp/browser-sandbox-node.log
+    log_sha256: 574895bbdf33e804bed6eeb991684b56627016fb3cf4d3ff439c83a2cc0758f0
+  actual_previous_failure:
+    source_commit: a73aa71
+    phase: runtime_prerequisites
+    chrome_launched: false
+    nonroot_user_namespace_creation_exit_code: 0
+    owned_browser_stopped: true
+  correction: Read /proc/net/dev in the calling network namespace instead of potentially
+    host-visible sysfs interfaces; require only loopback, including unaddressed interfaces
+    in the refusal check.
+  ugreen_sandbox_qualified: false

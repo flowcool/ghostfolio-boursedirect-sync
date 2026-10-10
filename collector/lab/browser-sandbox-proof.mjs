@@ -28,10 +28,21 @@ export function sandboxStatus(raw, baseline) {
     nested_pid_namespace: true, seccomp_filters: filters, baseline_seccomp_filters: parentFilters};
 }
 
+export function loopbackNamespace(raw) {
+  const names = raw.split('\n').slice(2).filter(line => line.trim()).map(line => {
+    const match = /^\s*([^:\s]+):/.exec(line);
+    if (!match) throw new Error('SANDBOX_NETWORK_REFUSED');
+    return match[1];
+  });
+  if (names.length !== 1 || names[0] !== 'lo') throw new Error('SANDBOX_NETWORK_REFUSED');
+  return true;
+}
+
 let stage = 'runtime_prerequisites', sandboxUnavailable = false;
 async function prove() {
-  if (process.getuid() !== 1000 || fs.readdirSync('/sys/class/net').sort().join(',') !== 'lo')
-    throw new Error('SANDBOX_RUNTIME_REFUSED');
+  if (process.getuid() !== 1000) throw new Error('SANDBOX_RUNTIME_REFUSED');
+  stage = 'network_namespace';
+  loopbackNamespace(fs.readFileSync('/proc/net/dev', 'utf8'));
   const profile = fs.mkdtempSync('/home/fixture/synthetic-sandbox-');
   const baseline = fs.readFileSync('/proc/self/status', 'utf8');
   stage = 'chrome_launch';
