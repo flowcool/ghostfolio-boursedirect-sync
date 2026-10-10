@@ -26,12 +26,18 @@ Global working agreement applies. Beads owns live work state.
 - Runtime dependencies: `requirements.txt`; development: `requirements-dev.txt`.
 - Required logic verification: `.venv/bin/python -m pytest -q`. Tests use synthetic
   inputs and forbid sockets. Never point tests at real Ghostfolio or shared state.
-- Before committing, run `bash scripts/verify-local.sh`; its documentation,
-  Python, collector and whitespace checks stop at the first failure. Record a
-  successful exit code before committing or closing work. For other required
-  checks, inspect each exit code before any dependent mutation.
+- Preserve verification results in keyed YAML with command, exit code and hashes
+  of the relevant code/runtime inputs. Reuse matching successful evidence across
+  sessions; run only new or affected checks and checks needed to resolve failures.
+  `bash scripts/verify-local.sh` is the full documentation, Python, collector and
+  whitespace gate when reusable evidence is unavailable. Inspect each required
+  exit code before committing, closing work or making a dependent mutation.
 - Real inputs, configuration, output and journals are ignored; never commit
   personal account data. Logs contain codes and counts only.
+- Chromium: use the latest available stable Chrome for Testing for new runtime
+  work, resolve it once, and record the exact version, download hash and image ID
+  used by the qualification run. When an old image is unavailable, qualify the
+  current release and continue; historical pins describe historical evidence.
 
 ## Pull request workflow
 

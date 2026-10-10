@@ -106,3 +106,34 @@ matrix, actual allocation kill-point observations, cleanup evidence or the
 separate source/credential/egress/security gates. All readiness fields remain false.
 Rollback code with a scoped revert, retaining principal journals and allocation
 records; fixture cleanup requires separately applicable exact-owned authorization.
+
+## Private vault delivery composition
+
+`vault-worker.mjs` implements the approved fixed version/config/login/unlock/sync/
+exact-item sequence. Its executable hash/version and immutable item/principal/
+account reference are explicit inputs. It requests one item-ID TOTP only after
+the bound challenge request, validates the supported profile privately, and
+exports neither raw item nor seed. CLI errors become fixed codes. The trusted
+process adapter captures bounded private output and supplies minimal child envs.
+
+`private-channel.mjs` uses anonymous trusted stdio with bounded strict JSON,
+timeouts and permanent fencing. The collector launcher constructs BD credentials
+in its child's initial environment inside the container; Chromium gets a separate
+credential-free environment. Container metadata, argv and Docker logs contain no
+secrets. Host/daemon owners remain trusted.
+
+The opt-in `scripts/vault_composition.py` composes two separately owned non-root,
+network-none containers with fake vault commands and an actual current Chromium
+headless shell. Supply the exact local image ID, resolved Chrome version, qualified
+seccomp profile and a new ignored `tmp/` output directory. It retains pre-create
+intents, inspected pre-start full-ID receipts and enrollment/journal evidence;
+cleanup uses only receipted IDs and verifies daemon absence. Missing/uncertain
+receipts remain fences. The source/account/principal records are invented fixtures.
+
+Saved qualification results and their input hashes live in
+[`../verification/vault-composition.yaml`](../verification/vault-composition.yaml).
+Reuse matching successful evidence; only changed inputs or missing scenarios need
+new execution. The project AGENTS policy owns current Chromium selection.
+This composition proves delivery plumbing, not real vault visibility, broker
+source acceptance, production egress or permission to authenticate. All readiness
+flags remain false. Keep real enrollment, vault/source and external security gates.
