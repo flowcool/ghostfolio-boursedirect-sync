@@ -307,7 +307,8 @@ records implementation hashes and results so unchanged checks can be reused.
 
 [`compose.yaml`](compose.yaml) is the future application's common stack. Its
 first service reuses the locally available `archivage-bitwarden-cli` image;
-browser and collector services will be added incrementally to this same file.
+the browser is an opt-in profile and the collector will be added incrementally
+to this same file.
 It does not build or pull an image. `BITWARDEN_CLI_IMAGE` may select the separately
 verified local image ID. Infrastructure supplies its availability on the selected
 Docker daemon.
@@ -338,6 +339,19 @@ and permit only the proxy's exact internal IP and port. The adapter's optional
 `https_proxy` used by the pinned CLI. A proxy environment variable alone provides
 no network isolation. Prove allowed and refused routes without credentials before
 any private delivery.
+
+The `browser` profile reuses the locally verified Chrome for Testing155.0.8059.39
+filesystem/config image, without a rebuild. Its idle service has no network,
+private tmpfs profile, non-root user and no published control endpoint. Enabling
+this profile does not authorize broker access; sandbox qualification on the
+selected host and separate source routing/journal gates are still required.
+The supplied [seccomp profile](collector/browser-seccomp.json) is byte-identical
+to Playwright commit54c711571a37de525377e6f3d3608c3e029b1829, under its retained
+[Apache2.0 license](collector/licenses/playwright-LICENSE). This profile, rather
+than disabling Chromium's sandbox, permits the required namespace syscalls.
+Retained lab image IDs can differ between Docker OCI-index and config-digest
+representations; the immutable configuration and ordered filesystem layers must
+match the transfer receipt. The service pins the available configuration digest.
 
 Validate configuration without contacting the Docker daemon:
 
