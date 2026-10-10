@@ -1,0 +1,189 @@
+schema_version: 1
+qualification:
+  kind: synthetic-only-two-owned-runtimes
+  chrome_product: HeadlessChrome
+  chrome_version: 155.0.8059.39
+  image_id: sha256:f5b167427267a7af51fde6e575f32612facaa5d96cbd2798505afc2211848878
+  download_sha256: 39dcb8c46550632a3d911850ab3b8af840b4e3f6d8622faa2018eb8756278786
+  seccomp_sha256: cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849
+  inputs:
+    private-allocation: 1d0849759c33b3fc6ec5a56f6c236b37c5dd00a1b82fe65b91ea8163b4dc7b72
+    proof/capability-bootstrap.mjs: 360edd80eae8d31ee79dc77ba645963442c5fdb92942f9dbe55525283222f512
+    proof/capability-ordering.mjs: e66e15853c5ac0c28278c3be989cfa9cef2ccfaf277d7d1478aed142f134fab1
+    proof/capability-pipe.mjs: e13be86dfd1149d84483f1dda2b2be29259247c9a5da20a14b0e243d39d694e5
+    proof/core.mjs: a05b5a61778b7350708afab1945edc7c3843c86627ab98455ec303b85a06126b
+    proof/credential-provider.mjs: bde07d8072c441a5692df3c99a21e30d707dbe1733ad714e0740a13baaed7d88
+    proof/internal/source-policy.mjs: a9e2915dc3b180a0e2aa92a20a12616162ae682badde258bb2b37a1b8e2bba45
+    proof/lab/fake-bw.mjs: b11667b52acb1487e05853dfa4dea5e1d187ba1aba9e896fb9e021c2999188c1
+    proof/lab/native-composition.mjs: 6968f6033ab62a5327139b55ee8fb5a45267a3c10d706ecd677c7a45c59b4f43
+    proof/lab/vault-browser-launcher.mjs: cdd464b7f41115e46340c772845ae32236d1bede2979e4aa44e2e45fe76ad3e0
+    proof/lab/vault-collector-runtime.mjs: a4604ee6b9bf771739dfb14a37bfb2fd2a6e40620a9ce83fc5d6c2895dfb29b5
+    proof/lab/vault-worker-runtime.mjs: 20ea66052c39fab80c53f8017dfaf3ef0860d36cfb5e59deb4d8c7e0bffdad27
+    proof/private-channel.mjs: e46a668d039864d9c4e20f6b79a39963a80030e17640b156791a724469259e99
+    proof/private-process.mjs: bc93447870b231d5b253e4d3c699a7ac4cbedbd4a23d78f686b8a62bb300a2ae
+    proof/request-controller.mjs: 14611666f0adede386f7c7b23a39e1f32b6a3c0e2afab08313d5957485d90dff
+    proof/vault-worker.mjs: fd85d4141f859744feec198e7c352d77d70d4dddcd2a4c008bb0ce1c51779d7c
+    runner: 88478a30b781ea1b1f32054f0e1474a514efaec6c108c34092ebd223471eca9e
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    collector/lab/vault.Dockerfile: 3ba9920a73b047135def87fe43ac1d7e6b38447f849878d3b923ce55153b01a3
+  scenarios:
+    success:
+      exit_code: 0
+      password_requests: 1
+      otp_requests: 1
+      retained_state: authenticated
+      restart_fenced: true
+      cleanup_verified: true
+      private_evidence: tmp/vault-proof-request-kind/success
+      evidence_sha256: 3af692cab93541770bb5f4317d0007e7ee6244b8ada211147643c18ce8e55290
+    wrong-stage:
+      exit_code: 0
+      password_requests: 1
+      otp_requests: 0
+      retained_state: password_accepted
+      restart_fenced: true
+      cleanup_verified: true
+      private_evidence: tmp/vault-proof-negatives/wrong-stage
+      evidence_sha256: 4375ca105b42ffd3a824fe0d7f386ffe6efc9940f197ad41c3f4842a42e328d6
+    expired:
+      exit_code: 0
+      password_requests: 1
+      otp_requests: 0
+      retained_state: password_accepted
+      restart_fenced: true
+      cleanup_verified: true
+      private_evidence: tmp/vault-proof-negatives/expired
+      evidence_sha256: 9411233840ddab5e7438628ae4339d47d56f44e22d1a9e52bda59b4d251707e4
+    fsync:
+      exit_code: 0
+      password_requests: 1
+      otp_requests: 0
+      retained_state: password_accepted
+      restart_fenced: true
+      cleanup_verified: true
+      private_evidence: tmp/vault-proof-negatives/fsync
+      evidence_sha256: a0491def3c46d04fdf3d189936174d065c5ef7731a26d8a38c10332820e3abd5
+    pipe-loss:
+      exit_code: 0
+      password_requests: 1
+      otp_requests: 0
+      retained_state: otp_uncertain
+      restart_fenced: true
+      cleanup_verified: true
+      private_evidence: tmp/vault-proof-negatives/pipe-loss
+      evidence_sha256: 90315c2b8eca156de632e438132aa354c17febb8c18915cbf5bcad0884431164
+    browser-crash:
+      exit_code: 0
+      password_requests: 1
+      otp_requests: 0
+      retained_state: otp_uncertain
+      restart_fenced: true
+      cleanup_verified: true
+      private_evidence: tmp/vault-proof-negatives/browser-crash
+      evidence_sha256: 9bd89f09144ad7ec735daac6a3e15ccc0e77f9984918197da7d6797e92f967ba
+  online_ready: false
+  browser_proven: false
+  import_ready: false
+  download_manifest: https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json
+  build_command: docker build --build-arg CHROME_SHA256=<resolved-download-sha256>
+    --iidfile <private-image-id-file> -f collector/lab/vault.Dockerfile <private-build-directory>
+  run_command: .venv/bin/python scripts/vault_composition.py --image <exact-image-id>
+    --chrome-version <resolved-version> --profile <qualified-profile> --output tmp/<new-private-evidence-directory>
+    --scenario <missing-or-affected-scenario>
+  installed_dependencies:
+    collector/node_modules/yaml:
+      files: 233
+      sha256: 71967fa5f2cfdf1a38f9861861469e85c7c82ab9a1a39d8b6a50d30d06910736
+      algorithm: SHA256 of sorted UTF-8 relative-path=SHA256(file) newline records;
+        reject symlinks and changed file set
+      source: Complete per-file hashes retained in all six private registry.yaml source
+        manifests; equality checked against installed bytes
+  baseline_commit: e3b4bbb8345689c3908244973da10d528b1fb392
+offline_checks:
+  node_full_before_startup_adaptation:
+    exit_code: 0
+    passed: 364
+    scope: Full Node suite before current HeadlessChrome/empty-startup adaptation;
+      affected coverage below supersedes changed inputs
+  node_affected:
+    exit_code: 0
+    passed: 90
+    command: node --import ./tests/no-network.mjs --test tests/capability-bootstrap.test.mjs
+      tests/capability-composition.test.mjs tests/credential-provider.test.mjs tests/vault-worker.test.mjs
+    test_inputs:
+      collector/tests/capability-bootstrap.test.mjs: 184939ca336ce9c2c92ebae54ee5d79bfc513fc4dc3bbf6d78312292c1ba3734
+      collector/tests/capability-composition.test.mjs: 925a199f1506aca96ddd4625299becad3e3200442d4b0c4272e1dff01d23ffd6
+      collector/tests/credential-provider.test.mjs: 4973c83f4559e157be7b99e3d22b1c23b57737fc669b6e3e339c21b8daa77747
+      collector/tests/no-network.mjs: a31b37dd5304c6a4f15c414a925d1f77f1e0f182742eb3bdd1e2a04065276df3
+      collector/tests/vault-worker.test.mjs: 75f23e529b8b4772fdbd5b4c4ab17c27cf1399ece59448596e9a5b0ed7e3e276
+    private_log: tmp/vault-offline-affected.log
+    log_sha256: fcdc5c59a54a977f61b0d6b9312a1b8958f52c8ca571ccc06cb778aad6c5efe6
+  python_reused_baseline:
+    commit: 5f2f1ff20285
+    exit_code: 0
+    passed: 1075
+    source: infra-4g8u.94 final committed verification; unchanged importer/runtime
+      requirements
+    changed_existing_python_files: scripts/prove-native-allocation.py; tests/test_native_allocation_proof.py;
+      tests/test_native_cdp_allocation.py are covered by retained targeted checks
+  python_allocation:
+    exit_code: 0
+    passed: 43
+    command: .venv/bin/python -m pytest -q tests/test_vault_composition.py tests/test_native_cdp_allocation.py
+    scope: Prior successful allocation tests; five later new cleanup cases covered
+      by affected check
+  python_affected:
+    exit_code: 0
+    command: .venv/bin/python -m pytest -q tests/test_vault_composition.py tests/test_native_allocation_proof.py
+      tests/test_documentation_checks.py
+    passed: 42
+    scope: Existing affected cases before the four new abrupt-exit cases; those are
+      independently verified below
+    private_log: tmp/vault-python-affected.log
+    log_sha256: a220ce88c7106a59a747625c904108a17cb39b22bb5302e68effbb6cb479f97a
+  allocation_kill_windows:
+    command: .venv/bin/python -m pytest -q tests/test_vault_composition.py -k abrupt_exit
+    exit_code: 0
+    passed: 4
+    windows:
+    - intent-before-create
+    - create-before-receipt
+    - receipt-before-start
+    - started-before-dispatch
+    scope: Actual SIGKILL of isolated supervisor subprocess with fake daemon; no real
+      Docker/shared state in these four cases
+    private_log: tmp/vault-kill-windows.log
+    log_sha256: 50139bfa73eafc040e3f54b7632b6334849e3ec143411527dfa2d2b6bc01d393
+  documentation:
+    command: .venv/bin/python scripts/check-docs.py
+    exit_code: 0
+review_followup:
+  review_id: 5480164679
+  reviewed_commit: e3b4bbb8345689c3908244973da10d528b1fb392
+  runner_sha256: 284da25729a2a7352b6d1b05c477e37e69b1e12769a752c7f60d0b2acb29c7eb
+  test_sha256: c77466678b8b6e4696cdd28374f1e580a4fe5d4b8163b40e1d67f87fe51bc8ee
+  change: Worker-only selected secret exclusion strengthened; original worker/browser/dependency
+    bytes unchanged. Prior six scenario evidence retained; affected host success path
+    requalified below.
+  new_regressions:
+    command: .venv/bin/python -m pytest -q tests/test_vault_composition.py -k 'unchecked_metadata
+      or worker_credentials'
+    exit_code: 0
+    passed: 3
+    private_log: tmp/pr44-new-regressions.log
+    log_sha256: da4350fab9383b33d04aabc75aa1bee7e602b8ec4ad187d5fefefe4fd73a57c3
+  success:
+    command: .venv/bin/python scripts/vault_composition.py --image sha256:f5b167427267a7af51fde6e575f32612facaa5d96cbd2798505afc2211848878
+      --chrome-version 155.0.8059.39 --profile <qualified-profile> --output tmp/pr44-review-proof
+      --scenario success
+    exit_code: 0
+    private_evidence: tmp/pr44-review-proof/success
+    evidence_sha256: 3af692cab93541770bb5f4317d0007e7ee6244b8ada211147643c18ce8e55290
+    cleanup_verified: true
+  reused_ci:
+    commit: e3b4bbb8345689c3908244973da10d528b1fb392
+    run: 38072454124
+    url: https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/runs/38072454124
+    conclusion: success
+    python_passed: 1107
+    node_passed: 367

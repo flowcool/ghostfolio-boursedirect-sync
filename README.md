@@ -299,6 +299,10 @@ provides offline principal fencing and one-use authentication permits. It does
 not connect to Bourse Direct; the browser driver still needs its separately
 reviewed capability proof. Source collection remains an operator-run activity.
 
+The same contract describes the private vault worker and isolated synthetic
+credential/OTP composition. Its retained [qualification evidence](docs/verification/vault-composition.yaml)
+records implementation hashes and results so unchanged checks can be reused.
+
 Completed saved acquisition bundles can be checked with the offline
 [`qualify-captures` command](docs/design/acquisition-bundles.md). It creates a new
 private prepare proposal from explicit existing mappings, preserves input files,

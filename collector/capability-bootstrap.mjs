@@ -1,6 +1,8 @@
 // Mock-only startup ownership experiment. No browser launcher or broker input.
-export function bootstrapExperiment({send, registerSession, initialize, stop}) {
+export function bootstrapExperiment({send, registerSession, initialize, stop, expectedVersion = '148.0.7778.97', product = 'Chrome'}) {
   if ([send, registerSession, initialize, stop].some(f => typeof f !== 'function')) throw new Error('CAPABILITY_CALLBACK_REQUIRED');
+  if (typeof expectedVersion !== 'string' || !/^\d+\.\d+\.\d+\.\d+$/.test(expectedVersion)) throw new Error('CAPABILITY_VERSION_REJECTED');
+  if (!['Chrome', 'HeadlessChrome'].includes(product)) throw new Error('CAPABILITY_VERSION_REJECTED');
   let phase = 'idle', attachment, creation, owner, stopped;
   let resolveAttachment;
   const attached = new Promise(resolve => {resolveAttachment = resolve;});
@@ -16,13 +18,13 @@ export function bootstrapExperiment({send, registerSession, initialize, stop}) {
     if (message?.method === 'Target.targetCreated') {
       const info = message.params?.targetInfo;
       if (['browser', 'tab'].includes(info?.type) && phase !== 'creating') return;
-      if (phase !== 'creating' || creation || info?.type !== 'page' || info.url !== 'about:blank'
+      if (phase !== 'creating' || creation || info?.type !== 'page' || !['', 'about:blank'].includes(info.url)
           || info.subtype !== undefined || typeof info.targetId !== 'string' || !info.targetId) reject();
       creation = structuredClone(info);
     } else if (message?.method === 'Target.attachedToTarget') {
       const params = message.params, info = params?.targetInfo;
       if (phase !== 'creating' || attachment || params?.waitingForDebugger !== true
-          || info?.type !== 'page' || info.url !== 'about:blank' || info.subtype !== undefined
+          || info?.type !== 'page' || !['', 'about:blank'].includes(info.url) || info.subtype !== undefined
           || typeof info.targetId !== 'string' || !info.targetId
           || typeof params.sessionId !== 'string' || !params.sessionId) reject();
       attachment = structuredClone(params); resolveAttachment(attachment);
@@ -34,7 +36,7 @@ export function bootstrapExperiment({send, registerSession, initialize, stop}) {
     phase = 'bootstrap';
     try {
       const version = await send('Browser.getVersion'); check();
-      if (version?.product !== 'Chrome/148.0.7778.97') throw new Error('CAPABILITY_VERSION_REJECTED');
+      if (version?.product !== product + '/' + expectedVersion) throw new Error('CAPABILITY_VERSION_REJECTED');
       await send('Target.setAutoAttach', {autoAttach: true, waitForDebuggerOnStart: true, flatten: true,
         filter: [{type: 'browser', exclude: true}, {type: 'tab', exclude: true}, {}]}); check();
       await send('Target.setDiscoverTargets', {discover: true}); check();

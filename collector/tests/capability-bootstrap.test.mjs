@@ -35,6 +35,40 @@ test('normal mock startup orders version, browser guard, discovery, creation and
   assert.deepEqual(f.actions, ['Browser.getVersion', 'Target.setAutoAttach', 'Target.setDiscoverTargets',
     'Target.createTarget', 'register:s', 'initialize:s']);
 });
+test('a current resolved version replaces historical fixture pin without accepting a mismatch', async () => {
+  const f = fixture({expectedVersion: '155.0.8059.39', send: async method => {
+    if (method === 'Browser.getVersion') return {product: 'Chrome/155.0.8059.39'};
+    if (method === 'Target.createTarget') {f.experiment.event(attach()); return {targetId:'owned'};}
+    return {};
+  }});
+  await f.experiment.start(); assert.equal(f.experiment.ready(), true);
+  const old = fixture({expectedVersion: '155.0.8059.39'});
+  await assert.rejects(old.experiment.start(), /CAPABILITY_BOOTSTRAP_FAILED/);
+  assert.deepEqual(old.actions, ['Browser.getVersion','stop']);
+});
+test('current headless shell may report its owned paused initial page before blank URL commits', async () => {
+  const f = fixture({expectedVersion:'155.0.8059.39', product:'HeadlessChrome', send:async method => {
+    if (method === 'Browser.getVersion') return {product:'HeadlessChrome/155.0.8059.39'};
+    if (method === 'Target.createTarget') {
+      const event = attach(); event.params.targetInfo.url = '';
+      f.experiment.event(event); return {targetId:'owned'};
+    }
+    return {};
+  }});
+  await f.experiment.start(); assert.equal(f.experiment.ready(), true);
+});
+test('a nonblank paused page remains forbidden during owned creation', async () => {
+  const f = fixture({send:async method => {
+    if (method === 'Browser.getVersion') return {product:'Chrome/148.0.7778.97'};
+    if (method === 'Target.createTarget') {
+      const event = attach(); event.params.targetInfo.url = 'https://foreign.synthetic.invalid';
+      f.experiment.event(event); return {targetId:'owned'};
+    }
+    return {};
+  }});
+  await assert.rejects(f.experiment.start(), /CAPABILITY_BOOTSTRAP_FAILED/);
+  assert.deepEqual(f.actions,['stop']);
+});
 for (const type of ['worker', 'service_worker', 'shared_worker', 'iframe']) {
   test(`unexpected ${type} never registers or initializes`, async () => {
     const f = fixture({send: async method => {
