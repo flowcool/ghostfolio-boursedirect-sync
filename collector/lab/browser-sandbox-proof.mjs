@@ -6,7 +6,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {capabilityPipe, PIPE_LIMITS} from '../capability-pipe.mjs';
 
-export function sandboxStatus(raw, baseline) {
+export function sandboxDetails(raw, baseline) {
   function fields(value) {
     const result = {};
     for (const line of value.split('\n')) {
@@ -21,11 +21,16 @@ export function sandboxStatus(raw, baseline) {
   const pids = status.NSpid?.split(/\s+/);
   const filters = /^\d+$/.test(status.Seccomp_filters ?? '') ? Number(status.Seccomp_filters) : 0;
   const parentFilters = /^\d+$/.test(parent.Seccomp_filters ?? '') ? Number(parent.Seccomp_filters) : 0;
-  if (status.NoNewPrivs !== '1' || status.Seccomp !== '2' || parent.Seccomp !== '2'
-      || parentFilters < 1 || filters <= parentFilters || !pids || pids.length < 2
-      || pids.some(value => !/^[1-9]\d*$/.test(value))) throw new Error('SANDBOX_STATUS_REFUSED');
-  return {no_new_privileges: true, additional_seccomp_filter: true,
-    nested_pid_namespace: true, seccomp_filters: filters, baseline_seccomp_filters: parentFilters};
+  return {no_new_privileges: status.NoNewPrivs === '1', seccomp_filter_mode: status.Seccomp === '2',
+    baseline_seccomp_filter_mode: parent.Seccomp === '2', additional_seccomp_filter: parentFilters >= 1 && filters > parentFilters,
+    nested_pid_namespace: Boolean(pids && pids.length >= 2 && pids.every(value => /^[1-9]\d*$/.test(value))),
+    pid_namespace_depth: pids?.length ?? 0, seccomp_filters: filters, baseline_seccomp_filters: parentFilters};
+}
+export function sandboxStatus(raw, baseline) {
+  const result = sandboxDetails(raw, baseline);
+  if (!result.no_new_privileges || !result.seccomp_filter_mode || !result.baseline_seccomp_filter_mode
+      || !result.additional_seccomp_filter || !result.nested_pid_namespace) throw new Error('SANDBOX_STATUS_REFUSED');
+  return result;
 }
 
 export function loopbackNamespace(raw) {
@@ -39,6 +44,7 @@ export function loopbackNamespace(raw) {
 }
 
 let stage = 'runtime_prerequisites', sandboxUnavailable = false;
+const osObservation = {owned_group_processes: 0, renderers_found: 0, renderer_status: [], proc_read_failures: 0};
 async function prove() {
   if (process.getuid() !== 1000) throw new Error('SANDBOX_RUNTIME_REFUSED');
   stage = 'network_namespace';
@@ -113,9 +119,17 @@ async function prove() {
         const stat = fs.readFileSync('/proc/' + name + '/stat', 'utf8');
         const group = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
         const args = fs.readFileSync('/proc/' + name + '/cmdline', 'utf8').split('\0');
-        if (group !== child.pid || !args.includes('--type=renderer')) continue;
-        renderers.push(sandboxStatus(fs.readFileSync('/proc/' + name + '/status', 'utf8'), baseline));
-      } catch (error) {if (error.message === 'SANDBOX_STATUS_REFUSED') throw error;}
+        if (group !== child.pid) continue;
+        osObservation.owned_group_processes++;
+        if (!args.includes('--type=renderer')) continue;
+        osObservation.renderers_found++;
+        const rawStatus = fs.readFileSync('/proc/' + name + '/status', 'utf8');
+        osObservation.renderer_status.push(sandboxDetails(rawStatus, baseline));
+        renderers.push(sandboxStatus(rawStatus, baseline));
+      } catch (error) {
+        if (error.message === 'SANDBOX_STATUS_REFUSED') throw error;
+        if (error.code !== 'ENOENT') osObservation.proc_read_failures++;
+      }
     }
     if (fenced || renderers.length === 0) throw new Error();
     result = {code: 'BROWSER_SANDBOX_QUALIFIED', chrome_version: '155.0.8059.39',
@@ -147,5 +161,5 @@ async function prove() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {console.log(JSON.stringify(await prove()));}
   catch {console.error(JSON.stringify({code: 'BROWSER_SANDBOX_NOT_QUALIFIED', stage,
-    sandbox_unavailable_message_observed: sandboxUnavailable})); process.exitCode = 1;}
+    sandbox_unavailable_message_observed: sandboxUnavailable, os_observation: osObservation})); process.exitCode = 1;}
 }

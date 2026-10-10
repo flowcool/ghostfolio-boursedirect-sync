@@ -298,3 +298,20 @@ sandbox_namespace_network_guard:
     host-visible sysfs interfaces; require only loopback, including unaddressed interfaces
     in the refusal check.
   ugreen_sandbox_qualified: false
+sandbox_os_diagnostics:
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: 745f02a4808fc7aae9f720c79e5b1c7d3315df54bcee567386b8d9179213fd6e
+    collector/tests/browser-sandbox-proof.test.mjs: 5eb673a6379322855968fe0f4033b33acae1c86ef98f93be7fb1d0dfd52fc990
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 420
+    log_sha256: 7ddfb317cecec93a95bc63316c81b33ea82813d34a168d2abcab4856cc343ecd
+  actual_previous_failure:
+    source_commit: 45201b6
+    phase: renderer_os_sandbox
+    synthetic_chrome_render_preceding_phase: true
+    sandbox_unavailable_message_observed: false
+    sandbox_qualified: false
+  failure_output: fixed stage, renderer protection booleans/filter counts/namespace
+    depth and bounded scan counters; no PIDs, cmdline or raw proc data
