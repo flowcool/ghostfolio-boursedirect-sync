@@ -1,0 +1,101 @@
+schema_version: 1
+qualification:
+  kind: synthetic-only-source-cli-adapter
+  inputs:
+    collector/bitwarden-cli.mjs: 029d5b04a00673e88be3f9d49ce2db6c827eef9be27cc19c4f1c5d74322286bf
+    collector/bitwarden-cli.sh: fdc58b056dafcb3f664463911cfd57f7e419de1553a9218f75c7c97540b80d28
+    collector/private-process.mjs: 5803a0d33470cd059b2ef7f35ee090b39d6f6506ccad2907d856fbbf424a7da6
+    collector/vault-worker.mjs: fd85d4141f859744feec198e7c352d77d70d4dddcd2a4c008bb0ce1c51779d7c
+    collector/core.mjs: a05b5a61778b7350708afab1945edc7c3843c86627ab98455ec303b85a06126b
+    collector/credential-provider.mjs: bde07d8072c441a5692df3c99a21e30d707dbe1733ad714e0740a13baaed7d88
+    collector/tests/no-network.mjs: a31b37dd5304c6a4f15c414a925d1f77f1e0f182742eb3bdd1e2a04065276df3
+    collector/tests/bitwarden-cli.test.mjs: 5d54e60159c259461419eb38cdcbc8d1a07f4eb1ec73b26539040917654eb9dc
+    collector/tests/vault-worker.test.mjs: 75f23e529b8b4772fdbd5b4c4ab17c27cf1399ece59448596e9a5b0ed7e3e276
+    tests/test_bitwarden_cli_shim.py: fd6c23d30e88c604bf3e677c2f48001bdf69fc6ad126162bab36e80c8f9c915c
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  checks:
+    worker_and_adapter:
+      command: cd collector && node --import ./tests/no-network.mjs --test tests/bitwarden-cli.test.mjs
+        tests/vault-worker.test.mjs
+      passed: 31
+      exit_code: 0
+      private_log: tmp/cli-adapter-tests.log
+      log_sha256: fbd9f21fe88b8d84868a85dcf97dc93dbef9b16e33fa696a85054d398732b316
+    shell_original_cases:
+      command: .venv/bin/python -m pytest -q tests/test_bitwarden_cli_shim.py
+      passed: 10
+      exit_code: 0
+      scope: Original ten cases; unchanged when the quoted-unicode case was subsequently
+        added.
+      private_log: tmp/cli-shim-tests.log
+      log_sha256: 40bfd4344a3eb1c606998014b2da30a6e67c7e7643e444298223a1d22650e0c7
+    shell_added_case:
+      command: .venv/bin/python -m pytest -q tests/test_bitwarden_cli_shim.py -k quoted-unicode
+      passed: 1
+      deselected: 10
+      exit_code: 0
+      private_log: tmp/cli-shim-quoted-tests.log
+      log_sha256: 1046d82db09482bb14f2864bca3938c595a1e9d9ec354747834ef2984697e394
+    documentation:
+      command: .venv/bin/python scripts/check-docs.py
+      exit_code: 0
+      private_log: tmp/cli-adapter-docs.log
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+reused_evidence:
+  offline_ci:
+    commit: 26ca4555ec9a51b44f68d102d315fe4742c1aca9
+    url: https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/runs/38073300439
+    python_passed: 1110
+    node_passed: 367
+    scope: Unchanged importer and collector behavior; changed private stdin and new
+      adapter are covered by the affected checks above.
+  historical_browser_composition:
+    record: docs/verification/vault-composition.yaml
+    scope: Historical qualified input hashes only; changed private-process input is
+      not claimed to match those hashes.
+existing_artifact_facts:
+  qualification: Read-only metadata and executable hash; no vault authentication or
+    command qualification.
+  cli_path: /usr/local/bin/bw
+  cli_version: 2026.6.0
+  cli_sha256: 8c7547def6868bb10c86145fe20843e6b164ec3bb28c4bb1f2104e309ccc4ed9
+  image_id: sha256:b97acaaf9c18654df0354416ba6e1a12ff72f917bdc7be53bd9502634ce9fce3
+operational_gates:
+  trusted_owner: Before each invocation attest the durable full-ID receipt, image
+    and CLI pin, private appdata, minimal environment, disabled logs/core dumps and
+    qualified egress. Supply bounded exact-ID shutdown with retained uncertain receipts.
+  binding: Separately pin vault origin, item UUID, principal and account configuration;
+    qualify real vault visibility and enrollment.
+  cleanup: Qualify independent owned cleanup when browser retention fails; PR44 synthetic
+    cleanup does not prove that failure boundary.
+  source: Real broker authentication and source observations require the existing
+    external permission and operational gates.
+readiness:
+  real_vault: false
+  broker_authentication: false
+  source_acceptance: false
+  production: false
+  financial_writes: false
+review_followup:
+  baseline_commit: d119cab33f8b3ff5bb3637407b14675a2d8c651a
+  review: https://github.com/flowcool/ghostfolio-boursedirect-sync/pull/45#pullrequestreview-5480297738
+  change: Only an oversized valid-frame case was added; runtime inputs and prior cases
+    are unchanged. Two valid frames ensure removing the length guard would reach the
+    fake CLI.
+  test_inputs:
+    tests/test_bitwarden_cli_shim.py: d27918402c23fefb1ea7ffd4307532564588fe9325d50c8dfdfd99c66d00cce5
+  check:
+    command: .venv/bin/python -m pytest -q tests/test_bitwarden_cli_shim.py -k oversized-valid-frame
+    exit_code: 0
+    passed: 1
+    deselected: 11
+    private_log: tmp/cli-shim-oversized-tests.log
+    log_sha256: d451cee84de8bc30242169415d36afc1a5cf2080bcdda98690308bdf02e1eee0
+  baseline_ci:
+    url: https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/runs/38075530006
+    python_passed: 1121
+    node_passed: 374
+    exit_code: 0

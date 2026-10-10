@@ -38,6 +38,9 @@ Global working agreement applies. Beads owns live work state.
   work, resolve it once, and record the exact version, download hash and image ID
   used by the qualification run. When an old image is unavailable, qualify the
   current release and continue; historical pins describe historical evidence.
+- This repository owns vault/CLI adapters and acquisition control code. Infra
+  supplies verified access facts and host/secret/network wiring. Reuse existing
+  CLI artifacts and provisioning mechanisms before adding another delivery layer.
 
 ## Pull request workflow
 
