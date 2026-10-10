@@ -137,3 +137,19 @@ new execution. The project AGENTS policy owns current Chromium selection.
 This composition proves delivery plumbing, not real vault visibility, broker
 source acceptance, production egress or permission to authenticate. All readiness
 flags remain false. Keep real enrollment, vault/source and external security gates.
+
+The source-owned `bitwarden-cli.mjs` adapter connects the same worker engine to
+an existing Bitwarden CLI container; it needs no new image or vault service.
+`bitwarden-cli.sh` receives command-specific secrets through bounded private
+stdin, and the CLI receives a cleared minimal environment. The adapter verifies
+the CLI executable hash and permits only the fixed sequence for the bound UUID.
+Failures or overlapping calls fence the adapter and request exact owned shutdown.
+An optional SSH transport uses a trusted provisioned destination, quoted arguments
+and strict host-key checking; no host or SOPS path is embedded in source code.
+The trusted owner must attest the durable full-ID receipt, image/CLI pin, private
+appdata, disabled logs/core dumps and qualified egress before every invocation.
+Infra supplies access facts and operational wiring; this repository owns adapters
+and acquisition control code. Actual vault visibility, source observations,
+enrollment, profile and cleanup qualification remain separate operational gates.
+Synthetic adapter evidence and reusable input hashes are retained in
+[`../verification/bitwarden-cli.yaml`](../verification/bitwarden-cli.yaml).

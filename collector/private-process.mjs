@@ -13,13 +13,18 @@ export function verifyExecutable(pin) {
   } catch {return false;} finally {if (fd !== undefined) fs.closeSync(fd);}
 }
 
-export function executePrivate(executable, args, env, timeoutMs = 45000) {
+export function executePrivate(executable, args, env, timeoutMs = 45000, input) {
   return new Promise((resolve, reject) => {
     let child, timer, out = [], error = [], bytes = 0, settled = false, timedOut = false;
     function fail() {if (child?.pid) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* Exit listener settles. */ }} }
     try {
-      child = spawn(executable, args, {env, detached: true, stdio: ['ignore', 'pipe', 'pipe']});
+      if (input !== undefined && (!Buffer.isBuffer(input) || input.length > 32768)) throw new Error();
+      child = spawn(executable, args, {env, detached: true, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']});
       timer = setTimeout(() => {timedOut = true; fail();}, timeoutMs);
+      if (input !== undefined) {
+        child.stdin.on('error', () => {timedOut = true; fail();});
+        child.stdin.end(input);
+      }
       const collect = target => value => {bytes += value.length; if (bytes > 294912) {timedOut = true; fail();} else target.push(value);};
       child.stdout.on('data', collect(out)); child.stderr.on('data', collect(error));
       child.on('error', () => {if (!settled) {settled = true; clearTimeout(timer); reject(new Error('PRIVATE_PROCESS_FAILED'));}});
