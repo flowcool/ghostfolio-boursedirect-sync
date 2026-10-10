@@ -190,3 +190,36 @@ offline_runtime:
     node_passed: 384
     scope: Unchanged importer, collector and browser composition. New qualifier guards
       and actual CLI metadata checked above.
+application_compose:
+  kind: configuration-only-first-application-brick
+  inputs:
+    compose.yaml: 024d2f96191d8a215bd0995dbfbedd1186ca9658869ceb6258b7a71f8dd7fd62
+  checks:
+    compose:
+      command: VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection docker
+        compose --env-file /dev/null -f compose.yaml config --format json
+      compose_version: v5.5.1
+      exit_code: 0
+      private_output: tmp/application-compose-config.json
+      output_sha256: 00249f8c21a5105b8d9ec8aeb2ebb8ff090c61ec2da6fd172f19146fe68b9c64
+    documentation:
+      command: .venv/bin/python scripts/check-docs.py
+      exit_code: 0
+      private_log: tmp/application-compose-docs.log
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+  reused_evidence:
+    offline_cli: offline_runtime
+    ci_commit: 87c5deaec285b23e037907f3a97415c4d7395405
+    ci_url: https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/runs/38079229809
+    python_passed: 1133
+    node_passed: 384
+    scope: Existing CLI binary behavior and unchanged importer/collector logic. This
+      Compose configuration has not been started or qualified as a live runtime.
+  runtime_started: false
+  live_vault_access: false
+  remaining_wiring: Infra supplies image availability, enforced external vault-only
+    network, private credential provisioning and independently receipted Compose container
+    lifecycle before access.

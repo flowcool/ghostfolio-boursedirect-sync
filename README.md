@@ -303,6 +303,44 @@ The same contract describes the private vault worker and isolated synthetic
 credential/OTP composition. Its retained [qualification evidence](docs/verification/vault-composition.yaml)
 records implementation hashes and results so unchanged checks can be reused.
 
+## Application Compose
+
+[`compose.yaml`](compose.yaml) is the future application's common stack. Its
+first service reuses the locally available `archivage-bitwarden-cli` image;
+browser and collector services will be added incrementally to this same file.
+It does not build or pull an image. `BITWARDEN_CLI_IMAGE` may select the separately
+verified local image ID. Infrastructure supplies its availability on the selected
+Docker daemon.
+
+The CLI service overrides the image's automatic login/serve entrypoint. It keeps
+independent private tmpfs appdata and receives no credentials through Compose.
+The existing source-owned `collector/bitwarden-cli.mjs` adapter supplies fixed CLI
+commands and command-specific secrets through private stdin after owner attestation.
+There are no published ports or production appdata mounts.
+
+`VAULT_OWNER` identifies the durable allocation, and `VAULT_NETWORK` names an
+existing independently qualified vault-only network supplied by infra. These are
+non-secret deployment inputs. The external network declaration does not itself
+filter egress; actual allowed/denied routing must be proved before credential
+delivery. Missing inputs refuse configuration rather than create an unrestricted
+default network. Keep private provisioning outside versioned configuration.
+
+Validate configuration without contacting the Docker daemon:
+
+```bash
+VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection \
+  docker compose --env-file /dev/null -f compose.yaml config --quiet
+```
+
+Those names are validation placeholders, not runtime wiring. The runtime owner
+must retain the pre-create intent, use Compose `create` without starting services,
+inspect and durably receipt exact full container IDs, then start those IDs only
+after configuration and daemon checks. Do not use automatic `up` before receipts
+or project-wide `down` as a substitute for exact owned cleanup. Infrastructure
+execution follows its handed-over lifecycle and rollback contract. Compose syntax
+validation does not establish vault visibility or source acceptance; retained
+evidence is in [`bitwarden-cli.yaml`](docs/verification/bitwarden-cli.yaml).
+
 Completed saved acquisition bundles can be checked with the offline
 [`qualify-captures` command](docs/design/acquisition-bundles.md). It creates a new
 private prepare proposal from explicit existing mappings, preserves input files,
