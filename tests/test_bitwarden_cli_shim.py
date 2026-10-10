@@ -37,7 +37,10 @@ def test_shell_invokes_only_fixed_cli_with_command_specific_env(tmp_path, mode, 
     assert all(value not in ' '.join(expected) for _, value in secrets)
 
 
-@pytest.mark.parametrize('content', [b'', b'!invalid!\n', b'\n'])
+@pytest.mark.parametrize('content', [b'', b'!invalid!\n', b'\n',
+    pytest.param(base64.b64encode(b'S' * 4099) + b'\n' + base64.b64encode(b'SYNTHETIC_API') + b'\n',
+                 id='oversized-valid-frame'),
+])
 def test_shell_rejects_bad_private_credential_frame_before_cli(tmp_path, content):
     shim = (ROOT / 'collector/bitwarden-cli.sh').read_text().replace('exec /usr/local/bin/bw', 'exec /bin/echo CLI_WAS_CALLED')
     result = subprocess.run(['/bin/sh', '-c', shim, 'vault-cli', 'login'], input=content,
