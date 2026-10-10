@@ -94,6 +94,36 @@ secret-provisioning wiring must satisfy the existing requirements before access.
 See the [domain vocabulary](../../GLOSSARY.md) and the
 [source-owned delivery contract](acquisition-core.md).
 
+## Automatic service target decision
+
+On 2026-10-10 Florent confirmed the architecture after a grilling interview. The
+canonical keyed target policy is `source-contract.yaml` under `target_service`.
+The product is an independent Bourse Direct service in the incremental application
+Compose: daily unattended acquisition and import, plus an operator trigger,
+revisiting the latest 90 days each run. This supersedes the earlier manual-only
+**product target**; recurring broker execution is not activated by this decision.
+The currently implemented collector remains guarded by the acquisition procedure
+and actual source qualification above. Production Ghostfolio writes remain a
+separate concrete activation gate.
+
+Certain unique existing financial matches prevent duplicate imports; existing
+financial values are neither corrected nor deleted automatically. IBKR provides
+reuse evidence for deployment and reconciliation concepts, not permission to
+copy its looser quantity/date-only matching. Unknown operations, demonstrated
+dependents and conflicting existing records become private exceptions, while
+independently qualified operations continue. The present period-blocking and
+operator-resolution implementation stays unchanged until reviewed dependency and
+automatic reconciliation behavior exists; this target is not runtime evidence.
+Authentication uncertainty always stops without an automatic retry.
+
+Commands/infrastructure jobs and private exception artifacts are the operator
+interface. Existing infrastructure notifications report intervention-required
+codes/counts only. Deduplication journals and acquired source documents outlive
+the rolling collection window in private persistent storage with verified backup
+and restore. The deployment adapter remains replaceable; Komodo, host names and
+private secret paths are infrastructure configuration, not public runtime
+requirements. The same stack grows to include browser and collector services.
+
 ## Verification and rollback
 
 `infra-jnvj` records the existing Archivage Bitwarden CLI mechanism. Recreate its
