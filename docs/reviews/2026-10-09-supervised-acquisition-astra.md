@@ -297,3 +297,138 @@ required to begin A and offline C at this exact hash.
 
 Review artifact only; parent owns commit, Beads and operational incident routing.
 Knowledge verdict: **Used and sufficient**, unchanged from the indexed lookup.
+
+
+## Exact-hash design review: portable Bitwarden delivery
+
+Date: 2026-10-09. Initially reviewed plan SHA256:
+`e5a31cd0b2886f474c9e9f977c1b7bd48a61d405cb382b537e1a7c25a56a77a6`.
+**Initial verdict: REVISE the delayed-OTP timing contract.** This records the
+reviewed initial bytes and two findings communicated before the author amended
+the plan. The final re-review below gives the superseding exact-hash disposition.
+This is independent DESIGN review, not PR review or operational authorization.
+
+### R6 — Qualify the TOTP parameters behind the 30-second assumption
+
+The initial amendment validated item ID, login binding, URI and TOTP availability,
+then accepted six-digit output with command timestamps inside one 30-second step.
+TOTP field presence and output length alone do not establish the configured
+period or provider interpretation. The ordinary CLI get documentation is command
+source-grounding, not evidence that these parameters match the temporal policy.
+
+Required correction: specify supported TOTP representation/parameters at the
+trusted worker boundary and reject unproved configurations/defaults. Seed or URI
+parsing stays inside that worker; neither leaves it. Synthetic helper cases must
+discriminate incompatible or ambiguous settings, and the pinned provider owner
+must prove its interpretation of the accepted profile. No real vault access is
+needed to define or test that boundary.
+
+### R7 — Retain freshness until the intercepted request continuation
+
+The initial amendment checked timing at receipt and immediately before arming/fill.
+The existing `collector/core.mjs` authority arms a permit for up to 45 seconds,
+and `consumePermit` checks that deadline rather than the OTP step. A delayed
+persistence callback, input submission or request queue could therefore reach
+continuation after the prior OTP check expired. One-use durable authority prevents
+replay but does not itself establish freshness of the first request. This is a
+contract analysis, not a reproduced live failure.
+
+Required correction: bind the action to its OTP step/expiry, revalidate after
+asynchronous work before fill and immediately before continuation, including
+after durable consumption. Expiry must fence without refreshing or replaying;
+already-consumed authority stays uncertain. Assign timing-result validation to
+the helper owner and actual guarded fill/continuation enforcement to a separate
+controller owner, with fake-clock tests crossing a held persistence callback.
+The same submission rule must preserve both initial-environment and provider
+modes. No local check can promise server acceptance or bound network transit.
+
+### Source review and otherwise sound boundaries
+
+Read the infra bridge, worker and runbook at pinned commit `ac3f584`, without
+execution, and the local cache of the official Bitwarden CLI documentation for
+exact-ID get, API client environment, password-environment unlock and session
+environment interfaces. The sources support choosing a fresh implementation of
+those interfaces and rejecting name search, repeated TOTP fetches, deployment
+wiring and name-based cleanup from the exploration. They do not qualify an
+installed CLI, real item visibility or an online runtime. No code was copied.
+
+The exact selected UUID, returned item/principal/URI checks, expected importer
+binding and prior enrollment give an implementable account boundary. Provider
+mode's one-use private descriptor and nonces correlate an already trusted
+supervisor; they do not authenticate an arbitrary service. Mutual exclusion with
+initial OTP/seed inputs must reject partial or malformed competing inputs too,
+before credential actions; failure must never fall back to the other mode.
+
+Two separately owned runtimes, private post-start pipes, collector-child-only
+initial credential environment and no secret Docker create/exec environment
+metadata are coherent. The browser process gets no credential environment or
+vault state. Disabled log collection, bounded fixed-code errors, no tracing/dumps
+and private worker appdata address accidental disclosure while explicitly trusting
+the parent, host and daemon. Runtime evidence must prove those properties in final
+code; the exploration's behavior cannot be inherited as qualification.
+
+The canonical persistent principal root and each resource's pre-create intent /
+pre-start exact-ID receipt preserve the existing guarded recovery contract.
+Missing state, unresolved allocation, contradictory ownership or failed cleanup
+remain blockers. A discovered name or label cannot authorize resource removal.
+The stopped-orphan gap remains explicit and requires separate operator recovery.
+
+## Final exact-hash re-review: portable Bitwarden helper decomposition
+
+Date: 2026-10-09. Reviewed amended plan SHA256:
+`a6f12b414f4f7d2cc9e4310763abd079f4ba67d383b39c76412c114aad992e2e`.
+**APPROVE the scoped pure-helper design and its three-owner decomposition.**
+R6 and R7 are resolved at design level; no blocking design finding remains for
+that scope. This supersedes the initial REVISE above only for the amended
+portable-delivery proposal, without changing earlier component approvals.
+
+R6 is resolved by private worker qualification of the strict Base32 and
+SHA1/30-second/six-digit profile. Explicit URI parameters must match; omitted
+parameters need pinned documented defaults and provider verification. HOTP,
+unsupported settings, malformed representations and unproved defaults disable
+TOTP. The downstream supported-profile assertion remains trusted input, not
+cryptographic attestation; the seed and raw URI stay within the worker. Strict
+URI parsing must reject ambiguous or duplicate parameters rather than choose a
+value. Pure fixtures and the following pinned-provider proof retain distinct
+acceptance obligations.
+
+R7 is resolved by binding the action to its observed step and absolute expiry,
+checking the same timing rules after transition/arm waits before fill and before
+consumption, then checking again after fsync immediately before continuation.
+The generic 45-second permit cannot override the stricter OTP bound. Clock
+reversal/skew, rollover and insufficient remaining time stop without refresh,
+replacement or retry. The corrected retention rule leaves password_accepted
+before the OTP transition and otp_uncertain plus any consumed permit afterward;
+there is no backward transition or claim to recall an earlier continuation.
+
+The decomposition now explicitly assigns three linked implementation owners:
+
+1. Pure exact-item/profile/binding and bounded one-use delayed-OTP helpers, with
+   network/child-forbidden synthetic validation and unchanged initial-env mode.
+2. Guarded-controller OTP step/expiry enforcement, including held-consumption
+   clock crossings and immediate post-await checks for both credential modes.
+3. Portable supervisor/worker and lifecycle composition, with final-code isolated
+   fake-vault/browser proof, exact runtime pins, secret-transfer/logging checks,
+   pre-start interruption windows and exact-resource cleanup evidence.
+
+The planning owner .84 may close only after these owners are linked with their
+acceptance boundaries; the controller timing change must precede composition.
+Do not describe pure-helper completion as delivered Bitwarden integration.
+Actual vault visibility, source compatibility, shared-clock/provider behavior,
+dedicated egress, portable runtime and exact-head security/external PR review
+remain their separately owned gates. This review authorizes no vault operation,
+seed export, container launch, broker login, production change or Ghostfolio write.
+
+No network, vault, credentials, Docker/browser runtime, production service or
+shared Beads operation was accessed during either pass. The reviewer read only
+local sources/contracts and the public-document cache, then appended these
+sections while preserving every earlier report byte. Parent owns Beads, commits
+and terminal reconciliation. Local source inspection is not runtime evidence.
+
+Knowledge lookup followed the corpus/topical indexes, including secret rotation
+and Docker's Bitwarden Host-header concept. That concept is stable/fresh but
+its bw-serve condition is absent in the chosen CLI-only architecture; it supplies
+no new delivery requirement. The previously checked input-preservation concept
+remains applicable to configuration and retained evidence. **Knowledge verdict:
+Used and sufficient.** No retrieval escalation or new portable operational
+finding arose; these design corrections belong in their canonical project records.

@@ -426,3 +426,380 @@ These are author corrections within the existing synthetic proof contract, not a
 new Astra verdict or production-browser qualification. Exact-current private
 receipts must be regenerated after the evaluator pin changes. Existing reader
 root feedback remains disproved; shared sibling routing is owned by `infra-d4cl`.
+
+
+## Exact-hash re-review: grounded reusable B design
+
+Date: 2026-10-09. Reviewed plan SHA256:
+`6d9d0448907b80df6b5a4a02989bdaa2b65310d6bcc6b83a39436a80b56c55ef`.
+**APPROVE the grounded design and its first callback-only controller delivery.**
+No blocking design finding remains for that scope. This supersedes reusable B's
+previous design HOLD only for the implementation sequence in the final grounded
+section; it does not qualify an online driver or grant broker access. The final
+section is normative over the historical multi-page/OOPIF suggestions.
+
+This is independent DESIGN review, not PR review, an implementation security
+approval, or independent observation of a running browser. The controller may
+accept trusted injected authority and metadata, but has no launcher, operator
+broker command, source loader, DOM evaluator or credential reader. Its readiness
+remains false. Trusted callback inputs prove policy behavior only; subsequent
+composition must prove that native events, durable authority and the runtime
+actually supply those inputs. The plan makes this distinction sufficiently
+explicit and assigns separate acceptance owners rather than inheriting harness
+success as reusable-code qualification.
+
+### Assessment of the requested safety boundaries
+
+- **Startup and target ownership:** acknowledge browser auto-attach/discovery
+  before creating the sole blank root; associate an early attachment only with
+  createTarget's exact returned identity; require debugger waiting; install and
+  acknowledge every guard before resume. The inspected one-root bootstrap is
+  consistent with this restricted model. Only same-origin in-process frames are
+  supported. OOPIFs, other pages/popups, workers and prerenders remain fatal on
+  discovery or attachment, never a compatibility fallback. Browser/tab structural
+  discovery is not permission to accept another usable target. New runtime code
+  must retain bounds and fatal handling through startup, including queued events.
+- **Request authority and redirects:** immutable exact URL/method/native-type
+  tuples, explicit owned frame/session/epochs and one current driver action avoid
+  implicit same-origin or resource allowances. Native `XHR` in the experiment
+  cannot establish actual broker transport or justify coercing `Fetch`. All
+  redirects, including GET and method-preserving auth redirects, are refused
+  before auth consumption. Absent observed source roles remain disabled. The
+  stricter final redirect rule supersedes the earlier acquisition proposal's
+  conditional redirect allowance.
+- **Durable permits and concurrency:** arming uncertainty before fill and durable
+  consumption before continuation preserve the existing authority core. Metadata
+  is copied/validated before queuing, decisions are bounded and serialized, and
+  the fence is checked after each await before an outbound action. A second
+  simultaneous auth pause must fence at ingress rather than wait for the first
+  pending callback to finish. The permitted first request may dispatch zero or
+  one times; neither zero server count nor resource absence clears uncertainty.
+  Unsupported app-method transitions remain disabled; no extension to the core's
+  transition semantics is implied by accepting role metadata.
+- **HTTP challenges and fatal stop:** CancelAuth is mandatory, with no Default or
+  credential response. The synchronous-fence rule applies when the challenge is
+  received, before awaiting its cancellation acknowledgement; cancellation must
+  not leave other continuations/resumes enabled. This is an implementation
+  obligation under the current fatal-stop contract, not approval to copy the
+  experiment's `cancelHttpAuth` unchanged: that helper calls abort in `finally`.
+  An already-fenced cancellation/stop path must remain bounded and cannot reopen
+  authority. All fatal paths retain `fence -> stop-owned -> owned-exit ->
+  close-pipe`; failed exit evidence must not become successful cleanup. Physical
+  pipe loss still needs an independent egress boundary.
+- **Pre-start allocation and recovery:** a durable intent before create and an
+  independently checked exact-ID receipt before start/credential transfer close
+  the unsafe assumption that an in-memory create result survives a crash. The
+  create-before-receipt gap can leave a stopped orphan, but the explicit blocked
+  allocation and manual recovery boundary make no automatic cleanup claim.
+  Names/labels discovered later cannot grant removal authority. Exact-ID recovery
+  still checks daemon/resource identity and refuses contradictory or incomplete
+  ownership; a persisted PID alone is insufficient. Runtime kill-point and daemon
+  failure evidence remains mandatory under its following owner. The controller
+  neither implements nor proves that deployment contract.
+- **Capture:** same-root navigation avoids claiming support for unproved popup
+  ownership. Exact native request/loader/commit/load chains and epoch checks
+  bracketing bounded serialization preserve freshness even for identical bytes.
+  Existing parser/filter/publication checks remain authoritative for financial
+  shape, every note date and config/source/previous-run preservation. Offline
+  manifest agreement and synthetic marker DOM are explicitly insufficient to
+  establish runtime or actual broker-document authenticity.
+
+### Evidence, limits and acceptance handoff
+
+Read repository guidance, the acquisition/core/bundle contracts, the historical
+review and current grounded proposal. Inspected the synthetic bootstrap,
+ordering/request helpers, scenario catalogue, durable permit boundary and the
+receipt-consolidation code. The existing synthetic helper implementation is
+reference/evidence for the design, not the approved reusable implementation.
+
+Independently ran only this read-only consolidation:
+
+```sh
+.venv/bin/python -B scripts/consolidate-cdp-proof.py tmp/cdp-real-proof/integration92-exact
+```
+
+It returned `passed=true`, `modes=28`, `receipts=28`,
+`current_pins_verified=true`, `capture_replaced=false`,
+`live_absence_verified=false`, and `browser_proven=false`. Validator SHA256 was
+`425768d24f16065e962bea99abaa0d0f755cd55ba48dab28640389f0803a2090`;
+the pure observation evaluator SHA256 was
+`c2d749c52ab3580c4d16b87f2abde52f205a1a788c86a68e192b09b087157a19`.
+This confirms consistency of the retained 28-scenario evidence and current source
+pins; it does not authenticate receipt authorship or rerun Chrome. The parent's
+separate current absence check is author evidence, not a check performed by this
+reviewer. No browser, Docker command, network request, credential, private broker
+HTML, production service or shared Beads state was accessed by this review.
+
+The first controller owner must supply discriminating network/child-forbidden
+checks, including held callbacks crossed by a fatal event, duplicate IDs,
+immutable queued metadata, bounded queues, simultaneous auth requests, HTTP-auth
+cancellation and persistence refusal. Complete Python/Node verification remains
+required. Later launch/recovery and capture-composition owners must prove their
+final code in separately isolated real fixtures; the earlier harness is not that
+proof. Source characterization, portable credential delivery, dedicated egress,
+exact-head security and external PR review retain their independent gates. No
+real login, secret export, production change or Ghostfolio write is authorized.
+
+Knowledge lookup followed the corpus and topical indexes to the stable
+`saved-input-report-preservation` concept, verified 2026-10-09 and fresh through
+2026-12-31, then checked its boundary against the owning acquisition-bundle
+contract. **Knowledge verdict: Used and sufficient.** No retrieval escalation or
+new portable runtime finding arose; design decisions stay in their canonical
+project artifacts. The reviewer appended only this section, preserving every
+prior report byte. Parent owns Beads, commits and terminal reconciliation.
+
+
+## Exact-hash design review: native synthetic composition amendment
+
+Date: 2026-10-10. Review owner: `infra-4g8u.99`.
+Reviewed the complete plan at commit
+`dc1c393b80177a599d452ded81ebd2900de28c77`, SHA256
+`49ddae6d63e66a4741e4e2c37df75ed4d72491b6a165eefafe6fd8e7306be66e`.
+The working plan was byte-identical to that committed object.
+
+**APPROVE the native synthetic composition DESIGN.** No blocking design finding
+or further plan amendment is required for this scoped implementation. The
+2026-10-10 amendment governs the internal synthetic composition; earlier approvals
+retain their original scopes. This verdict is neither PR review, final-code
+acceptance, runtime qualification nor permission to allocate a fixture or access
+the broker. Implementation and all final-code proof remain owned by `.94`.
+
+### Grounding and safety assessment
+
+The seam addresses an actual gap. `core.mjs` applies `brokerUrl` in source and
+stored-permit validation; `request-controller.mjs` imports those fixed validators
+and validates read URLs separately. The old `lab/first-request.mjs` consumes a
+broker-shaped saved request while Chrome requests a loopback URL, and
+`lab/capture-document.mjs` replaces session/frame/URL values with `FIXTURE`
+constants after native correlation. Those experiments cannot establish the new
+unchanged native composition, even where their individual controls passed.
+
+A module-private immutable policy shared by the real authority and controller is
+an appropriate internal seam. Keep the public broker signatures, origin, principal
+hash, fixed namespace and schema-1 journal format unchanged. The lab factory's
+literal canonical loopback origin, fixed invented principal, separate namespace,
+strict policy/origin/allocation journal binding and private handle identity make
+cross-use fail closed without exposing a configurable broker validator. This is
+a cooperation boundary under the existing same-user filesystem assumptions.
+Source cloning/freezing must cover nested values, and neither caller mutation nor
+an object with copied fields can acquire another instance's authority.
+
+Native URL/method/resource/session/frame/request/loader identities must pass
+through without fixture substitution. Local opaque epochs remain legitimate
+ownership metadata; they are not substitutes for CDP identities. The existing
+controller's exact event/action comparisons allow its consumer to use the already
+compared action tuple, but the composition must demonstrate that the tuple equals
+the native event. Do not fork the authority or decision algorithm into a permissive
+lab copy. Keep durable consumption before continuation and permanent fencing after
+fatal ingress, including a concurrent second authentication request or HTTP-auth
+challenge. The existing controller's synchronous `authRequired` fence is the
+required path; the older ordering helper's cancellation-then-abort behavior is
+not sufficient as the composition's sole challenge handler.
+
+The fixed host registry closes the alternate-output-directory bypass. Exclusive
+allocation/recovery, fsynced intent before create, independently verified full-ID
+receipt before copy/start, and immediate pre-start reinspection are a coherent
+fail-closed ordering. Registry/receipt loss, partial publication, daemon mismatch
+or uncertain ownership cannot become a fresh allocation or cleanup authority.
+The create-before-receipt window deliberately permits only a stopped orphan and
+manual reconciliation. Names, labels and later discovery never confer cleanup
+identity. A retained lock after a crash also requires manual reconciliation; no
+stale-lock expiry is implied by recovery support.
+
+The current runner is not compliant with that new contract: it retains the ID in
+memory, publishes its receipt after execution, can remove after failed inspection,
+and checks final absence by name. These are required replacement points under
+`.94`, not reasons to approve the old runner unchanged. Exact-ID absence must be
+a positive daemon observation, never a generic inspection failure. Cleanup does
+not clear authentication uncertainty. Failed terminal-absence fsync blocks the
+next allocation even after a resource is physically gone.
+
+Capture must arm its native ticket before navigation and correlate Fetch network
+ID, Network request/loader, commit and loader-bound load on the owned root. Keep
+ownership/epoch and active-loader checks around bounded serialization, including
+an intervening navigation with identical content. Synthetic account/day/role and
+operation markers test the fixture adapter only. The existing acquisition-bundle
+parser and publication-preservation contract remain the financial/source boundary.
+
+### Final-code acceptance handoff
+
+The `.94` owner must produce the amendment's evidence against its final executable
+sources; none is satisfied by this design verdict or historical harness receipts:
+
+- Discriminating broker/lab exclusion, forged/cross-instance handle, nested source
+  mutation, copied-journal and wrong-origin/allocation tests; unchanged broker
+  schema-1 compatibility; a fresh isolated process that refuses retained synthetic
+  uncertainty without reset or implicit reenrollment.
+- One positive native POST using the same durable consumer/controller algorithm,
+  with exactly one durable consumption before dispatch. Startup, unsupported
+  target/frame/worker, redirects, held callbacks, HTTP auth and concurrent/second
+  auth must prove ingress fencing and the original bounded stop ordering. The
+  race may dispatch zero or one times; the separate positive control proves one.
+- Native capture controls for missing/wrong/stale chains, changed ownership or
+  epoch, wrong markers and intervening navigation, plus identical bytes with
+  distinct fresh chains. Evidence must distinguish real events from derived
+  adversarial replays.
+- Isolated allocation kill points and fsync/daemon failures at intent, create,
+  receipt, start/dispatch and terminal absence. A competing process selecting a
+  different output directory must still be excluded. Missing/contradictory
+  ownership must produce no start, reallocation or removal; a verified receipt
+  permits only its exact-ID recovery under applicable authorization.
+- Final source/runtime/evaluator pins, retained private receipts and exact owned
+  absence for successful fixtures, plus the required complete local verification.
+  Uncertain cleanup keeps `.94` open. All readiness fields remain false.
+
+### Evidence and limits
+
+Read project guidance, the scoped review brief, the full owning plan, acquisition
+core/bundle contracts, the existing report, actual core/controller, sole-root
+bootstrap, ordered guards, bounded pipe, native capture helper, fixture runner,
+and relevant controller/core/composition/runner regression code. Hash/committed
+object comparison and initial Git status were read-only and successful. The
+parent reports `bash scripts/verify-local.sh` exit 0 with 1031 Python and 285 Node
+tests before this review; that is author evidence for existing code, not an
+independently rerun suite or evidence of the proposed implementation.
+
+No browser, Docker command, network request, credential, real broker document,
+production resource or shared-state test was used. This review makes no new
+vendor/runtime claim. Source characterization, credential delivery, isolated
+runtime authorization, egress, security and external PR review retain their
+separate gates. Rollback of this appended report is a scoped commit revert;
+retain every authentication journal, allocation record and private capture.
+
+Knowledge lookup followed corpus and Ghostfolio indexes to the stable
+`saved-input-report-preservation` concept (verified 2026-10-09, fresh through
+2026-12-31), checked against the owning acquisition-bundle contract. Lookup outcome:
+applicable. **Knowledge verdict: Used and sufficient.** The indexed path needed
+no retrieval escalation; these design decisions already belong in the canonical
+project plan/report and add no separate portable operational lesson. Only this
+section was appended, preserving all preceding report bytes. Parent owns Beads
+updates, complete verification, the scoped commit and terminal reconciliation.
+
+
+## Exact-hash design delta review: cached fixture recovery identity
+
+Date: 2026-10-10. Independent design delta review under `infra-4g8u.99`.
+Final owning plan SHA256:
+`e275a5ec951cc092d1b7582524a3b19a189cb0f31c787d654f1ae409142cd7ad`.
+**APPROVE the cached fixture recovery identity amendment only.** Its final text
+matches the reviewed substitution; no blocking design finding remains. Earlier
+scope restrictions and acceptance obligations continue to apply.
+
+Approved replacement of the development-only exact image-index pin:
+
+- Historical index:
+  `sha256:11b6dc0eb079e10e625ff8de54af6018100289b51fa500e72196adfca8233df8`.
+- Recovered index:
+  `sha256:05f2836ccd6a6b66a18e21e9d940e36336b7d40e353a3e97b05b01df0654f721`.
+- Identical original/recovered runtime manifest:
+  `sha256:480e30540a19482a31a70f345a97c769491d677a62b43eb2232f4fcfbe08c625`.
+- Identical original/recovered configuration:
+  `sha256:0665422bcb24981c0ed8a4dd885167958273a4210e410be84322465fa6ed9b9f`.
+
+The retained original and recovery build logs show unchanged runtime identities,
+cached filesystem/configuration steps and different attestation/index digests.
+The saved recovered-image inspection agrees with the new index, non-root user and
+fixture label. Recovery log SHA256 is
+`b80ab4faed9bc8a7d3779c2dc7225a72a6df5a090cc609b53fa7675f0bfab918`;
+inspection SHA256 is
+`bf8b34a41fd6598a83f0163ec4d6f74f55dae804a22f7b871089298cc319b4af`.
+These are independently read saved records, not a live daemon inspection or
+independent observation of the build/runtime.
+
+Chrome148.0.7778.97, Node20.19.2, artifact/profile/label pins, fixed registry,
+sandbox and exact full-ID controls remain mandatory. No tag fallback, runtime
+override, registry reset or rewriting old receipts is approved. Any incompatible
+retained allocation remains blocked for separate reconciliation. The final
+32-mode runtime proof under `.94` remains outstanding and must run from scratch
+against final sources and the recovered exact index with new private receipts;
+no historical receipt qualifies it. All readiness fields remain false. This is
+not PR review, runtime acceptance, production authorization or broker permission.
+
+Only this review section was appended; previous report bytes were preserved.
+No Docker/browser/network operation or Beads mutation was performed. Parent owns
+required local verification, the scoped commit and `.99` closure before runtime.
+**Knowledge verdict: Nothing durable.** This narrow identity delta belongs in
+its canonical plan, review and retained build records; it adds no portable lesson.
+
+
+## Exact-hash design delta review: supervised allocation interruption proof
+
+Date: 2026-10-10. Independent DESIGN review of the final owning plan SHA256
+`d5724ac0126b4eee2c1f737c1563b2c21079c3cf9fc9370e5d964061c5a1eb55`.
+**APPROVE the narrowly supervised laboratory interruption-proof design.**
+The earlier scoped HOLD is resolved: the worker now checks its exact private
+`output/home` and current parent PID against the invoking supervisor before
+accessing the registry, and the plan explicitly bounds the test-only recovery
+exception. This is cooperation against accidental cross-use, not a security
+boundary against hostile same-user code.
+
+Inspected the corrected `prove-native-allocation.py`, the relevant runner and
+allocation operations, and the native verdict's permitted-dispatch condition.
+The supervisor observes its same-invocation child exit by SIGKILL before retaining
+the old lock, acquiring fresh exclusion and reconciling that same allocation.
+The unreceipted full create ID comes from the fsynced checkpoint of that controlled
+create call; independent exact-ID inspection and durable receipt publication
+precede ordinary cleanup. Names, labels, discovered resources, expired locks or
+reconstructed authority after supervisor loss are not acceptable substitutes.
+Before-create intent remains retained and refuses another allocation. No restart,
+new allocation or ordinary runner recovery capability follows from this exception.
+
+The corrected dispatch checkpoint follows completion and validation of the native
+permitted run, then kills the worker before the ordinary runner receives and
+publishes its result. It therefore tests interruption after completed dispatch
+and before ordinary result publication, not a kill synchronized with a packet or
+an in-flight request. Preserve native observations, killed-state evidence,
+principal uncertainty and reconciliation receipts separately; do not present the
+supervisor's additional checkpoint authority as ordinary crash recovery evidence.
+
+This approval supplies design permission only. Final helper verification, a
+scoped commit before launch, applicable fixture authorization and observed runtime
+proof remain required under `.94`. The 32-mode matrix and interruption evidence
+retain distinct source pins and must not inherit historical receipts. All
+readiness flags remain false; no production, broker, deployment or financial
+permission is added. No runtime, Docker, network or shared-state operation was
+performed by this review. Only this section was appended, preserving every prior
+report byte. Parent owns verification, Beads and commit reconciliation.
+
+**Knowledge verdict: Nothing durable.** The bounded experiment and its evidence
+limits are recorded in the canonical project plan/report; no portable operational
+lesson or corpus change is introduced.
+
+
+## Exact-hash design delta review: retained allocation registry capacity
+
+Date: 2026-10-10. Final owning plan SHA256:
+`eb3f6516ec1bab5cebf9535e249a22358c07c83d88fd471d4a94a53386e84ad9`.
+**APPROVE this bounded registry-capacity and supervised lock-reconciliation
+design delta.** No blocking design finding remains. Raising serialized registry
+capacity from 1MiB to 32MiB retains the independent 1000-allocation,
+1000-source-entry, depth-16, strict-schema and private-file controls. These are
+maximum bounds, not a promise that every permitted combination fits. Future
+capacity exhaustion must still refuse without pruning receipts or resetting state.
+
+Inspected the exact plan appendix and the allocation diff, schema validation,
+publication and poisoned-handle ordering. `_publish` checks serialized length
+before creating its temporary file; `_save` already poisons the handle, and
+`begin_allocation` must succeed before the runner reaches create. This supports
+the reported failure mechanism. The reported 32 terminal rows and 1,019,046-byte
+live registry are parent evidence; this reviewer did not inspect or mutate it.
+
+The narrow same-session exception requires verified complete terminal-absence
+rows, proof that this failed attempt published no new intent and reached no
+create, and proof that no current/competing owner remains. Retain the original
+lock separately and preserve registry bytes; never infer recovery authority from
+lock age, successful test results or terminal rows alone. Unknown publication or
+resource outcome remains blocked. This approves neither a general lock-clearing
+command nor automatic recovery.
+
+Before reconciliation or launch, the owner must add discriminating finite-limit
+regression evidence, run complete local verification and commit the scoped change.
+The `.94` owner must rerun all 32 runtime modes with fresh receipts against the
+changed allocation-source digest; previous matrix passes cannot qualify it.
+All readiness flags remain false and existing resource/authorization boundaries
+remain unchanged. This is DESIGN review only, with no runtime, Docker, network,
+registry mutation or PR review performed. Only this section was appended and all
+prior report bytes were preserved. Parent owns evidence, Beads and commit closure.
+
+**Knowledge verdict: Nothing durable.** The bound and its qualified local failure
+mechanism belong in the canonical project plan/report and acceptance evidence.

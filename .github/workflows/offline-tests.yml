@@ -22,13 +22,15 @@ jobs:
           python-version: '3.13'
       - name: Install pinned test dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Verify versioned offline tests
-        run: python -m pytest tests -q
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
       - name: Install pinned collector unit dependencies
         run: npm ci --prefix collector --ignore-scripts --no-audit --no-fund
+      - name: Verify documentation catalogue and local links
+        run: python scripts/check-docs.py
+      - name: Verify versioned offline tests
+        run: python -m pytest tests -q
       - name: Verify socket-forbidden collector core
         run: npm test --prefix collector
       - name: Check whitespace

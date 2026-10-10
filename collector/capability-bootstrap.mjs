@@ -46,7 +46,7 @@ export function bootstrapExperiment({send, registerSession, initialize, stop}) {
       owner = response.targetId;
       phase = 'initializing';
       registerSession(page.sessionId);
-      await initialize(page.sessionId, page.waitingForDebugger); check();
+      await initialize(page.sessionId, page.waitingForDebugger, owner); check();
       phase = 'ready';
       return {targetId: owner, sessionId: page.sessionId, browser_proven: false};
     } catch {

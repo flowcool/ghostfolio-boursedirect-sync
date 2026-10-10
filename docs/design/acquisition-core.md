@@ -63,3 +63,46 @@ Rollback: revert the scoped implementation commit; keep real enrollment/attempt
 records and locks intact. Any future manual reconciliation must establish exact
 request outcome outside ordinary acquisition. No financial rollback or production
 permission is supplied by this helper.
+
+## Internal native synthetic composition
+
+The broker exports retain their fixed origin, call signatures, principal hash,
+auth namespace and schema-1 journal. A module-private policy identity factors
+the same durable operations and request-controller decisions for the separate
+development-only `nativeComposition(origin, allocation)` factory. It accepts
+only a canonical explicit-port loopback origin and an allocation UUID. No
+operator command or environment setting can select that policy.
+
+Synthetic principal state uses the fixed `synthetic-cdp/auth` sibling namespace
+and schema-2 policy/origin/allocation bindings. Handles are immutable private
+identities; copied, foreign-instance, broker/lab and released handles refuse.
+Copied journals, changed origins and unfinished attempts refuse reenrollment or
+restart. The lab composition binds its real durable consumer internally; the
+caller cannot supply a replacement consume function. Native URLs, methods,
+resource types and CDP IDs are retained without broker/fixture translation.
+
+`nativeCapture` evaluates an armed native request/Fetch-network/loader/commit/load
+chain and checks active ownership/loader before and after bounded serialization.
+Synthetic document markers test only the fixture adapter, not broker-document
+authenticity. The pure native verdict rechecks saved observations without network
+or subprocess access.
+
+The opt-in `scripts/run-native-cdp.py` runner has no broker input or secret reader.
+Its fixed private host allocation registry requires explicit first initialization,
+intent fsync before create and independently inspected full-ID receipt fsync before
+copy/start. Unfinished allocations exclude new runs across output directories;
+failed publication retains a poisoned lock for manual recovery. Cleanup requires
+the receipt, unchanged daemon and exact configuration. It preserves a private
+principal archive before removal and requires exact daemon absence before terminal
+registry publication. No name discovery or failed-inspection fallback grants
+cleanup authority. The earlier harness remains historical proof under its own
+scope, never final-code qualification of this composition.
+
+Design authorization and final-code proof requirements are in the appended
+native composition amendment of the [owning plan](../plans/2026-10-09-guarded-browser-driver.md)
+and its [independent design review](../reviews/2026-10-09-guarded-browser-driver-astra.md).
+Offline tests and source hashes cannot replace a fresh pinned sandboxed runtime
+matrix, actual allocation kill-point observations, cleanup evidence or the
+separate source/credential/egress/security gates. All readiness fields remain false.
+Rollback code with a scoped revert, retaining principal journals and allocation
+records; fixture cleanup requires separately applicable exact-owned authorization.

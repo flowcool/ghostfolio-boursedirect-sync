@@ -1,7 +1,7 @@
 # ghostfolio-boursedirect-sync
 
-Read [CLAUDE.md](CLAUDE.md), [FINDINGS.md](FINDINGS.md), and the
-[reviewed plan](docs/plans/2026-10-08-manual-document-import.md).
+Read [CLAUDE.md](CLAUDE.md), then the scoped Beads issue and the owning contract
+selected through the [design index](docs/design/index.md).
 Global working agreement applies. Beads owns live work state.
 
 ## Architecture and validation
@@ -26,6 +26,10 @@ Global working agreement applies. Beads owns live work state.
 - Runtime dependencies: `requirements.txt`; development: `requirements-dev.txt`.
 - Required logic verification: `.venv/bin/python -m pytest -q`. Tests use synthetic
   inputs and forbid sockets. Never point tests at real Ghostfolio or shared state.
+- Before committing, run `bash scripts/verify-local.sh`; its documentation,
+  Python, collector and whitespace checks stop at the first failure. Record a
+  successful exit code before committing or closing work. For other required
+  checks, inspect each exit code before any dependent mutation.
 - Real inputs, configuration, output and journals are ignored; never commit
   personal account data. Logs contain codes and counts only.
 
@@ -38,11 +42,22 @@ Global working agreement applies. Beads owns live work state.
 - Do not spawn PR-review subagents. Run local verification and record exact CI
   evidence; CodeRabbit supplies PR review externally. Historical independent
   reviews remain valid evidence for the exact heads they inspected.
-- Astra is manual escalation only (see `.claude/rules/delegation.md`): never an
-  automatic design-review gate. Surface the question and stop; Florent invokes
-  Astra by name, or it does not happen.
+- Future design reviews follow the reviewer and authorization policy in
+  `.claude/rules/delegation.md`. Historical Astra verdicts remain valid for their
+  exact reviewed scope; design review is separate from PR review.
 - No Ghostfolio writes are authorized. Public v0 publication is authorized;
   private documents, runtime evidence and credentials must remain off Git.
+
+## Autonomous technical ownership
+
+Florent authorizes the agent to complete the agreed project scope autonomously,
+including technical reviews and bounded infrastructure delegation under their
+existing explicit authority. Follow `.claude/rules/delegation.md` for reviewer
+and model selection. Resolve technical choices, review findings and
+recoverable laboratory failures without repeating permission requests. Carry
+existing approvals across sessions through their Beads evidence. Ask Florent
+only for genuinely new authority or indispensable information. Production,
+financial writes, publication/push and destructive-operation gates still apply.
 
 ## Durable work state
 
