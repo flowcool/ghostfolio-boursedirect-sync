@@ -193,6 +193,7 @@ incremental_compose_browser_profile:
     compose.yaml: aaa551c18b37f327c44fce9af2d61589e9ccc790076196667974193570c792c5
     collector/browser-seccomp.json: cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849
     collector/licenses/playwright-LICENSE: 45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb
+    .gitattributes: eecf743358ccef391d62d24bbfa9ee93fcc15858620fb274789fcfdf86b5b26e
   artifact:
     qualified_source_image: sha256:f5b167427267a7af51fde6e575f32612facaa5d96cbd2798505afc2211848878
     available_target_config_digest: sha256:2a08a5d2ce2005a7d4517b5cad854db731878a0fd9be96b5be2dc754dbf3e1a2
@@ -207,6 +208,9 @@ incremental_compose_browser_profile:
     source_path: utils/docker/seccomp_profile.json
     license: Apache-2.0
     profile_sha256: cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849
+    license_preservation: Original upstream CRLF bytes retained; path-specific cr-at-eol
+      recognition and no text conversion preserve the license without suppressing
+      real whitespace checks.
   checks:
     command: VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection VAULT_UPSTREAM_NETWORK=config-inspection-upstream
       docker compose --env-file /dev/null -f compose.yaml --profile browser config
@@ -220,6 +224,7 @@ incremental_compose_browser_profile:
     - bounded resources and private tmpfs
     documentation_exit_code: 0
     whitespace_exit_code: 0
+    whitespace_command: git diff --check 7c4b3dba333bb284881817db8a3466641985e8a9
   limits:
     profile_enabled_by_default: false
     browser_started: false
