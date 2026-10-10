@@ -538,3 +538,33 @@ requires its exact receipt and separately applicable cleanup authorization.
 Independent source observations, credentials, egress, security and external PR
 review remain separate gates. No deployment, image publication or broker request
 is part of this proposal or its approval.
+
+### Cached fixture recovery identity amendment (2026-10-10)
+
+Infra recovery used the unchanged original Dockerfile and verified Chrome ZIP.
+All image filesystem/configuration build steps were cached. The runtime manifest
+`sha256:480e30540a19482a31a70f345a97c769491d677a62b43eb2232f4fcfbe08c625`
+and configuration
+`sha256:0665422bcb24981c0ed8a4dd885167958273a4210e410be84322465fa6ed9b9f`
+match the original build log exactly. The newly generated build attestation
+changes the OCI image-index identity. Propose replacing the development-only
+allocation image pin with
+`sha256:05f2836ccd6a6b66a18e21e9d940e36336b7d40e353a3e97b05b01df0654f721`;
+the old index
+`sha256:11b6dc0eb079e10e625ff8de54af6018100289b51fa500e72196adfca8233df8`
+remains historical evidence, never a fallback. The local recovery tag is a
+navigation aid only and cannot grant runtime authority.
+
+Chrome148.0.7778.97, Node20.19.2, the original fixture label, artifact hash,
+seccomp hash, non-root/network-none sandbox restrictions, fixed registry and
+exact full-ID ownership checks remain mandatory. Qualify the final composition
+from scratch against the recovered exact index; earlier runtime receipts do
+not satisfy this owner. All readiness flags remain false.
+
+Private recovery evidence is retained under ignored project `tmp/`: original
+`cdp-capability-build/build.log`, `sonnet-recovery-build.log`, and
+`native-recovered-image-inspect.json`. Recovery changed only a new local image
+tag and attestation; no container or browser was launched. Rollback this pin
+change with its scoped commit revert. Image rollback belongs to infra: remove
+only `bd-native-cdp-recovery:infra-lnms` after verifying the exact recovered
+identity and that no container uses it; do not prune shared cached layers.

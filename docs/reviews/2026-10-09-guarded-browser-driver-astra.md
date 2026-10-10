@@ -674,3 +674,49 @@ no retrieval escalation; these design decisions already belong in the canonical
 project plan/report and add no separate portable operational lesson. Only this
 section was appended, preserving all preceding report bytes. Parent owns Beads
 updates, complete verification, the scoped commit and terminal reconciliation.
+
+
+## Exact-hash design delta review: cached fixture recovery identity
+
+Date: 2026-10-10. Independent design delta review under `infra-4g8u.99`.
+Final owning plan SHA256:
+`e275a5ec951cc092d1b7582524a3b19a189cb0f31c787d654f1ae409142cd7ad`.
+**APPROVE the cached fixture recovery identity amendment only.** Its final text
+matches the reviewed substitution; no blocking design finding remains. Earlier
+scope restrictions and acceptance obligations continue to apply.
+
+Approved replacement of the development-only exact image-index pin:
+
+- Historical index:
+  `sha256:11b6dc0eb079e10e625ff8de54af6018100289b51fa500e72196adfca8233df8`.
+- Recovered index:
+  `sha256:05f2836ccd6a6b66a18e21e9d940e36336b7d40e353a3e97b05b01df0654f721`.
+- Identical original/recovered runtime manifest:
+  `sha256:480e30540a19482a31a70f345a97c769491d677a62b43eb2232f4fcfbe08c625`.
+- Identical original/recovered configuration:
+  `sha256:0665422bcb24981c0ed8a4dd885167958273a4210e410be84322465fa6ed9b9f`.
+
+The retained original and recovery build logs show unchanged runtime identities,
+cached filesystem/configuration steps and different attestation/index digests.
+The saved recovered-image inspection agrees with the new index, non-root user and
+fixture label. Recovery log SHA256 is
+`b80ab4faed9bc8a7d3779c2dc7225a72a6df5a090cc609b53fa7675f0bfab918`;
+inspection SHA256 is
+`bf8b34a41fd6598a83f0163ec4d6f74f55dae804a22f7b871089298cc319b4af`.
+These are independently read saved records, not a live daemon inspection or
+independent observation of the build/runtime.
+
+Chrome148.0.7778.97, Node20.19.2, artifact/profile/label pins, fixed registry,
+sandbox and exact full-ID controls remain mandatory. No tag fallback, runtime
+override, registry reset or rewriting old receipts is approved. Any incompatible
+retained allocation remains blocked for separate reconciliation. The final
+32-mode runtime proof under `.94` remains outstanding and must run from scratch
+against final sources and the recovered exact index with new private receipts;
+no historical receipt qualifies it. All readiness fields remain false. This is
+not PR review, runtime acceptance, production authorization or broker permission.
+
+Only this review section was appended; previous report bytes were preserved.
+No Docker/browser/network operation or Beads mutation was performed. Parent owns
+required local verification, the scoped commit and `.99` closure before runtime.
+**Knowledge verdict: Nothing durable.** This narrow identity delta belongs in
+its canonical plan, review and retained build records; it adds no portable lesson.

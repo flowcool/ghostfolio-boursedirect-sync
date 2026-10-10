@@ -16,7 +16,7 @@ import yaml
 
 
 ENDPOINT = 'unix:///var/run/docker.sock'
-IMAGE = 'sha256:11b6dc0eb079e10e625ff8de54af6018100289b51fa500e72196adfca8233df8'
+IMAGE = 'sha256:05f2836ccd6a6b66a18e21e9d940e36336b7d40e353a3e97b05b01df0654f721'
 PROFILE_SHA = 'cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849'
 _HANDLES = {}
 _HASH = re.compile(r'[0-9a-f]{64}\Z')
