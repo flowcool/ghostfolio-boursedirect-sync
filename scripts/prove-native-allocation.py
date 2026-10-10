@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -93,7 +94,18 @@ def prove(stage, profile, output):
         wait_for(lambda: child.poll() is not None)
         allocation.require(child.returncode == -signal.SIGKILL, 'ALLOCATION_PROOF_KILL_UNVERIFIED')
         allocation.require(checkpoint.exists(), 'ALLOCATION_PROOF_CHECKPOINT_MISSING')
-        observed = json.loads(checkpoint.read_text())
+        try:
+            observed = json.loads(checkpoint.read_text())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise RuntimeError('ALLOCATION_PROOF_CHECKPOINT_INVALID') from None
+        valid = isinstance(observed, dict) and set(observed) == {'stage', 'container'}
+        if valid:
+            identifier = observed['container']
+            valid = observed['stage'] == stage and (
+                (stage == 'before-create' and identifier is None)
+                or (stage != 'before-create' and isinstance(identifier, str)
+                    and re.fullmatch(r'[0-9a-f]{64}', identifier) is not None))
+        allocation.require(valid, 'ALLOCATION_PROOF_CHECKPOINT_INVALID')
     finally:
         if child.poll() is None:
             child.kill()

@@ -97,13 +97,15 @@ test('invalid request cannot call provider and permanently disables later valid 
   await assert.rejects(p.request(expected), /PROVIDER_REQUEST_REJECTED/); assert.equal(calls, 0);
 });
 test('late callback, timeout, secret exception and reversed provider start cannot retry', async () => {
-  for (const kind of ['timeout', 'error', 'old', 'rollover']) {
+  for (const kind of ['timeout', 'error', 'old', 'rollover', 'worker-rollover']) {
     const {expected, response} = code(); let calls = 0, samples = 0;
     const p = delayedOtpProvider({...expected, timeoutMs: 10,
-      now: () => {samples++; return kind === 'rollover' && samples > 1 ? 150 : 121;},
+      now: () => {samples++; return samples > 1
+        ? (kind === 'rollover' ? 150 : kind === 'worker-rollover' ? 152 : 121) : 121;},
       fetchCode: () => {calls++;
         if (kind === 'timeout') return new Promise(() => {});
         if (kind === 'error') throw new Error(SECRET);
+        if (kind === 'worker-rollover') return {...response, startedAt: 150, completedAt: 151};
         return {...response, startedAt: kind === 'old' ? 120 : 121};
       }});
     await assert.rejects(p.request(expected), /^Error: PROVIDER_REQUEST_REJECTED$/);

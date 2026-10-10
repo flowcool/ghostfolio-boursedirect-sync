@@ -101,7 +101,8 @@ export function delayedOtpProvider({runNonce, stageNonce, fetchCode, now, env = 
       if (fenced) throw new Error();
       // Trusted worker brackets its own CLI; controller adds the earlier request bound.
       const receiptTime = now(); time(receiptTime);
-      if (response?.startedAt < startedAt) throw new Error();
+      if (response?.startedAt < startedAt
+          || Math.floor(response?.startedAt / 30) !== Math.floor(startedAt / 30)) throw new Error();
       return validateProviderCode(response, expected, receiptTime);
     } catch {fenced = true; throw new Error('PROVIDER_REQUEST_REJECTED');}
     finally {clearTimeout(timer);}
