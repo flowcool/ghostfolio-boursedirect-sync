@@ -431,3 +431,26 @@ inspection_uri_aliases:
   actual_trigger: One authorized vault observation found exact unique item and valid
     fields/profile, but two URI entries caused single-URI validation refusal. Login/unlock/sync/lookup
     succeeded; affected CLI stopped; no broker request.
+actual_independent_inspection:
+  kind: live_exact_named_vault_capability
+  source_commit: 0e8150e929f673acee35e54b5c50c20da5f623f9
+  private_result_sha256: 771bf04b86cb5fa13721cade903034e42dab2fca69bba2cf1aeba35bdede7e77
+  private_phase_receipt_sha256: 8426422607e8eb2d0b7809da89e2eaf89030664beaf5b0e63e0943cd0d114149
+  private_binding_sha256: fa5b92faa289b4e892b896250b9792fc89f4987a18678e03c9ebc4be7114cbb9
+  command: python3 tmp/run-live-vault-inspection.py
+  exit_code: 0
+  observations:
+    exact_name_unique: true
+    broker_uri_verified: true
+    credential_fields_verified: true
+    totp_profile_verified: true
+    item_uri_alias_count: 2
+    broker_uri_alias_count: 1
+    logout_exit_code: 0
+    unauthenticated_no_identity_status_verified: true
+    application_services_retained: true
+    totp_requested: false
+    broker_authentication_performed: false
+  scope: Independent vault item/profile/cleanup capability only. No account enrollment,
+    broker source roles, source request or Ghostfolio write authorized or proved.
+    Earlier failed attempts remain private and unretried by this artifact.
