@@ -1,5 +1,5 @@
 // Fixed-command worker engine. Only its trusted launcher can supply execution.
-import {selectWorkerItem, validateProviderCode} from './credential-provider.mjs';
+import {selectWorkerItem, selectNamedWorkerItem, validateProviderCode} from './credential-provider.mjs';
 import {brokerUrl} from './core.mjs';
 
 function exact(value, keys) {
@@ -16,11 +16,16 @@ function freeze(value) {Object.values(value).forEach(x => {if (x && typeof x ===
 export function providerConfiguration(value) {
   try {
     exact(value, ['schema_version', 'vaultOrigin', 'binding', 'cli']);
-    if (value.schema_version !== 1) throw new Error();
+    if (![1, 2].includes(value.schema_version)) throw new Error();
     const url = new URL(value.vaultOrigin);
     if (url.protocol !== 'https:' || url.origin !== value.vaultOrigin || url.username || url.password) throw new Error();
-    exact(value.binding, ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
-    uuid(value.binding.itemId); boundedText(value.binding.name); brokerUrl(value.binding.uri); hash(value.binding.principalHash);
+    if (value.schema_version === 1) {
+      exact(value.binding, ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
+      uuid(value.binding.itemId); boundedText(value.binding.name); brokerUrl(value.binding.uri); hash(value.binding.principalHash);
+    } else {
+      exact(value.binding, ['name', 'accountConfig']);
+      if (value.binding.name !== 'boursedirect.fr') throw new Error();
+    }
     exact(value.binding.accountConfig, ['path', 'sha256']); boundedText(value.binding.accountConfig.path); hash(value.binding.accountConfig.sha256);
     if (!value.binding.accountConfig.path.startsWith('/')) throw new Error();
     exact(value.cli, ['path', 'sha256', 'version', 'defaultsVerified']);
@@ -62,9 +67,11 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
       session = await command(['unlock', '--passwordenv', 'BW_PASSWORD', '--raw'], {...base, BW_PASSWORD: credentials.BW_PASSWORD});
       boundedText(session);
       await command(['sync'], {...base, BW_SESSION: session});
-      const raw = await command(['get', 'item', config.binding.itemId], {...base, BW_SESSION: session});
+      const raw = await command(config.schema_version === 1 ? ['get', 'item', config.binding.itemId]
+        : ['list', 'items', '--search', config.binding.name], {...base, BW_SESSION: session});
       // Full item/seed is scoped to worker memory and is never sent through IPC.
-      selected = selectWorkerItem(JSON.parse(raw), config.binding, config.cli.defaultsVerified);
+      selected = (config.schema_version === 1 ? selectWorkerItem : selectNamedWorkerItem)(
+        JSON.parse(raw), config.binding, config.cli.defaultsVerified);
       return structuredClone(selected);
     } catch {failed = true; selected = session = undefined; throw new Error('VAULT_WORKER_FAILED');}
   }
@@ -76,7 +83,7 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
       uuid(expected.runNonce); uuid(expected.stageNonce);
       if (request.runNonce !== expected.runNonce || request.stageNonce !== expected.stageNonce) throw new Error();
       const startedAt = sample(); if (30 - startedAt % 30 < 5) throw new Error();
-      const value = await command(['get', 'totp', config.binding.itemId],
+      const value = await command(['get', 'totp', selected.itemId],
         {PATH: '/usr/bin:/bin', HOME: appdata, BITWARDENCLI_APPDATA_DIR: appdata, BW_SESSION: session});
       if (failed) throw new Error();
       const completedAt = sample();

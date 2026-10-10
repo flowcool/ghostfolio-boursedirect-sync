@@ -153,3 +153,14 @@ and acquisition control code. Actual vault visibility, source observations,
 enrollment, profile and cleanup qualification remain separate operational gates.
 Synthetic adapter evidence and reusable input hashes are retained in
 [`../verification/bitwarden-cli.yaml`](../verification/bitwarden-cli.yaml).
+
+The operator may supply the item name `boursedirect.fr` instead of a UUID.
+Provider schema 2 expresses this authority with a binding containing only that
+exact name and the trusted account-configuration reference. The fixed worker
+uses one `list items --search boursedirect.fr` call, requires one exact live login
+item, and validates its UUID, canonical broker URI, credentials and OTP profile
+before delivery. It derives the principal hash from that selected login and pins
+the resolved UUID for the single delayed TOTP. No whole-vault listing, fallback
+after a failed pinned lookup or automatic retry is added. Schema 1 retains its
+pre-pinned identity contract. Named resolution does not qualify live ownership,
+egress, enrollment, account configuration or source observations.

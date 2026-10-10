@@ -20,7 +20,7 @@ case "$1" in
         export BW_PASSWORD
         set -- unlock --passwordenv BW_PASSWORD --raw
         ;;
-    sync|item|totp)
+    sync|item|totp|lookup)
         operation=$1
         BW_SESSION=$(read_value)
         export BW_SESSION
@@ -28,6 +28,10 @@ case "$1" in
             sync) set -- sync ;;
             item) set -- get item "$2" ;;
             totp) set -- get totp "$2" ;;
+            lookup)
+                [ "$2" = boursedirect.fr ] || exit 1
+                set -- list items --search boursedirect.fr
+                ;;
         esac
         ;;
     *) exit 1 ;;
