@@ -42,16 +42,18 @@ Global working agreement applies. Beads owns live work state.
 - Do not spawn PR-review subagents. Run local verification and record exact CI
   evidence; CodeRabbit supplies PR review externally. Historical independent
   reviews remain valid evidence for the exact heads they inspected.
-- The existing Astra design-review gate remains applicable before non-trivial
-  implementation; it is separate from PR review.
+- Future design reviews follow the reviewer and authorization policy in
+  `.claude/rules/delegation.md`. Historical Astra verdicts remain valid for their
+  exact reviewed scope; design review is separate from PR review.
 - No Ghostfolio writes are authorized. Public v0 publication is authorized;
   private documents, runtime evidence and credentials must remain off Git.
 
 ## Autonomous technical ownership
 
 Florent authorizes the agent to complete the agreed project scope autonomously,
-including required Astra design reviews and bounded infrastructure delegation
-(Sonnet for infrastructure). Resolve technical choices, review findings and
+including technical reviews and bounded infrastructure delegation under their
+existing explicit authority. Follow `.claude/rules/delegation.md` for reviewer
+and model selection. Resolve technical choices, review findings and
 recoverable laboratory failures without repeating permission requests. Carry
 existing approvals across sessions through their Beads evidence. Ask Florent
 only for genuinely new authority or indispensable information. Production,
