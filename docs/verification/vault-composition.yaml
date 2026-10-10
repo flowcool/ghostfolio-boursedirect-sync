@@ -231,3 +231,28 @@ incremental_compose_browser_profile:
     ugreen_sandbox_qualified: false
     broker_egress_qualified: false
     collector_credentials_supplied: false
+incremental_host_sandbox_runner:
+  kind: network_none_synthetic_source_owned_os_proof
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: 2d8a1ce2a867f844213e588378e2d71975237ed8548fbc0d613523881b0702e2
+    collector/capability-pipe.mjs: e13be86dfd1149d84483f1dda2b2be29259247c9a5da20a14b0e243d39d694e5
+    collector/tests/browser-sandbox-proof.test.mjs: be3b0c29fd4174be6afe11298f12790898ea1e41fc44c08be04a26ebbaae09cf
+  affected_check:
+    command: node --import ./collector/tests/no-network.mjs --test collector/tests/browser-sandbox-proof.test.mjs
+    exit_code: 0
+    passed: 7
+  required_observations:
+  - non-root UID1000 and only loopback interface
+  - pinned actual Chrome155.0.8059.39 renders syntheticdata document
+  - renderer no-new-privileges, nested PIDnamespace and additional seccomp beyond
+    Dockerbaseline
+  - owned browser and processgroup exit before successful result
+  actual_host_execution: false
+  broker_requests_permitted: false
+  credentials_permitted: false
+  full_collector_check:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 415
+    log_sha256: 6efb9ea62141d1fe96674a4131149d3f6ad1b33b36687393e4ca7a83b518a300
+    private_log: tmp/browser-sandbox-node.log
