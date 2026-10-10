@@ -2,6 +2,7 @@
 // Infra supplies runtime/access facts; no host, SSH, SOPS or network wiring here.
 import fs from 'node:fs';
 import {providerConfiguration} from './vault-worker.mjs';
+import {selectNamedWorkerItem} from './credential-provider.mjs';
 import {executePrivate} from './private-process.mjs';
 
 const shim = fs.readFileSync(new URL('./bitwarden-cli.sh', import.meta.url), 'utf8');
@@ -29,7 +30,8 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
     [['login', '--apikey'], 'login', ['BW_CLIENTID', 'BW_CLIENTSECRET']],
     [['unlock', '--passwordenv', 'BW_PASSWORD', '--raw'], 'unlock', ['BW_PASSWORD']],
     [['sync'], 'sync', ['BW_SESSION']],
-    [['get', 'item', config.binding.itemId], 'item', ['BW_SESSION']],
+    [config.schema_version === 1 ? ['get', 'item', config.binding.itemId]
+      : ['list', 'items', '--search', config.binding.name], config.schema_version === 1 ? 'item' : 'lookup', ['BW_SESSION']],
     [['get', 'totp', config.binding.itemId], 'totp', ['BW_SESSION']],
   ];
   let index = 0, verified = false, busy = false, failed = false, stopping;
@@ -73,8 +75,13 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
         if (typeof value !== 'string' || !value || Buffer.byteLength(value) > 4096 || /[\x00-\x1f\x7f]/.test(value)) throw new Error();
         return Buffer.from(value).toString('base64') + '\n';
       }).join('');
-      const extra = step[1] === 'server' ? [config.vaultOrigin] : ['item', 'totp'].includes(step[1]) ? [config.binding.itemId] : [];
-      return await invoke(['/bin/sh', '-c', shim, 'vault-cli', step[1], ...extra], Buffer.from(input));
+      const extra = step[1] === 'server' ? [config.vaultOrigin] : step[1] === 'lookup' ? [config.binding.name]
+        : ['item', 'totp'].includes(step[1]) ? [step[0][2]] : [];
+      const result = await invoke(['/bin/sh', '-c', shim, 'vault-cli', step[1], ...extra], Buffer.from(input));
+      if (step[1] === 'lookup') {
+        steps[6][0][2] = selectNamedWorkerItem(JSON.parse(result.stdout), config.binding, config.cli.defaultsVerified).itemId;
+      }
+      return result;
     } catch {return refuse();} finally {busy = false;}
   }
   return {verifyExecutable, execute};

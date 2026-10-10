@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
     ('unlock', [], [('BW_PASSWORD', 'SYNTHETIC_UNLOCK')], ['unlock', '--passwordenv', 'BW_PASSWORD', '--raw']),
     ('sync', [], [('BW_SESSION', 'SYNTHETIC_SESSION')], ['sync']),
     ('item', ['invented-uuid'], [('BW_SESSION', 'SYNTHETIC_SESSION')], ['get', 'item', 'invented-uuid']),
+    pytest.param('lookup', ['boursedirect.fr'], [('BW_SESSION', 'SYNTHETIC_SESSION')],
+                 ['list', 'items', '--search', 'boursedirect.fr'], id='named-lookup'),
     ('totp', ['invented-uuid'], [('BW_SESSION', 'SYNTHETIC_SESSION')], ['get', 'totp', 'invented-uuid']),
 ])
 def test_shell_invokes_only_fixed_cli_with_command_specific_env(tmp_path, mode, args, secrets, expected):
@@ -44,6 +46,15 @@ def test_shell_invokes_only_fixed_cli_with_command_specific_env(tmp_path, mode, 
 def test_shell_rejects_bad_private_credential_frame_before_cli(tmp_path, content):
     shim = (ROOT / 'collector/bitwarden-cli.sh').read_text().replace('exec /usr/local/bin/bw', 'exec /bin/echo CLI_WAS_CALLED')
     result = subprocess.run(['/bin/sh', '-c', shim, 'vault-cli', 'login'], input=content,
+                            env={'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path)}, capture_output=True, timeout=5)
+    assert result.returncode != 0
+    assert b'CLI_WAS_CALLED' not in result.stdout
+
+
+def test_shell_named_lookup_cannot_search_another_item(tmp_path):
+    shim = (ROOT / 'collector/bitwarden-cli.sh').read_text().replace('exec /usr/local/bin/bw', 'exec /bin/echo CLI_WAS_CALLED')
+    result = subprocess.run(['/bin/sh', '-c', shim, 'vault-cli', 'lookup', 'another'],
+                            input=base64.b64encode(b'SYNTHETIC_SESSION') + b'\n',
                             env={'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path)}, capture_output=True, timeout=5)
     assert result.returncode != 0
     assert b'CLI_WAS_CALLED' not in result.stdout

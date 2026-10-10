@@ -6,18 +6,22 @@ import {syncBuiltinESMExports} from 'node:module';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {bitwardenCli, sshCliTransport} from '../bitwarden-cli.mjs';
-import {vaultWorker} from '../vault-worker.mjs';
+import {vaultWorker, providerConfiguration} from '../vault-worker.mjs';
 import {principal} from '../core.mjs';
 import {executePrivate} from '../private-process.mjs';
 
 const credentials = {BW_CLIENTID:'SYNTHETIC_CLIENT', BW_CLIENTSECRET:'SYNTHETIC_API', BW_PASSWORD:'SYNTHETIC_UNLOCK'};
-function fixture({badHash=false,holdVersion,onVersion}={}) {
+function fixture({badHash=false,holdVersion,onVersion,named=false,lookupFault}={}) {
   const calls = [], id = 'b'.repeat(64), itemId = randomUUID(); let stops = 0, allowed = true;
   const configuration = {schema_version:1, vaultOrigin:'https://vault.synthetic.invalid', binding:{itemId,name:'invented',
     uri:'https://www.boursedirect.fr/synthetic',principalHash:principal('SYNTHETIC'),accountConfig:{path:'/synthetic/account.yaml',sha256:'a'.repeat(64)}},
     cli:{path:'/usr/local/bin/bw',sha256:'c'.repeat(64),version:'synthetic-1',defaultsVerified:false}};
   const item = {id:itemId,type:1,name:'invented',login:{username:'SYNTHETIC',password:'SYNTHETIC_PASSWORD',
     uris:[{uri:configuration.binding.uri}],totp:'otpauth://totp/invented?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=SHA1&digits=6&period=30'}};
+  if(named){
+    item.name='boursedirect.fr'; configuration.schema_version=2;
+    configuration.binding={name:item.name,accountConfig:configuration.binding.accountConfig};
+  }
   const adapter = bitwardenCli({configuration,containerId:id,attest:async value=>value===id && allowed,
     stopOwned:async value=>{assert.equal(value,id); stops++;}, transport:async (executable,args,env,timeout,input)=>{
       calls.push({executable,args,env,timeout,input});
@@ -25,12 +29,49 @@ function fixture({badHash=false,holdVersion,onVersion}={}) {
       if(mode==='version' && holdVersion){onVersion();await holdVersion;}
       const stdout=args.includes('/usr/bin/sha256sum') ? (badHash?'d'.repeat(64):configuration.cli.sha256)+'  /usr/local/bin/bw\n'
         : mode==='version' ? 'synthetic-1\n' : mode==='unlock' ? 'SYNTHETIC_SESSION\n'
-        : mode==='item' ? JSON.stringify(item) : mode==='totp' ? '123456\n' : '';
+        : mode==='item' ? JSON.stringify(item) : mode==='lookup' ? lookupFault ? lookupFault(item) : JSON.stringify([item])
+        : mode==='totp' ? '123456\n' : '';
       return {status:0,stdout,stderr:''};
     }});
   const worker=vaultWorker({configuration,...adapter,appdata:'/data',now:()=>120});
-  return {configuration,adapter,worker,calls,setAllowed:x=>{allowed=x;},stops:()=>stops};
+  return {configuration,item,adapter,worker,calls,setAllowed:x=>{allowed=x;},stops:()=>stops};
 }
+test('authorized exact name resolves once and binds the delayed TOTP to its UUID',async()=>{
+  const f=fixture({named:true}),selected=await f.worker.initialize(credentials);
+  assert.equal(selected.itemId,f.item.id); assert.equal(selected.principalHash,principal('SYNTHETIC'));
+  assert.equal(selected.online_ready,false); assert.equal(JSON.stringify(selected).includes('otpauth'),false);
+  const lookup=f.calls.filter(x=>x.args.includes('lookup'));
+  assert.equal(lookup.length,1);assert.equal(lookup[0].args.at(-1),'boursedirect.fr');
+  assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
+  const expected={runNonce:randomUUID(),stageNonce:randomUUID()};
+  assert.equal((await f.worker.code(expected,expected)).code,'123456');
+  assert.equal(f.calls.at(-1).args.at(-1),f.item.id);
+  await assert.rejects(f.worker.initialize(credentials),/VAULT_WORKER_FAILED/);
+  await assert.rejects(f.worker.code(expected,expected),/VAULT_WORKER_FAILED/);
+  assert.equal(f.calls.length,8);
+});
+test('named mode cannot widen the operator lookup or mix a pre-pinned identity',()=>{
+  const f=fixture({named:true});
+  for(const binding of [{...f.configuration.binding,name:'another'},
+    {...f.configuration.binding,itemId:f.item.id}, {...f.configuration.binding,principalHash:principal('SYNTHETIC')}])
+    assert.throws(()=>providerConfiguration({...f.configuration,binding}),/VAULT_CONFIG_INVALID/);
+});
+for(const [name,lookupFault] of [
+  ['absent',()=>JSON.stringify([])],['ambiguous',item=>JSON.stringify([item,item])],
+  ['wrong name',item=>JSON.stringify([{...item,name:'boursedirect.fr.other'}])],
+  ['deleted',item=>JSON.stringify([{...item,deletedDate:'synthetic'}])],
+  ['UUID',item=>JSON.stringify([{...item,id:'invalid'}])],
+  ['URI',item=>{item.login.uris[0].uri='https://unrelated.invalid';return JSON.stringify([item]);}],
+  ['profile',item=>{item.login.totp+='&digits=8';return JSON.stringify([item]);}],
+  ['malformed',()=>'{bad'],
+])test('named lookup refuses '+name+' before delivery or TOTP, without retry',async()=>{
+  const f=fixture({named:true,lookupFault});
+  await assert.rejects(f.worker.initialize(credentials),/^Error: VAULT_WORKER_FAILED$/);
+  assert.equal(f.stops(),1);assert.equal(f.calls.filter(x=>x.args.includes('lookup')).length,1);
+  const count=f.calls.length;
+  await assert.rejects(f.worker.initialize(credentials),/VAULT_WORKER_FAILED/);
+  assert.equal(f.calls.length,count);assert.equal(f.calls.some(x=>x.args.includes('totp')),false);
+});
 test('existing worker reaches fixed CLI through stdin with no secret Docker argv or env',async()=>{
   const f=fixture(); await f.worker.initialize(credentials);
   const expected={runNonce:randomUUID(),stageNonce:randomUUID()};

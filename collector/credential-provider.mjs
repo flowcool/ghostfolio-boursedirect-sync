@@ -55,6 +55,21 @@ export function selectWorkerItem(item, binding, defaultsVerified = false) {
   } catch { throw new Error('PROVIDER_ITEM_INVALID'); }
 }
 
+// Name lookup is explicit operator authority, not a fallback after UUID failure.
+export function selectNamedWorkerItem(items, binding, defaultsVerified = false) {
+  try {
+    exact(binding, ['name', 'accountConfig']);
+    if (binding.name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
+    const matches = items.filter(item => item?.name === binding.name);
+    if (matches.length !== 1) throw new Error();
+    const item = matches[0], login = item.login;
+    if (!login || !Array.isArray(login.uris) || login.uris.length !== 1) throw new Error();
+    const resolved = {itemId: item.id, name: binding.name, uri: login.uris[0]?.uri,
+      principalHash: principal(login.username), accountConfig: binding.accountConfig};
+    return selectWorkerItem(item, resolved, defaultsVerified);
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
+}
+
 export function credentialMode(env, providerSelected) {
   if (!env || typeof env !== 'object' || typeof providerSelected !== 'boolean') throw new Error('PROVIDER_MODE_INVALID');
   // Presence, including malformed/empty values, counts as a competing mode.
