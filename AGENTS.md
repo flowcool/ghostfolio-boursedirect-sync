@@ -38,8 +38,9 @@ Global working agreement applies. Beads owns live work state.
 - Do not spawn PR-review subagents. Run local verification and record exact CI
   evidence; CodeRabbit supplies PR review externally. Historical independent
   reviews remain valid evidence for the exact heads they inspected.
-- The existing Astra design-review gate remains applicable before non-trivial
-  implementation; it is separate from PR review.
+- Astra is manual escalation only (see `.claude/rules/delegation.md`): never an
+  automatic design-review gate. Surface the question and stop; Florent invokes
+  Astra by name, or it does not happen.
 - No Ghostfolio writes are authorized. Public v0 publication is authorized;
   private documents, runtime evidence and credentials must remain off Git.
 
