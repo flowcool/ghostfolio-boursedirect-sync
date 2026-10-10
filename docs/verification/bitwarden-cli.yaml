@@ -67,8 +67,9 @@ operational_gates:
   trusted_owner: Before each invocation attest the durable full-ID receipt, image
     and CLI pin, private appdata, minimal environment, disabled logs/core dumps and
     qualified egress. Supply bounded exact-ID shutdown with retained uncertain receipts.
-  binding: Separately pin vault origin, item UUID, principal and account configuration;
-    qualify real vault visibility and enrollment.
+  binding: Use the separately verified vault origin and either pinned UUID/principal
+    or one exact live boursedirect.fr name match. Retain the trusted account configuration;
+    qualify authenticated visibility, enrollment and actual CLI cloud routing.
   cleanup: Qualify independent owned cleanup when browser retention fails; PR44 synthetic
     cleanup does not prove that failure boundary.
   source: Real broker authentication and source observations require the existing
@@ -146,3 +147,46 @@ named_lookup:
       and shell verified above.
   readiness: Synthetic only. Live vault origin, trusted account reference, ownership,
     egress, enrollment, profile-default and source-observation gates remain unqualified.
+offline_runtime:
+  kind: actual-cli-offline-metadata-only
+  inputs:
+    docs/verification/bitwarden-cli.yaml#existing_artifact_facts: 76f1d1efcb13662869e0a9ae4e2bf54ae47786aa6dd87fdeb09583ca276617c9
+    scripts/native_cdp_allocation.py: 1d0849759c33b3fc6ec5a56f6c236b37c5dd00a1b82fe65b91ea8163b4dc7b72
+    scripts/qualify-bitwarden-cli.py: 646e0c8ecfef7794c5eaeb0488ab6b19d7dfffbe46c2b23ceaff03fa0d9e0ccf
+    tests/test_bitwarden_cli_qualification.py: a7fe0c8515c27f740d539f73ebd5a6714e859cbe63831da7ca2accbd3b182db3
+  checks:
+    owner_guards:
+      command: .venv/bin/python -m pytest -q tests/test_bitwarden_cli_qualification.py
+      exit_code: 0
+      passed: 9
+      private_log: tmp/cli-qualification-tests.log
+      log_sha256: 2db18c015cef70e3752c9e825220c8963cdaa886d634471be8397c56f5c593cd
+    actual_cli:
+      command: scripts/qualify-bitwarden-cli.py --ssh <trusted-destination>
+      exit_code: 0
+      private_log: tmp/cli-offline-qualification-execution.log
+      log_sha256: 51b543dad9c03f682778defa94d02def2cfed12fb1506d11b3446932b32e5f0d
+      private_receipt: tmp/cli-offline-qualification/registry.yaml
+      receipt_sha256: 68097a29c359c754eae857d58580b7a1e67ebe4cada31b80ad3b8ba47fc8cea1
+      private_result: tmp/cli-offline-qualification/result.yaml
+      result_sha256: e4bd21f704c7ccb2998e1eaeab78139166020810889779c1cf9b7cc8983f96d0
+      terminal_state: absence_verified
+  observations:
+    cli_version: 2026.6.0
+    cli_sha256: 8c7547def6868bb10c86145fe20843e6b164ec3bb28c4bb1f2104e309ccc4ed9
+    server_before: https://bitwarden.com
+    server_after: https://bitwarden.com
+    environment_metadata_recognized: false
+    network: none
+    credentials_supplied: false
+    authentication_performed: false
+    online_ready: false
+  limits: Getter/setter roundtrip only. environmentUrls was absent in fresh CLI appdata;
+    cloud API/identity routing, authenticated vault access and egress are not proved.
+  reused_baseline:
+    commit: 7298acd8605ad290a92e6d92a2dbd0f40be29490
+    ci_url: https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/runs/38077451725
+    python_passed: 1124
+    node_passed: 384
+    scope: Unchanged importer, collector and browser composition. New qualifier guards
+      and actual CLI metadata checked above.
