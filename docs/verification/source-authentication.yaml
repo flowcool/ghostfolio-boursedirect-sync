@@ -942,3 +942,36 @@ zero_padded_period_delivery:
     is validated against retained saved documents without another authentication attempt.
     Full final-head CI supplies offline verification; browser/vault/native proofs
     unchanged.
+
+final_acquisition_eur_preview:
+  observed_on: '2026-10-11'
+  currency_authority: Operator explicitly reconfirmed EUR execution price currency
+    for the three acquired PEA trades; not inferred from account type or document name.
+  private_input_sha256:
+    preparation_config: 232294595327215a1767dcd42733d0a2c6c58910a63c1a9eb555200b5685bea6
+    destination_snapshot: c94fb86fce9fd04384a7d99c35f74d26cf43e29f47cb558bd9f78112d284d2d8
+  command: .venv/bin/python tmp/current-source-preview.py
+  exit_code: 0
+  outcome:
+    prepared_trades: 3
+    identities_match_prior_sources: true
+    financial_values_match_prior_sources: true
+    legacy_candidates: 3
+    exact_financial_matches: 2
+    fee_discrepancies: 1
+    discrepant_fee_remote_minus_source_eur: '1'
+    utc_and_paris_calendar_day_matches: 3
+    import_ready: false
+    financial_writes: 0
+  verification: Pure current-config preparation replayed and validated against
+    final saved captures; private configuration, prepared activities and reconciliation
+    report read back exactly with mode0600. No network, source identity changes,
+    ledger mutation or legacy adoption performed.
+  destination_freshness:
+    saved_snapshot_date: '2026-10-08'
+    refresh: Refused JWT_REQUIRED in the exact inspected existing runtime before
+      any HTTP request; no session JWT available, no authentication exchange attempted.
+    current_snapshot_verified: false
+  limits: September BUY/SELL only; dividend source dates and amounts, opening
+    history and current destination state remain unverified. EUR confirmation
+    removes the explicit conversion currency gap for these selected trades only.
