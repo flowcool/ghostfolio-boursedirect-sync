@@ -1,0 +1,65 @@
+schema_version: 1
+kind: offline-app-method-permit-qualification
+inputs:
+  collector/core.mjs: a05b5a61778b7350708afab1945edc7c3843c86627ab98455ec303b85a06126b
+  collector/request-controller.mjs: 1a570fc6a9c2f1431101f5a9c8b866fc92ea6dc41b0db1b0157f543e854e0ad9
+  collector/tests/request-controller.test.mjs: 783800b5187656a9d36b8442fd77c7b6e8ae590a9b71253cbf49de2b0910ccf9
+  collector/tests/no-network.mjs: a31b37dd5304c6a4f15c414a925d1f77f1e0f182742eb3bdd1e2a04065276df3
+  collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  docs/design/acquisition-core.md: dc6ed26e2bbe2ae7fe340c17cfbe50130cea1a36bd1958f70b0d3d2734a4c1cb
+  docs/design/online-source-inspection.md: 97a4fe5ab22f235df854aa09dd41af4bbf1c87a157b30c75cef50e7c03706e38
+checks:
+  python:
+    command: .venv/bin/python -m pytest -q
+    exit_code: 0
+    log_sha256: fbc264489443a57fff6151436bc659b717be3c4f2cc55ad039419206fefe162a
+    summary:
+    - '........................................................................ [
+      60%]'
+    - '........................................................................ [
+      66%]'
+    - '........................................................................ [
+      72%]'
+    - '........................................................................ [
+      78%]'
+    - '........................................................................ [
+      84%]'
+    - '........................................................................ [
+      90%]'
+    - '........................................................................ [
+      96%]'
+    - '....................................                                     [100%]'
+    - 1188 passed in 90.35s (0:01:30)
+  collector:
+    command: npm test --prefix collector
+    exit_code: 0
+    log_sha256: bf3187c3298e4f14539f144f275c68261b5e9d114ae7c5f872a7e1cbbd77d9c2
+    summary:
+    - 1..536
+    - '# tests 536'
+    - '# suites 0'
+    - '# pass 536'
+    - '# fail 0'
+    - '# cancelled 0'
+    - '# skipped 0'
+    - '# todo 0'
+    - '# duration_ms 8629.130028'
+  documentation:
+    command: .venv/bin/python scripts/check-docs.py
+    exit_code: 0
+    log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+    summary:
+    - Documentation catalogue and local links passed
+  whitespace:
+    command: git diff --check
+    exit_code: 0
+    log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    summary: []
+runtime:
+  node: v20.19.2
+  python: Python 3.13.5
+limits:
+  broker_requests: 0
+  vault_sessions: 0
+  real_roles_enabled: 0
+  online_ready: false

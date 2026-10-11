@@ -229,3 +229,24 @@ Runtime rollback must be verified against the current exact-owned receipts and
 canonical connection procedure before startup or network changes. Authentication
 cannot be rolled back by deleting local files;
 prevent unsafe attempts instead. No financial operation is part of this phase.
+
+## Bounded end-to-end source qualification acceptance
+
+Florent confirmed this acceptance boundary on2026-10-11 through triage and
+grilling. The delivered entrypoint must complete actual broker connection,
+discover and distinctly identify both expected PEA and PEA-PME accounts, then
+verify acquisition of one monthly statement and one contract note for each
+account where available. An older contract note may be used when no recent
+trade exists. If no note exists, retain the acquired evidence and keep that
+criterion unverified; absence does not prove document acquisition.
+
+Exhaustive history acquisition and financial reconciliation retain their own
+acceptance owners. This qualification does not activate recurring execution or
+Ghostfolio writes. Reuse successful unchanged evidence and do not repeat broker
+authentication merely because a document criterion remains unresolved.
+
+Saved authentication application source describes a post-2FA credential-bearing
+finalization distinct from the initial password request. Its source description
+is not actual request observation. Keep it disabled until its own request role,
+bounded one-use dispatch and response evidence are independently qualified;
+never silently treat it as an automatic password retry.

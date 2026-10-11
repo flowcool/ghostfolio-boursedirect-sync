@@ -25,6 +25,12 @@ Unknown/null source-contract roles stay disabled. A source-contract evidence
 reference is supplied operator data, not an authenticated proof that it is true.
 No actual authentication endpoint is guessed or enabled by this component.
 
+The request controller accepts the existing `password_accepted` app-method phase
+only with its own characterized role and one-use durable permit. A separately
+constructed controller is required for that action; a prior controller cannot
+be rearmed. It does not reuse the initial password permit or grant an unknown
+intermediate request.
+
 Password challenge and authenticated success transitions require consumed
 requests; the caller still owes actual observed success evidence. Both request
 and observation are trusted helper inputs here, not a browser-origin guarantee.
