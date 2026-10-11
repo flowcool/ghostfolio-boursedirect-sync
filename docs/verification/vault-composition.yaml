@@ -1109,3 +1109,27 @@ native_community_connector:
   broker_authentication_started: false
   financial_writes: false
   arm64_remote_scan_pending: true
+external_observation_review_fixes:
+  reviewed_head: caa3cb77005e011f7b56d8e29e2fc8933e570fcf
+  source_sha256:
+    collector/public-login-policy.mjs: df54ee323496674b45a00a1c16ead6492c58fe113b6a7d3f75a956f947ec40ff
+    collector/source-form-probe.mjs: 31e3618cdab1ffe431b1318ebc31f3511f8a7f3f730ba8d967c92069843a69e2
+    collector/lab/public-login-observation.mjs: f1bc626164c20e6f3923c276356ffe33aec04ba4434cd85fc3e109acaf5a7aa8
+    collector/tests/public-login-policy.test.mjs: 19bef73be6120f0faf6dab347f6df76bb8a796e6336d7afa1e180659de6f7bc7
+    collector/tests/source-form-probe.test.mjs: dcbdaf610039bd45b77c87818ff21e14f5ac3ddaa35908d29c023fde8882e7cd
+    tests/test_source_connection.py: 1c5f7ee432a0ccc84aeaa95a30bef9bfb7ecf1f6ef85e7f441303295d5852030
+    docs/operations/source-connection.md: 39932ac4574e25a8adaeb37425d5ebf754799a3796a8f33f8dd66ced5f78808f
+  collector:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 534
+    log_sha256: 0dfaf63e407438483599af6e8cf09605a71b1b8b782f81a5d57dbb27b046b4c0
+  python:
+    command: .venv/bin/python -m pytest -q tests/test_source_connection.py
+    exit_code: 0
+    passed: 15
+  actual_live_reexecution: false
+  native_module_checks_reused: native_community_connector
+  bootstrap_exception_preserved: docs/operations/source-connection.md credential-free
+    current-timestamp two-file opt-in profile; declared and bootstrap admission share
+    one budget

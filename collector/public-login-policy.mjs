@@ -52,18 +52,19 @@ export function publicLoginPolicy(owner, assets = [], authBootstrap = false) {
     const match = authBootstrap && typeof value.request?.url === 'string'
       ? /^https:\/\/www\.boursedirect\.fr\/apps\/auth\/production\/auth\.(js|css)\?version=([0-9]{13})$/.exec(value.request.url) : null;
     const current = Date.now();
+    const key = JSON.stringify([value.request?.url, value.resourceType]);
     if (consumed && match && !usedBootstrap.has(match[1]) && current >= startedAt
+        && !usedAssets.has(key)
         && current - startedAt <= 60000 && Number(match[2]) >= startedAt && Number(match[2]) <= current + 1000
         && value.sessionId === binding.sessionId && value.frameId === binding.frameId
         && value.request.method === 'GET' && !Object.hasOwn(value, 'redirectedRequestId')
         && value.resourceType === (match[1] === 'js' ? 'Script' : 'Stylesheet')) {
-      usedBootstrap.add(match[1]); return true;
+      usedBootstrap.add(match[1]); usedAssets.add(key); return true;
     }
-    const key = JSON.stringify([value.request?.url, value.resourceType]);
     const read = consumed && value.sessionId === binding.sessionId && value.frameId === binding.frameId
       && value.request?.method === 'GET' && !Object.hasOwn(value, 'redirectedRequestId')
-      && reads.has(key) && !usedAssets.has(key);
-    if (read) usedAssets.add(key);
+      && reads.has(key) && !usedAssets.has(key) && !(match && usedBootstrap.has(match[1]));
+    if (read) {usedAssets.add(key); if (match) usedBootstrap.add(match[1]);}
     return read;
   };
 }

@@ -158,3 +158,22 @@ def test_extra_unrecognized_operational_adapter_refuses(saved):
     replay.private._publish(lab / 'replay.yaml', index)
     with pytest.raises(RuntimeError):
         replay.inspect_saved(root, lab)
+
+
+@pytest.mark.parametrize('action, expected', [('observe-public-form', {}),
+    ('characterize-password-request', {'probe': True})])
+def test_public_form_dispatch_reaches_only_pinned_adapter(saved, monkeypatch, capsys, action, expected):
+    root, lab = saved
+    adapter = lab / 'host/public-form.py'
+    adapter.write_bytes(b'def run(**kwargs):\n    return kwargs\n')
+    adapter.chmod(0o600)
+    index = replay.private._read(lab / 'replay.yaml')
+    index['trusted_helpers']['public-form.py'] = hashlib.sha256(adapter.read_bytes()).hexdigest()
+    replay.private._publish(lab / 'replay.yaml', index)
+    monkeypatch.setattr(replay, '__file__', str(root / 'scripts/source_connection.py'))
+    monkeypatch.setattr(replay.sys, 'argv', ['source_connection.py', action])
+    calls = []
+    monkeypatch.setattr(replay, 'live_status', lambda *args: calls.append('attested'))
+    assert replay.main() == 0
+    assert yaml.safe_load(capsys.readouterr().out)['live'] == expected
+    assert calls == ['attested']

@@ -1,4 +1,18 @@
 // Fixed dummy values only. The caller must deny every non-public request.
+export function verifyBlockedFormProbe(rows, owner) {
+  const matched = rows.some(row => {
+    if (row.method !== 'POST' || row.continued !== false || row.redirect !== false
+        || row.session_id !== owner.sessionId || row.frame_id !== owner.frameId
+        || row.blocked_form_envelope?.content_type !== 'application/json') return false;
+    try {
+      const body = JSON.parse(row.blocked_form_envelope.body);
+      return body.username === 'SOURCE_PROBE_LOGIN' && body.password === 'SOURCE_PROBE_NOT_A_PASSWORD';
+    } catch {return false;}
+  });
+  if (!matched) throw new Error('SOURCE_FORM_PROBE_REFUSED');
+  return true;
+}
+
 export function blockedFormEnvelope(request) {
   const refuse = () => {throw new Error('SOURCE_FORM_ENVELOPE_REFUSED');};
   if (!request || request.method !== 'POST' || !request.headers

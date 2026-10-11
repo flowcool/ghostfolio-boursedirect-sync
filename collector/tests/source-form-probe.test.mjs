@@ -1,8 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {sourceFormProbe, blockedFormEnvelope} from '../source-form-probe.mjs';
+import {sourceFormProbe, blockedFormEnvelope, verifyBlockedFormProbe} from '../source-form-probe.mjs';
 import {publicLoginPolicy, PUBLIC_LOGIN_URL} from '../public-login-policy.mjs';
+
+const probeOwner = {sessionId: 'synthetic-session', frameId: 'synthetic-frame'};
+const blockedProbe = {method: 'POST', continued: false, redirect: false,
+  session_id: probeOwner.sessionId, frame_id: probeOwner.frameId,
+  blocked_form_envelope: {content_type: 'application/json', body: JSON.stringify({
+    username: 'SOURCE_PROBE_LOGIN', password: 'SOURCE_PROBE_NOT_A_PASSWORD'})}};
+test('form characterization requires the actual blocked dummy password envelope', () => {
+  assert.equal(verifyBlockedFormProbe([blockedProbe], probeOwner), true);
+});
+for (const [name, rows] of [
+  ['no request', []], ['continued request', [{...blockedProbe, continued: true}]],
+  ['foreign frame', [{...blockedProbe, frame_id: 'foreign'}]],
+  ['foreign session', [{...blockedProbe, session_id: 'foreign'}]],
+  ['redirect', [{...blockedProbe, redirect: true}]],
+  ['preliminary only', [{...blockedProbe, blocked_form_envelope: {content_type: 'application/json', body: '{"branding":"synthetic"}'}}]],
+  ['malformed body', [{...blockedProbe, blocked_form_envelope: {content_type: 'application/json', body: '{'}}]],
+]) test('form characterization refuses ' + name, () => {
+  assert.throws(() => verifyBlockedFormProbe(rows, probeOwner), /SOURCE_FORM_PROBE_REFUSED/);
+});
 
 test('blocked envelope retains bounded body and content type without sensitive headers', () => {
   const body = JSON.stringify({username: 'SOURCE_PROBE_LOGIN', password: 'SOURCE_PROBE_NOT_A_PASSWORD'});

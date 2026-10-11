@@ -130,7 +130,8 @@ host bundle. Without that pin it refuses before SSH access. The adapter reuses
 the saved public document and authentication-app body hashes. The observed inline
 loader generates a new cache timestamp per load; the opt-in profile grants only
 its two named public Script/Stylesheet GETs once each with a current timestamp,
-alongside the two previously observed stylesheets. It blocks other requests without submitting a
+sharing the single-use budget with any identical declared asset, alongside the
+two previously observed stylesheets. It blocks other requests without submitting a
 form. A fresh private attempt retains original output, selector counts and owned
 exit evidence. Failure stops the exact browser and retains the attempt; this
 command never requests vault credentials or qualifies an authentication submit.
@@ -138,6 +139,9 @@ command never requests vault credentials or qualifies an authentication submit.
 `characterize-password-request` uses the same owned observer with fixed dummy
 markers to retain a blocked form request's URL/method/type. Every POST is denied;
 it supplies no real credential and dispatches no broker authentication. It requires
+an actually intercepted and successfully blocked same-frame/session JSON POST
+containing both fixed dummy credential markers; requesting form submission alone
+does not qualify the observation. It requires
 the pinned private adapter and exact-owned runtime, and refuses prefilled or
 ambiguous inputs before any mutation. The captured metadata requires independent
 source inspection; it never establishes successful login. Real credential delivery

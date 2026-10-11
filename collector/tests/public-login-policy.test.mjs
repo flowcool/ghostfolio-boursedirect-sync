@@ -92,6 +92,17 @@ test('explicit auth bootstrap permits each current cache-busted public file once
     assert.equal(decide({...row, requestId: extension + '-repeated'}), false);
   }
 });
+test('declared bootstrap asset shares the single-use budget across cache timestamps', context => {
+  const initial = 1800000000000;
+  context.mock.method(Date, 'now', () => initial);
+  const url = `https://www.boursedirect.fr/apps/auth/production/auth.js?version=${initial}`;
+  const decide = publicLoginPolicy(owner, [{url, resourceType: 'Script'}], true);
+  decide(request);
+  const row = {...request, requestId: 'bootstrap', resourceType: 'Script', request: {method: 'GET', url}};
+  assert.equal(decide(row), true);
+  assert.equal(decide({...row, requestId: 'declared-replay'}), false);
+  assert.equal(decide({...row, requestId: 'other-stamp', request: {method: 'GET', url: url.replace(String(initial), String(initial + 1))}}), false);
+});
 for (const [name, change] of [
   ['POST', {method: 'POST'}], ['stale timestamp', {stamp: '1000000000000'}],
   ['future timestamp', {stamp: '9999999999999'}], ['extra query', {suffix: '&next=other'}],
