@@ -82,7 +82,7 @@ function processTable() {
 // Install lifecycle listeners before attempting proc acquisition or pipe setup.
 export function ownedBrowserLifecycle(child, {read = readIdentity, table = processTable,
   signal = (pid, value) => process.kill(pid, value), delay = () => new Promise(resolve => setTimeout(resolve, 100))} = {}) {
-  let root, exited = false, closed = false, spawnFailed = false, stopping;
+  let root, observed = false, exited = false, closed = false, spawnFailed = false, stopping;
   const known = new Map();
   child.on('error', () => {spawnFailed = true;});
   child.on('exit', () => {exited = true;});
@@ -101,6 +101,7 @@ export function ownedBrowserLifecycle(child, {read = readIdentity, table = proce
       if (known.has(pid) && !sameProcess(known.get(pid), row)) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
       known.set(pid, row);
     }
+    observed = true;
     return owned;
   }
   function live() {
@@ -121,7 +122,7 @@ export function ownedBrowserLifecycle(child, {read = readIdentity, table = proce
   }
   function verified() {
     return (exited || (spawnFailed && closed)) && live().length === 0
-      && (root !== undefined || absentUnpinnedRoot());
+      && (root === undefined ? absentUnpinnedRoot() : observed);
   }
   async function waitExit() {
     for (let attempt = 0; attempt < 50; attempt++) {

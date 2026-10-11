@@ -472,3 +472,22 @@ credential_free_public_observation:
     enabled.
   actual_broker_requests: 0
   operational_egress_qualification_pending: true
+pinned_root_cleanup_review:
+  review_id: 5482178705
+  reviewed_head: c1d03dde80fb850433f26f23381b7e5f60a4a6dc
+  comment_id: 4240533414
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: b47b16d8a6ccb66b666c536fd208fbc8408647e7b5bcd8bfeca0c12ad80e8709
+    collector/tests/browser-sandbox-proof.test.mjs: a1a0818f7f7ffb9cc72a1db97e7bcaca54920e3590f32cc4db052471a6611547
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 441
+    log_sha256: 3fb7e7f68059778e1acd9975ca0c38bb4eaeb32a40d4896cee43bb565b4c1251
+  correction: Pinned-root cleanup requires at least one valid descendant observation.
+    Root loss before observation refuses certification; recorded reparented descendants
+    stay identity-pinned. Caller must stop exact owned container on failure.
+  review_scanner_false_positive: Generic API key at verification line376 is the public
+    synthetic collector-test-log SHA256, independently recomputed from ignored log;
+    not an access credential.
+  actual_updated_host_proof_pending: true

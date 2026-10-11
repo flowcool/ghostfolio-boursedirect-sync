@@ -94,3 +94,24 @@ test('missing child identity with no exit refuses to claim cleanup', async () =>
     signal: () => assert.fail('unowned PID'), delay: async () => {}});
   await assert.rejects(lifecycle.stop(), /SANDBOX_EXIT_TIMEOUT/);
 });
+
+test('root exit before the first descendant observation cannot certify cleanup', async () => {
+  const child = new EventEmitter(); child.pid = root.pid;
+  let gone = false;
+  const lifecycle = ownedBrowserLifecycle(child, {read: pid => gone ? undefined : tree.find(row => row.pid === pid),
+    table: () => tree, signal: () => assert.fail('unknown descendants are not safe signal targets'), delay: async () => {}});
+  lifecycle.pin(); gone = true; child.emit('exit', 1);
+  await assert.rejects(lifecycle.stop(), /SANDBOX_EXIT_TIMEOUT/);
+});
+test('recorded descendants remain owned after root exit and kernel reparenting', async () => {
+  const child = new EventEmitter(); child.pid = root.pid;
+  let gone = false, finished = false; const signals = [];
+  const lifecycle = ownedBrowserLifecycle(child, {read: pid => {
+    if (finished || (gone && pid === root.pid)) return undefined;
+    const row = tree.find(value => value.pid === pid);
+    return row && (gone ? {...row, ppid: 1} : row);
+  }, table: () => tree, signal: (pid, value) => signals.push([pid, value]), delay: async () => {finished = true;}});
+  lifecycle.pin(); lifecycle.observe(); gone = true; child.emit('exit', 1);
+  assert.equal(await lifecycle.stop(), true);
+  assert.deepEqual(signals.map(row => row[0]).sort(), [25, 30]);
+});
