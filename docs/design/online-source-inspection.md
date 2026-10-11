@@ -294,7 +294,10 @@ After a known password acceptance, the caller also denies the two exact TOTP/SMS
 selection image GETs derived from the pinned application source. These are
 same-origin `Image` requests without query/fragment; denial is retained before
 `Fetch.failRequest`. This grants no network dispatch or additional authentication
-attempt. Other requests and child frames after preflight still stop the session.
+attempt. Lazy same-origin `Font` GETs at this phase are also denied locally when
+they carry no query, fragment, userinfo or request body. Font denial grants no
+read permission; foreign fonts and ambiguous requests remain fatal. Other
+requests and child frames after preflight still stop the session.
 
 When the source shows a method list, the caller selects the unique owned local
 TOTP choice before waiting for its six code controls. An already selected TOTP

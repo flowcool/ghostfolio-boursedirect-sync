@@ -87,6 +87,14 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
         source_sha256:pins.app_sha256,request_id:p.requestId,dispatch_authority:false});
       await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
     }
+    // Method selection can lazily request a font. Deny this passive GET locally;
+    // it receives no read grant, network dispatch or authentication authority.
+    if(phase==='password_accepted'&&appVerified&&p.request.method==='GET'&&p.resourceType==='Font'
+        &&!url.search&&!url.hash&&!url.username&&!url.password&&!Object.hasOwn(p.request,'postData')) {
+      await retainSafe({role:'auth_public_font_blocked',url:p.request.url,method:'GET',resource_type:'Font',
+        source_sha256:pins.app_sha256,request_id:p.requestId,dispatch_authority:false});
+      await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
+    }
     const auth=PHASES[url.pathname];
     if(auth) {
       if(!appVerified||!gate||phase!==auth[0]||url.search||url.hash)throw new Error();
