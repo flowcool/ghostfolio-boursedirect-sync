@@ -1,4 +1,5 @@
 # Explicit overlay for credential-free source observation, not an auth service.
+# Combine with compose.lab.yaml; the community compose.yaml has its own native CLI.
 # Infra must qualify proxy-only namespace ACLs before any browser exec.
 # Requires Docker Compose supporting !reset; qualification host rendered with 5.1.3.
 services:

@@ -219,8 +219,8 @@ capability from actual broker authentication without weakening either boundary.
 
 ## Credential-free public document observation
 
-The explicit `compose.broker-inspection.yaml` overlay grows the same application
-stack with a separately owned broker-only proxy/network. Base Compose retains
+The explicit `compose.broker-inspection.yaml` overlay grows the preserved laboratory
+stack with a separately owned broker-only proxy/network. `compose.lab.yaml` retains
 `network_mode: none`; the overlay cannot grant Bitwarden destinations to the
 browser or broker destinations to the CLI. The CONNECT helper's default policy
 remains vault-only; `--broker-inspection` selects the fixed canonical broker host
@@ -287,3 +287,53 @@ Synthetic worker/CLI verification proves the new mode's logic, not a real vault
 session or broker readiness. Source/account, enrollment, runtime, egress and
 external security-review gates remain required; no real schema4 configuration or
 credential delivery is activated by this amendment.
+
+## Native community CLI integration
+
+Florent confirmed the native ENV contract on2026-10-11 through the grilling
+workflow: a reproducible community CLI image, operator-supplied vault ENV,
+automatic named item/identity binding and one session per execution with verified
+logout. This explicitly supersedes the earlier ban on container ENV secret
+injection for this native entrypoint. The private operational lab adapter retains
+its existing stdin contract and historical qualification evidence.
+
+`compose.yaml` now owns the native `bitwarden` service. The preserved
+`compose.lab.yaml` owns the former dedicated lab services. The native image uses
+the official architecture-specific CLI release archive with fixed checksum;
+no private image, host provisioning or remote Docker executor is required.
+Only the worker receives vault ENV. It clears those fields from its process
+environment after reading them and supplies a minimal environment per CLI call.
+Docker administrators remain trusted because Compose stores initial ENV in
+container metadata. Tmpfs appdata is independent per execution and never mounted
+from another application's session. Default native HTTPS egress is ordinary
+container connectivity, not evidence of the lab's proxy-only confinement.
+
+Provider schema5 is metadata-only inspection for an explicitly configured exact
+item name. Schemas1–4 retain their prior binding rules. After unique live item,
+broker URI, credential and TOTP-profile validation, inspection logs out and
+verifies unauthenticated status. It exposes no credentials or OTP capability.
+The immutable private native binding retains vault origin, configured name, UUID,
+principal, selected URI, full alias hash and profile. Exclusive locking and
+durable publication preserve partial/uncertain binding files as refusal gates;
+changed identities never cause automatic rebinding. The public `inspect` command
+reports fixed codes/counts only.
+
+`nativeVaultExecution` composes the same worker with local CLI subprocesses.
+A trusted source-qualified in-process consumer uses schema4 and receives only
+the bound credential projection plus the single delayed same-UUID code method.
+Every completed or failed execution attempts verified logout once after a login
+was reserved. A failed executable verification never invokes the unverified
+binary during cleanup. Uncertain logout refuses without retry; owned one-shot
+container exit discards private tmpfs. Closing while an operation is pending
+refuses instead of issuing overlapping CLI commands.
+
+The public `connect` command currently runs native vault inspection and retains
+the identity binding, then refuses broker authentication with exit2. Its future
+guarded source driver must consume this same connector; no vault success is
+converted into source permission or a claim of authenticated acquisition.
+Existing broker journal, actual request-role/account/resource qualification,
+external security review and financial activation gates remain separate.
+
+Rollback reverts the native source/Compose commit, retaining the private binding
+and all historical broker journals. Native ENV configuration contains no
+credential export, alternate executable or arbitrary command interface.

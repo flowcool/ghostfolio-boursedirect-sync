@@ -1,107 +1,30 @@
 name: ghostfolio-boursedirect-sync
-
 services:
-  bitwarden-cli:
-    image: ${BITWARDEN_CLI_IMAGE:-archivage-bitwarden-cli}
-    pull_policy: never
-    # The image's default entrypoint authenticates and starts bw serve.
-    # Our source adapter invokes the CLI through private stdin instead.
-    entrypoint: ["/bin/sleep"]
-    command: ["infinity"]
-    user: "1000:1000"
-    read_only: true
+  bitwarden:
+    build: .
+    image: ${BOURSEDIRECT_IMAGE:-ghostfolio-boursedirect-sync:local}
+    init: true
     restart: "no"
+    read_only: true
+    user: "1000:1000"
     environment:
-      PATH: /usr/bin:/bin
-      HOME: /data
-      BITWARDENCLI_APPDATA_DIR: /data
+      BW_SERVER: ${BW_SERVER:-https://vault.bitwarden.com}
+      BW_ITEM_NAME: ${BW_ITEM_NAME:-boursedirect.fr}
+      BW_CLIENTID: ${BW_CLIENTID:?Supply your Bitwarden personal API client ID}
+      BW_CLIENTSECRET: ${BW_CLIENTSECRET:?Supply your Bitwarden personal API client secret}
+      BW_PASSWORD: ${BW_PASSWORD:?Supply your Bitwarden master password}
     tmpfs:
       - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
       - /tmp:rw,nosuid,nodev,mode=1777
+    volumes:
+      - bitwarden-binding:/state
     cap_drop: [ALL]
     security_opt: [no-new-privileges]
-    ipc: private
-    mem_limit: 256m
+    ulimits:
+      core: {soft: 0, hard: 0}
+    mem_limit: 512m
     cpus: 1
     pids_limit: 64
-    ulimits:
-      core:
-        soft: 0
-        hard: 0
-    logging:
-      driver: none
-    healthcheck:
-      disable: true
-    labels:
-      proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
-    networks: [vault]
-
-  vault-egress:
-    image: python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
-    pull_policy: never
-    entrypoint: ["python3", "-I", "-B", "/opt/vault-egress.py"]
-    user: "1000:1000"
-    read_only: true
-    restart: "no"
-    volumes:
-      - ./collector/vault-egress.py:/opt/vault-egress.py:ro
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges]
-    ipc: private
-    mem_limit: 64m
-    cpus: 1
-    pids_limit: 32
-    ulimits:
-      core:
-        soft: 0
-        hard: 0
-    logging:
-      driver: none
-    healthcheck:
-      disable: true
-    labels:
-      proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
-    networks: [vault, vault-upstream]
-
-
-  browser:
-    profiles: [browser]
-    init: true
-    image: sha256:2a08a5d2ce2005a7d4517b5cad854db731878a0fd9be96b5be2dc754dbf3e1a2
-    pull_policy: never
-    entrypoint: ["/bin/sleep"]
-    command: ["infinity"]
-    user: "1000:1000"
-    read_only: true
-    restart: "no"
-    environment:
-      PATH: /usr/bin:/bin
-      HOME: /home/fixture
-    tmpfs:
-      - /home/fixture:rw,nosuid,nodev,mode=0700,uid=1000,gid=1000
-      - /tmp:rw,nosuid,nodev,mode=1777
-    security_opt: ["seccomp=./collector/browser-seccomp.json"]
-    network_mode: none
-    ipc: private
-    shm_size: 128m
-    mem_limit: 768m
-    cpus: 1
-    pids_limit: 256
-    ulimits:
-      core:
-        soft: 0
-        hard: 0
-    logging:
-      driver: none
-    healthcheck:
-      disable: true
-    labels:
-      proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
-
-networks:
-  vault:
-    external: true
-    name: ${VAULT_NETWORK:?Supply the separately qualified vault-only network}
-  vault-upstream:
-    external: true
-    name: ${VAULT_UPSTREAM_NETWORK:?Supply the separately owned proxy upstream network}
+    logging: {driver: none}
+volumes:
+  bitwarden-binding:

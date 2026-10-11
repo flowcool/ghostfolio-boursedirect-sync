@@ -305,70 +305,62 @@ records implementation hashes and results so unchanged checks can be reused.
 
 ## Application Compose
 
-[`compose.yaml`](compose.yaml) is the future application's common stack. Its
-first service reuses the locally available `archivage-bitwarden-cli` image;
-the browser is an opt-in profile and the collector will be added incrementally
-to this same file.
-It does not build or pull an image. `BITWARDEN_CLI_IMAGE` may select the separately
-verified local image ID. Infrastructure supplies its availability on the selected
-Docker daemon.
+The native [Compose](compose.yaml) builds the community Bitwarden CLI connector
+from the [Dockerfile](Dockerfile). It uses the official CLI release2026.9.1,
+verified by architecture-specific SHA256, with a pinned Node base image. Both
+amd64 and arm64 builds are checked in CI, including the image vulnerability gate.
 
-The CLI service overrides the image's automatic login/serve entrypoint. It keeps
-independent private tmpfs appdata and receives no credentials through Compose.
-The existing source-owned `collector/bitwarden-cli.mjs` adapter supplies fixed CLI
-commands and command-specific secrets through private stdin after owner attestation.
-There are no published ports or production appdata mounts.
+Copy [.env.example](.env.example) to a private `.env` and supply:
 
-`VAULT_OWNER` identifies the durable allocation, and `VAULT_NETWORK` names an
-independently owned internal network supplied by infra. `VAULT_UPSTREAM_NETWORK`
-names the separately owned network used only by the `vault-egress` sidecar. These are
-non-secret deployment inputs. The external network declaration does not itself
-filter egress; actual allowed/denied routing must be proved before credential
-delivery. Missing inputs refuse configuration rather than create an unrestricted
-default network. Keep private provisioning outside versioned configuration.
+| Variable | Meaning |
+| --- | --- |
+| `BW_SERVER` | Canonical HTTPS vault origin; defaults to `https://vault.bitwarden.com` |
+| `BW_CLIENTID` | Your Bitwarden personal API client ID |
+| `BW_CLIENTSECRET` | Your Bitwarden personal API client secret |
+| `BW_PASSWORD` | Your vault master password |
+| `BW_ITEM_NAME` | Exact login-item name; defaults to `boursedirect.fr` |
 
-The small standard-library CONNECT proxy reuses the pinned existing Python image
-and accepts only `identity.bitwarden.com:443` and `api.bitwarden.com:443`. It
-refuses HTTP requests, ambiguous headers and any non-public DNS answer, connects
-to the validated literal address and retains no request logs. TLS remains between
-the CLI and Bitwarden. This is the current US-cloud routing scope; self-hosted and
-other cloud regions require their own explicit qualification. The runtime owner
-must deny all direct IPv4 and IPv6 worker routes, including Docker's embedded DNS,
-and permit only the proxy's exact internal IP and port. The adapter's optional
-`egressProxy` is that attested literal `http://IP:8080`; it supplies the lowercase
-`https_proxy` used by the pinned CLI. A proxy environment variable alone provides
-no network isolation. Prove allowed and refused routes without credentials before
-any private delivery.
-
-The `browser` profile reuses the locally verified Chrome for Testing155.0.8059.39
-filesystem/config image, without a rebuild. Its idle service has no network,
-private tmpfs profile, non-root user and no published control endpoint. Enabling
-this profile does not authorize broker access; sandbox qualification on the
-selected host and separate source routing/journal gates are still required.
-The supplied [seccomp profile](collector/browser-seccomp.json) is byte-identical
-to Playwright commit54c711571a37de525377e6f3d3608c3e029b1829, under its retained
-[Apache2.0 license](collector/licenses/playwright-LICENSE). This profile, rather
-than disabling Chromium's sandbox, permits the required namespace syscalls.
-Retained lab image IDs can differ between Docker OCI-index and config-digest
-representations; the immutable configuration and ordered filesystem layers must
-match the transfer receipt. The service pins the available configuration digest.
-
-Validate configuration without contacting the Docker daemon:
+Use the CLI connector directly through Compose:
 
 ```bash
-VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection \
-  VAULT_UPSTREAM_NETWORK=config-inspection-upstream \
-  docker compose --env-file /dev/null -f compose.yaml config --quiet
+docker compose build bitwarden
+docker compose run --rm bitwarden inspect
+docker compose run --rm bitwarden connect
 ```
 
-Those names are validation placeholders, not runtime wiring. The runtime owner
-must retain the pre-create intent, use Compose `create` without starting services,
-inspect and durably receipt exact full container IDs, then start those IDs only
-after configuration and daemon checks. Do not use automatic `up` before receipts
-or project-wide `down` as a substitute for exact owned cleanup. Infrastructure
-execution follows its handed-over lifecycle and rollback contract. Compose syntax
-validation does not establish vault visibility or source acceptance; retained
-evidence is in [`bitwarden-cli.yaml`](docs/verification/bitwarden-cli.yaml).
+`inspect` opens an independent vault session, synchronizes, resolves exactly one
+live login item, verifies its broker URI and credential/TOTP profile, and logs out.
+Public output contains fixed codes and counts. The item UUID, principal, selected
+URI and complete ordered URI metadata are bound automatically in the private
+`bitwarden-binding` volume. A later identity change refuses; there is no automatic
+replacement or reset. Credentials, raw item and TOTP seed never enter that volume.
+The session appdata lives only in each execution's private tmpfs.
+
+`connect` uses the same native connector and binding. Broker submission still
+returns `SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED` (exit2): the current collector's
+actual authentication and account/resource driver remains under qualification.
+A verified vault inspection does not mean Bourse Direct is authenticated. The
+trusted collector integration can consume the pinned credentials internally and
+request one delayed TOTP for the same UUID; it always closes the vault session,
+including on consumer failure. No credential-export command is supplied.
+
+Compose injects vault credentials only into the Bitwarden worker's initial ENV.
+The CLI subprocess receives only the fields required for each command. Docker
+administrators can inspect container ENV; use an appropriately trusted daemon.
+No secret is needed at image-build time, and private `.env` files are ignored by
+Git and excluded from the image build context. There are no published ports or
+Docker socket mounts. The default native connector uses normal container HTTPS
+connectivity; it does not claim the qualified lab's proxy-only isolation. Deploy
+with your own network controls where that property is required.
+
+The existing dedicated acquisition lab is retained in
+[compose.lab.yaml](compose.lab.yaml), with the
+[broker-inspection overlay](compose.broker-inspection.yaml). Its pinned runtime,
+external networks, receipts and lifecycle remain governed by the
+[canonical connection procedure](docs/operations/source-connection.md). These
+lab files are not prerequisites for the community CLI connector. The browser's
+[seccomp profile](collector/browser-seccomp.json) and retained
+[Apache2.0 license](collector/licenses/playwright-LICENSE) remain unchanged.
 
 Completed saved acquisition bundles can be checked with the offline
 [`qualify-captures` command](docs/design/acquisition-bundles.md). It creates a new

@@ -997,3 +997,115 @@ qualified_blocked_dummy_form_envelopes:
   checks_reused: blocked_form_envelope_capture.checks
   documentation_exit_code: 0
   whitespace_exit_code: 0
+native_community_connector:
+  schema_version: 1
+  source_sha256:
+    .dockerignore: 92d025d19e99549e5a4a5fa1b03274450e791fe920e14f7bddabfe876bbdcb8b
+    .env.example: 64ba9bd1f8203d890f4cf7851776e706d4d09646d4cc5f4901f0b918e0c09850
+    .github/workflows/container-check.yml: ce7cf2d63ba5e000abce3779afc828da5f2f576c43dbefc2bef4168359075e98
+    .trivyignore: e1807d4b2039028b779ece027f67ebee7fad25fa4fed6f136c4933701d998608
+    Dockerfile: f243bf676e6d4cd1fbca134f631992de03603899cf93a52ea098825a56059257
+    README.md: b2d3d4777061f8f4fc0c04341efb33a7188fb46d1ed96bc735a0c81d406a962e
+    collector/bitwarden-cli.mjs: 8dcea03faecfbd99b27ae85c1fc9662396fe3079502204470dee673364b5b8b2
+    collector/credential-provider.mjs: 5aa8514ee185b76fe21eac270215288ea642784ffc04721385664bf8d301f9b3
+    collector/native-vault-command.mjs: 23d3fe648665cf151857c84ff1a627b1b3a966dbc2ad4e525bb1f59f814494a2
+    collector/native-vault.mjs: d6891fe7eb7c54134729881fda28d5c9bb2b3214ce540dba60e6fcb83ac54159
+    collector/private-process.mjs: b2d33691f45107348c573c08de4f135c957a64f2ad173622fc219f570e722ac5
+    collector/tests/native-vault.test.mjs: 32c629b4a01be8cf95f02f429393a7197d19b27c2749718e34e72fae10802e10
+    collector/vault-worker.mjs: da433c8f3243bc9da6818201a0774cccf96f4671be2b62560396db766ad3c0ce
+    compose.broker-inspection.yaml: 23593394818efc8f6c8ffd56118567aa0c6776d3743d26e5831ff8d8c4cc1776
+    compose.lab.yaml: 88e444f413ec65252cc63e8381c06ffc795922ed0d24614e7a549f8a00bf8a83
+    compose.yaml: 09f93467af38a3b13a3904b863117574f5e9b083df411076498db658398e06fa
+    docs/design/acquisition-core.md: 742022a8c1323218be1ea31b095b12e2d810945b585fed3c1be127a3658b2210
+    docs/operations/source-connection.md: dd153a419406a903693c79e4bbd4a847838e9ecc6ad31dba3e0e089de2cbc57d
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 525
+      log_sha256: f1c62ee0b0c840dbe9e7862720e33ecd237d968c3395b9c27df7ed592c47e7d3
+    python:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1186
+      log_sha256: f368faac6bc6f9e6ba244fa2d87a667be1ef72b8fae349c9fea5e4556cf95e00
+    compose_native:
+      command: docker compose --env-file /dev/null config --quiet (synthetic required
+        ENV)
+      exit_code: 0
+    compose_lab:
+      command: docker compose --env-file /dev/null -f compose.lab.yaml config --quiet
+        (synthetic owner/network ENV)
+      exit_code: 0
+  image:
+    architecture: amd64
+    oci_index: sha256:07c1c17c01b963dc9c0b6af970ea2e709f19a9a3b0e8ae53c30020178b1f3474
+    config_digest: sha256:bf09ab89720edc74689ec692e991d3f944aa5ce6c81ec0188440ae2abf7322bd
+    build_exit_code: 0
+    build_log_sha256: eb3b4d4e553a645b2c37703baa30420ecbb6e8c2f9f6e345c9ab9841a2f9edf3
+    cli_version: 2026.9.1
+    cli_binary_bytes: 142967059
+    totp_defaults_source:
+      cli_commit: 8246ae9c9a484a0a69f8b27203034555fb872523
+      sdk_package: 0.2.0-main.1034
+      sdk_git_head: 7de8f13a14b56068167160f88d55231f916cf16a
+      defaults:
+        algorithm: SHA1
+        digits: 6
+        period: 30
+    actual_cli_smoke:
+      cases:
+        missing-env:
+          exit_code: 1
+          owned_absence_verified: true
+          stdout_sha256: c23d649b9aad07783e99741cd9f75ba66908964bb343f2e68cae11ac4113891c
+        pin:
+          exit_code: 0
+          owned_absence_verified: true
+          stdout_sha256: 90c33202c32e982a5cca2f3ac30ec3148a4fc59f6795a757756acc2253186384
+        version:
+          exit_code: 0
+          owned_absence_verified: true
+          stdout_sha256: c539d2f2afb8c83aaf75d86d5e681f2a8db4b0536c408c63f31c04ceb980473c
+      daemon: 56b003f4-3493-4696-8542-f7529de7c931
+      image: sha256:07c1c17c01b963dc9c0b6af970ea2e709f19a9a3b0e8ae53c30020178b1f3474
+      network: none
+      real_credentials: false
+      schema_version: 1
+    synthetic_command_smoke:
+      cases:
+        connect:
+          exit_code: 2
+          owned_absence_verified: true
+          stdout_sha256: 74860e00ce2fb10a696e1dfda6ea72d9c3ebcf2dad5304e67299d4b45ad7a919
+        inspect-first:
+          exit_code: 0
+          owned_absence_verified: true
+          stdout_sha256: 973582af839342db0fb3480cc05e9ff515f528f83837427d17e444bf51f0b52d
+        inspect-repeat:
+          exit_code: 0
+          owned_absence_verified: true
+          stdout_sha256: 973582af839342db0fb3480cc05e9ff515f528f83837427d17e444bf51f0b52d
+      daemon: 56b003f4-3493-4696-8542-f7529de7c931
+      image: sha256:1afbd8a8d01c449083a49ec993813fff9fd8a2cdbb5c34ca2ec69c84ffbe47d4
+      network: none
+      real_credentials: false
+      schema_version: 1
+    trivy:
+      command: trivy image --input image.tar --scanners vuln --severity HIGH,CRITICAL
+        --ignore-unfixed --exit-code 1 --ignorefile .trivyignore
+      version: 0.75.0
+      exit_code: 0
+      findings: 0
+      report_sha256: 290163becbb3bafaa8130d880350c8902cf6c951435ef7cb614af89f2e1e22f3
+      ignore_sha256: e1807d4b2039028b779ece027f67ebee7fad25fa4fed6f136c4933701d998608
+  lab_preserved:
+    compose_prior_bytes_identical: true
+    runtime_resources_changed: false
+    canonical_check_exit_code: 0
+    canonical_status_exit_code: 0
+    private_migration_receipt_sha256: 373f4bd7f59c428e071f71d027e077932b7c5445b5256195478b3762e5aa86ea
+  real_vault_session_started: false
+  broker_authentication_started: false
+  financial_writes: false
+  arm64_remote_scan_pending: true

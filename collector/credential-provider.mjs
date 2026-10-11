@@ -106,9 +106,15 @@ export function selectNamedWorkerItem(items, binding, defaultsVerified = false) 
 // Independent vault qualification returns private identity/profile metadata only.
 // It cannot deliver broker credentials or create an importer account binding.
 export function inspectNamedVaultItem(items, binding, defaultsVerified = false) {
+  if (binding?.name !== 'boursedirect.fr') throw new Error('PROVIDER_ITEM_INVALID');
+  return inspectConfiguredVaultItem(items, binding, defaultsVerified);
+}
+
+export function inspectConfiguredVaultItem(items, binding, defaultsVerified = false) {
   try {
     exact(binding, ['name']);
-    if (binding.name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
+    text(binding.name);
+    if (!Array.isArray(items)) throw new Error();
     const matches = items.filter(item => item?.name === binding.name);
     if (matches.length !== 1) throw new Error();
     const item = matches[0], aliases = item?.login?.uris;

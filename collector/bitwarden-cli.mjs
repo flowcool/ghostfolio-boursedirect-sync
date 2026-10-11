@@ -23,6 +23,7 @@ export function sshCliTransport(destination, execute = executePrivate) {
 
 export function bitwardenCli({configuration, containerId, attest, stopOwned, transport = executePrivate, egressProxy}) {
   const config = providerConfiguration(configuration);
+  if (config.schema_version === 5) throw new Error('CLI_ADAPTER_INVALID');
   if (config.cli.path !== '/usr/local/bin/bw' || !/^[0-9a-f]{64}$/.test(containerId)
       || [attest, stopOwned, transport].some(x => typeof x !== 'function')) throw new Error('CLI_ADAPTER_INVALID');
   if (egressProxy !== undefined) {

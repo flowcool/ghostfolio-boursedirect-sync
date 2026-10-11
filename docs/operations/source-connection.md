@@ -25,6 +25,14 @@ runbook contains procedure, not a second work queue.
 
 ## One project owns operational access
 
+The community entrypoint is the ENV-configured native `bitwarden` service in
+`compose.yaml`; see the [application Compose instructions](../../README.md#application-compose).
+`docker compose run --rm bitwarden inspect` verifies access and closes its session.
+`connect` uses the same connector but still refuses unqualified broker dispatch.
+The existing dedicated lab retains `compose.lab.yaml` plus its broker overlay,
+private receipts and exact-owned SSH adapter. Its historical inspection is reused
+as evidence, while native image/runtime qualification is recorded separately.
+
 | Purpose | Canonical location |
 | --- | --- |
 | Public command and this procedure | `scripts/source_connection.py`, this file |
@@ -57,9 +65,12 @@ cannot be treated as active commands; no lab-control command depends on `tmp/`.
    profile. For actual authentication, use the source-owned CLI/provider adapter
    and existing private provisioning function. A fresh worker logs into its own
    appdata; password and session material travel through private memory/stdin.
-   Inspection schema3 returns metadata and logs out; it cannot provide collector
-   credentials. Acquisition schemas1/2 additionally require qualified account/URI
+   Inspection schemas3/5 return metadata and log out; they cannot provide collector
+   credentials. Acquisition schemas1/2/4 additionally require qualified account/URI
    binding. A successful inspection does not bypass that difference.
+   Native Compose receives `BW_SERVER`, `BW_CLIENTID`, `BW_CLIENTSECRET`,
+   `BW_PASSWORD` and `BW_ITEM_NAME` from operator ENV. It binds item identity
+   automatically; a changed principal, UUID or URI metadata remains a refusal.
 3. **Sandbox and public form.** Reuse the pinned renderer/cleanup and public-source
    evidence. The body of the actual authentication application was acquired as an
    inert GET Document with scripts disabled, from a previously paused Script URL.
