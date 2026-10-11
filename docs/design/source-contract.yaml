@@ -126,6 +126,13 @@ target_service:
     scheduled: daily
     manual: operator_command_or_infrastructure_job
     concurrency: one_active_run_per_account
+  account_scope:
+    discovery: enumerate_all_accessible_broker_accounts_and_verify_expected_private_inventory
+    binding: explicit_verified_broker_account_to_distinct_ghostfolio_account
+    identity_namespace: broker_account_in_every_operation_identity_and_reconciliation
+    isolation: separate_acquisition_coverage_deduplication_and_exception_state_per_account
+    missing_or_ambiguous_account: quarantine_account_binding_without_implicit_default
+    evidence: actual_authenticated_account_identifiers_required_before_activation
   history:
     rolling_days: 90
     revisit_window_each_run: true

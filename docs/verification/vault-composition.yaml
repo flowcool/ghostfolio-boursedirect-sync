@@ -590,3 +590,36 @@ observed_public_assets_mode:
     node_read_redirect_followed: false
     node_read_credentials: false
   actual_updated_observation_pending: true
+actual_guarded_public_frontend:
+  execution_source_commit: '8881755'
+  exit_code: 1
+  terminal_stage: bounded_public_dom
+  partial_evidence_retained: true
+  permitted_GET_requests: 12
+  http_200_responses: 12
+  blocked_requests: 16
+  new_target_type: shared_worker
+  credentials_read: false
+  authentication_requests: 0
+  renderer_sandbox:
+    additional_seccomp_filter: true
+    nested_pid_namespace_depth: 3
+  exact_owned_browser_stopped: true
+  complete_DOM_observation: false
+  authentication_and_account_roles_enabled: false
+  private_evidence_sha256:
+    inputs/source-observations/public-page-2/attempt.yaml: c8ceaa52c49c940090aa5628d10587579670c8fa2ca4e4c5cb86dacc9b83b61b
+    inputs/source-observations/public-page-2/stdout.private.json: f16b0021f2babe38da14817f946772efc56e09343fff52fc6082cb13af7e8d88
+inert_public_asset_documents:
+  inputs:
+    collector/public-login-policy.mjs: bbcaafe5329c13d50bf4d69376e25f0f4e95d94d292daec24dfd8a427a2b811b
+    collector/lab/public-login-observation.mjs: ff19984ea891f8c9933f4955c1dadca1e3b10b58b5d12caa9e87aa031415bd58
+    collector/tests/public-login-policy.test.mjs: 62890960dda7b51b36be618a13e17521f8cb67777b2d0c5895e0d639d6752bfa
+    docs/design/source-contract.yaml: c4a867aaddb5b8877517ded003d3b57725c0db7eef65cf0bb4b44d95b9319ff2
+  command: npm test --prefix collector
+  exit_code: 0
+  passed: 465
+  log_sha256: 31dde8efc23a65701d75d3d0130022e2368ecc9e9bbe8a19935ff087272d1979
+  authority: Read only exact observed canonical Script references as documents with
+    scripts disabled; no XHR, redirects, authentication or new target grants.
+  runtime_execution_pending: true
