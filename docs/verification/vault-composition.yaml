@@ -553,3 +553,15 @@ browser_child_reaping:
     browser_init: true
   actual_recreation_pending: true
   authority: Florent direct SSH lab lifecycle ownership2026-10-11
+direct_lab_browser_recreation:
+  source_commit: ae20ebfe7ed3899553c7e70415f1ffa3f1b49ddc
+  receipt_sha256: 0ea8a13d055a185baa4ca759ea4f5f429088f38fce903f224cab5869c3ba3623
+  transport: local SSH with existing key and strict host-key check
+  browser_init: true
+  previous_browser_absence_verified: true
+  browser_receipted_before_start: true
+  namespace_acl_reinstalled_and_attested: true
+  vault_cli_and_proxies_retained: true
+  new_source_requests: 0
+  rollback_private_receipt: inputs/source-observations/browser-before-init.yaml
+  actual_renderer_requalification_pending: true
