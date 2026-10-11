@@ -367,3 +367,24 @@ The existing CLI adapter now supports verified logout/status after acquisition
 with or without an OTP request. Closing before the code permanently skips its
 slot; logout failure fences the adapter and stops only its attested container.
 This closes the delivery session rather than retaining it for another attempt.
+
+## Separate post-2FA credential finalization
+
+Source schema2 adds a separately qualified nullable `finalize` role. The owner
+selects `post-2fa-finalization` when starting the attempt, before credentials or
+permits. This protocol is retained in the existing principal journal and cannot
+be downgraded by swapping in a schema1 source. Historical schema1 journals and
+the synthetic two-request protocol remain compatible; no namespace is changed.
+
+For this protocol, a consumed OTP request can advance only to `otp_accepted`.
+The owner then records `finalization_uncertain`, arms a distinct exact finalization
+permit and consumes it durably before the one credential-bearing continuation.
+Only that consumed request plus separately verified broker success may advance
+to `authenticated`. The controller accepts finalization with its usual owned
+frame/epoch binding, duplicate reservation and failure fencing. It does not
+reuse the OTP permit or retrieve a second code.
+
+Interruptions in either new state retain the principal fence. Unconsumed
+requests, failed durable publication, duplicates and failed continuation cannot
+declare success or restart an attempt. Authentication still requires observed
+success; these callable offline helpers neither implement nor activate a browser.

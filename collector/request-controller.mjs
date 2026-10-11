@@ -106,7 +106,7 @@ export function controllerForPolicy(policy, {binding, source, reads = [], consum
       const keys = ['phase', 'nonce', 'pageEpoch', 'frameEpoch', 'frameId', 'url', 'method', 'resourceType'];
       exact(value, value?.phase === 'otp_uncertain' ? [...keys, 'otp'] : keys);
       epoch(value.nonce); epoch(value.pageEpoch); epoch(value.frameEpoch);
-      if (!['password_uncertain', 'password_accepted', 'otp_uncertain'].includes(value.phase)
+      if (!['password_uncertain', 'password_accepted', 'otp_uncertain', 'finalization_uncertain'].includes(value.phase)
           || value.pageEpoch !== owner.pageEpoch || !Object.hasOwn(owner.frames, value.frameId)
           || value.frameEpoch !== owner.frames[value.frameId].epoch
           || !evaluateRequest(contract, value.phase, {

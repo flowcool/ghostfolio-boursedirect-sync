@@ -10,7 +10,7 @@ export const ORIGIN = 'https://www.boursedirect.fr';
 const LIMIT = 1048576;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
-const STATES = new Set(['enrolled', 'password_uncertain', 'password_accepted', 'otp_uncertain', 'authenticated', 'closed_success', 'blocked']);
+const STATES = new Set(['enrolled', 'password_uncertain', 'password_accepted', 'otp_uncertain', 'otp_accepted', 'finalization_uncertain', 'authenticated', 'closed_success', 'blocked']);
 const PUBLIC_CODES = new Set([
   'ACQUISITION_BOUND_INVALID', 'ACQUISITION_FAILED', 'ACQUISITION_SCHEMA_INVALID',
   'AUTH_ALREADY_ENROLLED', 'AUTH_ATTEMPT_LIMIT', 'AUTH_CLOCK_REVERSED', 'AUTH_HANDLE_CLOSED',
@@ -118,7 +118,7 @@ function enroll(login) {
 }
 function validPermit(p) {
   exact(p,['phase','attempt','page_epoch','frame_epoch','url','method','resource_type','nonce','deadline','consumed']);
-  if(!['password_uncertain','otp_uncertain','password_accepted'].includes(p.phase) || !UUID.test(p.attempt) || !UUID.test(p.nonce) || !UUID.test(p.page_epoch) || !UUID.test(p.frame_epoch) || !['GET','POST'].includes(p.method) || !['Document','XHR','Fetch'].includes(p.resource_type) || typeof p.consumed!=='boolean') fail('AUTH_PERMIT_INVALID');
+  if(!['password_uncertain','otp_uncertain','password_accepted','finalization_uncertain'].includes(p.phase) || !UUID.test(p.attempt) || !UUID.test(p.nonce) || !UUID.test(p.page_epoch) || !UUID.test(p.frame_epoch) || !['GET','POST'].includes(p.method) || !['Document','XHR','Fetch'].includes(p.resource_type) || typeof p.consumed!=='boolean') fail('AUTH_PERMIT_INVALID');
   integer(p.deadline,0,Number.MAX_SAFE_INTEGER);url(p.url);
 }
 function validateJournal(state,id) {
@@ -127,7 +127,9 @@ function validateJournal(state,id) {
   if(state.schema_version!==(lab?2:1) || typeof state.principal!=='string' || !HASH.test(state.principal) || state.principal!==id || !UUID.test(state.installation_id)) fail('AUTH_STATE_INVALID');
   if(!state.attempts || typeof state.attempts!=='object' || Array.isArray(state.attempts) || Object.keys(state.attempts).length>1000) fail('AUTH_STATE_INVALID');
   for(const [key,a] of Object.entries(state.attempts)) {
-    exact(a,['state','started_at','updated_at','permit']);
+    exact(a,['state','started_at','updated_at','permit',...(Object.hasOwn(a,'protocol')?['protocol']:[])]);
+    if(Object.hasOwn(a,'protocol')&&a.protocol!=='post-2fa-finalization')fail('AUTH_STATE_INVALID');
+    if(['otp_accepted','finalization_uncertain'].includes(a.state)&&a.protocol!=='post-2fa-finalization')fail('AUTH_STATE_INVALID');
     if(!UUID.test(key)||!STATES.has(a.state))fail('AUTH_STATE_INVALID');
     integer(a.started_at,0,Number.MAX_SAFE_INTEGER);integer(a.updated_at,a.started_at,Number.MAX_SAFE_INTEGER);
     if(a.permit!==null){validPermit(a.permit);if(a.permit.attempt!==key||a.permit.phase!==a.state)fail('AUTH_STATE_INVALID');}
@@ -159,27 +161,30 @@ function releasePrincipal(handle) {
   const parent=fs.openSync(handle.directory,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
 }
-function startAttempt(handle,now) {
+function startAttempt(handle,now,protocol='legacy') {
+  if(!['legacy','post-2fa-finalization'].includes(protocol))fail('AUTH_STATE_INVALID');
   integer(now,0,Number.MAX_SAFE_INTEGER);const state=readJournal(handle);
   if(Object.values(state.attempts).some(a=>a.state!=='closed_success'))fail('AUTH_PRINCIPAL_FENCED');
   if(Object.keys(state.attempts).length>=1000)fail('AUTH_ATTEMPT_LIMIT');
   if(Object.values(state.attempts).some(a=>now<a.updated_at))fail('AUTH_CLOCK_REVERSED');
-  const id=randomUUID();state.attempts[id]={state:'enrolled',started_at:now,updated_at:now,permit:null};
+  const id=randomUUID();state.attempts[id]={state:'enrolled',started_at:now,updated_at:now,permit:null,...(protocol==='legacy'?{}:{protocol})};
   atomicPrivate(path.join(handle.directory,'journal.yaml'),state);owned(handle).attempt=id;return id;
 }
-const TRANSITIONS={enrolled:['password_uncertain','blocked'],password_uncertain:['password_accepted','blocked'],password_accepted:['otp_uncertain','blocked'],otp_uncertain:['authenticated','blocked'],authenticated:['closed_success','blocked'],closed_success:[],blocked:[]};
+const TRANSITIONS={enrolled:['password_uncertain','blocked'],password_uncertain:['password_accepted','blocked'],password_accepted:['otp_uncertain','blocked'],otp_uncertain:['authenticated','otp_accepted','blocked'],otp_accepted:['finalization_uncertain','blocked'],finalization_uncertain:['authenticated','blocked'],authenticated:['closed_success','blocked'],closed_success:[],blocked:[]};
 function transition(handle,next,now) {
   const state=readJournal(handle),a=state.attempts[handle.attempt];
   if(!a||!TRANSITIONS[a.state].includes(next))fail('AUTH_TRANSITION_INVALID');
+  if(a.state==='otp_uncertain'&&next!=='blocked'
+      &&next!==(a.protocol==='post-2fa-finalization'?'otp_accepted':'authenticated'))fail('AUTH_TRANSITION_INVALID');
   integer(now,a.updated_at,Number.MAX_SAFE_INTEGER);
-  if(['password_accepted','authenticated'].includes(next)&&(!a.permit||!a.permit.consumed))fail('AUTH_SUCCESS_WITHOUT_REQUEST');
+  if(['password_accepted','otp_accepted','authenticated'].includes(next)&&(!a.permit||!a.permit.consumed))fail('AUTH_SUCCESS_WITHOUT_REQUEST');
   a.state=next;a.updated_at=now;a.permit=null;
   atomicPrivate(path.join(handle.directory,'journal.yaml'),state);return next;
 }
 function validateSourceContract(source) {
   exact(source,['schema_version','origin','roles']);
-  if(source.schema_version!==1||source.origin!==policy.origin)fail('SOURCE_CONTRACT_INVALID');
-  exact(source.roles,['password','app_method','otp']);
+  if(![1,2].includes(source.schema_version)||source.origin!==policy.origin)fail('SOURCE_CONTRACT_INVALID');
+  exact(source.roles,['password','app_method','otp',...(source.schema_version===2?['finalize']:[])]);
   for(const [role,c] of Object.entries(source.roles)){
     if(c===null)continue;
     exact(c,['url','method','resource_type','evidence']);url(c.url);
@@ -190,7 +195,7 @@ function validateSourceContract(source) {
 }
 function evaluateRequest(source,phase,request) {
   validateSourceContract(source);exact(request,['url','method','resource_type','redirect']);
-  const role={password_uncertain:'password',password_accepted:'app_method',otp_uncertain:'otp'}[phase];
+  const role={password_uncertain:'password',password_accepted:'app_method',otp_uncertain:'otp',finalization_uncertain:'finalize'}[phase];
   const c=role?source.roles[role]:null;
   return !!c&&request.redirect===false&&['url','method','resource_type'].every(k=>request[k]===c[k]);
 }
@@ -199,6 +204,7 @@ function armPermit(handle,contract,now,source) {
   if(!evaluateRequest(source,contract.phase,{url:contract.url,method:contract.method,resource_type:contract.resource_type,redirect:false}))fail('AUTH_SOURCE_ROLE_DISABLED');
   const state=readJournal(handle),a=state.attempts[handle.attempt];
   if(!a||a.state!==contract.phase||a.permit)fail('AUTH_PERMIT_BLOCKED');
+  if((a.protocol==='post-2fa-finalization')!==(source.schema_version===2))fail('AUTH_SOURCE_ROLE_DISABLED');
   integer(now,a.updated_at,Number.MAX_SAFE_INTEGER-45);
   const permit={...contract,attempt:handle.attempt,nonce:randomUUID(),deadline:now+45,consumed:false};validPermit(permit);
   // Contract is already independently characterized by the eventual source-contract owner.
@@ -220,7 +226,7 @@ export function enroll(login) {return brokerAuthority.enroll(login);}
 export function validateJournal(state,id) {return brokerAuthority.validateJournal(state,id);}
 export function acquirePrincipal(login) {return brokerAuthority.acquirePrincipal(login);}
 export function releasePrincipal(handle) {return brokerAuthority.releasePrincipal(handle);}
-export function startAttempt(handle,now) {return brokerAuthority.startAttempt(handle,now);}
+export function startAttempt(handle,now,protocol) {return brokerAuthority.startAttempt(handle,now,protocol);}
 export function transition(handle,next,now) {return brokerAuthority.transition(handle,next,now);}
 export function validateSourceContract(source) {return brokerAuthority.validateSourceContract(source);}
 export function evaluateRequest(source,phase,request) {return brokerAuthority.evaluateRequest(source,phase,request);}

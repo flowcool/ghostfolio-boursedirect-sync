@@ -168,6 +168,26 @@ contract and leave authentication roles disabled.
 
 ## Bounded recovery
 
+Missing URI-alias metadata from an older vault inspection can be refreshed
+through the same entrypoint:
+
+```sh
+.venv/bin/python scripts/source_connection.py inspect-vault-aliases
+```
+
+This requires a hash-pinned `vault_cli_binding` evidence reference whose bytes
+match the successful inspection's binding hash. The historical artifact supplies
+data only; no archived controller is executed. The source-owned private IPC
+adapter uses the current full-ID receipt, CLI pin, egress proof and provisioning
+function. It opens one metadata-only session, retrieves no TOTP, verifies logout
+and compares every prior identity/profile field before preserving the new alias
+hash in a fresh private inspection directory. No broker request or source role
+activation is performed. Missing pins, changed metadata, unverified cleanup or
+IPC failure refuse; a failed execution preserves intent and stops only the
+receipted CLI, recording `cli_stopped_owned` for bounded recovery. Public output
+contains fixed codes/counts only. Source code must be committed and pass its
+exact-head external security review before this opt-in command is used.
+
 If an exact owned browser was stopped and the receipt says
 `browser_stopped_owned`:
 

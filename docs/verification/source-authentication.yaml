@@ -133,3 +133,69 @@ envelope_and_cleanup:
     unchanged'
   broker_requests: 0
   vault_sessions: 0
+finalization_and_alias_metadata:
+  inputs:
+    collector/core.mjs: e06503adfa9cb4f26683d375dafd4205266049c58efa3bbef97993955235f794
+    collector/request-controller.mjs: 917d3983208d3ade020235c43aaea08131faa598c33710173c053e44f30e6880
+    collector/tests/auth-finalization.test.mjs: 548070b4c27d824f44b8c44a445ecda8dff5d9bf351df1116765d3b851e8e050
+    collector/owned-vault-inspection.mjs: 83cbb5adc6acba12a9743899e2cc7fcd35fa59ef07a823440bcce7fae87b4786
+    collector/lab/owned-vault-inspection-command.mjs: c62a6f3046db375a4cc634ae7da92bbacfe068a2cf91424425bb44a514626a75
+    scripts/source_connection.py: 533f82255a7b57159ffb72c1706d528c5bfe41fad75691bed7be4fd58ffff263
+    scripts/source_vault_inspection.py: 5dc945b4c50d48aef37d3395f3a4dd562d88503ccef3c658c1fe9d017415d091
+    tests/test_source_vault_inspection.py: 6f47e3feba89523997a69177179088b7e72f8d15fe8506de9cdaeacbfcb17227
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements.txt: c79be17433b0d60b772ab61dfe4ffc400eb9c53711e46a7c07e4ff86e9ae55c8
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+    docs/design/acquisition-core.md: 54d64ad6c00ddec08164d4026f497d6d99227aae8fbfb6f1708f289979869247
+    docs/operations/source-connection.md: 2de12a7c13e925d45e1eb1e62bbbe6b8751a10a5c91b573559e27e92ea89d977
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      log_sha256: bab8c22e1a27a101478ce8efc36330df4a6c599afaec5bc582243989b2dbb365
+      summary:
+      - 1..573
+      - '# tests 573'
+      - '# suites 0'
+      - '# pass 573'
+      - '# fail 0'
+      - '# cancelled 0'
+      - '# skipped 0'
+      - '# todo 0'
+      - '# duration_ms 6502.113499'
+    python:
+      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+        -m pytest -q
+      exit_code: 0
+      log_sha256: a60a63af6aee109aebbbecd13e5f205852c95e617018ed606db2a95920c7ee4b
+      summary:
+      - '........................................................................
+        [ 60%]'
+      - '........................................................................
+        [ 66%]'
+      - '........................................................................
+        [ 72%]'
+      - '........................................................................
+        [ 78%]'
+      - '........................................................................
+        [ 84%]'
+      - '........................................................................
+        [ 90%]'
+      - '........................................................................
+        [ 96%]'
+      - '..........................................                               [100%]'
+      - 1194 passed in 85.24s (0:01:25)
+    documentation:
+      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+        scripts/check-docs.py
+      exit_code: 0
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+      summary:
+      - Documentation catalogue and local links passed
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+      log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      summary: []
+  broker_requests: 0
+  vault_sessions: 0

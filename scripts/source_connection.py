@@ -140,7 +140,7 @@ def restart_browser(lab, verified):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect', 'observe-public-form', 'characterize-password-request'))
+    parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect', 'observe-public-form', 'characterize-password-request', 'inspect-vault-aliases'))
     parser.add_argument('--lab-root', default='inputs/lab')
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -154,6 +154,10 @@ def main():
             return 2
         if arguments.action == 'status':
             report['live'] = live_status(lab, verified)
+        elif arguments.action == 'inspect-vault-aliases':
+            require('vault_cli_binding' in inventory['evidence'])
+            import source_vault_inspection
+            report['live'] = source_vault_inspection.inspect(root, lab, inventory)
         elif arguments.action in ('observe-public-form', 'characterize-password-request'):
             require('public-form.py' in verified)
             probe = arguments.action == 'characterize-password-request'
