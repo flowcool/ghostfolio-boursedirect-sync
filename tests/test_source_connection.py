@@ -139,3 +139,21 @@ def test_helper_executes_only_the_bytes_previously_verified(saved, monkeypatch):
     monkeypatch.setitem(replay.sys.modules, 'qualify', None)
     loaded = replay.helper(lab, 'qualify', inventory['_verified_helpers'])
     assert loaded.__file__ == str(lab / 'host/qualify.py')
+
+
+def test_public_form_requires_pinned_adapter_before_live_access(saved, monkeypatch, capsys):
+    root, _ = saved
+    monkeypatch.setattr(replay, '__file__', str(root / 'scripts/source_connection.py'))
+    monkeypatch.setattr(replay.sys, 'argv', ['source_connection.py', 'observe-public-form'])
+    monkeypatch.setattr(replay, 'live_status', lambda *args: pytest.fail('unpinned adapter reached SSH'))
+    assert replay.main() == 1
+    assert yaml.safe_load(capsys.readouterr().out)['code'] == 'SOURCE_REPLAY_REFUSED'
+
+
+def test_extra_unrecognized_operational_adapter_refuses(saved):
+    root, lab = saved
+    index = replay.private._read(lab / 'replay.yaml')
+    index['trusted_helpers']['unrecognized.py'] = '0' * 64
+    replay.private._publish(lab / 'replay.yaml', index)
+    with pytest.raises(RuntimeError):
+        replay.inspect_saved(root, lab)

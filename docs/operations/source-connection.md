@@ -108,6 +108,20 @@ are implemented and verified; changing the code or clearing an old journal to
 make it return success is not qualification. A future session resumes from the
 saved app source and named gaps instead of repeating vault/public exploration.
 
+The credential-free form observation is available through the same entrypoint:
+
+```sh
+.venv/bin/python scripts/source_connection.py observe-public-form
+```
+
+It requires a separately pinned private `public-form.py` adapter in the project
+host bundle. Without that pin it refuses before SSH access. The adapter reuses
+the saved public document and authentication-app body hashes, grants only their
+observed Script/Stylesheet GETs, and blocks other requests without submitting a
+form. A fresh private attempt retains original output, selector counts and owned
+exit evidence. Failure stops the exact browser and retains the attempt; this
+command never requests vault credentials or qualifies an authentication submit.
+
 ## Bounded recovery
 
 If an exact owned browser was stopped and the receipt says

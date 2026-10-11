@@ -27,8 +27,8 @@ def inspect_saved(root, lab):
     require((lab / 'replay.yaml').is_file(), 'SOURCE_REPLAY_INVENTORY_MISSING')
     inventory = private._read(lab / 'replay.yaml')
     require(inventory['schema_version'] == 1)
-    require(set(inventory['trusted_helpers']) == {'qualify.py', 'attest.py', 'broker-attest.py',
-        'broker-stop.py', 'stop.py', 'provision.py'})
+    core_helpers = {'qualify.py', 'attest.py', 'broker-attest.py', 'broker-stop.py', 'stop.py', 'provision.py'}
+    require(core_helpers <= set(inventory['trusted_helpers']) <= core_helpers | {'public-form.py'})
     evidence = {}
     for name, reference in inventory['evidence'].items():
         path = contained(root, reference['path'])
@@ -139,7 +139,7 @@ def restart_browser(lab, verified):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect'))
+    parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect', 'observe-public-form'))
     parser.add_argument('--lab-root', default='inputs/lab')
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -153,6 +153,10 @@ def main():
             return 2
         if arguments.action == 'status':
             report['live'] = live_status(lab, verified)
+        elif arguments.action == 'observe-public-form':
+            require('public-form.py' in verified)
+            live_status(lab, verified)
+            report['live'] = helper(lab, 'public-form', verified).run()
         elif arguments.action == 'restart-browser':
             report['live'] = restart_browser(lab, verified)
         elif arguments.action == 'stop-browser':

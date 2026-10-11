@@ -764,3 +764,25 @@ canonical_replay_review_corrections:
     whitespace_exit_code: 0
   deployed_immutable_proxy_runtime_unchanged: true
   new_authentication_attempt: false
+canonical_public_form_entrypoint:
+  input_sha256:
+    scripts/source_connection.py: cbdb2e1b7cf141207ba5a916ee458b59c955c57a2fc3803f0d207425c85bacf1
+    tests/test_source_connection.py: 0fc47898842a219b0d90e0a392b63b52c07b755ad74d499b1a23359ba7267270
+    docs/operations/source-connection.md: 5cbdc61776c36c2a41d1eceaa94a023d1a474086df16775dd9bf00d03f38c2f7
+  private_adapter_sha256: e172ce3feb824269ab7a39bbc3ab50485ebe643cf684e7c25a6038e5e710cbe7
+  credential_free: true
+  authentication_authority: false
+  allowed_observed_assets: 3
+  checks:
+    entrypoint_tests:
+      exit_code: 0
+      passed: 12
+      log_sha256: 25b344f582773f5dd4605b6b93321dba3bcb07224d56025ea8ff804cb3e7f66f
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+    python_full:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1185
+      log_sha256: aa046a6203d70b0c2fd168faa9a40965301a428c29ceb2ec65dbb72cdf567bd7
+  owned_runtime_observation_pending: true
