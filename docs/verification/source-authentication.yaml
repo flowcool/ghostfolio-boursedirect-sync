@@ -1034,3 +1034,55 @@ ghostfolio_383_destination_qualification:
   reuse: Existing browser, vault, acquisition, TLS and 3.81.0 proofs unchanged;
     the actual new destination version invalidated only its import qualification.
     Final-head CI supplies full offline verification before runtime delivery.
+
+historical_statement_selection:
+  owner: infra-4g8u.25
+  runtime_commit: abaae09a5d73f9f445534920daf8f0af69f06756
+  inputs:
+    scripts/source_qualification.py: a45c86737ebba7d61c83d962000cdbadb44d40a583aefa237cf5333588a6c80d
+    tests/test_source_qualification.py: 9417e71f2d8919dcb9b67bed3064e0813c16eff3417e19f76ea7be21eee15cbb
+  affected_regressions:
+    command: root .venv/bin/python -m pytest tests/test_source_qualification.py -q
+    passed: 37
+  saved_source_replay:
+    network_requests: 0
+    observed_july_option: '3'
+    unrequested_september_excluded: true
+  ci:
+    offline_tests: 38172938988
+    codeql: 38172938993
+    dependency_review: 38172938978
+    native_connector_image: 38172938983
+    conclusion: success
+  reused_boundaries:
+  - Pinned browser and native document POST transport unchanged.
+  - Vault credential transport and one-attempt authority unchanged.
+  actual_acquisition:
+    statement_period: 2026-07
+    accounts_verified: 2
+    totp_requests: 1
+    retained_documents: 17
+    statement_events: 16
+    coupon_rows: 7
+    cash_controls_reconciled: true
+    owned_session_closed: true
+    exact_owned_browser_and_cli_stopped: true
+    previous_journal_preserved: true
+    production_financial_writes: 0
+  destination_diagnosis:
+    snapshot_rows: 1017
+    july_paris_dividends: 4
+    exploratory_name_pairs: 3
+    paired_date_differences: 3
+    paired_amount_differences: 1
+    source_without_july_name_pair: 4
+    destination_without_source_name_pair: 1
+    security_identity_verified: false
+    gross_and_withholding_verified: false
+    import_ready: false
+  limits:
+  - Name associations and cash-date projections are diagnostic only.
+  - Cash credits do not establish gross dividends, withholding or complete history.
+  - Unknown operations still block conversion of the July period.
+  - The separate GitGuardian false-positive issue remains unresolved; CodeRabbit waiting
+    is waived.
