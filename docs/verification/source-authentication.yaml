@@ -780,3 +780,33 @@ source_otp_http_success:
     on credential refusal or lockout signals.
   full_offline: Final-head CI supplies full verification before another spaced real
     attempt; CodeRabbit wait waived.
+
+source_otp_opaque_json:
+  inputs:
+    collector/source-authentication-response.mjs: 7e42e4c0b970123f1b4b97788c27846a190ac2d2a5f911c02c8186464165f4ab
+    collector/tests/source-authentication-response.test.mjs: 4938b75091951e6387ab03c4a293f4894b29164ca8933db8e31793f22bcebfa0
+    collector/lab/source-authentication-runtime.mjs: a91da37e0b377a3df091bc57d80a88fd4787eabf6c8e22005e5bd6bc65f4f71d
+    docs/design/online-source-inspection.md: 7b5ce48e3ac2b9f53ad7ae12369d7feaf5c795a81e55ff8f9115c7d8f27eaa97
+  checks:
+    command: node --import ./tests/no-network.mjs --test tests/source-authentication-response.test.mjs
+      tests/source-authentication-dom.test.mjs tests/source-native-session.test.mjs
+      tests/source-authentication-gate.test.mjs
+    exit_code: 0
+    passed: 69
+    log_sha256: 9f89495ebebd3973d6231d80ca06eb16b07f392624257645efcc4995640c5326
+  native:
+    otp_body: 'null'
+    password: 1
+    otp: 1
+    finalize: 1
+    documents: 1
+    owned_cleanup_verified: true
+  boundary: Pinned-source OTP callback ignores response data. HTTP200 plus empty or
+    valid opaque JSON is sufficient; explicit error/contradictory success flags, malformed/duplicate-key
+    JSON and non200 statuses still refuse. No payload is returned or logged. Finalization
+    and account ownership remain separate.
+  reuse: Prior empty-object native proof and query-font refusal remain applicable;
+    the new proof qualifies JSON null. Earlier source_otp_http_success object-only
+    evidence describes its historical runtime inputs.
+  full_offline: Final-head CI supplies full verification before another spaced real
+    attempt.

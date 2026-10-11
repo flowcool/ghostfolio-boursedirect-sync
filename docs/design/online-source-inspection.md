@@ -307,7 +307,7 @@ still checks the actual TOTP form and untrusted-device selection afterwards.
 
 The pinned TOTP mutation advances on HTTP success and does not inspect a
 `success` property. The caller recognizes HTTP 200 with an empty body or a
-JSON object lacking an error and contradictory success flag. It retains only
+valid opaque JSON without an explicit error or contradictory success flag. It retains only
 the outcome and status, never backend data. Other statuses, malformed or
-duplicate-key JSON, scalars, arrays and explicit errors remain refused;
+duplicate-key JSON and explicit errors remain refused;
 credential finalization still needs its independently verified redirect.
