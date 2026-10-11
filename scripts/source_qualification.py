@@ -37,17 +37,22 @@ def source_url(base, relative):
     return url
 
 
-def planner():
+def planner(statement_periods=None):
+    periods = {} if statement_periods is None else statement_periods
+    replay.require(isinstance(periods, dict) and set(periods) <= {'PEA', 'PEA-PME'})
+    replay.require(all(type(value) is str and re.fullmatch(r'[1-9][0-9]{3}(?:0[1-9]|1[0-2])', value)
+        for value in periods.values()))
     return {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
-        'documents': {}, 'current': None, 'captures': 0}
+        'documents': {}, 'current': None, 'captures': 0, 'statement_periods': dict(periods)}
 
 
 def discover(state, url, raw, role):
-    """Derive exact GETs from inert saved HTML, maintaining the selected account."""
+    """Derive exact document requests from inert HTML, preserving account identity."""
     soup = BeautifulSoup(raw, 'html.parser')
     parent = digest(raw)
     current = state['current']
     account = current.get('account') if current else None
+    wanted = state['statement_periods'].get(account)
     selectors = soup.select('select#nc[name=nc]')
     if selectors:
         replay.require(len(selectors) == 1)
@@ -106,6 +111,7 @@ def discover(state, url, raw, role):
             period = params['dt'][:6]
         if role == 'contract_note' and re.fullmatch(r'[0-9]{4}', params.get('year', '')) and re.fullmatch(r'(?:0?[1-9]|1[0-2])', params.get('month', '')):
             period = params['year'] + params['month'].zfill(2)
+        replay.require(role != 'monthly_statement' or wanted is None or period == wanted)
         state['documents'].setdefault(account, {})[role] = {'sha256': parent, 'url': url, 'period': period}
         return
     # Before selecting each wrapper, traverse only source-declared account frames.
@@ -125,6 +131,10 @@ def discover(state, url, raw, role):
             continue
         path = urlsplit(target).path
         document_role = 'monthly_statement' if path.endswith('/releveCompte.php') else 'contract_note' if path.endswith('/releveOpe.php') else 'frame_document'
+        if document_role == 'monthly_statement' and wanted is not None:
+            date = dict(parse_qsl(urlsplit(target).query)).get('dt', '')
+            if not re.fullmatch(r'[0-9]{8}', date) or date[:6] != wanted:
+                continue
         if node.name == 'script' and path != '/priv/scripts/avis-operes.js':
             continue
         if account is None and node.name == 'a' and path not in {'/fr/page/releves', '/fr/page/avis-operes', '/fr/page/avis-d-operes'}:
@@ -149,10 +159,23 @@ def discover(state, url, raw, role):
             and inputs[0].get('value') == state['accounts'][account])
         options = month_select.find_all('option', recursive=False)
         replay.require(1 <= len(options) <= 21 and len({row.get('value') for row in options}) == len(options))
+        desired_value = None
+        if wanted is not None:
+            months = {'janvier': '01', 'février': '02', 'mars': '03', 'avril': '04',
+                'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08', 'septembre': '09',
+                'octobre': '10', 'novembre': '11', 'décembre': '12'}
+            matches = []
+            for option in options:
+                label = ' '.join(option.get_text(' ', strip=True).casefold().split())
+                parts = label.split(' ')
+                if len(parts) == 2 and parts[0] in months and parts[1] + months[parts[0]] == wanted:
+                    matches.append(option)
+            replay.require(len(matches) == 1)
+            desired_value = matches[0].get('value')
         for option in options:
             value = option.get('value')
             replay.require(re.fullmatch(r'(?:[1-9]|1[0-9]|2[01])', value or ''))
-            if not option.has_attr('selected'):
+            if not option.has_attr('selected') and (wanted is None or value == desired_value):
                 candidates.append({'url': target, 'role': 'frame_document', 'sourceSha256': parent,
                     'account': account, 'verify_account': True, 'method': 'POST',
                     'fields': {'nc': state['accounts'][account], 'RlvCombo': value}})
@@ -212,6 +235,12 @@ def source_pins(root, inventory):
 
 def qualify(root, lab, inventory, public_only=False):
     replay.require(type(public_only) is bool)
+    preference_path = root / 'inputs/source-observations/statement-preference.yaml'
+    preference = replay.private._read(preference_path) if preference_path.exists() else {
+        'schema_version': 1, 'statement_periods': {}}
+    replay.require(isinstance(preference, dict) and set(preference) == {'schema_version', 'statement_periods'}
+        and type(preference['schema_version']) is int and preference['schema_version'] == 1)
+    state = planner(preference['statement_periods'])
     verified = inventory['_verified_helpers']
     q = replay.helper(lab, 'qualify', verified)
     vault = replay.helper(lab, 'attest', verified).attest()
@@ -231,14 +260,15 @@ def qualify(root, lab, inventory, public_only=False):
     output = root / ('inputs/source-observations/qualification-' + uuid.uuid4().hex)
     output.mkdir(mode=0o700)
     intent = {'schema_version': 1, 'owner': 'infra-4g8u.70', 'source_commit': head,
-        'state': 'reserved', 'public_only': public_only, 'source_contract_sha256': configuration['binding']['accountConfig']['sha256']}
+        'state': 'reserved', 'public_only': public_only,
+        'statement_periods': state['statement_periods'],
+        'source_contract_sha256': configuration['binding']['accountConfig']['sha256']}
     replay.private._publish(output / 'attempt.yaml', intent, exclusive=True)
     lease = lab / 'vault-operation.lock'
     lease.mkdir(mode=0o700)
     q.durable._sync_directory(lease.parent)
     process = None
     passed = False
-    state = planner()
     document = None
     sequence = 0
     consumed = set()

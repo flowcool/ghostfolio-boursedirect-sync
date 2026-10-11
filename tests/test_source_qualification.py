@@ -232,3 +232,62 @@ def test_note_period_accepts_source_zero_padded_month():
     html = "<strong>Avis d'Opération</strong><table><tr><td>COMPTE N°</td><td>ACCOUNT_A PEA</td></tr></table>"
     qualification.discover(state, ORIGIN + '/priv/new/releveOpe.php?year=2026&month=09&day=23', html.encode(), 'contract_note')
     assert state['documents']['PEA']['contract_note']['period'] == '202609'
+
+
+@pytest.mark.parametrize('period,label,value', [('202607', 'Juillet 2026', '3'),
+    ('202608', 'Août 2026', '2')])
+def test_preferred_statement_uses_only_observed_month_value(period, label, value):
+    state = qualification.planner({'PEA': period})
+    state.update(accounts={'PEA': '1', 'PEA-PME': '2'}, verified={'PEA'}, current={'account': 'PEA'})
+    html = ('<form method=post><input type=hidden name=nc value=1><select name=RlvCombo>'
+        '<option value=1 selected>Septembre 2026</option><option value=2>Août 2026</option>'
+        '<option value=3>Juillet 2026</option></select></form>'
+        '<a href="releveCompte.php?dt=20260930">Current</a>')
+    qualification.discover(state, ORIGIN + '/priv/new/releves.php', html.encode(), 'frame_document')
+    assert len(state['queue']) == 1
+    choice = qualification.next_document(state)['document']
+    assert choice['method'] == 'POST'
+    assert choice['fields'] == {'nc': '1', 'RlvCombo': value}
+    assert choice['sourceSha256'] == qualification.digest(html.encode())
+
+
+@pytest.mark.parametrize('options', [
+    '<option value=1 selected>Septembre 2026</option>',
+    '<option value=1 selected>Juillet 2026</option><option value=2>Juillet 2026</option>',
+    '<option value=22>Juillet 2026</option>',
+])
+def test_unavailable_ambiguous_or_invalid_preferred_month_refuses(options):
+    state = qualification.planner({'PEA': '202607'})
+    state.update(accounts={'PEA': '1'}, verified={'PEA'}, current={'account': 'PEA'})
+    html = ('<form method=post><input type=hidden name=nc value=1>'
+        '<select name=RlvCombo>' + options + '</select></form>')
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, ORIGIN + '/priv/new/releves.php', html.encode(), 'frame_document')
+    assert not state['queue']
+
+
+def test_preferred_statement_rejects_wrong_period_and_accepts_exact_observed_link():
+    state = qualification.planner({'PEA': '202607'})
+    state.update(account_ids={'PEA': 'ACCOUNT_A'}, verified={'PEA'}, current={'account': 'PEA'})
+    html = '<strong>RELEVE DE COMPTE</strong><table><tr><td>COMPTE N°</td><td>ACCOUNT_A PEA</td></tr></table>'
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, ORIGIN + '/priv/new/releveCompte.php?dt=20260930', html.encode(), 'monthly_statement')
+    assert not state['documents']
+    qualification.discover(state, ORIGIN + '/priv/new/releveCompte.php?dt=20260731', html.encode(), 'monthly_statement')
+    assert state['documents']['PEA']['monthly_statement']['period'] == '202607'
+
+
+@pytest.mark.parametrize('periods', [[], {'unknown': '202607'}, {'PEA': 202607},
+    {'PEA': '202613'}, {'PEA': '20267'}, {'PEA': None}])
+def test_invalid_statement_preferences_refuse_before_navigation(periods):
+    with pytest.raises(RuntimeError):
+        qualification.planner(periods)
+
+
+def test_invalid_private_preference_refuses_before_owned_helper_access(tmp_path, monkeypatch):
+    (tmp_path / 'inputs/source-observations').mkdir(parents=True, mode=0o700)
+    qualification.replay.private._publish(tmp_path / 'inputs/source-observations/statement-preference.yaml',
+        {'schema_version': 2, 'statement_periods': {'PEA': '202607'}}, exclusive=True)
+    monkeypatch.setattr(qualification.replay, 'helper', lambda *args: pytest.fail('No runtime access allowed'))
+    with pytest.raises(RuntimeError):
+        qualification.qualify(tmp_path, tmp_path / 'lab', {})

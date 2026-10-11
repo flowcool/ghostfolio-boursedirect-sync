@@ -266,3 +266,21 @@ The original ten-minute browser lifetime and request budgets still apply. No
 password or OTP retry is granted. Cleanup verifies logout or stops the exact
 owned CLI, verifies browser exit or stops its exact container, and preserves
 uncertainty. This qualification does not enable recurring collection.
+
+For a specific historical statement, optionally save a private
+`inputs/source-observations/statement-preference.yaml` before starting the attempt:
+
+```yaml
+schema_version: 1
+statement_periods:
+  PEA: '202607'
+```
+
+Only `PEA` and `PEA-PME` keys and valid `YYYYMM` strings are accepted. Invalid
+configuration refuses before owned runtime access. The collector selects only
+the uniquely matching French month/year label offered by the saved broker form,
+using its exact observed option value and selected account. Missing or ambiguous
+months refuse; no URL or option value is invented. Without this file, navigation
+keeps its existing behavior. The preference narrows document selection and does
+not authorize a new authentication attempt. Verify the retained statement's
+actual period and financial contents separately before reconciliation.
