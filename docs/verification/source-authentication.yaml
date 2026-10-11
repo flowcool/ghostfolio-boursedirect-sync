@@ -63,3 +63,33 @@ limits:
   vault_sessions: 0
   real_roles_enabled: 0
   online_ready: false
+role_gap_inventory:
+  inputs:
+    scripts/source_connection.py: d703fccd4b64f8729fa85ea25545e260eff2d10d8da71e666e4d1d5746ee48f2
+    tests/test_source_connection.py: 5ce5b7f7fcf190f62201e7b4077886ccb6eda0df7578b7c8d52b553858213669
+    docs/operations/source-connection.md: 4d802bbdd99f69f3fd00abf3538abf31abbe721f20ff310d17f1bf3566404e09
+  checks:
+    python:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      log_sha256: 6b2905bb1f23e4c4e5d836917b1d57232f779b295232d1f92e84d4bf32107ac0
+      summary:
+      - '........................................................................
+        [ 96%]'
+      - '.....................................                                    [100%]'
+      - 1189 passed in 88.48s (0:01:28)
+    documentation:
+      command: .venv/bin/python scripts/check-docs.py
+      exit_code: 0
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+      summary:
+      - Documentation catalogue and local links passed
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+      log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      summary: []
+  collector_evidence_reused: 'checks.collector: collector/runtime inputs unchanged
+    by role inventory update'
+  broker_requests: 0
+  vault_sessions: 0

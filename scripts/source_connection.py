@@ -58,7 +58,8 @@ def inspect_saved(root, lab):
     idle = evidence['browser_idle']
     require(idle['browser_init'] and all(idle['counts'][key] == 0 for key in
         ('live_chrome', 'zombies', 'unexpected_proc_errors')))
-    required = ('password_submit', 'app_method', 'otp_submit', 'frame_document', 'monthly_statement', 'contract_note')
+    required = ('preliminary_verify', 'password_submit', 'app_method', 'otp_submit',
+        'password_finalize', 'frame_document', 'monthly_statement', 'contract_note')
     missing = [name for name in required if contract['roles'].get(name, {}).get('enabled') is not True]
     accounts = contract.get('expected_account_inventory', {}).get('accounts', [])
     return inventory, {

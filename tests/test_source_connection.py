@@ -70,6 +70,17 @@ def test_saved_success_is_reused_without_claiming_current_authentication(saved, 
     assert all(p.read_bytes() == raw for p, raw in before.items())
 
 
+def test_old_role_inventory_does_not_hide_preliminary_or_finalization_gaps(saved):
+    root, lab = saved
+    contract = replay.private._read(lab / 'source.yaml')
+    contract['roles'] = {name: {'enabled': True} for name in ('password_submit',
+        'app_method', 'otp_submit', 'frame_document', 'monthly_statement', 'contract_note')}
+    replay.private._publish(lab / 'source.yaml', contract)
+    report = replay.inspect_saved(root, lab)[1]
+    assert report['missing_request_roles'] == ['preliminary_verify', 'password_finalize']
+    assert report['current_collector_authentication_ready'] is False
+
+
 @pytest.mark.parametrize('change', ('changed', 'missing', 'public', 'symlink'))
 def test_untrusted_saved_source_refuses_before_any_live_adapter(saved, change):
     root, lab = saved

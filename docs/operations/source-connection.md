@@ -152,6 +152,11 @@ ambiguous inputs before any mutation. The captured metadata requires independent
 source inspection; it never establishes successful login. Real credential delivery
 and authentication retain their separate source, runtime and security gates.
 
+The local check reports preliminary verification and post-2FA password
+finalization as separate required roles. An older six-role inventory cannot
+hide those gaps or establish authentication readiness. Finalization is distinct
+from app-method selection; saved application code cannot qualify its dispatch.
+
 Inspect every denied POST separately. The current form observation produced a
 preliminary verification request and a password-submit request in the same owned
 frame/session. The opt-in dummy observer additionally retains each denied POST's
