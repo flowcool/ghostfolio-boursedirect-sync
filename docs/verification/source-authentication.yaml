@@ -214,3 +214,78 @@ ci_node_path_correction:
   failed_ci_run: 38147779684
   broker_requests: 0
   vault_sessions: 0
+method_and_worker_confinement:
+  inputs:
+    collector/core.mjs: f8360cb27715b02339b7e0d645ecc5521ac986b5f611478b0346c3058373950a
+    collector/source-authentication-gate.mjs: d74a81100555837f48a6348cbef5780869044e99e9301913beb09262a8d21f95
+    collector/source-request-inspection.mjs: 7307b152880e66d47568b183e8694f76d66b6e6ad4c6f792987afd1ed711daa5
+    collector/tests/source-authentication-gate.test.mjs: bb94b95eb598ffc5ceda72062bec2a3f46f4d699d4486fcefc25b94730867e35
+    collector/tests/auth-finalization.test.mjs: cb8ff21699b38fa8d5ae0758e9229b9649e7f75e5605e099502e647b06f755c9
+    collector/lab/owned-vault-inspection-command.mjs: a6cfb503d22bd757284ad07d7478a5e139f54e92cd12ac6d548db62835f150e6
+    collector/tests/owned-vault-spawn-fixture.mjs: 4375087f5cbc182e8d41d841ba59937849f1f572136897a9dea2b71289e053f4
+    scripts/source_vault_inspection.py: ba22750bab1a6b970fdb677dfc95cabf98873cf226db7d2ebeac1973e505da73
+    tests/test_source_vault_inspection.py: 1c633cb416b07d089d9606f8d3b17c7a49f00d7167091d7e3d5c4dc10bdceceb
+    docs/design/acquisition-core.md: f8319746bb8bf66e6fde2344a74ce3c764e77d1fcba60b2440eba91e392230bc
+    docs/operations/source-connection.md: 7c1af6f31dee460846ecbd771962035124f165aa8ff2c4478da9b7b004def728
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements.txt: c79be17433b0d60b772ab61dfe4ffc400eb9c53711e46a7c07e4ff86e9ae55c8
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      log_sha256: 72c67b3a815c5f9e154425806ab8bbc2bef6dfadeb40efadaa02ced63b1fa833
+      summary:
+      - 1..590
+      - '# tests 590'
+      - '# suites 0'
+      - '# pass 590'
+      - '# fail 0'
+      - '# cancelled 0'
+      - '# skipped 0'
+      - '# todo 0'
+      - '# duration_ms 7221.861437'
+    python:
+      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+        -m pytest -q
+      exit_code: 0
+      log_sha256: 0d33a9953998c14f96911fd892a43e70f369ede890a7d5d5242407fad6bb8844
+      summary:
+      - '........................................................................
+        [ 60%]'
+      - '........................................................................
+        [ 66%]'
+      - '........................................................................
+        [ 72%]'
+      - '........................................................................
+        [ 78%]'
+      - '........................................................................
+        [ 84%]'
+      - '........................................................................
+        [ 90%]'
+      - '........................................................................
+        [ 96%]'
+      - '..........................................                               [100%]'
+      - 1194 passed in 81.08s (0:01:21)
+    documentation:
+      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+        scripts/check-docs.py
+      exit_code: 0
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+      summary:
+      - Documentation catalogue and local links passed
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+      log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      summary: []
+  external_finding:
+    review_id: 5483737539
+    comment_id: 4242002739
+    reviewed_head: f6db83d2ace7efe8203f2a6e845c338ca741e84a
+    resolution: Required network method consumes its own permit; local TOTP selection
+      requires separate durable native DOM evidence. No guessed network action.
+  worker_confinement: SSH CLI responses consumed inside worker; supervisor RPC carries
+    no full item or seed
+  broker_requests: 0
+  new_vault_sessions: 0

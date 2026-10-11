@@ -33,8 +33,53 @@ function dispatch(handle, phase) {
 function prepare(handle) {
   core.startAttempt(handle, 100, 'post-2fa-finalization');
   core.transition(handle, 'password_uncertain', 100); dispatch(handle, 'password_uncertain');
-  core.transition(handle, 'password_accepted', 100); core.transition(handle, 'otp_uncertain', 100);
+  core.transition(handle, 'password_accepted', 100);
+  const epochs = parse(fs.readFileSync(path.join(handle.directory, 'journal.yaml'), 'utf8')).attempts[handle.attempt].initial_auth_epochs;
+  core.confirmLocalAppMethod(handle, source, {...epochs, source_sha256: 'c'.repeat(64), session_id: 'session', frame_id: 'frame',
+    method: 'TOTP', trusted_device: false, native_dom_checked: true}, 100);
+  core.transition(handle, 'otp_uncertain', 100);
 }
+function passwordAccepted(handle, selected = source) {
+  core.startAttempt(handle, 100, 'post-2fa-finalization'); core.transition(handle, 'password_uncertain', 100);
+  const value = permit('password_uncertain'), nonce = core.armPermit(handle, value, 100, selected);
+  core.consumePermit(handle, {...value, nonce, redirect: false}, 100); core.transition(handle, 'password_accepted', 100);
+  return parse(fs.readFileSync(path.join(handle.directory, 'journal.yaml'), 'utf8')).attempts[handle.attempt];
+}
+function localEvidence(attempt) {
+  return {...attempt.initial_auth_epochs, source_sha256: 'c'.repeat(64), session_id: 'session', frame_id: 'frame',
+    method: 'TOTP', trusted_device: false, native_dom_checked: true};
+}
+test('a required network app-method cannot be bypassed or changed to local selection', () => isolated(async handle => {
+  const selected = structuredClone(source);
+  selected.roles.app_method = {url: core.ORIGIN + '/synthetic-app-method', method: 'GET', resource_type: 'XHR', evidence: 'synthetic'};
+  const attempt = passwordAccepted(handle, selected);
+  assert.equal(attempt.app_method_required, true);
+  assert.throws(() => core.transition(handle, 'otp_uncertain', 100), /AUTH_SUCCESS_WITHOUT_REQUEST/);
+  assert.throws(() => core.confirmLocalAppMethod(handle, source, localEvidence(attempt), 100), /AUTH_TRANSITION_INVALID/);
+  const value = {...attempt.initial_auth_epochs, phase: 'password_accepted', url: selected.roles.app_method.url,
+    method: 'GET', resource_type: 'XHR'};
+  const nonce = core.armPermit(handle, value, 100, selected);
+  assert.throws(() => core.transition(handle, 'otp_uncertain', 100), /AUTH_SUCCESS_WITHOUT_REQUEST/);
+  core.consumePermit(handle, {...value, nonce, redirect: false}, 100);
+  core.transition(handle, 'otp_uncertain', 100);
+}));
+test('local TOTP selection requires distinct durable same-frame evidence before OTP', () => isolated(async handle => {
+  const attempt = passwordAccepted(handle);
+  assert.equal(attempt.app_method_required, false);
+  assert.throws(() => core.transition(handle, 'otp_uncertain', 100), /AUTH_SUCCESS_WITHOUT_REQUEST/);
+  for (const changes of [{trusted_device: true}, {native_dom_checked: false}, {frame_epoch: randomUUID()}, {method: 'SMS'}])
+    assert.throws(() => core.confirmLocalAppMethod(handle, source, {...localEvidence(attempt), ...changes}, 100));
+  core.confirmLocalAppMethod(handle, source, localEvidence(attempt), 100);
+  assert.throws(() => core.confirmLocalAppMethod(handle, source, localEvidence(attempt), 100), /AUTH_TRANSITION_INVALID/);
+  core.transition(handle, 'otp_uncertain', 100);
+}));
+test('failed local-selection fsync leaves OTP unavailable', () => isolated(async handle => {
+  const attempt = passwordAccepted(handle), sync = fs.fsyncSync;
+  fs.fsyncSync = () => {throw new Error('PRIVATE_SYNTHETIC_DETAILS');};
+  try {assert.throws(() => core.confirmLocalAppMethod(handle, source, localEvidence(attempt), 100));}
+  finally {fs.fsyncSync = sync;}
+  assert.throws(() => core.transition(handle, 'otp_uncertain', 100), /AUTH_SUCCESS_WITHOUT_REQUEST/);
+}));
 test('post-2FA protocol needs three independently consumed permits before success', () => isolated(async handle => {
   prepare(handle);
   assert.throws(() => core.transition(handle, 'otp_accepted', 100), /AUTH_SUCCESS_WITHOUT_REQUEST/);

@@ -179,7 +179,10 @@ This requires a hash-pinned `vault_cli_binding` evidence reference whose bytes
 match the successful inspection's binding hash. The historical artifact supplies
 data only; no archived controller is executed. The source-owned private IPC
 adapter uses the current full-ID receipt, CLI pin, egress proof and provisioning
-function. It opens one metadata-only session, retrieves no TOTP, verifies logout
+function. SSH CLI output is consumed directly inside the worker; the supervisor's
+private RPC carries only attestation/stop metadata and the final inspected
+projection. Full items, seeds and CLI stdout never cross that RPC boundary.
+It opens one metadata-only session, retrieves no TOTP, verifies logout
 and compares every prior identity/profile field before preserving the new alias
 hash in a fresh private inspection directory. No broker request or source role
 activation is performed. Missing pins, changed metadata, unverified cleanup or

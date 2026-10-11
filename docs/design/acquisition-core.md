@@ -368,6 +368,14 @@ with or without an OTP request. Closing before the code permanently skips its
 slot; logout failure fences the adapter and stops only its attested container.
 This closes the delivery session rather than retaining it for another attempt.
 
+The source-owned metadata worker uses `sshCliTransport` directly for CLI stdout.
+Its Python supervisor provides private initial provisioning and attestation/stop
+callbacks, then receives the final metadata projection after verified logout.
+The supervisor never relays full items, seeds or CLI response bodies. Synthetic
+IPC coverage stands in for SSH inside the worker process and asserts that the
+supervisor observes only control metadata, while logout failure still fences
+the exact owned CLI.
+
 ## Separate post-2FA credential finalization
 
 Source schema2 adds a separately qualified nullable `finalize` role. The owner
@@ -388,3 +396,37 @@ Interruptions in either new state retain the principal fence. Unconsumed
 requests, failed durable publication, duplicates and failed continuation cannot
 declare success or restart an attempt. Authentication still requires observed
 success; these callable offline helpers neither implement nor activate a browser.
+
+### Method qualification before OTP
+
+The first schema2 password permit durably snapshots whether a network app-method
+role is required, together with the initial page/frame epochs. A required role
+must consume its own permit before entering `otp_uncertain`; later source changes
+cannot replace it with a local selection. With no network role, the observed
+frontend's local TOTP selection instead needs `confirmLocalAppMethod`: a separate
+durable receipt asserting independently checked native DOM, exact initial epochs,
+owned session/frame, pinned source hash, TOTP selection and an untrusted device.
+Missing, duplicate, foreign-frame or failed-publication evidence refuses OTP.
+No synthetic network request or permit is invented for a local DOM action.
+Historical legacy attempts retain their prior behavior. Existing post-2FA records
+are still readable; missing method qualification cannot authorize new progress.
+
+### Paused authentication qualification gate
+
+`brokerAuthenticationComposition` binds one cooperating authority and its handles
+to `source-authentication-gate.mjs`. The bounded gate accepts only the three
+source-described POST/XHR destinations for initial credentials, TOTP and final
+credentials. The trusted owner separately proves current source bytes, runtime
+ownership and actual response outcomes. The gate compares the native body in
+memory, retains structural evidence, arms the exact durable permit and consumes
+it before continuation. It binds credential requests to the journal principal,
+clones inputs before awaiting and reserves each phase at ingress. Duplicate or
+HTTP-auth events fence held actions; HTTP authentication is cancelled without
+credentials. Retention, fsync, timing or continuation failures stop the owner.
+The gate never advances authentication state or declares successful connection.
+
+The bounded qualification profile permits inspecting an already paused expected
+request before arming its exact permit. Ordinary operational controllers keep
+their previously qualified before-fill gate. Synthetic runtime qualification
+uses an internally registered loopback policy and separate synthetic namespace;
+the broker factory exposes no operator-selectable origin or state-root override.

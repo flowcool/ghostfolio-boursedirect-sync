@@ -1,6 +1,7 @@
 // Anonymous private stdio only. The pinned supervisor owns SSH and resource facts.
 import {privateChannel} from '../private-channel.mjs';
 import {inspectOwnedVault} from '../owned-vault-inspection.mjs';
+import {sshCliTransport} from '../bitwarden-cli.mjs';
 
 process.umask(0o077);
 let fenced = false;
@@ -19,8 +20,9 @@ try {
   const selected = await inspectOwnedVault({...input,
     attest: (containerId, pin) => request({action: 'attest', containerId, pin}),
     stopOwned: containerId => request({action: 'stop', containerId}),
-    transport: (executable, args, env, timeout, bytes) => request({action: 'transport', executable, args, env, timeout,
-      input: bytes.toString('base64')})});
+    // CLI stdout, including the item/seed, stays inside this trusted worker.
+    // The supervisor receives attestation/stop metadata and the final projection only.
+    transport: sshCliTransport(input.destination)});
   await channel.send({action: 'complete', selected, session_logged_out: true, totp_requests: 0});
 } catch {
   await channel.send({action: 'refused', code: 'OWNED_VAULT_INSPECTION_REFUSED'}).catch(() => {});

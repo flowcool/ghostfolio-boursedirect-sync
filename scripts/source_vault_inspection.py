@@ -1,5 +1,4 @@
 """Refresh missing vault metadata through the existing exact-owned CLI only."""
-import base64
 import hashlib
 import json
 import os
@@ -137,25 +136,14 @@ def inspect(root, lab, inventory):
         q.save(current)
         return True
 
-    def transport(row):
-        replay.require(set(row) == {'action', 'executable', 'args', 'env', 'timeout', 'input'}
-            and row['executable'] == '/usr/bin/docker' and row['env'] == {'PATH': '/usr/bin:/bin'}
-            and type(row['timeout']) is int and row['timeout'] == 45000
-            and isinstance(row['args'], list) and all(isinstance(value, str) for value in row['args'])
-            and row['args'][:5] == ['exec', '-i', identifier, '/usr/bin/env', '-i'])
-        payload = base64.b64decode(row['input'], validate=True)
-        replay.require(len(payload) <= 16401)
-        result = q.remote(['/usr/bin/docker'] + row['args'], payload, timeout=45)
-        return {'status': result.returncode, 'stdout': result.stdout.decode(), 'stderr': result.stderr.decode()}
-
     try:
         credentials = replay.helper(lab, 'provision', verified).initial_environment()
         process = subprocess.Popen(['/usr/bin/node', str(source)], cwd=CODE_ROOT,
             env={'PATH': '/usr/bin:/bin', 'HOME': str(Path.home())},
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         selected = exchange(process, {'configuration': configuration, 'containerId': identifier,
-            'egressProxy': binding['egressProxy'], 'credentials': credentials},
-            {'attest': attest, 'transport': transport, 'stop': stop})
+            'egressProxy': binding['egressProxy'], 'destination': binding['destination'], 'credentials': credentials},
+            {'attest': attest, 'stop': stop})
         credentials = None
         expected = previous['selected']
         replay.require(set(selected) == set(expected) | {'uriAliasesSha256'}

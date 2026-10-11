@@ -127,9 +127,20 @@ function validateJournal(state,id) {
   if(state.schema_version!==(lab?2:1) || typeof state.principal!=='string' || !HASH.test(state.principal) || state.principal!==id || !UUID.test(state.installation_id)) fail('AUTH_STATE_INVALID');
   if(!state.attempts || typeof state.attempts!=='object' || Array.isArray(state.attempts) || Object.keys(state.attempts).length>1000) fail('AUTH_STATE_INVALID');
   for(const [key,a] of Object.entries(state.attempts)) {
-    exact(a,['state','started_at','updated_at','permit',...(Object.hasOwn(a,'protocol')?['protocol']:[])]);
+    exact(a,['state','started_at','updated_at','permit',...(Object.hasOwn(a,'protocol')?['protocol']:[]),
+      ...(Object.hasOwn(a,'app_method_required')?['app_method_required','initial_auth_epochs']:[]),
+      ...(Object.hasOwn(a,'local_app_selection')?['local_app_selection']:[])]);
     if(Object.hasOwn(a,'protocol')&&a.protocol!=='post-2fa-finalization')fail('AUTH_STATE_INVALID');
     if(['otp_accepted','finalization_uncertain'].includes(a.state)&&a.protocol!=='post-2fa-finalization')fail('AUTH_STATE_INVALID');
+    if(Object.hasOwn(a,'app_method_required')) {
+      if(a.protocol!=='post-2fa-finalization'||typeof a.app_method_required!=='boolean')fail('AUTH_STATE_INVALID');
+      exact(a.initial_auth_epochs,['page_epoch','frame_epoch']);
+      if(!UUID.test(a.initial_auth_epochs.page_epoch)||!UUID.test(a.initial_auth_epochs.frame_epoch))fail('AUTH_STATE_INVALID');
+    }
+    if(Object.hasOwn(a,'local_app_selection')) {
+      validateLocalSelection(a.local_app_selection);
+      if(a.app_method_required!==false||!['page_epoch','frame_epoch'].every(k=>a.local_app_selection[k]===a.initial_auth_epochs[k]))fail('AUTH_STATE_INVALID');
+    }
     if(!UUID.test(key)||!STATES.has(a.state))fail('AUTH_STATE_INVALID');
     integer(a.started_at,0,Number.MAX_SAFE_INTEGER);integer(a.updated_at,a.started_at,Number.MAX_SAFE_INTEGER);
     if(a.permit!==null){validPermit(a.permit);if(a.permit.attempt!==key||a.permit.phase!==a.state)fail('AUTH_STATE_INVALID');}
@@ -174,12 +185,33 @@ const TRANSITIONS={enrolled:['password_uncertain','blocked'],password_uncertain:
 function transition(handle,next,now) {
   const state=readJournal(handle),a=state.attempts[handle.attempt];
   if(!a||!TRANSITIONS[a.state].includes(next))fail('AUTH_TRANSITION_INVALID');
+  if(a.protocol==='post-2fa-finalization'&&a.state==='password_accepted'&&next==='otp_uncertain') {
+    if(a.app_method_required===true) {
+      if(!a.permit||!a.permit.consumed)fail('AUTH_SUCCESS_WITHOUT_REQUEST');
+    } else if(a.app_method_required!==false||!a.local_app_selection)fail('AUTH_SUCCESS_WITHOUT_REQUEST');
+  }
   if(a.state==='otp_uncertain'&&next!=='blocked'
       &&next!==(a.protocol==='post-2fa-finalization'?'otp_accepted':'authenticated'))fail('AUTH_TRANSITION_INVALID');
   integer(now,a.updated_at,Number.MAX_SAFE_INTEGER);
   if(['password_accepted','otp_accepted','authenticated'].includes(next)&&(!a.permit||!a.permit.consumed))fail('AUTH_SUCCESS_WITHOUT_REQUEST');
   a.state=next;a.updated_at=now;a.permit=null;
   atomicPrivate(path.join(handle.directory,'journal.yaml'),state);return next;
+}
+function validateLocalSelection(value) {
+  exact(value,['source_sha256','page_epoch','frame_epoch','session_id','frame_id','method','trusted_device','native_dom_checked']);
+  if(!HASH.test(value.source_sha256)||!UUID.test(value.page_epoch)||!UUID.test(value.frame_epoch)
+      ||value.method!=='TOTP'||value.trusted_device!==false||value.native_dom_checked!==true
+      ||['session_id','frame_id'].some(k=>typeof value[k]!=='string'||!value[k]||value[k].length>256))fail('AUTH_STATE_INVALID');
+}
+function confirmLocalAppMethod(handle,source,evidence,now) {
+  validateSourceContract(source);validateLocalSelection(evidence);
+  const state=readJournal(handle),a=state.attempts[handle.attempt];
+  if(!a||a.protocol!=='post-2fa-finalization'||a.state!=='password_accepted'||a.app_method_required!==false
+      ||a.local_app_selection||a.permit||source.schema_version!==2||source.roles.app_method!==null
+      ||!['page_epoch','frame_epoch'].every(k=>evidence[k]===a.initial_auth_epochs[k]))fail('AUTH_TRANSITION_INVALID');
+  integer(now,a.updated_at,Number.MAX_SAFE_INTEGER);
+  a.local_app_selection=structuredClone(evidence);a.updated_at=now;
+  atomicPrivate(path.join(handle.directory,'journal.yaml'),state);return true;
 }
 function validateSourceContract(source) {
   exact(source,['schema_version','origin','roles']);
@@ -205,6 +237,11 @@ function armPermit(handle,contract,now,source) {
   const state=readJournal(handle),a=state.attempts[handle.attempt];
   if(!a||a.state!==contract.phase||a.permit)fail('AUTH_PERMIT_BLOCKED');
   if((a.protocol==='post-2fa-finalization')!==(source.schema_version===2))fail('AUTH_SOURCE_ROLE_DISABLED');
+  if(a.protocol==='post-2fa-finalization'&&contract.phase==='password_uncertain') {
+    if(Object.hasOwn(a,'app_method_required'))fail('AUTH_PERMIT_BLOCKED');
+    a.app_method_required=source.roles.app_method!==null;
+    a.initial_auth_epochs={page_epoch:contract.page_epoch,frame_epoch:contract.frame_epoch};
+  }
   integer(now,a.updated_at,Number.MAX_SAFE_INTEGER-45);
   const permit={...contract,attempt:handle.attempt,nonce:randomUUID(),deadline:now+45,consumed:false};validPermit(permit);
   // Contract is already independently characterized by the eventual source-contract owner.
@@ -218,7 +255,7 @@ function consumePermit(handle,request,now) {
   p.consumed=true;a.updated_at=now;atomicPrivate(path.join(handle.directory,'journal.yaml'),state);
   return true; // Trusted driver may continue only after this function returns.
 }
-  return Object.freeze({enroll,validateJournal,acquirePrincipal,releasePrincipal,startAttempt,transition,validateSourceContract,evaluateRequest,armPermit,consumePermit,
+  return Object.freeze({enroll,validateJournal,acquirePrincipal,releasePrincipal,startAttempt,transition,confirmLocalAppMethod,validateSourceContract,evaluateRequest,armPermit,consumePermit,
     assertHandle:handle=>{const data=owned(handle);if(data.released)fail('AUTH_HANDLE_CLOSED');return true;}});
 }
 const brokerAuthority=authorityForPolicy(BROKER_POLICY);
@@ -228,6 +265,7 @@ export function acquirePrincipal(login) {return brokerAuthority.acquirePrincipal
 export function releasePrincipal(handle) {return brokerAuthority.releasePrincipal(handle);}
 export function startAttempt(handle,now,protocol) {return brokerAuthority.startAttempt(handle,now,protocol);}
 export function transition(handle,next,now) {return brokerAuthority.transition(handle,next,now);}
+export function confirmLocalAppMethod(handle,source,evidence,now) {return brokerAuthority.confirmLocalAppMethod(handle,source,evidence,now);}
 export function validateSourceContract(source) {return brokerAuthority.validateSourceContract(source);}
 export function evaluateRequest(source,phase,request) {return brokerAuthority.evaluateRequest(source,phase,request);}
 export function armPermit(handle,contract,now,source) {return brokerAuthority.armPermit(handle,contract,now,source);}

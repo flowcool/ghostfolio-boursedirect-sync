@@ -1,6 +1,6 @@
 // Native paused-request inspection only. No dispatch, credential export or role activation.
 import {parseDocument} from 'yaml';
-import {brokerUrl} from './core.mjs';
+import {BROKER_POLICY, policyUrl, requirePolicy} from './internal/source-policy.mjs';
 
 const HASH = /^[a-f0-9]{64}$/;
 const POST_KEYS = Object.freeze({
@@ -22,11 +22,12 @@ function identifier(value) {
   if (typeof value !== 'string' || !value || value.length > 256) throw new Error();
 }
 
-export function inspectSourceRequest({owner, candidate, event, expected}) {
+export function inspectSourceRequestForPolicy(policy, {owner, candidate, event, expected}) {
   try {
+    requirePolicy(policy);
     exact(owner, ['sessionId', 'frameId']); Object.values(owner).forEach(identifier);
     exact(candidate, ['role', 'url', 'method', 'resourceType', 'sourceSha256']);
-    brokerUrl(candidate.url);
+    policyUrl(policy, candidate.url);
     if (!HASH.test(candidate.sourceSha256)) throw new Error();
     const fields = POST_KEYS[candidate.role];
     if (!fields && !GET_ROLES.has(candidate.role)) throw new Error();
@@ -71,3 +72,5 @@ export function inspectSourceRequest({owner, candidate, event, expected}) {
     return Object.freeze(observation);
   } catch {throw new Error('SOURCE_REQUEST_ENVELOPE_REFUSED');}
 }
+
+export function inspectSourceRequest(input) {return inspectSourceRequestForPolicy(BROKER_POLICY, input);}
