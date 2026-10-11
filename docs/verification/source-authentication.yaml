@@ -1132,3 +1132,56 @@ certain_unique_reconciliation:
     and daily scheduling remain unimplemented.
   - Full final-runtime CI is required before delivery; prose-only updates reuse its
     runtime evidence.
+
+coupon_source_inspection:
+  owner: infra-4g8u.25
+  runtime_inputs:
+    boursedirect_to_ghostfolio.py: 086832461bfeedf62f29d3618332edd705a913745d2ec36b23d9d43e9912b1c7
+    tests/test_contract_notes.py: 3f7f9bc4c61bc35265b1f444dfdbc93a69a8c0f1cd3540d3dae4f2a7c0fd5001
+  automatic_review_runtime_ci:
+    commit: d3bf5d1c54ad827acdc54ada3ad403ed91014d58
+    offline_tests: 38174135293
+    codeql: 38174135300
+    dependency_review: 38174135303
+    native_connector_image: 38174135305
+    conclusion: success
+  affected_regressions:
+    command: root .venv/bin/python -m pytest -q tests/test_contract_notes.py tests/test_conversion.py
+      tests/test_preparation_replay.py tests/test_prepare.py
+    passed: 161
+  actual_paced_acquisition:
+    retained_documents: 39
+    source_month_navigation: observed September to August to July options only
+    accounts_verified: 2
+    totp_requests: 1
+    july_coupon_rows: 7
+    coupon_isins_verified: 7
+    exact_statement_cash_date_and_credit_matches: 7
+    notes_with_explicit_tax_credit_field: 4
+    notes_with_brut_credit_difference: 3
+    explicit_withholding_fields: 0
+    session_closed: true
+    exact_owned_browser_and_cli_stopped: true
+    previous_journal_bytes_preserved: true
+  actual_parser_check:
+    coupon_fields_exact: 7
+    trade_groups_in_mixed_documents: 2
+    unknown_split_groups_retained: 2
+    inferred_withholding: false
+    financial_conversion: false
+    cli_coupon_split_counts_verified: true
+    july_cash_controls_reconciled: true
+    september_three_trade_preparation_unchanged: true
+    network_requests_during_parser_check: 0
+  reuse:
+  - Default trade preparation, financial wire, holdings, automatic assignment, API
+    readback and recovery remain unchanged.
+  - Actual September source preparation equals the prior qualified artifact exactly.
+  - Browser, vault and native month/document transport unchanged.
+  limits:
+  - Inspection preserves source fields; BRUT is not asserted to equal issuer gross
+    and differences are not labeled withholding.
+  - Source signed coupon quantities do not become sales or dividend API quantities.
+  - Mixed nontrade notes cannot pass strict trade preparation.
+  - Dividend amount/date conversion policy requires separate approved implementation.
+  - No production financial writes.

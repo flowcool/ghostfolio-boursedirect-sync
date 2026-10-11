@@ -296,7 +296,9 @@ def valid_isin(value):
     return total % 10 == 0
 
 
-def parse_contract_note(html, max_depth):
+def parse_contract_note(html, max_depth, include_coupons=False):
+    if type(include_coupons) is not bool:
+        fail("INVALID_NOTE_INSPECTION_MODE")
     if max_depth <= 0:
         fail("INVALID_DEPTH_LIMIT")
     soup = BeautifulSoup(html, "html.parser")
@@ -336,19 +338,42 @@ def parse_contract_note(html, max_depth):
     if len(lengths) != 1:
         fail("UNEQUAL_COLUMN_LENGTHS")
     count = len(vectors[0])
-    if not count or count % 9:
+    if not count or not include_coupons and count % 9:
         fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
     groups = []
     labels = {"ACHAT COMPTANT": "BUY", "ACHAT ETRANGER": "BUY", "VENTE COMPTANT": "SELL"}
-    for start in range(0, count, 9):
+    start = 0
+    while start < count:
+        if count - start < 2:
+            fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
+        initial = cells(vectors[1][start + 1])
+        if len(initial) != 1:
+            fail("UNSUPPORTED_NOTE_SLOT")
+        coupon = include_coupons and text(initial[0]).startswith("COUPONS ")
+        unknown = include_coupons and not coupon and not any(
+            text(initial[0]).startswith(label + " ") for label in labels)
+        size = 6 if coupon else 9
+        if unknown:
+            next_headers = []
+            for index in range(start + 2, count):
+                date_cells = cells(vectors[0][index])
+                if len(date_cells) != 1:
+                    fail("UNSUPPORTED_NOTE_SLOT")
+                if text(date_cells[0]):
+                    next_headers.append(index)
+            size = (next_headers[0] - 1 if next_headers else count) - start
+            if size < 3:
+                fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
+        if count - start < size:
+            fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
         slots = []
-        for offset in range(9):
+        for offset in range(size):
             parts = [cells(v[start + offset]) for v in vectors]
             if any(len(c) != 1 for c in parts):
                 fail("UNSUPPORTED_NOTE_SLOT")
             if any(c[0].find("table") for i, c in enumerate(parts) if i != 1):
                 fail("UNSUPPORTED_NOTE_SLOT")
-            if offset in (0, 2, 6, 8):
+            if offset in ({0, 2} if unknown else {0, 2, 6, 8}):
                 if any(text(c[0]) or c[0].find("table") for c in parts):
                     fail("NOTE_BLANK_SLOT_CONFLICT")
             elif offset != 1 and any(text(parts[i][0]) for i in (0, 2, 3)):
@@ -370,14 +395,63 @@ def parse_contract_note(html, max_depth):
             return [text(c) for c in field_cells]
 
         header = fields(1)
-        if header[0] not in labels:
+        if header[0] not in labels and not (coupon and header[0] == "COUPONS") and not unknown:
             fail("UNSUPPORTED_NOTE_OPERATION")
         if not valid_isin(header[1]) or not header[2]:
             fail("INVALID_NOTE_SECURITY")
-        kind = labels[header[0]]
+        kind = "UNKNOWN" if unknown else "COUPON" if coupon else labels[header[0]]
         note = {"slot": start + 1, "kind": kind, "isin": header[1], "name": header[2],
                 "date": parse_date(text(slots[1][0][0])), "net_currency": "EUR",
                 "price_currency": None}
+        if unknown:
+            note.update(source_kind=header[0], source_fields=[], gross_semantics_verified=False)
+            for offset in range(3, size):
+                cell = slots[offset][1][0]
+                if text(cell) or cell.find("table"):
+                    note["source_fields"].append(fields(offset))
+            for key, column in (("debit", 2), ("credit", 3)):
+                value = text(slots[1][column][0])
+                note[key] = parse_decimal(value, cash=True) if value else Decimal(0)
+            if min(note["debit"], note["credit"]) < 0 or note["debit"] and note["credit"]:
+                fail("NOTE_DIRECTION_CONFLICT")
+            groups.append(note)
+            start += size
+            continue
+        if coupon:
+            layout = {3: (("QUANTITE", "quantity", False),),
+                      4: (("PX UN.BRUT", "unit_gross", False), ("BRUT", "gross", True)),
+                      5: (("COMMISSION", "commission", True),)}
+            for offset, definitions in layout.items():
+                values = fields(offset)
+                extra = values[len(definitions):]
+                if offset == 5 and extra[0]:
+                    match = re.fullmatch(r"CRED\. IMPOT\s*:\s*(.+)", extra[0])
+                    if not match:
+                        fail("UNSUPPORTED_NOTE_EXTRA_FIELD")
+                    note["tax_credit"] = parse_decimal(match[1], cash=True)
+                    extra = extra[1:]
+                if any(extra):
+                    fail("UNSUPPORTED_NOTE_EXTRA_FIELD")
+                for value, (label, key, cash) in zip(values, definitions):
+                    match = re.fullmatch(re.escape(label) + r"\s*:\s*(.+)", value)
+                    if not match:
+                        fail("NOTE_FIELD_MISSING_OR_REORDERED")
+                    note[key] = parse_decimal(match[1], cash=cash)
+            for key, column in (("debit", 2), ("credit", 3)):
+                value = text(slots[1][column][0])
+                note[key] = parse_decimal(value, cash=True) if value else Decimal(0)
+            if min(note[k] for k in ("gross", "commission", "debit", "credit")) < 0 or note.get("tax_credit", Decimal(0)) < 0:
+                fail("NEGATIVE_NOTE_AMOUNT")
+            if note["quantity"] >= 0 or note["credit"] <= 0 or note["debit"]:
+                fail("NOTE_DIRECTION_CONFLICT")
+            if note["unit_gross"] <= 0 or note["gross"] <= 0:
+                fail("INVALID_NOTE_PRICE_OR_GROSS")
+            # These are observed source fields, not a dividend conversion. In
+            # particular gross minus credit is not an inferred withholding tax.
+            note.update(withholding=None, gross_semantics_verified=False)
+            groups.append(note)
+            start += size
+            continue
         layout = {3: (("QUANTITE", "quantity", False),),
                   4: (("COURS", "unit_price", False), ("BRUT", "gross", True)),
                   5: (("COURTAGE", "brokerage", True), ("TVA", "vat", True))}
@@ -420,6 +494,7 @@ def parse_contract_note(html, max_depth):
             if note["debit"] + note["credit"] != expected:
                 fail("NOTE_NET_MISMATCH")
         groups.append(note)
+        start += size
     if len({n["date"] for n in groups}) != 1:
         fail("NOTE_MULTIPLE_DATES")
     return {"account_ref": accounts[0], "notes": groups, "slot_count": count}
@@ -429,6 +504,8 @@ def match_trade_notes(statement, documents):
     if any(d["account_ref"] != statement["account_ref"] for d in documents):
         fail("NOTE_ACCOUNT_MISMATCH")
     notes = [n for d in documents for n in d["notes"]]
+    if any(n["kind"] not in ("BUY", "SELL") for n in notes):
+        fail("NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW")
     trades = [e for e in statement["events"] if e["kind"] in ("BUY", "SELL")]
     keys = ("date", "kind", "unit_price", "debit", "credit")
     candidates = [[i for i, n in enumerate(notes)
@@ -2748,6 +2825,12 @@ def main(argv=None):
     inspect.add_argument("--max-bytes", type=int, required=True, help="Explicit local input size budget")
     inspect.add_argument("--max-depth", type=int, required=True, help="Explicit HTML nesting budget")
     inspect.add_argument("--notes", nargs="+", help="Saved daily contract-note HTML files; no URLs")
+    note = subparsers.add_parser("inspect-note", help="Inspect saved operation-note fields without conversion")
+    note.add_argument("path", help="Saved local HTML only")
+    note.add_argument("--input-root", required=True)
+    note.add_argument("--max-bytes", type=int, required=True)
+    note.add_argument("--max-depth", type=int, required=True)
+    note.add_argument("--include-coupons", action="store_true", help="Read coupon fields without tax or import claims")
     prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
     prepare.add_argument("--config", required=True, help="Local keyed YAML inside input root")
     prepare.add_argument("--input-root", required=True)
@@ -2801,6 +2884,18 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "inspect-note":
+            html, _ = read_document(args.path, args.input_root, args.max_bytes)
+            document = parse_contract_note(html, args.max_depth, include_coupons=args.include_coupons)
+            coupons = sum(n["kind"] == "COUPON" for n in document["notes"])
+            unknown = sum(n["kind"] == "UNKNOWN" for n in document["notes"])
+            blockers = (["COUPON_FINANCIAL_POLICY_REQUIRED"] if coupons else ["REAL_SOURCE_ACCEPTANCE_PENDING"])
+            if unknown:
+                blockers.append("UNKNOWN_OPERATIONS")
+            print(json.dumps({"notes": len(document["notes"]), "coupons": coupons,
+                "trades": len(document["notes"]) - coupons - unknown, "unknown": unknown,
+                "import_ready": False, "blockers": blockers}, sort_keys=True))
+            return 2
         if args.command == "qualify-captures":
             print(json.dumps(qualify_local_captures(args.manifest, args.config, args.input_root,
                                                    args.output, args.max_bytes, args.max_depth), sort_keys=True))

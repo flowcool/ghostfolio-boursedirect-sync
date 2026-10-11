@@ -96,7 +96,7 @@ periods. The authorized G1 coding probe now accepts `inspect --notes FILE...`;
 it remains source characterization, not activity conversion or API transport.
 
 Require an exact account header, one observed four-column ledger and equal
-parallel column lengths. Only observed nine-slot operation groups are accepted;
+parallel column lengths. Default trade inspection accepts only observed nine-slot operation groups;
 blank slots, date and amount alignment, nested three-cell field tables and known
 BUY/SELL labels are checked. Unknown labels, additional field cells or monetary
 components, invalid ISIN checksums, invalid time and unsupported structure fail.
@@ -122,3 +122,34 @@ Rollback is a new revert of the scoped extension commit. Private inputs,
 manifest and auth journal stay excluded and untouched; the earlier statement-only
 probe remains available. Git and local file access were verified before edits;
 this change has no external-state blast radius.
+
+## Coupon operation-note inspection
+
+`inspect-note FILE --include-coupons --input-root DIR --max-bytes N --max-depth N`
+reads the same inert local document boundary and prints only operation counts and
+blocker codes. It never prepares or sends dividend activities. The default
+`inspect --notes` and preparation paths retain strict trade-only acceptance.
+
+Actual July source notes establish six-slot coupon groups, including coupons
+adjacent to nine-slot trades or unsupported split groups. Coupon inspection checks
+direct-child column alignment, blank slots, dates, exact ISIN checksum and source
+account header. It retains signed `QUANTITE`, `PX UN.BRUT`, `BRUT`, `COMMISSION`,
+optional `CRED. IMPOT`, and the exact EUR cash credit. The observed coupon quantity
+is negative; inspection preserves it and does not interpret it as a sale. Gross
+currency stays unset. Cash values require exact cent precision.
+
+`CRED. IMPOT` is a tax-credit field, not withholding. Absent withholding remains
+unknown; neither gross minus credit nor commission is relabeled as a tax. The
+source field `BRUT` is retained without claiming its equivalence to issuer gross
+or inventing a gross/quantity rounding rule. Unseen financial field labels refuse.
+Unsupported operations keep their header and raw aligned fields as `UNKNOWN` in
+inspection only. A source date starts each group; no unsupported quantity or
+corporate action is converted. Invalid layouts or security identifiers refuse.
+
+Mixed coupon/unknown documents cannot enter trade matching or preparation through
+this mode: `NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW` preserves the boundary. Dividend
+amount/date policy, source-to-destination binding and uncertain historical
+reconciliation require separate qualified implementation. All returned fields
+remain private; `COUPON_FINANCIAL_POLICY_REQUIRED` and `UNKNOWN_OPERATIONS` expose
+only safe codes. Revert this scoped commit to remove inspection support while
+retaining acquired documents and journals.
