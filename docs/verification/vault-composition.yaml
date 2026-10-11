@@ -487,7 +487,26 @@ pinned_root_cleanup_review:
   correction: Pinned-root cleanup requires at least one valid descendant observation.
     Root loss before observation refuses certification; recorded reparented descendants
     stay identity-pinned. Caller must stop exact owned container on failure.
-  review_scanner_false_positive: Generic API key at verification line376 is the public
-    synthetic collector-test-log SHA256, independently recomputed from ignored log;
-    not an access credential.
+  review_scanner_false_positive: Generic API key at reviewed c1d03dd verification line376
+    is the SHA256 of collector/tests/credential-provider.test.mjs, independently
+    recomputed from tracked synthetic test bytes; not an access credential.
   actual_updated_host_proof_pending: true
+actual_broker_only_route:
+  creation_source_commit: a16ea74994d919b193ad144f28017145240f740d
+  private_receipt_sha256: 32c321855b9e93a13b828b2c20c2f203df9878241107197ed67609c1f13d3e19
+  same_compose_project: true
+  browser_recreated_under_exact_owned_receipt: true
+  vault_cli_and_proxy_retained: true
+  namespace_policy:
+    ipv4: only_numeric_broker_proxy_tcp8080
+    ipv6: deny_all
+    direct_ipv4_ipv6_dns_tcp_udp: actual_refused
+  connect_policy:
+    canonical_broker443: actual200_then_closed
+    vault_apex_outsider_metadata: actual403
+  broker_transport_connections: 1
+  broker_tls_bytes: 0
+  broker_http_requests: 0
+  authentication_requests: 0
+  limits: Transport qualification alone does not prove any source request role. Single
+    public document observation reserved separately; no credentials or financial request.
