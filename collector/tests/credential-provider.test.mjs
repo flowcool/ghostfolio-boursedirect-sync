@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {ORIGIN, principal, otpFromEnvironment} from '../core.mjs';
-import {validateWorkerTotp, selectWorkerItem, credentialMode, validateProviderCode, delayedOtpProvider} from '../credential-provider.mjs';
+import {validateWorkerTotp, inspectNamedVaultItem, selectWorkerItem, selectAliasedWorkerItem, workerUriAliasesHash, credentialMode, validateProviderCode, delayedOtpProvider} from '../credential-provider.mjs';
 const SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'; // RFC synthetic key only.
 const PROFILE = {algorithm: 'SHA1', period: 30, digits: 6};
 const uri = () => `otpauth://totp/synthetic?secret=${SECRET}&algorithm=SHA1&period=30&digits=6`;
@@ -17,6 +17,36 @@ function code() {
   const expected = {runNonce: randomUUID(), stageNonce: randomUUID()};
   return {expected, response: {...expected, code: '123456', startedAt: 120, completedAt: 121, profile: {...PROFILE}}};
 }
+function aliased() {
+  const value = bound();
+  value.item.login.uris.push({uri: 'https://alias.synthetic.invalid/', match: null});
+  value.binding.uriAliasesSha256 = workerUriAliasesHash(value.item.login.uris);
+  return value;
+}
+test('explicit alias pin preserves selected principal and never exports alias or seed', () => {
+  const {item, binding} = aliased();
+  const selected = selectAliasedWorkerItem(item, binding);
+  assert.equal(selected.login, 'SYNTHETIC'); assert.equal(selected.itemId, binding.itemId);
+  assert.equal(selected.online_ready, false);
+  assert.equal(JSON.stringify(selected).includes('alias.synthetic'), false);
+  assert.equal(JSON.stringify(selected).includes(SECRET), false);
+  assert.equal(item.login.uris.length, 2);
+  assert.throws(() => selectWorkerItem(item, {...binding, uriAliasesSha256: undefined}), /PROVIDER_ITEM_INVALID/);
+});
+for (const [name, change] of [
+  ['added alias', v => v.item.login.uris.push({uri: 'https://other.synthetic.invalid/'})],
+  ['removed alias', v => v.item.login.uris.pop()],
+  ['reordered aliases', v => v.item.login.uris.reverse()],
+  ['changed match rule', v => {v.item.login.uris[1].match = 0;}],
+  ['wrong principal despite new alias pin', v => {v.item.login.username = 'OTHER';}],
+  ['wrong UUID', v => {v.item.id = randomUUID();}],
+  ['duplicate selected URI despite matching hash', v => {v.item.login.uris.push({uri: v.binding.uri});v.binding.uriAliasesSha256 = workerUriAliasesHash(v.item.login.uris);}],
+  ['unknown URI metadata', v => {v.item.login.uris[1].redirect = true;}],
+  ['selected URI absent despite matching hash', v => {v.binding.uri = ORIGIN + '/missing';}],
+]) test('pinned aliases refuse ' + name, () => {
+  const value = aliased(); change(value);
+  assert.throws(() => selectAliasedWorkerItem(value.item, value.binding), /^Error: PROVIDER_ITEM_INVALID$/);
+});
 test('worker accepts only qualified profile and exports neither seed nor raw URI', () => {
   assert.deepEqual(validateWorkerTotp(uri()), PROFILE);
   assert.deepEqual(validateWorkerTotp(SECRET, true), PROFILE);
@@ -117,4 +147,32 @@ test('near-rollover request and conflicting initialization never fetch', async (
   const p = delayedOtpProvider({...expected, now: () => 146, fetchCode: () => {calls++;}});
   await assert.rejects(p.request(expected), /PROVIDER_REQUEST_REJECTED/); assert.equal(calls, 0);
   assert.throws(() => delayedOtpProvider({...expected, now: () => 120, fetchCode: () => {}, env: {BD_OTP: ''}}), /PROVIDER_CONFIG_INVALID/);
+});
+
+
+test('inspection observes canonical broker origin while inert aliases cannot deliver credentials', () => {
+  const {item} = bound(); item.name = 'boursedirect.fr';
+  item.login.uris.unshift({uri: 'https://alias.synthetic.invalid/'});
+  const result = inspectNamedVaultItem([item], {name: item.name});
+  assert.equal(result.uri, ORIGIN + '/synthetic-login');
+  assert.equal(result.uri_count, 2); assert.equal(result.broker_uri_count, 1);
+  assert.equal(result.online_ready, false);
+  for (const forbidden of ['login', 'password', 'uris', 'accountConfig']) assert.equal(Object.hasOwn(result, forbidden), false);
+  assert.equal(JSON.stringify(result).includes('alias.synthetic'), false);
+  assert.throws(() => selectWorkerItem(item, {itemId: item.id, name: item.name,
+    uri: result.uri, principalHash: result.principalHash, accountConfig: {path: '/synthetic/account', sha256: 'a'.repeat(64)}}), /PROVIDER_ITEM_INVALID/);
+  item.login.uris.push({uri: ORIGIN + '/other-login'});
+  assert.equal(inspectNamedVaultItem([item], {name: item.name}).broker_uri_count, 2);
+  assert.throws(() => selectWorkerItem(item, {itemId: item.id, name: item.name,
+    uri: result.uri, principalHash: result.principalHash, accountConfig: {path: '/synthetic/account', sha256: 'a'.repeat(64)}}), /PROVIDER_ITEM_INVALID/);
+});
+for (const [name, change] of [
+  ['no canonical broker origin', item => {item.login.uris = [{uri: 'https://alias.synthetic.invalid/'}];}],
+  ['empty aliases', item => {item.login.uris = [];}],
+  ['too many aliases', item => {item.login.uris = Array.from({length: 17}, () => ({uri: ORIGIN + '/'}));}],
+  ['malformed alias', item => {item.login.uris.push({uri: 'synthetic\n'});}],
+  ['missing alias', item => {item.login.uris.push({});}],
+]) test('inspection refuses ' + name, () => {
+  const {item} = bound(); item.name = 'boursedirect.fr'; change(item);
+  assert.throws(() => inspectNamedVaultItem([item], {name: item.name}), /PROVIDER_ITEM_INVALID/);
 });

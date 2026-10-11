@@ -32,8 +32,8 @@ for this session as permission for an unattended service.
    Changedetection browser/session.
 2. Establish an agent-owned browser context through a private control path, with
    exact startup/shutdown and rollback evidence from infra. Prefer an existing
-   SSH/container-exec path. Any necessary service/network change must be owned by
-   an atomic infra issue under Florent's GO; do not publish an unauthenticated
+   SSH/container-exec path. Apply the current lab ownership amendment below for
+   service/network changes; do not publish an unauthenticated
    browser-control endpoint to the Internet. No broker connection occurs while
    merely characterizing infrastructure capability.
 3. Establish account access. Reuse an explicitly available authenticated session
@@ -94,6 +94,114 @@ secret-provisioning wiring must satisfy the existing requirements before access.
 See the [domain vocabulary](../../GLOSSARY.md) and the
 [source-owned delivery contract](acquisition-core.md).
 
+## Direct lab ownership and connection replay amendment
+
+On 2026-10-11 Florent authorized this project's agent to operate its dedicated
+lab directly through local SSH, including owned container lifecycle, logs,
+networks and necessary ports, without an infra-agent relay. This supersedes the
+earlier requirement to route every lab change through an infra issue. Shared or
+production services, destructive operations and financial writes retain their
+separate authority gates. A private SSH/container-exec control path remains the
+default; any required port must have a bounded purpose and exposure.
+
+The [canonical connection procedure](../operations/source-connection.md) owns
+resumption, exact-resource attestation and bounded recovery. Its source-owned
+entrypoint reads one private project inventory. Active private control code and
+mutable receipts live under `inputs/lab/`; prior exploration controllers are
+archived there as provenance. Infra remains the authority for host/secret/network
+facts, while this project owns its lab operation and connection control. Public
+code must remain independent of private host names and provisioning paths.
+
+Reuse successful unchanged source, vault and runtime evidence before investigating
+the first unqualified stage. The successful password/application-TOTP exploration
+of 2026-10-08 remains evidence; it does not establish a live session or qualify the
+current collector's unobserved requests. Account discovery must include the
+declared PEA and PEA-PME and establish distinct verified bindings; personal
+identifiers remain private. The replay command explicitly refuses authentication
+while its request roles and credential-delivery gates are unqualified.
+
+## Credential-free public bootstrap qualification
+
+The saved 2026-10-11 public document contains an inline loader using `Date.now()`
+for the cache version of `/apps/auth/production/auth.js` and `auth.css`.
+An exact historical full URL therefore cannot replay this public bootstrap.
+The opt-in public observation profile permits each of those two files once,
+after the sole public document, in its exact owned session/frame, with GET and
+the matching Script/Stylesheet type, no redirect, and only a thirteen-digit
+`version` timestamp generated within the current bounded observation. No other
+query key, path or origin is accepted. The ordinary exact-URL policy and inert
+document mode remain unchanged; the latter cannot select this profile.
+
+The private operator must pin the actual loader evidence before selecting the
+profile. This amendment qualifies only credential-free public assets. Password,
+application-method, OTP, account and financial-resource requests remain disabled
+until their separate observations and delivery gates pass.
+
+### Blocked form request characterization
+
+The opt-in source observation can exercise the independently observed login form
+using two fixed dummy markers. It refuses prefilled, foreign, duplicate, disabled
+or mismatched-form inputs before any mutation. Only the two known input controls
+and their associated form can be exercised; no operator JavaScript, URL, selector,
+password or OTP is accepted. The same public-only policy denies every POST and
+every uncharacterized GET before network dispatch. This is source request-shape
+observation, with no vault access, principal enrollment or broker authentication.
+
+The complete private envelope retains paused request metadata and the explicit
+synthetic-action marker. Metadata from a blocked request can characterize its
+URL/method/type, but proves no server acceptance, account ownership or successful
+authentication. The source owner still owes independent inspection and a separately
+bound real credential attempt. No role becomes enabled from a counter alone.
+
+In this opt-in dummy mode, denied POSTs from the exact owned frame/session also
+retain their bounded request body (at most8192 UTF8 bytes) and unambiguous
+Content-Type (at most256 characters) in the private envelope. Missing or malformed
+fields refuse and retain the attempt. Cookie, Authorization and other headers are
+excluded. Ordinary public observation retains its metadata-only behavior. The
+source owner inspects each preliminary and submit request separately; envelope
+capture grants neither network dispatch nor server-acceptance authority.
+
+The canonical characterization command requires the pinned project-owned adapter
+and verified owned runtime. The fixed helper and POST-denial composition are
+qualified with synthetic DOM objects and socket-forbidden tests. This observation
+remains inside the authorized read-only source scope; it does not activate real
+credential delivery. Actual authentication, merge and financial activation retain
+their separate external review and authorization gates.
+
+## Automatic service target decision
+
+On 2026-10-10 Florent confirmed the architecture after a grilling interview. The
+canonical keyed target policy is `source-contract.yaml` under `target_service`.
+The product is an independent Bourse Direct service in the incremental application
+Compose: daily unattended acquisition and import, plus an operator trigger,
+revisiting the latest 90 days each run. A coverage gap outside that window blocks
+both daily and manual resumption until explicit resolution: verified catch-up
+where the source supports it, or an operator acknowledgment of the missing period.
+Acquisition coverage derives from the last completed period; pending exceptions
+remain in the durable journal beyond the window. This supersedes the earlier manual-only
+**product target**; recurring broker execution is not activated by this decision.
+The currently implemented collector remains guarded by the acquisition procedure
+and actual source qualification above. Production Ghostfolio writes remain a
+separate concrete activation gate.
+
+Certain unique existing financial matches prevent duplicate imports; existing
+financial values are neither corrected nor deleted automatically. IBKR provides
+reuse evidence for deployment and reconciliation concepts, not permission to
+copy its looser quantity/date-only matching. Unknown operations, demonstrated
+dependents and conflicting existing records become private exceptions, while
+independently qualified operations continue. The present period-blocking and
+operator-resolution implementation stays unchanged until reviewed dependency and
+automatic reconciliation behavior exists; this target is not runtime evidence.
+Authentication uncertainty always stops without an automatic retry.
+
+Commands/infrastructure jobs and private exception artifacts are the operator
+interface. Existing infrastructure notifications report intervention-required
+codes/counts only. Deduplication journals and acquired source documents outlive
+the rolling collection window in private persistent storage with verified backup
+and restore. The deployment adapter remains replaceable; Komodo, host names and
+private secret paths are infrastructure configuration, not public runtime
+requirements. The same stack grows to include browser and collector services.
+
 ## Verification and rollback
 
 `infra-jnvj` records the existing Archivage Bitwarden CLI mechanism. Recreate its
@@ -117,6 +225,7 @@ before building activities; no values inferred from names or net-price gaps.
 
 The scope change affects documentation and project Beads. Documentation rollback
 is a new revert of the amendment commit, retaining the user's decision in Beads.
-Runtime rollback must be supplied by the owning infra issue before startup or
-network changes. Authentication cannot be rolled back by deleting local files;
+Runtime rollback must be verified against the current exact-owned receipts and
+canonical connection procedure before startup or network changes. Authentication
+cannot be rolled back by deleting local files;
 prevent unsafe attempts instead. No financial operation is part of this phase.

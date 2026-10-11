@@ -13,6 +13,9 @@ For the original scope rationale or numbered approval gates, consult the
 [manual document import proposal](docs/plans/2026-10-08-manual-document-import.md).
 Current contracts and recorded acceptance evidence govern later amendments;
 historical pending checkpoints are not current status. No CSV/Excel export is confirmed.
+For connection replay or lab access, start with the
+[canonical connection procedure](docs/operations/source-connection.md), which loads
+preserved authentication/source evidence before current qualification gaps.
 Florent authorized interactive online source collection; see the
 [acquisition amendment](docs/design/online-source-inspection.md). The original
 manual-only proposal remains a historical reference.

@@ -117,3 +117,74 @@ source_acceptance:
   blocking_conditions: []
   full_operation_sync_proven: false
   currency_basis: explicit_user_confirmation_for_selected_PEA_sample_corroborated_by_net_EUR_headers_and_exact_note_arithmetic
+target_service:
+  authority: Florent confirmed the architecture grilling on 2026-10-10; online-source-inspection.md#automatic-service-target-decision
+  implementation_status: design_only_existing_runtime_gates_retained
+  product_boundary: independent_bourse_direct_service
+  delivery: incremental_source_owned_compose_infra_owned_deployment
+  trigger:
+    scheduled: daily
+    manual: operator_command_or_infrastructure_job
+    concurrency: one_active_run_per_account
+  account_scope:
+    discovery: enumerate_all_accessible_broker_accounts_and_verify_expected_private_inventory
+    binding: explicit_verified_broker_account_to_distinct_ghostfolio_account
+    identity_namespace: broker_account_in_every_operation_identity_and_reconciliation
+    isolation: separate_acquisition_coverage_deduplication_and_exception_state_per_account
+    missing_or_ambiguous_account: quarantine_account_binding_without_implicit_default
+    evidence: actual_authenticated_account_identifiers_required_before_activation
+  history:
+    rolling_days: 90
+    revisit_window_each_run: true
+    deduplicate_prior_imports: true
+    coverage_basis: durable_last_completed_acquisition_period_not_last_run_start
+    gap_outside_rolling_window: block_daily_and_manual_resume_until_explicit_coverage_resolution
+    gap_resolution: verified_catchup_if_source_available_or_explicit_operator_acknowledgment_of_missing_period
+    unresolved_quarantined_operations: remain_pending_in_durable_journal_independent_of_window
+  pipeline:
+  - independent_vault_session
+  - guarded_source_acquisition
+  - local_document_conversion
+  - certain_unique_existing_activity_reconciliation
+  - automatic_new_qualified_activity_import
+  existing_activity_policy:
+    required_match: globally_unique_one_to_one_exact_available_financial_fields_and_verified_date_semantics
+    assignment_scope: all_source_operations_and_eligible_remote_records_in_reconciliation
+    remote_record_reuse: forbidden
+    multiplicity_conflict: quarantine_all_affected_operations_no_already_imported_classification
+    fields:
+    - account
+    - security
+    - side
+    - quantity
+    - price
+    - fee
+    - currency
+    - date
+    ambiguous_or_changed: quarantine_conflict
+    automatic_financial_rewrite: false
+    automatic_delete: false
+    manual_resolution_for_normal_certain_match: not_required_in_target_not_yet_implemented
+  unknown_operation_policy:
+    quarantine: unknown_operation_and_demonstrated_dependents
+    continue: independent_qualified_operations
+    implemented_period_blocking: unchanged_until_dependency_proof_and_reviewed_implementation
+  authentication_uncertainty: stop_no_automatic_retry
+  operator_interface: commands_and_private_exception_review_artifacts
+  notification:
+    existing_provider: ntfy
+    when: intervention_required
+    public_content: fixed_codes_and_counts_only
+  retention:
+    journal: durable
+    acquired_documents: durable_beyond_collection_window
+    storage: private_persistent_volume
+    backup_and_restore: infra_verified_before_activation
+    sessions_and_secrets: excluded_from_public_config_and_notifications
+  activation_gates:
+  - actual_source_and_authentication_observations
+  - financial_and_date_semantics
+  - complete_target_context_and_opening_history
+  - isolated_api_number_date_and_recovery_qualification
+  - external_security_review
+  - separate_concrete_production_write_authorization

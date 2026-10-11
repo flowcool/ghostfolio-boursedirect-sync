@@ -1,8 +1,9 @@
 // Source-owned seam to an already provisioned, durably owned CLI container.
 // Infra supplies runtime/access facts; no host, SSH, SOPS or network wiring here.
 import fs from 'node:fs';
+import {isIP} from 'node:net';
 import {providerConfiguration} from './vault-worker.mjs';
-import {selectNamedWorkerItem} from './credential-provider.mjs';
+import {selectNamedWorkerItem, inspectNamedVaultItem} from './credential-provider.mjs';
 import {executePrivate} from './private-process.mjs';
 
 const shim = fs.readFileSync(new URL('./bitwarden-cli.sh', import.meta.url), 'utf8');
@@ -20,20 +21,34 @@ export function sshCliTransport(destination, execute = executePrivate) {
   };
 }
 
-export function bitwardenCli({configuration, containerId, attest, stopOwned, transport = executePrivate}) {
+export function bitwardenCli({configuration, containerId, attest, stopOwned, transport = executePrivate, egressProxy}) {
   const config = providerConfiguration(configuration);
+  if (config.schema_version === 5) throw new Error('CLI_ADAPTER_INVALID');
   if (config.cli.path !== '/usr/local/bin/bw' || !/^[0-9a-f]{64}$/.test(containerId)
       || [attest, stopOwned, transport].some(x => typeof x !== 'function')) throw new Error('CLI_ADAPTER_INVALID');
+  if (egressProxy !== undefined) {
+    let proxy;
+    try {proxy = new URL(egressProxy);} catch {throw new Error('CLI_ADAPTER_INVALID');}
+    if (typeof egressProxy !== 'string' || isIP(proxy.hostname) !== 4
+        || egressProxy !== 'http://' + proxy.hostname + ':8080') throw new Error('CLI_ADAPTER_INVALID');
+  }
+  // A literal independently attested endpoint needs no worker DNS. Infrastructure
+  // must deny every direct route; setting a proxy alone is never confinement.
+  const executionEnv = {...base, ...(egressProxy === undefined ? {} : {https_proxy: egressProxy})};
   const steps = [
     [['--version'], 'version', []],
     [['config', 'server', config.vaultOrigin], 'server', []],
     [['login', '--apikey'], 'login', ['BW_CLIENTID', 'BW_CLIENTSECRET']],
     [['unlock', '--passwordenv', 'BW_PASSWORD', '--raw'], 'unlock', ['BW_PASSWORD']],
     [['sync'], 'sync', ['BW_SESSION']],
-    [config.schema_version === 1 ? ['get', 'item', config.binding.itemId]
-      : ['list', 'items', '--search', config.binding.name], config.schema_version === 1 ? 'item' : 'lookup', ['BW_SESSION']],
+    [[1, 4].includes(config.schema_version) ? ['get', 'item', config.binding.itemId]
+      : ['list', 'items', '--search', config.binding.name], [1, 4].includes(config.schema_version) ? 'item' : 'lookup', ['BW_SESSION']],
     [['get', 'totp', config.binding.itemId], 'totp', ['BW_SESSION']],
   ];
+  if (config.schema_version === 3) {
+    steps[6] = [['logout'], 'logout', []];
+    steps.push([['status'], 'status', []]); // No TOTP command in inspection mode.
+  }
   let index = 0, verified = false, busy = false, failed = false, stopping;
   async function refuse() {
     failed = true;
@@ -46,7 +61,7 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
     // minimal container env, disabled logs/core dumps and qualified egress.
     if (await attest(containerId, config.cli) !== true || failed) throw new Error();
     const result = await transport('/usr/bin/docker', ['exec', '-i', containerId, '/usr/bin/env', '-i',
-      ...Object.entries(base).map(([name, value]) => name + '=' + value), ...args],
+      ...Object.entries(executionEnv).map(([name, value]) => name + '=' + value), ...args],
     {PATH: '/usr/bin:/bin'}, 45000, input);
     if (failed || !result || result.status !== 0 || typeof result.stdout !== 'string'
         || typeof result.stderr !== 'string' || Buffer.byteLength(result.stdout) > 262144
@@ -78,8 +93,10 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
       const extra = step[1] === 'server' ? [config.vaultOrigin] : step[1] === 'lookup' ? [config.binding.name]
         : ['item', 'totp'].includes(step[1]) ? [step[0][2]] : [];
       const result = await invoke(['/bin/sh', '-c', shim, 'vault-cli', step[1], ...extra], Buffer.from(input));
-      if (step[1] === 'lookup') {
+      if (step[1] === 'lookup' && config.schema_version !== 3) {
         steps[6][0][2] = selectNamedWorkerItem(JSON.parse(result.stdout), config.binding, config.cli.defaultsVerified).itemId;
+      } else if (step[1] === 'lookup') {
+        inspectNamedVaultItem(JSON.parse(result.stdout), config.binding, config.cli.defaultsVerified);
       }
       return result;
     } catch {return refuse();} finally {busy = false;}

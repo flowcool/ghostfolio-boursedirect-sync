@@ -4,6 +4,13 @@ Read [CLAUDE.md](CLAUDE.md), then the scoped Beads issue and the owning contract
 selected through the [design index](docs/design/index.md).
 Global working agreement applies. Beads owns live work state.
 
+For acquisition resumption, SSH/lab operations or connection diagnosis, first run
+the [canonical connection procedure](docs/operations/source-connection.md).
+`scripts/source_connection.py check` loads preserved successes and named gaps;
+`status` verifies the existing lab. Resume the first unqualified stage and reuse
+unchanged evidence. Active private lab control and receipts belong to `inputs/lab/`;
+prior temporary controllers are provenance archives, not alternate entrypoints.
+
 ## Architecture and validation
 
 - `boursedirect_to_ghostfolio.py` is a functional mono-file document importer
@@ -67,6 +74,16 @@ recoverable laboratory failures without repeating permission requests. Carry
 existing approvals across sessions through their Beads evidence. Ask Florent
 only for genuinely new authority or indispensable information. Production,
 financial writes, publication/push and destructive-operation gates still apply.
+
+Florent authorized direct project-agent operation of the dedicated acquisition
+lab on 2026-10-11: inspect/log/exec, start/recreate its containers, and manage its
+networks and necessary ports without an infra-agent relay. This project-local
+authorization supersedes the lab handoff requirement in
+`.claude/rules/delegation.md`. Before operating, read the private runtime receipts
+referenced by the scoped Beads issue, verify the daemon and exact resource owner,
+and preserve rollback and private evidence. Reuse the existing SSH/Docker access.
+Infra remains responsible for shared host services and production wiring; broker
+authentication and financial activation retain their separate gates.
 
 ## Durable work state
 

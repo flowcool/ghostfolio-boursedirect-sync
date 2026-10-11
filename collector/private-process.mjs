@@ -8,7 +8,8 @@ export function verifyExecutable(pin) {
   try {
     fd = fs.openSync(pin.path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || stat.size > 134217728 || stat.nlink !== 1 || (stat.mode & 0o022)) return false;
+    // Current official standalone CLI exceeds 128 MiB; retain a finite 256 MiB cap.
+    if (!stat.isFile() || stat.size > 268435456 || stat.nlink !== 1 || (stat.mode & 0o022)) return false;
     return createHash('sha256').update(fs.readFileSync(fd)).digest('hex') === pin.sha256;
   } catch {return false;} finally {if (fd !== undefined) fs.closeSync(fd);}
 }

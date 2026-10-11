@@ -9,6 +9,7 @@ read_value() {
 case "$1" in
     version) set -- --version ;;
     server) set -- config server "$2" ;;
+    logout|status) set -- "$1" ;;
     login)
         BW_CLIENTID=$(read_value)
         BW_CLIENTSECRET=$(read_value)

@@ -174,3 +174,166 @@ verifies the daemon and configuration, removes only that full ID and retains
 explicit absence evidence. Its fixed ignored evidence directory refuses a
 second allocation; uncertain intents remain for manual recovery. This metadata
 proof does not establish cloud API routing, vault visibility or qualified egress.
+
+The incremental application Compose now includes a source-owned CONNECT-only
+vault egress helper using the already available pinned Python image. Its exact
+US-cloud destinations are grounded in official Bitwarden CLI tag
+`cli-v2026.6.0`, commit `e6293ff2bc85123e9baaa998cf1543030ec5d9f0`:
+`node-api.service.ts` reads lowercase `http_proxy` or `https_proxy` and constructs
+`HttpsProxyAgent`; the default environment supplies identity/API cloud origins.
+The CLI adapter accepts an optional attested numeric proxy endpoint and adds only
+`https_proxy` to its cleared execution environment. Worker credential sequencing
+and secret stdin delivery are unchanged.
+
+The helper bounds headers, concurrent connections, DNS answers and tunnel time;
+it refuses non-CONNECT requests, unrecognized authorities, ambiguous headers and
+non-public/transition addresses. It validates every DNS answer before connecting
+once to a literal address and does not terminate TLS or log traffic. Infra still
+owns the enforced worker network-namespace IPv4/IPv6 deny policy, exact proxy IP
+exception, denied embedded DNS, independent network/container receipts and
+cleanup. Syntax and offline refusal tests do not prove live egress. Real routing
+must be proved without secrets before independent vault access. Rollback reverts
+the scoped source commit and removes only newly receipted operational resources;
+never change shared services or discard authentication journals.
+
+Provider schema 3 implements the independent vault-access milestone from the
+interactive amendment. Its binding contains only the operator's exact
+`boursedirect.fr` name. It reuses the same executable pin, fixed private-stdin
+login/unlock/sync/search sequence and strict unique live item, URI, credential and
+TOTP-profile validation. Inspection accepts a bounded list of inert item URI
+aliases only when at least one exact canonical broker-origin URI is present. The
+first observed canonical URI and alias counts are inspection metadata, not
+acquisition URI selection; other alias values are neither exported nor executed.
+Acquisition schemas 1/2 keep their single exact bound URI rule. Only private
+item/principal/URI/profile metadata is
+returned; no login, password, session or seed can be delivered to a collector.
+The worker logs out and verifies an unauthenticated status with no retained user
+or sync identity before returning. It discards its session, and both worker and
+adapter refuse TOTP commands in this mode. The independently owned application
+services stay available for later stages; an unverified session cleanup fences
+the capability and requires exact affected-runtime shutdown. No importer config or broker enrollment is
+created or inferred. Acquisition schemas 1 and 2 retain their mandatory trusted
+account reference and broker gates. This separates qualification of the vault
+capability from actual broker authentication without weakening either boundary.
+
+
+## Credential-free public document observation
+
+The explicit `compose.broker-inspection.yaml` overlay grows the preserved laboratory
+stack with a separately owned broker-only proxy/network. `compose.lab.yaml` retains
+`network_mode: none`; the overlay cannot grant Bitwarden destinations to the
+browser or broker destinations to the CLI. The CONNECT helper's default policy
+remains vault-only; `--broker-inspection` selects the fixed canonical broker host
+on port443. Infra must install and attest proxy-only IPv4/IPv6 namespace routing,
+including direct/DNS denial, before any browser execution. Restart alone does not
+restore authority. No control ports or secrets are added to Compose.
+
+`collector/lab/public-login-observation.mjs` is an opt-in one-document source
+inspection, not an authentication entrypoint. It accepts a numeric proxy and
+private routing-receipt hash on stdin under a minimal secret-free environment.
+It verifies the pinned sandboxed Chrome version and renderer OS protections,
+uses guarded target attachment and Fetch interception before page release,
+disables page scripts, and grants exactly one GET Document to the previously
+observed public login URL. Redirects, assets, frames, XHR and every POST are
+blocked. Their bounded private request metadata records observation without
+enabling a role. No credentials, OTP provider, enrollment or broker auth journal
+is accessed. Unknown endpoint roles remain disabled.
+
+Stdout is a private bounded evidence envelope for an owning supervisor to capture
+exclusively under ignored `inputs/` (0700 directory, 0600 file), not a routine log.
+It retains request/response metadata and the CDP response-body representation;
+this is not a claim of original wire bytes. Failures retain a partial private
+envelope plus fixed stderr codes/counts, and the supervisor must stop the exact
+owned browser container if process cleanup or output qualification fails. Source
+publication contains only hashes, codes and structural counts. Rollback removes
+the explicit overlay and restores the received network-none browser; existing
+vault services, auth journals and prior observations are preserved. A public
+login GET cannot establish authenticated account or password/app-method/OTP
+roles, and all readiness flags remain false.
+
+
+A later explicitly selected public-page observation may accept up to32 immutable
+asset tuples (`observed_assets`: exact canonical URL plus Script/Stylesheet/Image/
+Font type) and `reference_evidence_sha256` alongside the route receipt. The
+private owning supervisor verifies those tuples against the retained public HTML
+references or previously paused metadata before supplying them. In this mode,
+page scripts can execute only after interception is installed; the initial public
+Document and each known asset GET are admitted once, in the owning session/frame,
+without redirects. XHR/Fetch, every POST, unknown assets and foreign targets remain
+blocked. Bounded target metadata, responses and a separately marked UTF8 DOM
+serialization retain source-discovery evidence. Authentication remains disabled;
+this is not recurring collection or permission to fill credentials. The default
+two-field input still grants only the public Document with scripts disabled.
+
+### Explicit immutable alias binding
+
+Provider schema4 adds a pinned-UUID acquisition mode. Its binding retains the
+schema1 item UUID, expected name, selected canonical broker URI, principal hash
+and account-configuration reference, adding `uriAliasesSha256`. The worker hashes
+the ordered URI/match metadata privately after strict bounded validation; omitted
+and null match modes have the same representation. Every alias and match mode is
+pinned. Adding, removing, reordering or changing metadata refuses delivery.
+The selected URI must appear exactly once. Other aliases never supply a command,
+navigation destination or fallback. Credentials/profile then pass the existing
+strict UUID/name/principal/TOTP checks. The CLI uses `get item UUID`, and delayed
+one-use TOTP uses that same UUID. Schemas1/2 retain their single-URI requirements.
+
+Metadata-only inspection now includes this hash, without exporting extra URI
+strings, credentials, a seed or a code, and retains logout/status verification.
+The earlier successful inspection remains valid for its original fields; its
+missing alias hash cannot be invented from alias counts. Schema4 requires a
+fresh privately verified metadata hash and explicit configuration before use.
+Synthetic worker/CLI verification proves the new mode's logic, not a real vault
+session or broker readiness. Source/account, enrollment, runtime, egress and
+external security-review gates remain required; no real schema4 configuration or
+credential delivery is activated by this amendment.
+
+## Native community CLI integration
+
+Florent confirmed the native ENV contract on2026-10-11 through the grilling
+workflow: a reproducible community CLI image, operator-supplied vault ENV,
+automatic named item/identity binding and one session per execution with verified
+logout. This explicitly supersedes the earlier ban on container ENV secret
+injection for this native entrypoint. The private operational lab adapter retains
+its existing stdin contract and historical qualification evidence.
+
+`compose.yaml` now owns the native `bitwarden` service. The preserved
+`compose.lab.yaml` owns the former dedicated lab services. The native image uses
+the official architecture-specific CLI release archive with fixed checksum;
+no private image, host provisioning or remote Docker executor is required.
+Only the worker receives vault ENV. It clears those fields from its process
+environment after reading them and supplies a minimal environment per CLI call.
+Docker administrators remain trusted because Compose stores initial ENV in
+container metadata. Tmpfs appdata is independent per execution and never mounted
+from another application's session. Default native HTTPS egress is ordinary
+container connectivity, not evidence of the lab's proxy-only confinement.
+
+Provider schema5 is metadata-only inspection for an explicitly configured exact
+item name. Schemas1–4 retain their prior binding rules. After unique live item,
+broker URI, credential and TOTP-profile validation, inspection logs out and
+verifies unauthenticated status. It exposes no credentials or OTP capability.
+The immutable private native binding retains vault origin, configured name, UUID,
+principal, selected URI, full alias hash and profile. Exclusive locking and
+durable publication preserve partial/uncertain binding files as refusal gates;
+changed identities never cause automatic rebinding. The public `inspect` command
+reports fixed codes/counts only.
+
+`nativeVaultExecution` composes the same worker with local CLI subprocesses.
+A trusted source-qualified in-process consumer uses schema4 and receives only
+the bound credential projection plus the single delayed same-UUID code method.
+Every completed or failed execution attempts verified logout once after a login
+was reserved. A failed executable verification never invokes the unverified
+binary during cleanup. Uncertain logout refuses without retry; owned one-shot
+container exit discards private tmpfs. Closing while an operation is pending
+refuses instead of issuing overlapping CLI commands.
+
+The public `connect` command currently runs native vault inspection and retains
+the identity binding, then refuses broker authentication with exit2. Its future
+guarded source driver must consume this same connector; no vault success is
+converted into source permission or a claim of authenticated acquisition.
+Existing broker journal, actual request-role/account/resource qualification,
+external security review and financial activation gates remain separate.
+
+Rollback reverts the native source/Compose commit, retaining the private binding
+and all historical broker journals. Native ENV configuration contains no
+credential export, alternate executable or arbitrary command interface.

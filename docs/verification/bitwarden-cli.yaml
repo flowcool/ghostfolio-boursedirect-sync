@@ -223,3 +223,234 @@ application_compose:
   remaining_wiring: Infra supplies image availability, enforced external vault-only
     network, private credential provisioning and independently receipted Compose container
     lifecycle before access.
+vault_egress:
+  kind: offline-vault-egress-integration
+  inputs:
+    collector/vault-egress.py: 2325ee9591e23276bfdcd474b9da52492cf288563f75670f45f712a620ef3ad3
+    collector/bitwarden-cli.mjs: aa12fa23f40b47b6f3361eed0a1ab23df6208885d4f8c71b6b7e9037c6db1249
+    collector/bitwarden-cli.sh: 2e7d28a273f74cad3e6cf8ce9e57267c46f6f7792f6099808b2eb7a64887042c
+    collector/vault-worker.mjs: 5768159c0ac51a1e72eb0ae55a50aa7aa6e9f034216b79977e3f3f891b98d6ba
+    collector/tests/bitwarden-cli.test.mjs: 7070f06e5fe64cdb1b5b3308437d396a862bfb5c86f3cf5530786b4555a50722
+    tests/test_vault_egress.py: 3c4fd98515a8d9ed6eca28c9fa2e6558741b7f9ea5ca0cb332f98e4da53608ca
+    compose.yaml: dc622b00288a300790bf54194424b4bd5abb39a3d3a78e97d65d3b7f418d7502
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+  runtime:
+    python: 3.13.5
+    node: v20.19.2
+  checks:
+    full_local:
+      command: bash scripts/verify-local.sh
+      exit_code: 0
+      python_passed: 1160
+      node_passed: 391
+      private_log: tmp/vault-egress-verification.log
+      log_sha256: 0902cc9d30de37c6cf4d608cc0585fa68bba1be6d38ea71aa0d167cae8cbb3b3
+    compose:
+      command: VAULT_OWNER=config-inspection VAULT_NETWORK=config-inspection VAULT_UPSTREAM_NETWORK=config-inspection-upstream
+        docker compose --env-file /dev/null -f compose.yaml config --format json
+      exit_code: 0
+      private_output: tmp/vault-egress-compose.json
+      output_sha256: 3eebd2aab9e868fc282986da64a0f3526450a402bde48c71802b25c9b745cb43
+  source_grounding:
+    repository: https://github.com/bitwarden/clients
+    commit: e6293ff2bc85123e9baaa998cf1543030ec5d9f0
+    tag: cli-v2026.6.0
+    proxy: apps/cli/src/platform/services/node-api.service.ts:49-57; lowercase http_proxy
+      or https_proxy, HttpsProxyAgent
+    routing: libs/common/src/platform/services/default-environment.service.ts; identity.bitwarden.com
+      and api.bitwarden.com
+  security_review:
+    kind: source-self-review
+    scope: CONNECT-only exact destinations; full DNS answer validation; literal-address
+      connect; bounded transport; no logs or TLS termination; proxy added only to
+      cleared CLI execution env; no secrets in Compose; external network namespace
+      enforcement remains infra-owned
+    external_review: Required before merge; source self-review does not replace CodeRabbit
+  readiness:
+    real_egress_proven: false
+    live_vault_access: false
+    broker_authentication: false
+independent_inspection:
+  kind: inspection-only-independent-vault-capability
+  schema_version: 3
+  inputs:
+    collector/credential-provider.mjs: 589043ee443ab9c0593a90fa4022f5fb3b0d770c57fd7ff5fad205573974fc7a
+    collector/vault-worker.mjs: 31da6578a59dc0b795e79e31ec4063178de0ebbdc7544c9ba2e573ac19233523
+    collector/bitwarden-cli.mjs: 62b29e4c2585f78621da4aa7e9c2f14d9b52877cade5c117d94f96d8fbdfbbef
+    collector/tests/bitwarden-cli.test.mjs: 050365c295e879ff1472fa6e6cd176024903b84ff247db72bf8ec4b37fd4d5ea
+    collector/private-process.mjs: 5803a0d33470cd059b2ef7f35ee090b39d6f6506ccad2907d856fbbf424a7da6
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  checks:
+    affected:
+      command: node --import ./tests/no-network.mjs --test tests/bitwarden-cli.test.mjs
+        tests/vault-worker.test.mjs tests/credential-provider.test.mjs
+      exit_code: 0
+      node_passed: 100
+      private_log: tmp/vault-inspection-node.log
+      log_sha256: 949403f68c02a72eab1068d778b40d00c2610fa5573bdfd995632e69dca55778
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      node_passed: 398
+      private_log: tmp/vault-inspection-full-node.log
+      log_sha256: 26181a35db9581d14ba6ea584638eb5b698aa24e90807f5b57eec54eec1bae78
+  reused_python:
+    record: vault_egress.checks.full_local
+    passed: 1160
+    scope: Importer/Python tests and vault CONNECT helper unchanged by the inspection-only
+      JavaScript mode.
+  invariants:
+  - Exact unique operator-named live item and canonical broker URI required
+  - Credential fields and strict supported TOTP profile validated only in worker memory
+  - Returned identity/profile metadata contains no broker login/password, vault session
+    or seed
+  - Worker discards session; worker and adapter refuse TOTP commands
+  - No account reference or enrollment manufactured; acquisition schemas1/2 unchanged
+  readiness:
+    live_vault_access: false
+    broker_authentication: false
+operational_routing:
+  owner: infra-9i9s
+  source_commit: 7ba0245308d2caf2b302728564298327a0a60b2c
+  receipt_sha256: cf594265aaf9d6addd931a6d331c0af99e26b2b858782ffe980665e084b31555
+  state: routes_qualified
+  command_exit_codes:
+    stage: 0
+    start: 0
+    probes: 0
+  observations:
+    allowed_connect_tls_verified: 2
+    allowed_http_status: 404
+    denied_connect: 4
+    direct_ipv4: denied
+    ipv6: denied
+    embedded_dns_tcp: denied
+    embedded_dns_udp: denied
+  credentials_supplied: false
+  authentication_performed: false
+  limits: Proves the independently owned runtime routing boundary for source7ba0245;
+    actual CLI/vault visibility and broker source are separate milestones.
+sdk_totp_defaults:
+  package: '@bitwarden/sdk-internal@0.2.0-main.841'
+  source_commit: c5d5bba159bd222321f3ecfd90f5ae6192c2c8eb
+  archive_integrity: sha512-zltcEuNPyOofCvUwLKY5PKLC/M5rNGkSCiUzl9wMybvq898c98GoCHQrJVCAkGbwSh2sIPC6NqLuMSe1tevu8g==
+  synthetic_default_equivalence_cases: 12
+  defaults:
+    algorithm: SHA1
+    digits: 6
+    period: 30
+  network_forbidden: true
+  discriminating_profile_controls: 3
+  wasm_sha256: 7ed0431cf5275f0bcb268bfafefc24cfb8ac4f840d5cc5b892d49b5ff08718ac
+  command: Socket-forbidden pinned SDK generate_totp on synthetic RFC6238 key; six
+    timestamps, raw key and missing-parameter URI, three changed-profile negative
+    controls
+  exit_code: 0
+  private_result: tmp/bitwarden-sdk-defaults.json
+  result_sha256: f51205d1a1d8132c3da693451ef4778292a06f278a6cc270c9e3e0d7ddee67f1
+  cli_link: CLI cli-v2026.6.0 package-lock pins SDK841; TotpService.getCode$ invokes
+    sdk.vault().totp().generate_totp
+  limits: Qualifies implicit profile arithmetic in the pinned SDK. No actual vault
+    item or real TOTP requested; operational clock/nonce gates remain independent.
+durable_session_cleanup:
+  kind: inspection-logout-with-services-retained
+  inputs:
+    collector/vault-worker.mjs: bd9079ed10dd0fa2e096d8a0c1034afb1b620dbb7a5e675c3844d53f31419393
+    collector/bitwarden-cli.mjs: 075cd8d77293a0a9703096eb719a8f8d3bf8f15f8e8696157e898c54fc6e9815
+    collector/bitwarden-cli.sh: 1bf789482c22d8d083af8d4e0772e5c70150eb3d3702665e7e3dfc1f9174140d
+    collector/tests/bitwarden-cli.test.mjs: 99513248f265d1855541d029cc7347c7e233606bdea83ebe583c8b9f736778df
+    tests/test_bitwarden_cli_shim.py: e392f14c0bd2df94f7ec6e5f1714243f9999412269748090bd7a5b023cf27263
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements.txt: c79be17433b0d60b772ab61dfe4ffc400eb9c53711e46a7c07e4ff86e9ae55c8
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+  checks:
+    python:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1162
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 401
+      private_log: tmp/vault-session-node.log
+      log_sha256: 043402ad686f4ff8f6cf3b5c8a5db78f499487db1c70cf4bf9852ab483ef68e7
+    documentation:
+      command: .venv/bin/python scripts/check-docs.py
+      exit_code: 0
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+  invariants:
+  - Inspection returns metadata only after logout and unauthenticated status with
+    no user/sync identity
+  - Services remain available after successful cleanup
+  - Failed cleanup fences the capability and stops only the exact affected CLI runtime
+  vendor_logout_source: 'bitwarden/clients e6293ff2bc85123e9baaa998cf1543030ec5d9f0;
+    apps/cli/src/auth/commands/logout.command.ts and service-container.ts logout:
+    keys/ciphers/folders/tokens/account removed'
+  live_vault_access: false
+connection_limit_review:
+  review_comment: 4239114907
+  reviewed_commit: 9eb9a1cd2176826a64944f532eebe5a11cc6318c
+  inputs:
+    collector/vault-egress.py: 452d7132c0f014458b3ba774099152cb96abb41f02c4a871c4567c715d3ea0ec
+    tests/test_vault_egress.py: ec1dfc001af69f6bfe4d20094da756b38a19c816ec1fb1ee5070eec0b3b6a4fb
+  command: .venv/bin/python -m pytest -q tests/test_vault_egress.py
+  exit_code: 0
+  passed: 30
+  reused_verification: 'durable_session_cleanup.checks: remaining Python1162 and Node401
+    unchanged'
+  cases:
+  - Capacity closes with no response/upstream call
+  - Success and failure both release active slot
+  deployment_note: Actual routes_qualified evidence remains bound to prior deployed
+    helper hash; no new deployment proof inferred.
+inspection_uri_aliases:
+  kind: inspection_only_origin_evidence_not_acquisition_binding
+  inputs:
+    collector/credential-provider.mjs: ed75b3c31c0d969e1daa6e6bc979b2e1132194c5e990f779d5561544a2312f17
+    collector/tests/credential-provider.test.mjs: aeb10a4f288f7710af33c407f1f311e7a601cb5436bded42c674438d450e8af3
+    collector/tests/bitwarden-cli.test.mjs: 99dae2c819207ac26d8935166030d74d3942569361ea1c3b7e002e120f693dc2
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 408
+    private_log: tmp/vault-alias-node.log
+    log_sha256: 2a24cc0810ed573f4104e4d4866dce76a5bbe90f1ffd5e53f589381c7124e723
+  reused_python: durable_session_cleanup.checks.python plus connection_limit_review;
+    Python/runtime unchanged by inspection-only provider adjustment
+  invariants:
+  - Exact unique item, bounded nonempty aliases, at least one canonical exact broker-origin
+    URI
+  - Alias values are never executed or exported; counts are inspection metadata only
+  - No acquisition URI or account binding selected; schemas1/2 single-bound-URI requirements
+    unchanged
+  - Successful inspection still requires logout and no-identity unauthenticated status
+  actual_trigger: One authorized vault observation found exact unique item and valid
+    fields/profile, but two URI entries caused single-URI validation refusal. Login/unlock/sync/lookup
+    succeeded; affected CLI stopped; no broker request.
+actual_independent_inspection:
+  kind: live_exact_named_vault_capability
+  source_commit: 0e8150e929f673acee35e54b5c50c20da5f623f9
+  private_result_sha256: 771bf04b86cb5fa13721cade903034e42dab2fca69bba2cf1aeba35bdede7e77
+  private_phase_receipt_sha256: 8426422607e8eb2d0b7809da89e2eaf89030664beaf5b0e63e0943cd0d114149
+  private_binding_sha256: fa5b92faa289b4e892b896250b9792fc89f4987a18678e03c9ebc4be7114cbb9
+  command: python3 tmp/run-live-vault-inspection.py
+  exit_code: 0
+  observations:
+    exact_name_unique: true
+    broker_uri_verified: true
+    credential_fields_verified: true
+    totp_profile_verified: true
+    item_uri_alias_count: 2
+    broker_uri_alias_count: 1
+    logout_exit_code: 0
+    unauthenticated_no_identity_status_verified: true
+    application_services_retained: true
+    totp_requested: false
+    broker_authentication_performed: false
+  scope: Independent vault item/profile/cleanup capability only. No account enrollment,
+    broker source roles, source request or Ghostfolio write authorized or proved.
+    Earlier failed attempts remain private and unretried by this artifact.

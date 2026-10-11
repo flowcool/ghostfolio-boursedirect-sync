@@ -67,3 +67,16 @@ commit; private snapshots/resolutions and earlier preparation remain untouched.
 Sources: indexed KB `operations/ghostfolio/api-traps.md`, pinned official API
 activities service and common config at806d83f. The IBKR sibling was inspected for
 reference at54958ab1035eb97a1f67f9072b79699813ec3800; no sibling code is copied.
+
+## Confirmed automatic-service target
+
+The `target_service.existing_activity_policy` in [the source contract](source-contract.yaml)
+records Florent's 2026-10-10 decision: a certain unique financial match should
+prevent reimport without a per-run manual resolution, while conflicting or
+ambiguous matches remain exceptions. Uniqueness applies to a one-to-one assignment
+across all source operations and eligible remote records: two source operations
+cannot both adopt one remote record. Multiplicity conflicts remain quarantined.
+This is a future orchestration target; the
+current snapshot-bound explicit resolution requirements above remain implemented.
+Neither target nor current code authorizes rewriting or deleting existing
+financial records.

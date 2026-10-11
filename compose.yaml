@@ -1,42 +1,30 @@
 name: ghostfolio-boursedirect-sync
-
 services:
-  bitwarden-cli:
-    image: ${BITWARDEN_CLI_IMAGE:-archivage-bitwarden-cli}
-    pull_policy: never
-    # The image's default entrypoint authenticates and starts bw serve.
-    # Our source adapter invokes the CLI through private stdin instead.
-    entrypoint: ["/bin/sleep"]
-    command: ["infinity"]
-    user: "1000:1000"
-    read_only: true
+  bitwarden:
+    build: .
+    image: ${BOURSEDIRECT_IMAGE:-ghostfolio-boursedirect-sync:local}
+    init: true
     restart: "no"
+    read_only: true
+    user: "1000:1000"
     environment:
-      PATH: /usr/bin:/bin
-      HOME: /data
-      BITWARDENCLI_APPDATA_DIR: /data
+      BW_SERVER: ${BW_SERVER:-https://vault.bitwarden.com}
+      BW_ITEM_NAME: ${BW_ITEM_NAME:-boursedirect.fr}
+      BW_CLIENTID: ${BW_CLIENTID:?Supply your Bitwarden personal API client ID}
+      BW_CLIENTSECRET: ${BW_CLIENTSECRET:?Supply your Bitwarden personal API client secret}
+      BW_PASSWORD: ${BW_PASSWORD:?Supply your Bitwarden master password}
     tmpfs:
       - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
       - /tmp:rw,nosuid,nodev,mode=1777
+    volumes:
+      - bitwarden-binding:/state
     cap_drop: [ALL]
     security_opt: [no-new-privileges]
-    ipc: private
-    mem_limit: 256m
+    ulimits:
+      core: {soft: 0, hard: 0}
+    mem_limit: 512m
     cpus: 1
     pids_limit: 64
-    ulimits:
-      core:
-        soft: 0
-        hard: 0
-    logging:
-      driver: none
-    healthcheck:
-      disable: true
-    labels:
-      proof.owner: ${VAULT_OWNER:?Supply the durable allocation owner}
-    networks: [vault]
-
-networks:
-  vault:
-    external: true
-    name: ${VAULT_NETWORK:?Supply the separately qualified vault-only network}
+    logging: {driver: none}
+volumes:
+  bitwarden-binding:

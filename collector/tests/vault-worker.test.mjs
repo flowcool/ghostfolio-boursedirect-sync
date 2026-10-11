@@ -4,10 +4,11 @@ import {randomUUID} from 'node:crypto';
 import {PassThrough} from 'node:stream';
 import {ORIGIN, principal} from '../core.mjs';
 import {vaultWorker, providerConfiguration} from '../vault-worker.mjs';
+import {workerUriAliasesHash} from '../credential-provider.mjs';
 import {privateChannel, PRIVATE_LIMIT} from '../private-channel.mjs';
 import {collectorEnvironment} from '../private-process.mjs';
 
-function fixture(fault) {
+function fixture(fault, aliasMode = false) {
   const id = randomUUID(), expected = {runNonce: randomUUID(), stageNonce: randomUUID()}, calls = [];
   const config = {schema_version: 1, vaultOrigin: 'https://vault.synthetic.invalid',
     binding: {itemId: id, name: 'invented', uri: ORIGIN + '/synthetic', principalHash: principal('SYNTHETIC'),
@@ -15,6 +16,11 @@ function fixture(fault) {
     cli: {path: '/opt/bw', sha256: 'b'.repeat(64), version: 'synthetic-1', defaultsVerified: false}};
   const item = {id, type: 1, name: 'invented', login: {username: 'SYNTHETIC', password: 'SYNTHETIC_PASSWORD',
     uris: [{uri: config.binding.uri}], totp: 'otpauth://totp/invented?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=SHA1&digits=6&period=30'}};
+  if (aliasMode) {
+    config.schema_version = 4;
+    item.login.uris.push({uri: 'https://alias.synthetic.invalid/', match: null});
+    config.binding.uriAliasesSha256 = workerUriAliasesHash(item.login.uris);
+  }
   let clock = 120;
   const worker = vaultWorker({configuration: config, appdata: '/synthetic/tmpfs', now: () => clock,
     verifyExecutable: () => fault !== 'pin', execute: async (path, args, env) => {
@@ -28,6 +34,24 @@ function fixture(fault) {
   return {config, item, calls, worker, expected, setClock: value => {clock = value;}};
 }
 const credentials = {BW_CLIENTID: 'SYNTHETIC_CLIENT', BW_CLIENTSECRET: 'SYNTHETIC_API', BW_PASSWORD: 'SYNTHETIC_UNLOCK'};
+test('alias mode reads fixed UUID and delays the same UUID TOTP until challenge', async () => {
+  const f = fixture(undefined, true);
+  const selected = await f.worker.initialize(credentials);
+  assert.equal(selected.itemId, f.item.id);
+  assert.deepEqual(f.calls.at(-1).args, ['get', 'item', f.item.id]);
+  assert.equal(f.calls.some(row => row.args[0] === 'list'), false);
+  assert.equal(f.calls.some(row => row.args[1] === 'totp'), false);
+  await f.worker.code(f.expected, f.expected);
+  assert.deepEqual(f.calls.at(-1).args, ['get', 'totp', f.item.id]);
+});
+test('changed alias after immutable config capture fences delivery without retry', async () => {
+  const f = fixture(undefined, true);
+  f.item.login.uris[1].uri = 'https://changed.synthetic.invalid/';
+  await assert.rejects(f.worker.initialize(credentials), /^Error: VAULT_WORKER_FAILED$/);
+  const count = f.calls.length;
+  await assert.rejects(f.worker.initialize(credentials), /^Error: VAULT_WORKER_FAILED$/);
+  assert.equal(f.calls.length, count);
+});
 test('fixed worker sequence and delayed one-use TOTP keep secret seed inside worker', async () => {
   const f = fixture(), selected = await f.worker.initialize(credentials);
   assert.deepEqual(f.calls.map(x => x.args), [['--version'], ['config','server',f.config.vaultOrigin],

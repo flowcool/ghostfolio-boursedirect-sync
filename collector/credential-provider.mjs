@@ -1,5 +1,6 @@
 // Pure trusted-worker/provider interfaces; no CLI, networking or secret-store access.
 import {principal, brokerUrl, totp, otpFromEnvironment} from './core.mjs';
+import {createHash} from 'node:crypto';
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const PROFILE = Object.freeze({algorithm: 'SHA1', period: 30, digits: 6});
@@ -36,37 +37,102 @@ export function validateWorkerTotp(value, defaultsVerified = false) {
   } catch { throw new Error('PROVIDER_PROFILE_INVALID'); }
 }
 
+function workerFields(item, binding, defaultsVerified) {
+  uuid(binding.itemId); text(binding.name); brokerUrl(binding.uri);
+  if (!HASH.test(binding.principalHash)) throw new Error();
+  if (!item || item.id !== binding.itemId || item.name !== binding.name || item.type !== 1 || item.deletedDate) throw new Error();
+  const login = item.login;
+  if (!login || !Array.isArray(login.uris) || login.uris.length !== 1
+      || login.uris[0]?.uri !== binding.uri || principal(login.username) !== binding.principalHash) throw new Error();
+  text(login.username); text(login.password);
+  const profile = validateWorkerTotp(login.totp, defaultsVerified);
+  return {login: login.username, password: login.password, profile, itemId: binding.itemId,
+    principalHash: binding.principalHash, online_ready: false};
+}
+
+function namedIdentity(items, name) {
+  if (name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
+  const matches = items.filter(item => item?.name === name);
+  if (matches.length !== 1) throw new Error();
+  const item = matches[0], login = item.login;
+  if (!login || !Array.isArray(login.uris) || login.uris.length !== 1) throw new Error();
+  return {item, binding: {itemId: item.id, name, uri: login.uris[0]?.uri, principalHash: principal(login.username)}};
+}
+
 export function selectWorkerItem(item, binding, defaultsVerified = false) {
   try {
     exact(binding, ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
-    uuid(binding.itemId); text(binding.name); brokerUrl(binding.uri);
-    if (!HASH.test(binding.principalHash)) throw new Error();
     exact(binding.accountConfig, ['path', 'sha256']); text(binding.accountConfig.path);
     if (!HASH.test(binding.accountConfig.sha256)) throw new Error();
-    if (!item || item.id !== binding.itemId || item.name !== binding.name || item.type !== 1 || item.deletedDate) throw new Error();
-    const login = item.login;
-    if (!login || !Array.isArray(login.uris) || login.uris.length !== 1
-        || login.uris[0]?.uri !== binding.uri || principal(login.username) !== binding.principalHash) throw new Error();
-    text(login.username); text(login.password);
-    const profile = validateWorkerTotp(login.totp, defaultsVerified);
     // Only validated login fields/profile leave this worker helper; no raw item/seed.
-    return {login: login.username, password: login.password, profile, itemId: binding.itemId,
-      principalHash: binding.principalHash, accountConfig: structuredClone(binding.accountConfig), online_ready: false};
+    return {...workerFields(item, binding, defaultsVerified), accountConfig: structuredClone(binding.accountConfig)};
   } catch { throw new Error('PROVIDER_ITEM_INVALID'); }
+}
+
+// Private metadata pin; URI aliases are never navigation or lookup authority.
+export function workerUriAliasesHash(aliases) {
+  try {
+    if (!Array.isArray(aliases) || aliases.length < 1 || aliases.length > 16) throw new Error();
+    const rows = aliases.map(row => {
+      exact(row, Object.hasOwn(row ?? {}, 'match') ? ['uri', 'match'] : ['uri']);
+      text(row.uri);
+      const match = row.match ?? null;
+      if (match !== null && (!Number.isInteger(match) || match < 0 || match > 5)) throw new Error();
+      return {uri: row.uri, match};
+    });
+    return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
+}
+
+export function selectAliasedWorkerItem(item, binding, defaultsVerified = false) {
+  try {
+    exact(binding, ['itemId', 'name', 'uri', 'principalHash', 'uriAliasesSha256', 'accountConfig']);
+    if (!HASH.test(binding.uriAliasesSha256) || workerUriAliasesHash(item?.login?.uris) !== binding.uriAliasesSha256
+        || item.login.uris.filter(row => row.uri === binding.uri).length !== 1) throw new Error();
+    const {uriAliasesSha256, ...single} = binding;
+    return selectWorkerItem({...item, login: {...item.login, uris: [{uri: binding.uri}]}}, single, defaultsVerified);
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
 }
 
 // Name lookup is explicit operator authority, not a fallback after UUID failure.
 export function selectNamedWorkerItem(items, binding, defaultsVerified = false) {
   try {
     exact(binding, ['name', 'accountConfig']);
-    if (binding.name !== 'boursedirect.fr' || !Array.isArray(items)) throw new Error();
+    const resolved = namedIdentity(items, binding.name);
+    return selectWorkerItem(resolved.item, {...resolved.binding, accountConfig: binding.accountConfig}, defaultsVerified);
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
+}
+
+// Independent vault qualification returns private identity/profile metadata only.
+// It cannot deliver broker credentials or create an importer account binding.
+export function inspectNamedVaultItem(items, binding, defaultsVerified = false) {
+  if (binding?.name !== 'boursedirect.fr') throw new Error('PROVIDER_ITEM_INVALID');
+  return inspectConfiguredVaultItem(items, binding, defaultsVerified);
+}
+
+export function inspectConfiguredVaultItem(items, binding, defaultsVerified = false) {
+  try {
+    exact(binding, ['name']);
+    text(binding.name);
+    if (!Array.isArray(items)) throw new Error();
     const matches = items.filter(item => item?.name === binding.name);
     if (matches.length !== 1) throw new Error();
-    const item = matches[0], login = item.login;
-    if (!login || !Array.isArray(login.uris) || login.uris.length !== 1) throw new Error();
-    const resolved = {itemId: item.id, name: binding.name, uri: login.uris[0]?.uri,
-      principalHash: principal(login.username), accountConfig: binding.accountConfig};
-    return selectWorkerItem(item, resolved, defaultsVerified);
+    const item = matches[0], aliases = item?.login?.uris;
+    if (!Array.isArray(aliases) || aliases.length < 1 || aliases.length > 16) throw new Error();
+    const canonical = [];
+    for (const alias of aliases) {
+      text(alias?.uri);
+      try {brokerUrl(alias.uri); canonical.push(alias.uri);} catch {}
+    }
+    if (canonical.length === 0) throw new Error();
+    // Inspection observes origin membership, not acquisition URI selection.
+    // Additional aliases are never executed or exported; schemas 1/2 stay strict.
+    const resolved = {itemId: item.id, name: binding.name, uri: canonical[0], principalHash: principal(item.login.username)};
+    const fields = workerFields({...item, login: {...item.login, uris: [{uri: resolved.uri}]}}, resolved, defaultsVerified);
+    return {itemId: fields.itemId, principalHash: fields.principalHash,
+      uri: resolved.uri, uri_count: aliases.length, broker_uri_count: canonical.length,
+      uriAliasesSha256: workerUriAliasesHash(aliases),
+      profile: fields.profile, online_ready: false};
   } catch {throw new Error('PROVIDER_ITEM_INVALID');}
 }
 
