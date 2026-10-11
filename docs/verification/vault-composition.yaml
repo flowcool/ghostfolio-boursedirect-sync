@@ -786,3 +786,40 @@ canonical_public_form_entrypoint:
       passed: 1185
       log_sha256: aa046a6203d70b0c2fd168faa9a40965301a428c29ceb2ec65dbb72cdf567bd7
   owned_runtime_observation_pending: true
+observed_public_auth_cache_bootstrap:
+  source_evidence: private_public_document_inline_Date_now_loader_and_paused_Script_GET
+  prior_exact_script_url_replay:
+    exit_code: 0
+    continued_gets: 3
+    blocked_requests: 36
+    login_selector_count: 0
+    password_selector_count: 0
+    authentication_requests: 0
+    owned_browser_exit_verified: true
+  input_sha256:
+    collector/public-login-policy.mjs: e9282ad2cdf7a5ff8014146004afffbe39f3090984bb8529e3d5e6efe7da93d5
+    collector/lab/public-login-observation.mjs: fdd084b163a228e9eac1a43eb1fc30c1b97eda14dcfa1acdd954bc1350e7b68d
+    collector/tests/public-login-policy.test.mjs: 55d9dfa19955b7107592e7f2e10c27dbbf79bde81b0d9a5f79ae66763dcafc87
+    docs/design/online-source-inspection.md: 6900b697cc970065c860dd6d49c2968db0ff47775605cabca4bfe298b0a4783a
+    docs/operations/source-connection.md: 4c06dd25138095f6f080547306607ed5a04576f8a01cb14eddd09c3e005b3b71
+  private_adapter_sha256: 02d55b481cecfe10ae284e6a71712a675f9473b0589b05d94b2c11a84efcfaa6
+  policy:
+    opt_in: true
+    named_public_files: 2
+    per_file_consumption: 1
+    only_cache_version_query: true
+    current_observation_milliseconds: 60000
+    authentication_authority: false
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 476
+      log_sha256: 4f9da5b3be18d9c1e27abaeaeccef96b13ac5708f5594ea480fb7387ae58ce88
+    python_reused:
+      source_record: canonical_public_form_entrypoint.checks.python_full
+      passed: 1185
+      python_implementation_unchanged: true
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+  fresh_owned_observation_pending: true

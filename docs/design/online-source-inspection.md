@@ -120,6 +120,23 @@ declared PEA and PEA-PME and establish distinct verified bindings; personal
 identifiers remain private. The replay command explicitly refuses authentication
 while its request roles and credential-delivery gates are unqualified.
 
+## Credential-free public bootstrap qualification
+
+The saved 2026-10-11 public document contains an inline loader using `Date.now()`
+for the cache version of `/apps/auth/production/auth.js` and `auth.css`.
+An exact historical full URL therefore cannot replay this public bootstrap.
+The opt-in public observation profile permits each of those two files once,
+after the sole public document, in its exact owned session/frame, with GET and
+the matching Script/Stylesheet type, no redirect, and only a thirteen-digit
+`version` timestamp generated within the current bounded observation. No other
+query key, path or origin is accepted. The ordinary exact-URL policy and inert
+document mode remain unchanged; the latter cannot select this profile.
+
+The private operator must pin the actual loader evidence before selecting the
+profile. This amendment qualifies only credential-free public assets. Password,
+application-method, OTP, account and financial-resource requests remain disabled
+until their separate observations and delivery gates pass.
+
 ## Automatic service target decision
 
 On 2026-10-10 Florent confirmed the architecture after a grilling interview. The

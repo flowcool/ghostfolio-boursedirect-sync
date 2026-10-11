@@ -116,8 +116,10 @@ The credential-free form observation is available through the same entrypoint:
 
 It requires a separately pinned private `public-form.py` adapter in the project
 host bundle. Without that pin it refuses before SSH access. The adapter reuses
-the saved public document and authentication-app body hashes, grants only their
-observed Script/Stylesheet GETs, and blocks other requests without submitting a
+the saved public document and authentication-app body hashes. The observed inline
+loader generates a new cache timestamp per load; the opt-in profile grants only
+its two named public Script/Stylesheet GETs once each with a current timestamp,
+alongside the two previously observed stylesheets. It blocks other requests without submitting a
 form. A fresh private attempt retains original output, selector counts and owned
 exit evidence. Failure stops the exact browser and retains the attempt; this
 command never requests vault credentials or qualifies an authentication submit.

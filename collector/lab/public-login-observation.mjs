@@ -24,8 +24,10 @@ async function run() {
   });
   const assetsMode = input && Object.hasOwn(input, 'observed_assets');
   const assetDocuments = input && Object.hasOwn(input, 'asset_documents');
+  const authBootstrap = input && Object.hasOwn(input, 'auth_bootstrap');
   if (!input || (assetDocuments && (!assetsMode || input.asset_documents !== true))
-      || Object.keys(input).length !== (assetDocuments ? 5 : assetsMode ? 4 : 2)
+      || (authBootstrap && (!assetsMode || assetDocuments || input.auth_bootstrap !== true))
+      || Object.keys(input).length !== (assetDocuments || authBootstrap ? 5 : assetsMode ? 4 : 2)
       || (assetsMode && (!/^[a-f0-9]{64}$/.test(input.reference_evidence_sha256) || !Array.isArray(input.observed_assets) || !input.observed_assets.length)) || !/^[a-f0-9]{64}$/.test(input.routing_receipt_sha256)
       || typeof input.proxy !== 'string' || !/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:8080$/.test(input.proxy)
       || new URL(input.proxy).origin !== input.proxy
@@ -45,6 +47,7 @@ async function run() {
   const evidence = {schema_version: 1, kind: assetDocuments ? 'inert_public_asset_documents' : 'single_public_document_observation',
     routing_receipt_sha256: input.routing_receipt_sha256, chrome_version: '155.0.8059.39',
     authentication_requests: 0, credentials_read: false, scripts_disabled: !assetsMode || assetDocuments,
+    auth_bootstrap: Boolean(authBootstrap),
     reference_evidence_sha256: input.reference_evidence_sha256 ?? null,
     requests: [], responses: [], targets: [], online_ready: false};
   retained = evidence;
@@ -114,7 +117,7 @@ async function run() {
         await pipe.send('Emulation.setScriptExecutionDisabled', {value: !assetsMode || assetDocuments}, session);
         frameId = (await pipe.send('Page.getFrameTree', {}, session)).frameTree.frame.id;
         decide = assetDocuments ? publicAssetDocumentPolicy({sessionId: session, frameId}, input.observed_assets)
-          : publicLoginPolicy({sessionId: session, frameId}, input.observed_assets ?? []);
+          : publicLoginPolicy({sessionId: session, frameId}, input.observed_assets ?? [], authBootstrap);
       }});
     const bootstrap = bootstrapExperiment({send: pipe.send, registerSession: pipe.registerSession,
       initialize: ordering.initialize, stop: fatal, product: 'HeadlessChrome', expectedVersion: '155.0.8059.39'});

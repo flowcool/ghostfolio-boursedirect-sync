@@ -81,3 +81,35 @@ test('inert document mode rejects non-script inventories and bounds the request 
   for (let id = 0; id < 256; id++) assert.equal(decide({...request, requestId: String(id)}), false);
   assert.throws(() => decide({...request, requestId: 'overflow'}), /PUBLIC_OBSERVATION_REQUEST_REFUSED/);
 });
+
+test('explicit auth bootstrap permits each current cache-busted public file once', () => {
+  const decide = publicLoginPolicy(owner, [], true);
+  decide(request);
+  for (const [extension, type] of [['js', 'Script'], ['css', 'Stylesheet']]) {
+    const row = {...request, requestId: extension, resourceType: type,
+      request: {method: 'GET', url: `https://www.boursedirect.fr/apps/auth/production/auth.${extension}?version=${Date.now()}`}};
+    assert.equal(decide(row), true);
+    assert.equal(decide({...row, requestId: extension + '-repeated'}), false);
+  }
+});
+for (const [name, change] of [
+  ['POST', {method: 'POST'}], ['stale timestamp', {stamp: '1000000000000'}],
+  ['future timestamp', {stamp: '9999999999999'}], ['extra query', {suffix: '&next=other'}],
+  ['foreign session', {sessionId: 'foreign'}], ['foreign frame', {frameId: 'foreign'}],
+  ['redirect', {redirectedRequestId: 'prior'}], ['XHR', {resourceType: 'XHR'}],
+  ['different file', {file: 'other.js'}],
+]) test('auth bootstrap refuses ' + name, () => {
+  const decide = publicLoginPolicy(owner, [], true); decide(request);
+  const {method = 'GET', stamp = String(Date.now()), suffix = '', file = 'auth.js', ...fields} = change;
+  const row = {...request, requestId: name, resourceType: 'Script', ...fields,
+    request: {method, url: `https://www.boursedirect.fr/apps/auth/production/${file}?version=${stamp}${suffix}`}};
+  assert.equal(decide(row), false);
+});
+test('auth bootstrap remains disabled by default and before initial document', () => {
+  const row = {...request, requestId: 'bootstrap', resourceType: 'Script',
+    request: {method: 'GET', url: `https://www.boursedirect.fr/apps/auth/production/auth.js?version=${Date.now()}`}};
+  const ordinary = publicLoginPolicy(owner); ordinary(request);
+  assert.equal(ordinary(row), false);
+  assert.equal(publicLoginPolicy(owner, [], true)(row), false);
+  assert.throws(() => publicLoginPolicy(owner, [], {}), /ASSETS_REFUSED/);
+});

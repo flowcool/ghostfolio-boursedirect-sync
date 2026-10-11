@@ -19,7 +19,8 @@ export function publicAssetDocumentPolicy(owner, assets) {
     return permitted;
   };
 }
-export function publicLoginPolicy(owner, assets = []) {
+export function publicLoginPolicy(owner, assets = [], authBootstrap = false) {
+  if (typeof authBootstrap !== 'boolean') throw new Error('PUBLIC_OBSERVATION_ASSETS_REFUSED');
   if (!owner || Object.keys(owner).length !== 2 || ['sessionId', 'frameId'].some(key =>
     typeof owner[key] !== 'string' || !owner[key] || owner[key].length > 256))
     throw new Error('PUBLIC_OBSERVATION_OWNER_REFUSED');
@@ -37,7 +38,8 @@ export function publicLoginPolicy(owner, assets = []) {
     if (reads.has(key)) throw new Error('PUBLIC_OBSERVATION_ASSETS_REFUSED');
     reads.add(key);
   }
-  const binding = {...owner}, seen = new Set(), usedAssets = new Set();
+  const binding = {...owner}, seen = new Set(), usedAssets = new Set(), usedBootstrap = new Set();
+  const startedAt = Date.now();
   let consumed = false;
   return value => {
     if (!value || typeof value.requestId !== 'string' || !value.requestId || value.requestId.length > 256
@@ -47,6 +49,16 @@ export function publicLoginPolicy(owner, assets = []) {
       && value.resourceType === 'Document' && value.request?.method === 'GET'
       && value.request.url === PUBLIC_LOGIN_URL && !Object.hasOwn(value, 'redirectedRequestId');
     if (permitted) {consumed = true; return true;}
+    const match = authBootstrap && typeof value.request?.url === 'string'
+      ? /^https:\/\/www\.boursedirect\.fr\/apps\/auth\/production\/auth\.(js|css)\?version=([0-9]{13})$/.exec(value.request.url) : null;
+    const current = Date.now();
+    if (consumed && match && !usedBootstrap.has(match[1]) && current >= startedAt
+        && current - startedAt <= 60000 && Number(match[2]) >= startedAt && Number(match[2]) <= current + 1000
+        && value.sessionId === binding.sessionId && value.frameId === binding.frameId
+        && value.request.method === 'GET' && !Object.hasOwn(value, 'redirectedRequestId')
+        && value.resourceType === (match[1] === 'js' ? 'Script' : 'Stylesheet')) {
+      usedBootstrap.add(match[1]); return true;
+    }
     const key = JSON.stringify([value.request?.url, value.resourceType]);
     const read = consumed && value.sessionId === binding.sessionId && value.frameId === binding.frameId
       && value.request?.method === 'GET' && !Object.hasOwn(value, 'redirectedRequestId')
