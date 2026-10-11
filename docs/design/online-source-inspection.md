@@ -304,3 +304,10 @@ TOTP choice before waiting for its six code controls. An already selected TOTP
 form needs no click. Ambiguous choices, foreign DOM ownership and navigation
 links refuse before code retrieval; the existing durable local-method proof
 still checks the actual TOTP form and untrusted-device selection afterwards.
+
+The pinned TOTP mutation advances on HTTP success and does not inspect a
+`success` property. The caller recognizes HTTP 200 with an empty body or a
+JSON object lacking an error and contradictory success flag. It retains only
+the outcome and status, never backend data. Other statuses, malformed or
+duplicate-key JSON, scalars, arrays and explicit errors remain refused;
+credential finalization still needs its independently verified redirect.

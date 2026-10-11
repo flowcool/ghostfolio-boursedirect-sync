@@ -29,6 +29,13 @@ test('native base64 response decodes internally without returning its body', () 
   assert.deepEqual(inspect(BROKER_POLICY, {...initial, body:Buffer.from(initial.body).toString('base64'),base64Encoded:true}), {outcome:'known_totp_challenge',status:401});
 });
 
-for (const body of ['', '[]', '"ok"', '{"success":false}', '{}', 'null'])
+for (const body of ['[]', '"ok"', '{"success":false}', '{"success":null}', 'null', '{"error":null}', '{"success":true,"success":false}'])
   test('OTP refuses an unrecognized positive outcome: '+body, () =>
     assert.throws(() => inspect(BROKER_POLICY,{phase:'otp_uncertain',status:200,body,base64Encoded:false}), /SOURCE_AUTHENTICATION_RESPONSE_REFUSED/));
+
+for (const body of ['', '{}', '{"opaque":"SYNTHETIC_TOKEN"}'])
+  test('source OTP HTTP200 does not require an invented success field', () => {
+    assert.deepEqual(inspect(BROKER_POLICY,{phase:'otp_uncertain',status:200,body,base64Encoded:false}),{outcome:'otp_accepted',status:200});
+    for(const status of [201,204,400,401,403,429,500])
+      assert.throws(() => inspect(BROKER_POLICY,{phase:'otp_uncertain',status,body,base64Encoded:false}),/SOURCE_AUTHENTICATION_RESPONSE_REFUSED/);
+  });

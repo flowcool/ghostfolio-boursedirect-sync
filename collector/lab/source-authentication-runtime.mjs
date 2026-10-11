@@ -48,7 +48,7 @@ try {
       else if(url.pathname==='/hub/auth/two-factor/login/state/boursedirect')res.end('{"state":"ACTIVATED"}');
       else if(url.pathname==='/hub/auth/two-factor/login/active-systems/boursedirect')res.end('{"systems":[{"type":"totp","enabled":true}]}');
       else if (url.pathname === '/hub/auth/login') {counts.password++;res.writeHead(401);res.end('{"error":"2FA required"}');}
-      else if (url.pathname === '/hub/auth/two-factor/validate-totp') {counts.otp++;res.end('{"success":true}');}
+      else if (url.pathname === '/hub/auth/two-factor/validate-totp') {counts.otp++;res.end('{}');}
       else if (url.pathname === '/hub/auth/login-2fa') {counts.finalize++;res.end('{"redirect":"/fr/page/mes-comptes"}');}
       else {res.writeHead(403);res.end('{}');}
     });

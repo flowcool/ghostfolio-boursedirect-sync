@@ -720,3 +720,63 @@ late_font_denial:
     waived.
   full_offline: Final-head CI supplies full offline verification before any newly
     authorized attempt.
+
+source_otp_http_success:
+  inputs:
+    collector/source-authentication-response.mjs: d7c242d0435e2a02b54ec15e2750d31b673ab3e7456a2345b2c12c710435c480
+    collector/tests/source-authentication-response.test.mjs: d22689ac646ec2b5ec9fef2571a9e5e54fe1aaeedcd6559d463fce98dad55eae
+    collector/lab/source-authentication-runtime.mjs: 0efa85b11e388955391cd33a5c01f414bc926c1999c6d779a1289cfb7fb09167
+    docs/design/online-source-inspection.md: 46d617a7d5b394c423af1b8efbe90401971ee010150e95c4207408fcccfdd1a6
+  checks:
+    red:
+      command: node --import ./tests/no-network.mjs --test tests/source-authentication-response.test.mjs
+      failed: 3
+      passed: 17
+      log_sha256: 87be81ed39b6c4fdfcac61370d40b607ea1e9d16ad1f439375ab3dc35599e95c
+    green:
+      command: node --import ./tests/no-network.mjs --test tests/source-authentication-response.test.mjs
+        tests/source-authentication-dom.test.mjs tests/source-native-session.test.mjs
+        tests/source-authentication-gate.test.mjs
+      exit_code: 0
+      passed: 67
+      log_sha256: 7ad79577ef352b527b39c557a3743a5ec416d0caa2de73f3e02479c3fb36d5be
+  native:
+    mandatory_success_flag:
+      refused: true
+      password: 1
+      otp: 1
+      finalize: 0
+      retained_state: otp_uncertain
+      owned_cleanup_verified: true
+    source_like_empty_object:
+      passed: true
+      password: 1
+      otp: 1
+      finalize: 1
+      documents: 1
+      owned_cleanup_verified: true
+    ambiguous_font_query:
+      refused: true
+      password: 1
+      otp: 0
+      finalize: 0
+      owned_cleanup_verified: true
+  source: Pinned Qs validate-totp mutation returns Axios data; onSuccess calls its
+    continuation without inspecting data.success. Require HTTP200 and conservatively
+    accept an empty body or error-free JSON object, never return its opaque data.
+  actual:
+    source_commit: 97ba006e0faf55b561cf2c86ced6f1bb714bcbec
+    password_outcome: known_totp_challenge
+    otp_requests: 1
+    otp_http_status: 200
+    native_failure: SOURCE_AUTHENTICATION_RESPONSE_REFUSED
+    exact_response_body: not retained; unknown
+    retained_state: otp_uncertain
+    finalization_requests: 0
+    document_captures: 0
+    owned_browser_and_cli_stopped: true
+  authority: Operator explicitly authorizes paced archived-journal recovery and technical
+    resumptions without repeated permission questions. Preserve uncertainty and stop
+    on credential refusal or lockout signals.
+  full_offline: Final-head CI supplies full verification before another spaced real
+    attempt; CodeRabbit wait waived.

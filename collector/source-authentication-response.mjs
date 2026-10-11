@@ -23,7 +23,11 @@ export function inspectSourceAuthenticationResponse(policy, {phase, status, body
       return Object.freeze({outcome: 'known_totp_challenge', status});
     }
     if (phase === 'otp_uncertain') {
-      if (status !== 200 || !object || Object.hasOwn(value, 'error') || value.success !== true) throw new Error();
+      // The pinned source calls its OTP onSuccess after HTTP success without
+      // inspecting a success property. Empty responses and opaque objects are
+      // valid here; explicit errors or contradictory flags still refuse.
+      if (status !== 200 || (body !== '' && (!object || Object.hasOwn(value, 'error')
+          || Object.hasOwn(value, 'success') && value.success !== true))) throw new Error();
       return Object.freeze({outcome: 'otp_accepted', status});
     }
     if (phase === 'finalization_uncertain') {
