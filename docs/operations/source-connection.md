@@ -226,3 +226,15 @@ evidence; append public structural verification under
 changes, publish under existing authority, and record current acceptance in Beads.
 Successful pinned evidence is reused until its relevant input or runtime property
 changes. Documentation never substitutes for an unobserved request or account.
+
+### Interrupted vault containment
+
+Metadata inspection reserves `inputs/lab/vault-operation.lock` before credential
+provisioning. A concurrent invocation refuses; verified logout or exact owned
+CLI shutdown releases the lease. Uncertain cleanup and process interruption
+retain it for ownership-preserving recovery rather than opening another session.
+`stop_owned_cli` revalidates the full owned ID/configuration and original running
+PID. A retained `cli_stop_intent` can finish the bounded stop, or publish the
+stopped receipt when that exact container is already stopped. Changed ownership,
+PID or unknown receipt states refuse before mutation. This permits cleanup
+reconciliation only; it never restarts the CLI or retries authentication.

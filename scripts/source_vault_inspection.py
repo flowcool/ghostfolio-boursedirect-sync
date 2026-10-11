@@ -70,6 +70,32 @@ def exchange(process, input_record, operations, timeout=300):
         selector.close()
 
 
+def stop_owned_cli(q, lab, identifier):
+    """Reconcile only the previously receipted CLI, including an interrupted stop."""
+    current = q.load()
+    replay.require(current['containers']['bitwarden-cli']['id'] == identifier)
+    replay.require(current['state'] in ('routes_qualified', 'cli_stop_intent', 'cli_stopped_owned'))
+    details = q.owned(current, 'container', identifier)
+    q.validate_container(current, 'bitwarden-cli', details)
+    if details['State']['Running']:
+        replay.require(current['state'] != 'cli_stopped_owned'
+            and details['State']['Pid'] == current['containers']['bitwarden-cli']['pid'])
+        if current['state'] == 'routes_qualified':
+            replay.private._publish(lab / ('vault-before-stop-' + uuid.uuid4().hex + '.yaml'), current, exclusive=True)
+            current['state'] = 'cli_stop_intent'
+            q.save(current)
+        q.docker(['stop', '--time', '5', identifier])
+        details = q.owned(current, 'container', identifier)
+        q.validate_container(current, 'bitwarden-cli', details)
+    replay.require(details['State']['Running'] is False and details['State']['Pid'] == 0)
+    replay.require(current['state'] in ('cli_stop_intent', 'cli_stopped_owned'))
+    if current['state'] != 'cli_stopped_owned':
+        current['state'] = 'cli_stopped_owned'
+        current['containers']['bitwarden-cli'].update(state='stopped', pid=0)
+        q.save(current)
+    return True
+
+
 def inspect(root, lab, inventory):
     reference = inventory['evidence'].get('vault_cli_binding')
     replay.require(reference is not None)
@@ -117,25 +143,15 @@ def inspect(root, lab, inventory):
 
     def stop(row):
         replay.require(set(row) == {'action', 'containerId'} and row['containerId'] == identifier)
-        current = q.load()
-        replay.require(current['containers']['bitwarden-cli']['id'] == identifier)
-        details = q.owned(current, 'container', identifier)
-        q.validate_container(current, 'bitwarden-cli', details)
-        if not details['State']['Running']:
-            replay.require(current['state'] == 'cli_stopped_owned')
-            return True
-        replay.require(current['state'] == 'routes_qualified'
-            and details['State']['Pid'] == current['containers']['bitwarden-cli']['pid'])
-        replay.private._publish(lab / ('vault-before-stop-' + uuid.uuid4().hex + '.yaml'), current, exclusive=True)
-        current['state'] = 'cli_stop_intent'
-        q.save(current)
-        q.docker(['stop', '--time', '5', identifier])
-        replay.require(q.owned(current, 'container', identifier)['State']['Running'] is False)
-        current['state'] = 'cli_stopped_owned'
-        current['containers']['bitwarden-cli'].update(state='stopped', pid=0)
-        q.save(current)
-        return True
+        return stop_owned_cli(q, lab, identifier)
 
+    lease = lab / 'vault-operation.lock'
+    lease.mkdir(mode=0o700)
+    lease_parent = os.open(lab, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(lease_parent)
+    finally:
+        os.close(lease_parent)
     try:
         credentials = replay.helper(lab, 'provision', verified).initial_environment()
         process = subprocess.Popen(['/usr/bin/node', str(source)], cwd=CODE_ROOT,
@@ -173,3 +189,11 @@ def inspect(root, lab, inventory):
             except Exception:
                 cleanup = 'OWNED_CLI_STOP_UNCERTAIN'
             replay.private._publish(output / 'attempt.yaml', {**intent, 'state': 'refused_preserved', 'cleanup': cleanup})
+
+        if passed or cleanup == 'OWNED_CLI_STOPPED':
+            lease.rmdir()
+            parent = os.open(lab, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)

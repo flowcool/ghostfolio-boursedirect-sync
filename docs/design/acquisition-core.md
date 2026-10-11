@@ -430,3 +430,43 @@ request before arming its exact permit. Ordinary operational controllers keep
 their previously qualified before-fill gate. Synthetic runtime qualification
 uses an internally registered loopback policy and separate synthetic namespace;
 the broker factory exposes no operator-selectable origin or state-root override.
+
+### Native qualification building blocks
+
+`source-native-session.mjs` composes the pinned private CDP pipe with existing
+startup guards and request/response interception. Native default realms are
+bound by their unique context ID; foreign frames, HTTP redirects and new targets
+fence the session. Response interception permits durable protocol publication
+before frontend callbacks issue the next native step. HTTP authentication is
+cancelled. The stop callback verifies owned exit before closing the pipe; final
+close separately drains handlers to avoid a handler waiting for itself.
+
+The dedicated `lab/source-browser-pipe.mjs` launches only the fixed attested
+Chromium with a numeric owned proxy and credential-free environment. It pins
+process start identities, checks renderer sandbox state and bounds the lifetime.
+Renderer command lines can be flattened by Chromium; classification recognizes
+both space and NUL separators. Native bytes remain on private stdio. Only fixed
+process/sandbox/exit codes and counts go to the private control stderr channel.
+
+`source-authentication-dom.mjs` restricts credential fill to the two observed
+blank login controls in one form. Local TOTP requires the observed heading,
+exact six ordered empty numeric inputs and the explicit distrust control. The
+source's multi-character handler receives the code once; no additional button
+click or second fill is performed. Results expose only structural proof.
+`source-authentication-response.mjs` decodes bounded native UTF8/base64 bodies
+internally and projects known challenge, OTP acceptance and one same-origin
+final source-page destination; no response body, token or header is exported.
+
+`source-read-gate.mjs` permits only source-pinned preliminary/state/systems/config
+reads or independently qualified document GETs. Each request's structural evidence
+and distinct consumed grant precede continuation. A trusted owner must prove
+actual candidate provenance and publish grants atomically; a source hash alone
+is not lookup authority. Duplicate grants, failure or fencing refuse.
+
+The network-none `lab/source-authentication-runtime.mjs` exercises these primitives
+with an invented proxy site and fixed synthetic credentials. Its isolated
+synthetic namespace, native IDs, original request URLs, renderer sandbox and
+exact exit proof are retained. It does not select a broker origin, use a real
+vault or enable an operational connection command. The operational caller still
+owes independently bound credentials, current source bytes and both-account
+source evidence.

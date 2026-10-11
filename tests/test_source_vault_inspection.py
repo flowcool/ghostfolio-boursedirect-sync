@@ -76,3 +76,89 @@ def test_alias_inspection_requires_a_pinned_binding_before_importing_live_helper
     monkeypatch.setattr(inspection.replay, 'helper', lambda *args: pytest.fail('unpinned live access'))
     with pytest.raises(RuntimeError):
         inspection.inspect(tmp_path, tmp_path / 'lab', {'evidence': {}})
+
+
+@pytest.mark.parametrize('state,running', [
+    ('routes_qualified', True), ('cli_stop_intent', True),
+    ('cli_stop_intent', False), ('cli_stopped_owned', False)])
+def test_owned_cleanup_reconciles_interruption_without_new_authority(tmp_path, monkeypatch, state, running):
+    import copy
+    from types import SimpleNamespace
+    identifier = 'a' * 64
+    durable = {'state': state, 'containers': {'bitwarden-cli': {'id': identifier, 'pid': 123,
+        'state': 'started'}}}
+    details = {'Id': identifier, 'State': {'Running': running, 'Pid': 123 if running else 0}}
+    mutations = []
+
+    def save(value):
+        durable.clear()
+        durable.update(copy.deepcopy(value))
+        mutations.append(value['state'])
+
+    def stop(args):
+        assert durable['state'] == 'cli_stop_intent'
+        assert args == ['stop', '--time', '5', identifier]
+        details['State'] = {'Running': False, 'Pid': 0}
+        mutations.append('stop')
+
+    q = SimpleNamespace(load=lambda: copy.deepcopy(durable), save=save, docker=stop,
+        owned=lambda *_: copy.deepcopy(details), validate_container=lambda *_: None)
+    monkeypatch.setattr(inspection.replay.private, '_publish', lambda *_args, **_kw: mutations.append('backup'))
+    assert inspection.stop_owned_cli(q, tmp_path, identifier) is True
+    assert durable['state'] == 'cli_stopped_owned'
+    assert mutations.count('stop') == int(running)
+    assert inspection.stop_owned_cli(q, tmp_path, identifier) is True
+    assert mutations.count('stop') == int(running)
+
+
+def test_stop_failure_preserves_intent_and_can_reconcile_next_call(tmp_path, monkeypatch):
+    import copy
+    from types import SimpleNamespace
+    identifier = 'a' * 64
+    durable = {'state': 'routes_qualified', 'containers': {'bitwarden-cli': {'id': identifier, 'pid': 123}}}
+    details = {'State': {'Running': True, 'Pid': 123}}
+    calls = []
+
+    def save(value):
+        durable.clear()
+        durable.update(copy.deepcopy(value))
+
+    def stop(args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise RuntimeError('SYNTHETIC_TRANSPORT_LOSS')
+        details['State'] = {'Running': False, 'Pid': 0}
+
+    q = SimpleNamespace(load=lambda: copy.deepcopy(durable), save=save, docker=stop,
+        owned=lambda *_: copy.deepcopy(details), validate_container=lambda *_: None)
+    monkeypatch.setattr(inspection.replay.private, '_publish', lambda *_args, **_kw: None)
+    with pytest.raises(RuntimeError, match='SYNTHETIC_TRANSPORT_LOSS'):
+        inspection.stop_owned_cli(q, tmp_path, identifier)
+    assert durable['state'] == 'cli_stop_intent'
+    assert inspection.stop_owned_cli(q, tmp_path, identifier) is True
+
+
+@pytest.mark.parametrize('change', ['id', 'pid', 'state', 'validation'])
+def test_cleanup_refuses_resource_drift_before_mutation(tmp_path, change):
+    from types import SimpleNamespace
+    identifier = 'a' * 64
+    current = {'state': 'cli_stop_intent', 'containers': {'bitwarden-cli': {'id': identifier, 'pid': 123}}}
+    details = {'State': {'Running': True, 'Pid': 123}}
+    if change == 'id':
+        current['containers']['bitwarden-cli']['id'] = 'b' * 64
+    if change == 'pid':
+        details['State']['Pid'] = 124
+    if change == 'state':
+        current['state'] = 'unknown'
+
+    def forbidden(*_):
+        raise AssertionError('MUTATION_FORBIDDEN')
+
+    def validate(*_):
+        if change == 'validation':
+            raise RuntimeError('SYNTHETIC_OWNER_DRIFT')
+
+    q = SimpleNamespace(load=lambda: current, owned=lambda *_: details, validate_container=validate,
+        save=forbidden, docker=forbidden)
+    with pytest.raises(RuntimeError):
+        inspection.stop_owned_cli(q, tmp_path, identifier)

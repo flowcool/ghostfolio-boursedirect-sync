@@ -289,3 +289,119 @@ method_and_worker_confinement:
     no full item or seed
   broker_requests: 0
   new_vault_sessions: 0
+native_building_blocks:
+  inputs:
+    collector/source-request-inspection.mjs: f77a689c4ce7e6e5d1ba1fcf76eb5c1c563b98bbdb3c881080c1c9fbf001e409
+    collector/source-read-gate.mjs: ee5a08d8d88160b7c10400dc3f235b9c23a0cce14577e5766654178f6376df5f
+    collector/source-native-session.mjs: db96fd6841a12bee0ca371dc4d33fdb5effde46c82d472636d8760806d3cd7d4
+    collector/source-authentication-dom.mjs: 832a547ec6d515afec2519a97db728c8976f29b7c64aada30f805865532ac118
+    collector/source-authentication-response.mjs: 3109a94b72425fbcc869fd9fab447dfee1b8ae1c560753509ef612f6cd54d1c4
+    collector/lab/source-browser-pipe.mjs: 3be23d6dc7570d055ac045c401f25f45b3fd85a2723bc50d1dd986ecc81ab928
+    collector/lab/source-authentication-runtime.mjs: 5fd1d2719be23ff85968735cd2490c15dbe58d86565bbbe3f304b74ca7b79fbd
+    collector/tests/source-authentication-dom.test.mjs: dcdf9e3ec5288b7c7738dbc4c53a6d72feb5944cf926c7395cbabae076d6ac6e
+    collector/tests/source-authentication-response.test.mjs: 5f18a17083e4e2fc6ceef36d62181de7ab92a773a9312fc16783814d58256ca5
+    collector/tests/source-native-session.test.mjs: 2f823056b04211281d79b6fd659e3581bc9c7d745a357c36506417c26784d1c3
+    collector/tests/source-read-gate.test.mjs: ca1b7c3eab59589871ffe8429081a69f8323e656cc59a4c216432ef8c6bf409d
+    scripts/source_vault_inspection.py: 8a443e0f608257d1545de41579be84e958c4782ed20202ccf1ad14f79aa04f86
+    tests/test_source_vault_inspection.py: 56f7fffe5c8d5cfab09c02982085699920131ded97bfaa88678034b68150aa0a
+    docs/design/acquisition-core.md: 9ab8fb28c4e21c83150b06d05016508c7a512592090f38fd16baf58f4fcda3e8
+    docs/operations/source-connection.md: b111440edc4c4356a3c77fa82ab6a9d40c346f5effb7f20f4372258efcffef37
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    requirements.txt: c79be17433b0d60b772ab61dfe4ffc400eb9c53711e46a7c07e4ff86e9ae55c8
+    requirements-dev.txt: ce054a690007086436361fe3ed894dd2a5e642d72d066d4823d762640f5deb97
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      log_sha256: 315c5a33b3e8a77a3d9abf1c00389f0c5692e09333555d495556af2aac0e3c99
+      summary:
+      - 1..627
+      - '# tests 627'
+      - '# suites 0'
+      - '# pass 627'
+      - '# fail 0'
+      - '# cancelled 0'
+      - '# skipped 0'
+      - '# todo 0'
+      - '# duration_ms 6757.14658'
+    python:
+      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+        -m pytest -q
+      exit_code: 0
+      log_sha256: 59ebfb543313e5bd7e204f191e3e5dbd474c82d9a47379717c923366c3650a6e
+      summary:
+      - '........................................................................
+        [ 59%]'
+      - '........................................................................
+        [ 65%]'
+      - '........................................................................
+        [ 71%]'
+      - '........................................................................
+        [ 77%]'
+      - '........................................................................
+        [ 83%]'
+      - '........................................................................
+        [ 89%]'
+      - '........................................................................
+        [ 95%]'
+      - '...................................................                      [100%]'
+      - 1203 passed in 89.33s (0:01:29)
+    documentation:
+      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+        scripts/check-docs.py
+      exit_code: 0
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+      summary:
+      - Documentation catalogue and local links passed
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+      log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      summary: []
+  native_proof:
+    chrome_version: 155.0.8059.39
+    image_id: sha256:2a08a5d2ce2005a7d4517b5cad854db731878a0fd9be96b5be2dc754dbf3e1a2
+    network: none
+    scenarios:
+      success:
+        evidence_sha256: e1616f5a451a3d26c59631830b47294a0c0e03f81d3394c4285e0b085d89db1e
+        passed: true
+        counts:
+          finalize: 1
+          otp: 1
+          password: 1
+        retained_state: authenticated
+        renderer_sandbox_verified: true
+        browser_exit_verified: true
+        cleanup_verified: true
+      wrong-body:
+        evidence_sha256: 5f83cc536b4e9aab4eabd628fc3ea44e965c89fac193559169de372d28fbba43
+        passed: true
+        counts:
+          finalize: 0
+          otp: 0
+          password: 0
+        retained_state: password_uncertain
+        renderer_sandbox_verified: true
+        browser_exit_verified: true
+        cleanup_verified: true
+      fsync:
+        evidence_sha256: 5f83cc536b4e9aab4eabd628fc3ea44e965c89fac193559169de372d28fbba43
+        passed: true
+        counts:
+          finalize: 0
+          otp: 0
+          password: 0
+        retained_state: password_uncertain
+        renderer_sandbox_verified: true
+        browser_exit_verified: true
+        cleanup_verified: true
+    harness_sha256: c20ed6ba1a1bf828464d332ad1a1429eb7402f71db62079e64e5e98bfb9a5400
+  broker_requests: 0
+  vault_sessions: 0
+  external_cleanup_finding:
+    comment_id: 6109792835
+    reviewed_head: 3e0688171f5ef43c039a1700ff6206546eb45cfd
+    resolution: Reattest exact CLI identity/configuration and original running PID;
+      reconcile cli_stop_intent to bounded stop or verified stopped receipt. Reserve
+      exclusive appdata lease before provisioning; uncertain cleanup retains lease.

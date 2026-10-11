@@ -9,7 +9,8 @@ const POST_KEYS = Object.freeze({
   otp_submit: ['code', 'branding', 'trusted_device'],
   password_finalize: ['username', 'password', 'branding', 'redirect'],
 });
-const GET_ROLES = new Set(['app_method', 'frame_document', 'monthly_statement', 'contract_note']);
+const XHR_GET_ROLES = new Set(['app_method', 'two_factor_systems', 'two_factor_state', 'branding_config']);
+const GET_ROLES = new Set([...XHR_GET_ROLES, 'frame_document', 'monthly_statement', 'contract_note']);
 function exact(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
       || Object.keys(value).length !== keys.length || keys.some(key => !Object.hasOwn(value, key))) throw new Error();
@@ -32,7 +33,7 @@ export function inspectSourceRequestForPolicy(policy, {owner, candidate, event, 
     const fields = POST_KEYS[candidate.role];
     if (!fields && !GET_ROLES.has(candidate.role)) throw new Error();
     if (candidate.method !== (fields ? 'POST' : 'GET')
-        || candidate.resourceType !== (fields || candidate.role === 'app_method' ? 'XHR' : 'Document')) throw new Error();
+        || candidate.resourceType !== (fields || XHR_GET_ROLES.has(candidate.role) ? 'XHR' : 'Document')) throw new Error();
     // The runtime supplies native metadata without translating URLs or CDP IDs.
     exact(event, ['requestId', 'sessionId', 'frameId', 'resourceType', 'request']);
     identifier(event.requestId);
