@@ -31,7 +31,7 @@ are generated from each contract's first non-heading line.
 | [Pure preparation source replay](preparation-source-replay.md) | `compute_prepared_sources(config_raw, documents, max_bytes, max_depth)` returns |
 | [Qualified operator application](qualified-application.md) | The `apply` command defaults to offline preview/export. Remote application exists |
 | [GET-only saved activity snapshot acquisition](readonly-snapshot.md) | `snapshot` is a narrowly scoped acquisition command. It sends exactly one |
-| [Saved Ghostfolio schema compatibility](remote-schema-compatibility.md) | The real destination runs Ghostfolio 3.81.0. A complete GET-only capture could not |
+| [Saved Ghostfolio schema compatibility](remote-schema-compatibility.md) | The original destination capture used Ghostfolio 3.81.0. A complete capture could not |
 | [Single-event laboratory dispatch core](single-event-lab-dispatch.md) | `dispatch_single_lab_intent` is a reusable lab-only orchestration helper, with a |
 | [Synthetic document-to-import lifecycle on Ghostfolio 3.81.0](synthetic-import-lifecycle.md) | Observed on 2026-10-09 (Europe/Zurich), under reviewed G5/G6. This joins the |
 | [Local durable write intents and replay fences](write-intents.md) | The offline journal boundary complements [reviewed wire bytes](offline-wire.md). |

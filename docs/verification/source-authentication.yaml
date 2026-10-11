@@ -975,3 +975,62 @@ final_acquisition_eur_preview:
   limits: September BUY/SELL only; dividend source dates and amounts, opening
     history and current destination state remain unverified. EUR confirmation
     removes the explicit conversion currency gap for these selected trades only.
+
+ghostfolio_383_destination_qualification:
+  observed_on: '2026-10-11'
+  inputs:
+    boursedirect_to_ghostfolio.py: 4678547141816d42d578857e6a67216db7765018d3e9e1a964ffde90339ea7b4
+    tests/test_qualified_application.py: 53e53e164318c203691e4581c5042b9edbb035aa72ef7a11795b0d16731ed1c3
+  affected_checks:
+    command: .venv/bin/python -m pytest tests/test_qualified_application.py -q
+    exit_code: 0
+    passed: 98
+  actual_destination:
+    version: '3.83.0'
+    version_evidence: Exact deployed container image and installed API package
+      version inspected read-only by infra; no further authentication required.
+    snapshot_sha256: fd8739d59f9e5d0098ce6b8e6fd5eba7734ef5b3fcbeedadfced39c9d527221c
+    snapshot_rows: 1017
+    target_pea_rows: 572
+    target_financial_fingerprints_changed_since_previous_capture: 0
+    access: Existing deployed durable-token provider, one authentication exchange
+      then activities/account GET200; redirects and retries forbidden, bearer memory-only.
+    financial_writes: 0
+  source_reconciliation:
+    prepared_trades: 3
+    legacy_candidates: 3
+    exact_financial_matches: 2
+    fee_discrepancies: 1
+    discrepant_fee_remote_minus_source_eur: '1'
+    utc_and_paris_calendar_day_matches: 3
+    legacy_adoption_performed: false
+  dividend_inventory:
+    rows: 184
+    utc_versus_paris_calendar_day_differences: 130
+    currency_counts: {EUR: 182, DKK: 1, SEK: 1}
+    limitation: Timestamp projections only, not proven Bourse Direct date or amount
+      discrepancies; no broker dividend source evidence or automatic normalization.
+  disposable_current_version:
+    image: ghostfolio/ghostfolio@sha256:8f22c08366cf8692ae83a144b938ed870f04fcad5ccf1d0f67b9bff671f2460b
+    command: .venv/bin/python tmp/real-statement383-e2e/run.py --run-disposable-lab
+    controller_sha256: 5a73ed8bedd435f1d2452c2771a6c98493aaebdb1819c1ba3b73d06600e6deec
+    owned_runner_sha256: 9cf96b9c2c11b2ec7c04f9e6740186b38b89584d3215fa1842652721abf38a9b
+    result_sha256: b07c82df3bbfe276e58e24d97dd13894ba5ba5ce9e6a1e5eff03f235a93f3b60
+    exit_code: 0
+    passed: true
+    actual_source_trades: 3
+    synthetic_support_buys: 3
+    source_posts: 3
+    exact_readback_and_confirmed_intents: 3
+    complete_archive_cold_replay: true
+    repeat_new_events: 0
+    repeat_posts: 0
+    rollback_deleted_owned_rows: 6
+    rollback_remaining_rows: 0
+    owned_container_and_network_absence_verified: true
+  boundary: Only the independently rehearsed 3.83.0 version joins qualified 3.81.0;
+    other versions remain refused. Source, currency, date, holdings, declaration,
+    origin, financial-write authorization and uncertain-result fences unchanged.
+  reuse: Existing browser, vault, acquisition, TLS and 3.81.0 proofs unchanged;
+    the actual new destination version invalidated only its import qualification.
+    Final-head CI supplies full offline verification before runtime delivery.

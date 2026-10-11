@@ -2143,7 +2143,7 @@ def validate_qualified_application(bundle, max_bytes, max_depth):
     if Path(declaration["prepare_config"]).is_absolute():
         fail("INVALID_APPLICATION_PREPARATION_PATH")
     validated_ghost_origin(declaration["allowed_origin"])
-    if declaration["destination_version"] != "3.81.0" or declaration["display_timezone"] not in ("Europe/Paris", "Europe/Zurich"):
+    if declaration["destination_version"] not in ("3.81.0", "3.83.0") or declaration["display_timezone"] not in ("Europe/Paris", "Europe/Zurich"):
         fail("APPLICATION_DESTINATION_SCOPE_UNVERIFIED")
     confirmations = declaration["confirmations"]
     names = {"source_acceptance", "destination_validation", "security_review",
