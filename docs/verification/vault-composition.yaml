@@ -510,3 +510,34 @@ actual_broker_only_route:
   authentication_requests: 0
   limits: Transport qualification alone does not prove any source request role. Single
     public document observation reserved separately; no credentials or financial request.
+actual_public_login_document:
+  execution_source_commit: 72d15ed126a3a22921901374177d2674bce6808d
+  private_evidence_sha256:
+    inputs/source-observations/public-login-1/stdout.private.json: 931e4372dbe32e55b8154b9cf4e017c51f87a6847dcef0b267218e039da70094
+    inputs/source-observations/public-login-1/qualification.yaml: e3f9eeadda26f172ee26c17c514fd66b99f379821aded6327d7a4d8909543de8
+    inputs/source-observations/public-login-1/independent-inspection.yaml: 60bc0296e982fafbea8840a1ac41e11bd1b30453da149d5d107138cb12c33a23
+    inputs/source-observations/source-contract.yaml: c597a83e2a34045c3cb547c019be5fbf72a1660c49cedf86a71d75f007773ce6
+  command: Reserved main-owned callback over local SSH -> exact browser docker exec
+    env -i PATH=/usr/bin:/bin HOME=/home/fixture node source observer
+  exit_code: 0
+  http_status: 200
+  permitted_requests: 1
+  blocked_requests: 7
+  blocked_types:
+    Stylesheet: 2
+    Image: 5
+  page_scripts_executed: false
+  credentials_read: false
+  authentication_requests: 0
+  account_roles_enabled: false
+  unknown_authentication_resource_roles: disabled
+  owned_browser_exit_verified: true
+  independent_idle_check:
+    private_receipt_sha256: d3b924cb3475c051dd2cfc330887661a8a1253ed67c5f220536c2938edc3cd33
+    live_chrome_executable_processes: 0
+    unexpected_proc_read_errors: 0
+    zombie_processes: 3
+    headless_shell_zombies: 0
+  limitations: Public document only; login controls require further source investigation.
+    CDP body representation is not original wire bytes. Actual authenticated request/account
+    roles remain unmet.

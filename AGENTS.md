@@ -68,6 +68,16 @@ existing approvals across sessions through their Beads evidence. Ask Florent
 only for genuinely new authority or indispensable information. Production,
 financial writes, publication/push and destructive-operation gates still apply.
 
+Florent authorized direct project-agent operation of the dedicated acquisition
+lab on 2026-10-11: inspect/log/exec, start/recreate its containers, and manage its
+networks and necessary ports without an infra-agent relay. This project-local
+authorization supersedes the lab handoff requirement in
+`.claude/rules/delegation.md`. Before operating, read the private runtime receipts
+referenced by the scoped Beads issue, verify the daemon and exact resource owner,
+and preserve rollback and private evidence. Reuse the existing SSH/Docker access.
+Infra remains responsible for shared host services and production wiring; broker
+authentication and financial activation retain their separate gates.
+
 ## Durable work state
 
 - Root epic: `infra-4g8u`, metadata `project=ghostfolio-boursedirect-sync`.
