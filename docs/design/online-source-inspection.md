@@ -137,6 +137,29 @@ profile. This amendment qualifies only credential-free public assets. Password,
 application-method, OTP, account and financial-resource requests remain disabled
 until their separate observations and delivery gates pass.
 
+### Blocked form request characterization
+
+The opt-in source observation can exercise the independently observed login form
+using two fixed dummy markers. It refuses prefilled, foreign, duplicate, disabled
+or mismatched-form inputs before any mutation. Only the two known input controls
+and their associated form can be exercised; no operator JavaScript, URL, selector,
+password or OTP is accepted. The same public-only policy denies every POST and
+every uncharacterized GET before network dispatch. This is source request-shape
+observation, with no vault access, principal enrollment or broker authentication.
+
+The complete private envelope retains paused request metadata and the explicit
+synthetic-action marker. Metadata from a blocked request can characterize its
+URL/method/type, but proves no server acceptance, account ownership or successful
+authentication. The source owner still owes independent inspection and a separately
+bound real credential attempt. No role becomes enabled from a counter alone.
+
+The canonical characterization command requires the pinned project-owned adapter
+and verified owned runtime. The fixed helper and POST-denial composition are
+qualified with synthetic DOM objects and socket-forbidden tests. This observation
+remains inside the authorized read-only source scope; it does not activate real
+credential delivery. Actual authentication, merge and financial activation retain
+their separate external review and authorization gates.
+
 ## Automatic service target decision
 
 On 2026-10-10 Florent confirmed the architecture after a grilling interview. The

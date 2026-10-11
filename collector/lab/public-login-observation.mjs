@@ -7,6 +7,7 @@ import {bootstrapExperiment} from '../capability-bootstrap.mjs';
 import {orderingExperiment} from '../capability-ordering.mjs';
 import {ownedBrowserLifecycle, sandboxStatus} from './browser-sandbox-proof.mjs';
 import {PUBLIC_LOGIN_URL, publicLoginPolicy, publicAssetDocumentPolicy} from '../public-login-policy.mjs';
+import {sourceFormProbe} from '../source-form-probe.mjs';
 
 let stage = 'input', pipe, lifecycle, ordering, timer;
 let retained;
@@ -25,9 +26,11 @@ async function run() {
   const assetsMode = input && Object.hasOwn(input, 'observed_assets');
   const assetDocuments = input && Object.hasOwn(input, 'asset_documents');
   const authBootstrap = input && Object.hasOwn(input, 'auth_bootstrap');
+  const formProbe = input && Object.hasOwn(input, 'form_probe');
   if (!input || (assetDocuments && (!assetsMode || input.asset_documents !== true))
       || (authBootstrap && (!assetsMode || assetDocuments || input.auth_bootstrap !== true))
-      || Object.keys(input).length !== (assetDocuments || authBootstrap ? 5 : assetsMode ? 4 : 2)
+      || (formProbe && (!authBootstrap || input.form_probe !== true))
+      || Object.keys(input).length !== (formProbe ? 6 : assetDocuments || authBootstrap ? 5 : assetsMode ? 4 : 2)
       || (assetsMode && (!/^[a-f0-9]{64}$/.test(input.reference_evidence_sha256) || !Array.isArray(input.observed_assets) || !input.observed_assets.length)) || !/^[a-f0-9]{64}$/.test(input.routing_receipt_sha256)
       || typeof input.proxy !== 'string' || !/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:8080$/.test(input.proxy)
       || new URL(input.proxy).origin !== input.proxy
@@ -48,6 +51,7 @@ async function run() {
     routing_receipt_sha256: input.routing_receipt_sha256, chrome_version: '155.0.8059.39',
     authentication_requests: 0, credentials_read: false, scripts_disabled: !assetsMode || assetDocuments,
     auth_bootstrap: Boolean(authBootstrap),
+    synthetic_form_probe: Boolean(formProbe),
     reference_evidence_sha256: input.reference_evidence_sha256 ?? null,
     requests: [], responses: [], targets: [], online_ready: false};
   retained = evidence;
@@ -162,6 +166,15 @@ async function run() {
       stage = 'bounded_public_dom';
       await new Promise(resolve => setTimeout(resolve, 5000));
       if (failed) throw new Error();
+      if (formProbe) {
+        stage = 'blocked_synthetic_form_probe';
+        const result = await pipe.send('Runtime.evaluate', {expression: '(' + sourceFormProbe.toString() + ')()',
+          returnByValue: true}, owner.sessionId);
+        if (result.exceptionDetails || result.result?.value?.code !== 'SOURCE_SYNTHETIC_FORM_SUBMIT_REQUESTED') throw new Error();
+        evidence.form_probe = result.result.value;
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        if (failed) throw new Error();
+      }
       const document = await pipe.send('DOM.getDocument', {depth: 0}, owner.sessionId);
       const outer = await pipe.send('DOM.getOuterHTML', {nodeId: document.root.nodeId}, owner.sessionId);
       if (typeof outer.outerHTML !== 'string' || Buffer.byteLength(outer.outerHTML) > 262144) throw new Error();

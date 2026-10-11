@@ -141,10 +141,11 @@ def test_helper_executes_only_the_bytes_previously_verified(saved, monkeypatch):
     assert loaded.__file__ == str(lab / 'host/qualify.py')
 
 
-def test_public_form_requires_pinned_adapter_before_live_access(saved, monkeypatch, capsys):
+@pytest.mark.parametrize('action', ['observe-public-form', 'characterize-password-request'])
+def test_public_form_requires_pinned_adapter_before_live_access(saved, monkeypatch, capsys, action):
     root, _ = saved
     monkeypatch.setattr(replay, '__file__', str(root / 'scripts/source_connection.py'))
-    monkeypatch.setattr(replay.sys, 'argv', ['source_connection.py', 'observe-public-form'])
+    monkeypatch.setattr(replay.sys, 'argv', ['source_connection.py', action])
     monkeypatch.setattr(replay, 'live_status', lambda *args: pytest.fail('unpinned adapter reached SSH'))
     assert replay.main() == 1
     assert yaml.safe_load(capsys.readouterr().out)['code'] == 'SOURCE_REPLAY_REFUSED'

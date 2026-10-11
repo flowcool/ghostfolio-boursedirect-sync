@@ -124,6 +124,14 @@ form. A fresh private attempt retains original output, selector counts and owned
 exit evidence. Failure stops the exact browser and retains the attempt; this
 command never requests vault credentials or qualifies an authentication submit.
 
+`characterize-password-request` uses the same owned observer with fixed dummy
+markers to retain a blocked form request's URL/method/type. Every POST is denied;
+it supplies no real credential and dispatches no broker authentication. It requires
+the pinned private adapter and exact-owned runtime, and refuses prefilled or
+ambiguous inputs before any mutation. The captured metadata requires independent
+source inspection; it never establishes successful login. Real credential delivery
+and authentication retain their separate source, runtime and security gates.
+
 ## Bounded recovery
 
 If an exact owned browser was stopped and the receipt says

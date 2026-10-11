@@ -880,3 +880,37 @@ immutable_vault_uri_alias_binding:
   live_schema4_configuration_created: false
   real_vault_session_started: false
   broker_authentication_started: false
+blocked_form_characterization_offline:
+  input_sha256:
+    collector/source-form-probe.mjs: b031546a1de81ea6afec90d21cca7b412681570f8ffe1ed9d3cf6d7c7ba78a51
+    collector/tests/source-form-probe.test.mjs: ec8234bc95c3634d559a6f3858aef86021355f4969dcc8c3be7ce3a2330f5757
+    collector/lab/public-login-observation.mjs: 96ff1e28f208c5efeb2baba393bfe9db0e1a61112714de832f51912ea4656ed0
+    scripts/source_connection.py: b33917f8cd2312a67fe49510494efeb4796edc2a015166a1f8b8082bb43ce62d
+    tests/test_source_connection.py: ed6a6b2ba85ab3b178bf736059d5bcb2b0f05806fbfab554baaca21b1a7d230d
+    docs/design/online-source-inspection.md: 93c8aa2fc8146a74e19d1d1ef07378a1f50728c711a9eaa3405ac339593258ee
+    docs/operations/source-connection.md: 3441911a45b4c8956d8f1282b993fc5a22e9ebba09e728674fbf38eb71a5611c
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 501
+      log_sha256: cec97347e9de3708a02b25ff4b30811861d811e6d98bd0d52a78ea6adc45ec00
+    python_full:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1186
+      log_sha256: 948bddc1607504e696ea3cad38d4181d5ecabc08f47ae466d7320244fc833901
+    entrypoint:
+      command: .venv/bin/python -m pytest -q tests/test_source_connection.py
+      exit_code: 0
+      passed: 13
+      log_sha256: 5457c7691fb2eec58f3a79a1398f61e7814f0a87a44960f098f3ba7093208a6a
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+  opt_in: true
+  only_fixed_dummy_values: true
+  all_POST_requests_denied: true
+  live_characterization_executed: false
+  real_vault_session_started: false
+  broker_authentication_started: false
+  authentication_roles_qualified: false
