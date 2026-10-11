@@ -32,8 +32,8 @@ for this session as permission for an unattended service.
    Changedetection browser/session.
 2. Establish an agent-owned browser context through a private control path, with
    exact startup/shutdown and rollback evidence from infra. Prefer an existing
-   SSH/container-exec path. Any necessary service/network change must be owned by
-   an atomic infra issue under Florent's GO; do not publish an unauthenticated
+   SSH/container-exec path. Apply the current lab ownership amendment below for
+   service/network changes; do not publish an unauthenticated
    browser-control endpoint to the Internet. No broker connection occurs while
    merely characterizing infrastructure capability.
 3. Establish account access. Reuse an explicitly available authenticated session
@@ -94,6 +94,32 @@ secret-provisioning wiring must satisfy the existing requirements before access.
 See the [domain vocabulary](../../GLOSSARY.md) and the
 [source-owned delivery contract](acquisition-core.md).
 
+## Direct lab ownership and connection replay amendment
+
+On 2026-10-11 Florent authorized this project's agent to operate its dedicated
+lab directly through local SSH, including owned container lifecycle, logs,
+networks and necessary ports, without an infra-agent relay. This supersedes the
+earlier requirement to route every lab change through an infra issue. Shared or
+production services, destructive operations and financial writes retain their
+separate authority gates. A private SSH/container-exec control path remains the
+default; any required port must have a bounded purpose and exposure.
+
+The [canonical connection procedure](../operations/source-connection.md) owns
+resumption, exact-resource attestation and bounded recovery. Its source-owned
+entrypoint reads one private project inventory. Active private control code and
+mutable receipts live under `inputs/lab/`; prior exploration controllers are
+archived there as provenance. Infra remains the authority for host/secret/network
+facts, while this project owns its lab operation and connection control. Public
+code must remain independent of private host names and provisioning paths.
+
+Reuse successful unchanged source, vault and runtime evidence before investigating
+the first unqualified stage. The successful password/application-TOTP exploration
+of 2026-10-08 remains evidence; it does not establish a live session or qualify the
+current collector's unobserved requests. Account discovery must include the
+declared PEA and PEA-PME and establish distinct verified bindings; personal
+identifiers remain private. The replay command explicitly refuses authentication
+while its request roles and credential-delivery gates are unqualified.
+
 ## Automatic service target decision
 
 On 2026-10-10 Florent confirmed the architecture after a grilling interview. The
@@ -151,6 +177,7 @@ before building activities; no values inferred from names or net-price gaps.
 
 The scope change affects documentation and project Beads. Documentation rollback
 is a new revert of the amendment commit, retaining the user's decision in Beads.
-Runtime rollback must be supplied by the owning infra issue before startup or
-network changes. Authentication cannot be rolled back by deleting local files;
+Runtime rollback must be verified against the current exact-owned receipts and
+canonical connection procedure before startup or network changes. Authentication
+cannot be rolled back by deleting local files;
 prevent unsafe attempts instead. No financial operation is part of this phase.
