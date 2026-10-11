@@ -112,7 +112,7 @@ def test_connection_limit_closes_without_upstream_or_response(monkeypatch):
     async def run():
         reader, writer, output, closed = streams(b'')
         active = set(range(proxy.CONNECTION_LIMIT))
-        async def forbidden(*args):
+        async def forbidden(*args, **kwargs):
             pytest.fail('Connection limit reached upstream handling')
         monkeypatch.setattr(proxy, 'serve_connection', forbidden)
         await proxy.accept(reader, writer, active)
@@ -127,7 +127,7 @@ def test_accept_releases_active_slot_after_handling(monkeypatch, failed):
     async def run():
         reader, writer, output, closed = streams(b'')
         active = set()
-        async def handled(*args):
+        async def handled(*args, **kwargs):
             assert active == {asyncio.current_task()}
             if failed:
                 raise RuntimeError('synthetic')
@@ -138,4 +138,30 @@ def test_accept_releases_active_slot_after_handling(monkeypatch, failed):
         else:
             await proxy.accept(reader, writer, active)
         assert active == set()
+    asyncio.run(run())
+
+@pytest.mark.parametrize('policy, host', [('vault', 'www.boursedirect.fr'),
+                                         ('broker-inspection', 'api.bitwarden.com'),
+                                         ('broker-inspection', 'identity.bitwarden.com'),
+                                         ('broker-inspection', 'www.boursedirect.fr.evil'),
+                                         ('broker-inspection', 'boursedirect.fr')])
+def test_fixed_policies_do_not_cross_grant_hosts(policy, host):
+    with pytest.raises(RuntimeError, match='VAULT_PROXY_REQUEST_REJECTED'):
+        proxy.connect_target(f'CONNECT {host}:443 HTTP/1.1\r\nHost: {host}:443\r\n\r\n'.encode(), policy)
+
+
+def test_broker_inspection_only_accepts_exact_canonical_tls_destination():
+    assert proxy.connect_target(b'CONNECT www.boursedirect.fr:443 HTTP/1.1\r\nHost: www.boursedirect.fr:443\r\n\r\n',
+                                'broker-inspection') == 'www.boursedirect.fr'
+    with pytest.raises(RuntimeError, match='VAULT_PROXY_POLICY_REJECTED'):
+        proxy.connect_target(b'', 'arbitrary')
+
+
+def test_broker_rejection_never_reaches_upstream():
+    async def run():
+        reader, writer, output, closed = streams(b'CONNECT api.bitwarden.com:443 HTTP/1.1\r\n\r\n')
+        async def forbidden(host):
+            pytest.fail('Broker policy reached vault networking')
+        await proxy.serve_connection(reader, writer, forbidden, 'broker-inspection')
+        assert output.startswith(b'HTTP/1.1 403') and closed
     asyncio.run(run())

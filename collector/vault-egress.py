@@ -3,20 +3,25 @@
 import asyncio
 import ipaddress
 import socket
+import sys
 
-ALLOWED_HOSTS = frozenset(('identity.bitwarden.com', 'api.bitwarden.com'))
+POLICIES = {'vault': frozenset(('identity.bitwarden.com', 'api.bitwarden.com')),
+            'broker-inspection': frozenset(('www.boursedirect.fr',))}
+ALLOWED_HOSTS = POLICIES['vault']
 HEADER_LIMIT = 8192
 CONNECTION_LIMIT = 32
 
 
-def connect_target(raw):
+def connect_target(raw, policy='vault'):
+    if policy not in POLICIES:
+        raise RuntimeError('VAULT_PROXY_POLICY_REJECTED')
     if len(raw) > HEADER_LIMIT or not raw.endswith(b'\r\n\r\n'):
         raise RuntimeError('VAULT_PROXY_REQUEST_REJECTED')
     try:
         lines = raw.decode('ascii').split('\r\n')
         method, authority, protocol = lines[0].split(' ')
         host, port = authority.split(':')
-        if method != 'CONNECT' or protocol != 'HTTP/1.1' or port != '443' or host not in ALLOWED_HOSTS:
+        if method != 'CONNECT' or protocol != 'HTTP/1.1' or port != '443' or host not in POLICIES[policy]:
             raise ValueError()
         seen = set()
         for line in lines[1:-2]:
@@ -68,12 +73,12 @@ async def copy_stream(reader, writer):
         await asyncio.wait_for(writer.drain(), 15)
 
 
-async def serve_connection(reader, writer, connect=upstream):
+async def serve_connection(reader, writer, connect=upstream, policy='vault'):
     remote_writer = None
     established = False
     try:
         raw = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), 10)
-        host = connect_target(raw)
+        host = connect_target(raw, policy)
         remote_reader, remote_writer = await asyncio.wait_for(connect(host), 15)
         writer.write(b'HTTP/1.1 200 Connection Established\r\n\r\n')
         await asyncio.wait_for(writer.drain(), 15)
@@ -102,23 +107,25 @@ async def serve_connection(reader, writer, connect=upstream):
                     pass
 
 
-async def accept(reader, writer, active):
+async def accept(reader, writer, active, policy='vault'):
     if len(active) >= CONNECTION_LIMIT:
         writer.close()
         return
     task = asyncio.current_task()
     active.add(task)
     try:
-        await serve_connection(reader, writer)
+        await serve_connection(reader, writer, policy=policy)
     finally:
         active.discard(task)
 
 
-async def run():
+async def run(policy='vault'):
+    if policy not in POLICIES:
+        raise RuntimeError('VAULT_PROXY_POLICY_REJECTED')
     active = set()
 
     async def on_accept(reader, writer):
-        await accept(reader, writer, active)
+        await accept(reader, writer, active, policy)
 
     server = await asyncio.start_server(on_accept, '0.0.0.0', 8080, limit=HEADER_LIMIT)
     async with server:
@@ -126,4 +133,6 @@ async def run():
 
 
 if __name__ == '__main__':
-    asyncio.run(run())
+    if sys.argv[1:] not in ([], ['--broker-inspection']):
+        raise SystemExit('VAULT_PROXY_POLICY_REJECTED')
+    asyncio.run(run('broker-inspection' if sys.argv[1:] else 'vault'))

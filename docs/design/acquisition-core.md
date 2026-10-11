@@ -215,3 +215,38 @@ the capability and requires exact affected-runtime shutdown. No importer config 
 created or inferred. Acquisition schemas 1 and 2 retain their mandatory trusted
 account reference and broker gates. This separates qualification of the vault
 capability from actual broker authentication without weakening either boundary.
+
+
+## Credential-free public document observation
+
+The explicit `compose.broker-inspection.yaml` overlay grows the same application
+stack with a separately owned broker-only proxy/network. Base Compose retains
+`network_mode: none`; the overlay cannot grant Bitwarden destinations to the
+browser or broker destinations to the CLI. The CONNECT helper's default policy
+remains vault-only; `--broker-inspection` selects the fixed canonical broker host
+on port443. Infra must install and attest proxy-only IPv4/IPv6 namespace routing,
+including direct/DNS denial, before any browser execution. Restart alone does not
+restore authority. No control ports or secrets are added to Compose.
+
+`collector/lab/public-login-observation.mjs` is an opt-in one-document source
+inspection, not an authentication entrypoint. It accepts a numeric proxy and
+private routing-receipt hash on stdin under a minimal secret-free environment.
+It verifies the pinned sandboxed Chrome version and renderer OS protections,
+uses guarded target attachment and Fetch interception before page release,
+disables page scripts, and grants exactly one GET Document to the previously
+observed public login URL. Redirects, assets, frames, XHR and every POST are
+blocked. Their bounded private request metadata records observation without
+enabling a role. No credentials, OTP provider, enrollment or broker auth journal
+is accessed. Unknown endpoint roles remain disabled.
+
+Stdout is a private bounded evidence envelope for an owning supervisor to capture
+exclusively under ignored `inputs/` (0700 directory, 0600 file), not a routine log.
+It retains request/response metadata and the CDP response-body representation;
+this is not a claim of original wire bytes. Failures retain a partial private
+envelope plus fixed stderr codes/counts, and the supervisor must stop the exact
+owned browser container if process cleanup or output qualification fails. Source
+publication contains only hashes, codes and structural counts. Rollback removes
+the explicit overlay and restores the received network-none browser; existing
+vault services, auth journals and prior observations are preserved. A public
+login GET cannot establish authenticated account or password/app-method/OTP
+roles, and all readiness flags remain false.

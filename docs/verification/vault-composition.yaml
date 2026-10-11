@@ -404,3 +404,71 @@ browser_early_failure_and_architecture_review:
   - Coverage gaps outside rolling window require explicit resolution for both triggers;
     durable pending exceptions survive window.
   actual_updated_host_proof_pending: true
+actual_ugreen_sandbox_c1d03dd:
+  source_commit: c1d03dde80fb
+  private_receipt_sha256: 7b2a283e2af7728eee01bb43fafca8f9a9fdcc5f00816feebf66ffac497e22e7
+  inputs:
+    collector/capability-pipe.mjs: e13be86dfd1149d84483f1dda2b2be29259247c9a5da20a14b0e243d39d694e5
+    collector/lab/browser-sandbox-proof.mjs: 099918cd97737d72b9720800a12d92e4cdd0c9ec5e2be3fd4f772733667cd587
+  exit_code: 0
+  result:
+    broker_requests: 0
+    chrome_version: 155.0.8059.39
+    code: BROWSER_SANDBOX_QUALIFIED
+    credentials_read: false
+    network_none: true
+    owned_browser_exit_verified: true
+    owned_descendant_exit_verified: true
+    renderer_count: 1
+    renderer_sandbox:
+    - additional_seccomp_filter: true
+      baseline_seccomp_filter_mode: true
+      baseline_seccomp_filters: 1
+      nested_pid_namespace: true
+      no_new_privileges: true
+      pid_namespace_depth: 3
+      seccomp_filter_mode: true
+      seccomp_filters: 2
+    synthetic_document_rendered: true
+  independent_idle_check:
+    chrome_processes: 0
+    proc_read_errors: 0
+    self_excluded: true
+    match: proc_exe_exact_pinned_chrome_path
+  canonical_same_stack:
+    source_pin: c1d03dd
+    deployment_success: true
+    cli_retained: true
+    proxy_routing_requalified: true
+  prior_attempt: Infra orchestration assertion preceded fixed diagnostic retention;
+    failure preserved; browser-only synthetic recovery successful. No authentication
+    or broker request.
+credential_free_public_observation:
+  inputs:
+    collector/vault-egress.py: 1b84a45eab8d5f42bedb3f625683ff1c82ea37edf7f01e23ab4a33221bd05570
+    collector/lab/public-login-observation.mjs: cc65b2fc1bbb76fd113fbd930238a0026e7629352506c0b1b5a4813d6f1f6553
+    collector/public-login-policy.mjs: ee99c45ca4a20701fae6622cf4bc01024b519e38924fee6b1bd85753a3c6cb60
+    collector/tests/public-login-policy.test.mjs: 663fb3e5aecfac6ca992070b42c25f0e4534d7745eea2545571505d5f16d7321
+    tests/test_vault_egress.py: 130e88bd5c9a007080dc1338863e80bf128b6c6c532a81b00b2e1475ac5de90f
+    compose.broker-inspection.yaml: 5d51cb6fd8b84bb5cb8857cbd1c387b75b12676afedfbc41c85ba3eac9ccb3ac
+  checks:
+    collector_command: npm test --prefix collector
+    collector_exit_code: 0
+    collector_passed: 439
+    collector_log_sha256: 55995386178b5472d521e083526d84c2f148dc4ea754ef38c8ec2913b814e013
+    proxy_command: .venv/bin/python -m pytest -q tests/test_vault_egress.py
+    proxy_exit_code: 0
+    proxy_passed: 37
+    observer_syntax_exit_code: 0
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+    compose_render_exit_code: 0
+    compose_version: 5.5.1
+    base_browser_network: none
+    inspection_browser_network: broker-inspection
+    browser_and_vault_networks_disjoint: true
+  authority_limit: One previously observed public login GET only, page scripts disabled,
+    all other requests blocked. No credentials or auth enrollment. Unknown roles not
+    enabled.
+  actual_broker_requests: 0
+  operational_egress_qualification_pending: true
