@@ -52,7 +52,12 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
   const candidate=(role,url,method='GET',resourceType='XHR',sha=pins.app_sha256)=>({role,url,method,resourceType,sourceSha256:sha});
   async function publicRead(event,binding,send) {
     const p=event.params;
-    if (!publicDecide({...p,sessionId:event.sessionId})) throw new Error();
+    if (!publicDecide({...p,sessionId:event.sessionId})) {
+      if(phase!=='preflight'||p.request.method!=='GET'||p.resourceType==='Document')throw new Error();
+      await retainSafe({role:'public_resource_blocked',url:p.request.url,method:'GET',resource_type:p.resourceType,
+        request_id:p.requestId,session_id:event.sessionId,frame_id:p.frameId,dispatch_authority:false});
+      await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
+    }
     const grant='public-'+randomUUID();
     await retainSafe({grant,role:'public_resource',url:p.request.url,method:p.request.method,resource_type:p.resourceType,
       request_id:p.requestId,session_id:event.sessionId,frame_id:p.frameId,dispatch_authority:false});
@@ -64,7 +69,12 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
   }
   async function paused({event,binding,send}) {
     const p=event.params,url=new URL(p.request.url);
-    if (url.origin!==policy.origin)throw new Error();
+    if (url.origin!==policy.origin) {
+      if(phase!=='preflight'||p.request.method!=='GET'||p.resourceType==='Document')throw new Error();
+      await retainSafe({role:'public_resource_blocked',url:p.request.url,method:'GET',resource_type:p.resourceType,
+        request_id:p.requestId,session_id:event.sessionId,frame_id:p.frameId,dispatch_authority:false});
+      await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
+    }
     if (pending.size>=256||pending.has(p.requestId))throw new Error();
     const auth=PHASES[url.pathname];
     if(auth) {

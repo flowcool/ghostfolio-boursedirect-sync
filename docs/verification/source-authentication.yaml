@@ -497,3 +497,38 @@ caller_review_corrections:
       evidence; this correction affects command completion/cleanup and private selection
       bookkeeping.
   broker_attempts: 0
+
+public_preflight_denial:
+  kind: public-preflight-denial-preserves-known-loader
+  inputs:
+    collector/source-qualification-pilot.mjs: 62e01403dab6383b856c495e10c2fee1778c1ca671ce81577e9aa439c4f3f210
+    collector/lab/source-authentication-runtime.mjs: da775ca32ffa74b8f45801e431b8d9e89c771c6bee94744639a139efc958c9f8
+  checks:
+    node:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 633
+      log_sha256: 77c9842938aa2723ec8454b8a49a32aa9df5c9737679576b58917e08a3968ff8
+    native:
+      command: owned network-none Chromium pilot/pilot-bad-source with unqualified
+        image GET
+      exit_code: 0
+      scenario_evidence:
+        pilot: c071cedc5bd622ef65f870bfa0ee346c0dab1ba6d028df11c35dd73a68aeea32
+        pilot-bad-source: b2640b33d2008705ee754a816df8abf0abaa52c88ae449d570c86f0d28d5e2ec
+      unqualified_image_continued: false
+      valid_authentication_posts:
+        initial: 1
+        otp: 1
+        finalization: 1
+      changed_source_posts: 0
+      owned_cleanup_verified: true
+      renderer_sandbox_verified: true
+  actual_observation:
+    public_gets: 3
+    credential_delivery: false
+    enrollment_reserved: false
+    authentication_posts: 0
+    owned_browser_and_cli_stop_verified: true
+  scope: Unlisted GET subresources are denied during credential-free preflight only;
+    later unqualified requests still fence the attempt.
