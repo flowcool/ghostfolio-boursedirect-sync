@@ -66,6 +66,7 @@ services:
 
   browser:
     profiles: [browser]
+    init: true
     image: sha256:2a08a5d2ce2005a7d4517b5cad854db731878a0fd9be96b5be2dc754dbf3e1a2
     pull_policy: never
     entrypoint: ["/bin/sleep"]

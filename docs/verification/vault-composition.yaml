@@ -541,3 +541,15 @@ actual_public_login_document:
   limitations: Public document only; login controls require further source investigation.
     CDP body representation is not original wire bytes. Actual authenticated request/account
     roles remain unmet.
+browser_child_reaping:
+  problem: Long-lived sleep PID1 does not reap orphaned stopped child processes; independent
+    actual observation found3zombies but no live Chrome.
+  change: Docker init enabled for the owned browser; synthetic renderer and exact
+    owned cleanup still required.
+  inputs:
+    compose.yaml: 88e444f413ec65252cc63e8381c06ffc795922ed0d24614e7a549f8a00bf8a83
+  checks:
+    base_and_inspection_compose_render_exit_code: 0
+    browser_init: true
+  actual_recreation_pending: true
+  authority: Florent direct SSH lab lifecycle ownership2026-10-11
