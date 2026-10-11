@@ -93,3 +93,43 @@ role_gap_inventory:
     by role inventory update'
   broker_requests: 0
   vault_sessions: 0
+envelope_and_cleanup:
+  inputs:
+    collector/source-request-inspection.mjs: 7e5481f7a36ecc79757a04b84c87ff3d11652e96dd4d188730904e8f48c31d77
+    collector/tests/source-request-inspection.test.mjs: 33a095c97c9d4cfa87970b2563b265245771fb3b6f45d2f8b59e29e94d53f691
+    collector/bitwarden-cli.mjs: cac60a4b11658625e9c4485ef1abd8df7516231216e445a869f57fb2d984a242
+    collector/tests/bitwarden-cli.test.mjs: 6bc1d6387861f30a0e2bcab315c24ea024ec943b949e425f347ea9ac7e318078
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    docs/design/acquisition-core.md: 4bc4f608f2bb3e34a32e5dac2172fc8338e08e59685c5329de9a075a00565823
+    docs/design/online-source-inspection.md: 241b1cb9c10f566a45fe0d490310e9fc6a290c5c055aadf868e138eee70af246
+    docs/plans/2026-10-09-guarded-browser-driver.md: b40a7f466edb2ad4e06853cca6500ad72fe508ec6735f3b62748aa20cbf33268
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      log_sha256: c83b3c5a0b720f2f6543306f6222b9055808425b7c8e177e9607e04028de0b9f
+      summary:
+      - 1..565
+      - '# tests 565'
+      - '# suites 0'
+      - '# pass 565'
+      - '# fail 0'
+      - '# cancelled 0'
+      - '# skipped 0'
+      - '# todo 0'
+      - '# duration_ms 6280.118827'
+    documentation:
+      command: .venv/bin/python scripts/check-docs.py
+      exit_code: 0
+      log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
+      summary:
+      - Documentation catalogue and local links passed
+    whitespace:
+      command: git diff --check
+      exit_code: 0
+      log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      summary: []
+  python_evidence_reused: 'role_gap_inventory.checks.python: all Python/runtime inputs
+    unchanged'
+  broker_requests: 0
+  vault_sessions: 0

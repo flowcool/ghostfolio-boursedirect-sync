@@ -57,6 +57,34 @@ test('fixed CLI adapter supports pinned aliases without name lookup or URI autho
   assert.equal(f.calls.filter(row=>row.args.includes('totp')).length,1);
   assert.equal(f.stops(),0);
 });
+for (const mode of [{}, {named:true}, {aliases:true}]) {
+  for (const requestCode of [false, true]) test(`acquisition cleanup ${JSON.stringify(mode)} code=${requestCode}`,async()=>{
+    const f=fixture(mode);
+    await f.worker.initialize(credentials);
+    if (requestCode) {
+      const nonce={runNonce:randomUUID(),stageNonce:randomUUID()};
+      await f.worker.code(nonce,nonce);
+    }
+    await f.worker.close();
+    assert.deepEqual(f.calls.slice(-2).map(x=>x.args[x.args.indexOf('vault-cli')+1]),['logout','status']);
+    assert.equal(f.calls.filter(row=>row.args.includes('totp')).length,requestCode?1:0);
+    assert.equal(f.stops(),0);
+    const count=f.calls.length;
+    await f.worker.close();
+    const nonce={runNonce:randomUUID(),stageNonce:randomUUID()};
+    await assert.rejects(f.worker.code(nonce,nonce),/VAULT_WORKER_FAILED/);
+    assert.equal(f.calls.length,count);
+  });
+}
+test('failed acquisition logout stops only the attested CLI and cannot retry cleanup',async()=>{
+  const f=fixture({aliases:true,logoutFault:true});
+  await f.worker.initialize(credentials);
+  await assert.rejects(f.worker.close(),/^Error: VAULT_CLEANUP_FAILED$/);
+  assert.equal(f.stops(),1);
+  const count=f.calls.length;
+  await assert.rejects(f.worker.close(),/^Error: VAULT_CLEANUP_FAILED$/);
+  assert.equal(f.calls.length,count);
+});
 test('independent vault inspection requires no importer binding and exports no broker secret',async()=>{
   const f=fixture({inspection:true}),result=await f.worker.initialize(credentials);
   assert.deepEqual(Object.keys(result).sort(),['broker_uri_count','itemId','online_ready','principalHash','profile','uri','uriAliasesSha256','uri_count']);

@@ -343,3 +343,27 @@ external security review and financial activation gates remain separate.
 Rollback reverts the native source/Compose commit, retaining the private binding
 and all historical broker journals. Native ENV configuration contains no
 credential export, alternate executable or arbitrary command interface.
+
+## Native source-request envelope inspection
+
+`inspectSourceRequest` is an offline boundary for the authorized bounded
+qualification profile. The trusted owner supplies an exact source-pinned
+candidate and a native paused request from its owned page/frame/session.
+It verifies exact URL/method/type, unambiguous JSON Content-Type, bounded
+unique-key payload and the current in-memory principal/password or delayed code.
+TOTP requests require `trusted_device=false`; login requests require a null
+redirect. GET roles cannot carry a credential projection. Its private result
+contains structural keys and source/native metadata only, with dispatch and
+readiness false. It returns no body, header, credential-derived hash or secret.
+Source hashes supplied by the caller are provenance references, not proof of
+independent source qualification; the trusted supervisor still verifies them.
+
+This helper never arms a role, consumes a permit, sends a request or launches
+a browser. The guarded runtime must combine inspection with actual source
+observation, durable one-use consumption, independent response/success evidence
+and exact owned cleanup under the online acquisition amendment.
+
+The existing CLI adapter now supports verified logout/status after acquisition
+with or without an OTP request. Closing before the code permanently skips its
+slot; logout failure fences the adapter and stops only its attested container.
+This closes the delivery session rather than retaining it for another attempt.

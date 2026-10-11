@@ -250,3 +250,34 @@ finalization distinct from the initial password request. Its source description
 is not actual request observation. Keep it disabled until its own request role,
 bounded one-use dispatch and response evidence are independently qualified;
 never silently treat it as an automatic password retry.
+
+## Agent-owned bounded same-attempt qualification amendment
+
+On2026-10-11 Florent directed the project agent to manage source qualification
+autonomously after receiving the bounded same-attempt proposal. This permits
+qualification of a native paused request during that single deliberate attempt
+only when its exact destination, method, resource type, purpose and payload
+construction were already pinned from retained application source or an actual
+qualified source response/document. The exact owned page/frame/session and
+actual envelope must match those pins before enabling that exact role and
+consuming its separate durable one-use permit before network continuation.
+There is no wildcard same-origin allowance or unlisted endpoint discovery.
+Unlisted requests, redirects, malformed envelopes, principal/account drift and
+unexpected challenges still stop the attempt.
+
+The initial password submit, app-method selection, one delayed same-item TOTP
+and source-described post-2FA credential finalization are distinct protocol
+steps. Finalization may send the same bound credentials once after its separate
+qualification; it is never a retry following failed or uncertain authentication.
+No code refresh, journal reset or manual browser bypass is added. Retain safe
+private request metadata and structural payload evidence, never real credential
+bodies, cookies, headers or authentication DOM. Existing unchanged source and
+historical successes remain evidence.
+
+This narrow qualification profile supersedes the earlier prohibition on live
+contract repair only for already-pinned expected candidates inspected before
+dispatch. It does not enable the ordinary collector or weaken its default
+unknown-request refusal. Exact-head external security review, affected offline
+tests and owned synthetic runtime qualification remain prerequisites to use.
+The dedicated lab ownership, broker settings and financial boundaries remain
+unchanged; no Ghostfolio write or recurring activation is authorized.
