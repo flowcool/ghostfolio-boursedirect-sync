@@ -104,7 +104,7 @@ def discover(state, url, raw, role):
         period = None
         if role == 'monthly_statement' and re.fullmatch(r'[0-9]{8}', params.get('dt', '')):
             period = params['dt'][:6]
-        if role == 'contract_note' and re.fullmatch(r'[0-9]{4}', params.get('year', '')) and re.fullmatch(r'(?:[1-9]|1[0-2])', params.get('month', '')):
+        if role == 'contract_note' and re.fullmatch(r'[0-9]{4}', params.get('year', '')) and re.fullmatch(r'(?:0?[1-9]|1[0-2])', params.get('month', '')):
             period = params['year'] + params['month'].zfill(2)
         state['documents'].setdefault(account, {})[role] = {'sha256': parent, 'url': url, 'period': period}
         return

@@ -909,3 +909,36 @@ historical_month_form_read:
     cleanup proofs unchanged.
   full_offline: Final-head CI supplies full verification before another paced real
     acquisition; CodeRabbit waiting waived.
+
+zero_padded_period_delivery:
+  inputs:
+    scripts/source_qualification.py: aa41284497ac7b11e46a2d075a205e492d269b141c5737c97d550c336510a62c
+    tests/test_source_qualification.py: ce3a3bac27eb4946cddfb4959fe03a98e8f10f3f2ad583f0a6a2cfa1582a0e59
+  checks:
+    command: .venv/bin/python -m pytest tmp/source70-worktree/tests/test_source_qualification.py
+      -q
+    exit_code: 0
+    passed: 24
+    log_sha256: a4d521417dd5fb06ecf58068e60342a774e4b2209db537940c3cc5f3a82f0891
+  boundary: Accept source month09 as September when recording note period; strict
+    source/account/transport checks unchanged. Offline importer independently proves
+    source-to-note financial match, rather than relying on URLs alone.
+  actual_delivery:
+    runtime_source_commit: d3ee912cb04c90b6911b49d07aeeb0634dd33cff
+    selected_distinct_wrappers: 2
+    pea_statement_period: '202609'
+    pea_statements: 1
+    pea_parsed_note_documents: 2
+    pea_matched_trades: 3
+    missing_or_ambiguous_trade_notes: 0
+    pme_offered_months_without_statement: 21
+    pme_older_history: Unavailable accessible-period history accepted by operator;
+      do not claim never used
+    financial_writes: 0
+    conversion_blocker: EXPLICIT_PRICE_CURRENCY_REQUIRED remains outside acquisition
+      scope
+    owned_session_closed: true
+  reuse: Actual acquisition at d3ee912 remains applicable; this period-recording fix
+    is validated against retained saved documents without another authentication attempt.
+    Full final-head CI supplies offline verification; browser/vault/native proofs
+    unchanged.

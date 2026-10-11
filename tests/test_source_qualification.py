@@ -224,3 +224,11 @@ def test_acquisition_is_complete_only_for_matching_note_and_statement_periods():
     assert qualification.next_document(state)['documents']['complete'] is True
     state['documents']['PEA']['contract_note']['period'] = None
     assert qualification.next_document(state)['documents']['complete'] is False
+
+
+def test_note_period_accepts_source_zero_padded_month():
+    state = qualification.planner()
+    state.update(account_ids={'PEA': 'ACCOUNT_A'}, verified={'PEA'}, current={'account': 'PEA'})
+    html = "<strong>Avis d'Opération</strong><table><tr><td>COMPTE N°</td><td>ACCOUNT_A PEA</td></tr></table>"
+    qualification.discover(state, ORIGIN + '/priv/new/releveOpe.php?year=2026&month=09&day=23', html.encode(), 'contract_note')
+    assert state['documents']['PEA']['contract_note']['period'] == '202609'
