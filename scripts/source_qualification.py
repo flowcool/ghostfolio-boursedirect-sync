@@ -147,6 +147,8 @@ def validate_selection(state, captured, choice):
         and choice['sourceSha256'] in captured and choice['account'] in state['verified']
         and choice['role'] in ('frame_document', 'monthly_statement', 'contract_note'))
     source_url(choice['url'], choice['url'])
+    replay.require((choice['account'], choice['url']) not in state['seen']
+        and choice['role'] not in state['documents'].get(choice['account'], {}))
     selected = dict(parse_qsl(urlsplit(choice['url']).query)).get('nc')
     current_account = state['current'].get('account')
     replay.require(selected is None or selected == state['accounts'][choice['account']])
@@ -305,7 +307,7 @@ def qualify(root, lab, inventory):
                             write_frame(process, {'result': {'accounts_verified': True, 'needs_selection': True}})
                             continue
                         choice = validate_selection(state, captured, replay.private._read(selection))
-                        selection.rename(output / ('selection-used-' + str(state['captures']) + '.yaml'))
+                        selection.rename(output / ('selection-used-' + uuid.uuid4().hex + '.yaml'))
                         q.durable._sync_directory(output)
                         state['queue'].append(choice)
                         awaiting_selection = False

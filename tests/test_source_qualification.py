@@ -77,6 +77,14 @@ def test_incomplete_lists_allow_only_a_retained_source_and_verified_account_sele
         'role': 'frame_document', 'sourceSha256': 'a' * 64, 'account': 'PEA'}
     captured = {'a' * 64: {'role': 'frame_document'}}
     assert qualification.validate_selection(state, captured, choice)['verify_account'] is True
+    state['seen'].add(('PEA', choice['url']))
+    with pytest.raises(RuntimeError):
+        qualification.validate_selection(state, captured, choice)
+    state['seen'].clear()
+    state['documents']['PEA'] = {'frame_document': {}}
+    with pytest.raises(RuntimeError):
+        qualification.validate_selection(state, captured, choice)
+    state['documents'].clear()
     for invalid in ({**choice, 'sourceSha256': 'b' * 64}, {**choice, 'account': 'unknown'},
         {**choice, 'url': ORIGIN + '/priv/new/avis-operes.php'},
         {**choice, 'url': ORIGIN + '/priv/new/avis-operes.php?nc=ACCOUNT_B'}):

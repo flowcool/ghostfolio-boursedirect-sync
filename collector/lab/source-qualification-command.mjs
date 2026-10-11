@@ -8,7 +8,7 @@ import {qualifyBrokerSource} from '../source-qualification-pilot.mjs';
 import {principal} from '../core.mjs';
 
 process.umask(0o077);
-let fenced=false, child, receive, exit, browserClosed=false, sandbox=false, worker, pilot;
+let fenced=false, child, receive, exit, browserClosed=false, sandbox=false, worker, pilot, failed=false, browserStoppedOwned=false;
 const channel=privateChannel({input:process.stdin,output:process.stdout,fence:()=>{fenced=true;child?.stdin.end();process.exitCode=1;}});
 let serial=Promise.resolve();
 function request(value) {
@@ -51,7 +51,7 @@ try {
       try {const [code]=await Promise.race([exit,new Promise((_,no)=>{timer=setTimeout(()=>no(new Error()),15000);})]);
         if(code===0&&browserClosed)return true;
       } catch {} finally {clearTimeout(timer);}
-      return await request({action:'stop_browser'})===true;
+      browserStoppedOwned=await request({action:'stop_browser'})===true;return browserStoppedOwned;
     }};
   const adapter=bitwardenCli({...input.vault,
     transport:sshCliTransport(input.destination),
@@ -92,18 +92,20 @@ try {
     if(next.needs_selection===true)continue;
     if(next.done===true) {
       if(!confirmed)throw new Error();
-      await pilot.close();pilot=undefined;await worker.close();worker=undefined;
+      await pilot.close();pilot=undefined;await worker.close();const totpRequests=Number(worker.status().used);worker=undefined;
       await channel.send({action:'complete',accounts_verified:true,documents:next.documents,
-        session_logged_out:true,browser_exit_verified:true,totp_requests:1});break;
+        session_logged_out:true,browser_exit_verified:browserClosed||browserStoppedOwned,
+        browser_pipe_exit_verified:browserClosed,browser_stopped_owned:browserStoppedOwned,totp_requests:totpRequests});break;
     }
     if(n===95)throw new Error();
     await pilot.captureDocument(next.document);
   }
 } catch {
-  await channel.send({action:'refused',code:'SOURCE_QUALIFICATION_REFUSED'}).catch(()=>{});process.exitCode=1;
+  failed=true;process.exitCode=1;
 } finally {
   await pilot?.close().catch(()=>{process.exitCode=1;});
   await worker?.close().catch(()=>{process.exitCode=1;});
-  if(child&&!browserClosed){child.stdin.end();await exit?.catch(()=>{});}
+  if(child&&!browserClosed&&!browserStoppedOwned){child.stdin.end();await exit?.catch(()=>{});}
+  if(failed)await channel.send({action:'refused',code:'SOURCE_QUALIFICATION_REFUSED'}).catch(()=>{});
   try{channel.releaseInput();}catch{process.exitCode=1;}process.stdin.destroy();
 }

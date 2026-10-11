@@ -471,3 +471,29 @@ qualification_caller:
   account_discovery_completed: false
   document_pairs_completed: false
   online_ready: false
+
+caller_review_corrections:
+  kind: external-caller-review-corrections
+  reviewed_head: dd0c32ad71a998e51bbad69d0a0d907deefc0daf
+  review_id: 5484284059
+  comments:
+  - 4242557245
+  - 4242557248
+  - 4242557255
+  inputs:
+    collector/lab/source-qualification-command.mjs: 7d23262f70c3651a59883b9261f030a4dc4167b11ac345437265264a2faa81b7
+    scripts/source_qualification.py: d26d0b65d84c6d5af68e1ce1ede6fce43c1c819976ad19df57973fc273e35e82
+    tests/test_source_qualification.py: 7e0a2b4f0696cb369ca0dd7826e6ae11dde799b038a7474ad1a866f3a23c4186
+  checks:
+    python:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1218
+      log_sha256: 89eb0573c3050bc9f450a64475362dd0fe5c1e21f53416036887d5a97a7a9034
+    worker_syntax:
+      command: node --check collector/lab/source-qualification-command.mjs
+      exit_code: 0
+    native_pilot: Unchanged source-specific caller and browser runtime reuse qualification_caller
+      evidence; this correction affects command completion/cleanup and private selection
+      bookkeeping.
+  broker_attempts: 0
