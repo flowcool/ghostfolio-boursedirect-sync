@@ -580,3 +580,51 @@ public_preflight_recovery:
     credentials_delivered: false
     authentication_attempts: 0
     owned_cleanup_verified: true
+
+challenge_image_denial:
+  inputs:
+    collector/lab/source-authentication-runtime.mjs: ade3b7f5729f5d04ec5c949b8fc402b6f5c3d2e8422e2aaaeee28f6fbe1152ad
+    collector/source-native-session.mjs: f3d952da4cfa7b5ce33a13ba001432f3c44c4932c8fa8ad7c39045bac64226a0
+    collector/source-qualification-pilot.mjs: b03566c6e420829e5df7580582de87cafcd841aee090a2787961398bf6bec6ae
+    collector/tests/source-native-session.test.mjs: babf461ab40d94f1573cdf2ff96c2313293ebffcaf2765e4137ed27ab9218ca7
+    docs/design/online-source-inspection.md: 0bc18b93e060964f274df4d4d36337af4c122c6900afe02af31b1e182e3ffc4f
+  checks:
+    node:
+      command: node --import ./tests/no-network.mjs --test tests/source-native-session.test.mjs
+        tests/source-authentication-gate.test.mjs
+      exit_code: 0
+      passed: 28
+      log_sha256: 1ba8889656347aa06acf7fb291c68fa45a33a395b1d7c7b026c67d84f37d2328
+  native:
+    known_image:
+      blocked_images: 1
+      password: 1
+      otp: 1
+      finalize: 1
+      documents: 1
+      child_requests: 0
+      owned_cleanup_verified: true
+    unknown_image:
+      password: 1
+      otp: 0
+      finalize: 0
+      retained_state: password_accepted
+      owned_cleanup_verified: true
+    denial_removed:
+      refused: true
+      password: 1
+      otp: 0
+      finalize: 0
+  actual:
+    password_outcome: known_totp_challenge
+    two_factor_state_verified: true
+    two_factor_systems_verified: true
+    otp_submissions: 0
+    document_captures: 0
+    retained_state: password_accepted
+    owned_browser_and_cli_stopped: true
+    exact_async_failure_trigger: unconfirmed; prior diagnostic retained no event context
+  recovery: No journal reset or real authentication retry. A new attempt and explicit
+    journal recovery require renewed operator authority.
+  full_offline: Final-head CI must supply full offline verification; previous 26beb2a
+    CI passed 1221 Python/639 Node tests. CodeRabbit waiting waived by operator.

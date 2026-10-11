@@ -15,9 +15,9 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
   let requests = 0, bytes = 0, failure;
   function abort() {fenced = true; return ordering ? ordering.abort() : stopOwned();}
   function check() {if (fenced) throw new Error('SOURCE_NATIVE_SESSION_FENCED');}
-  function track(promise) {
+  function track(promise, diagnostic = {}) {
     tasks.add(promise);
-    void promise.catch(error => {failure ??= {code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_NATIVE_HANDLER_REFUSED'};return abort();}).catch(() => {}).finally(() => tasks.delete(promise));
+    void promise.catch(error => {failure ??= {...diagnostic,code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_NATIVE_HANDLER_REFUSED'};return abort();}).catch(() => {}).finally(() => tasks.delete(promise));
   }
   function send(method, params = {}, sessionId) {check(); return pipe.send(method, params, sessionId);}
   function binding() {
@@ -87,8 +87,8 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
         ownedEvent(event);
         if (Object.hasOwn(p, 'responseStatusCode')) {
           if (p.responseStatusCode >= 300 && p.responseStatusCode < 400 || p.responseErrorReason) throw new Error();
-          track(response({event, binding: binding(), send}));
-        } else track(paused({event, binding: binding(), send}));
+          track(response({event, binding: binding(), send}),diagnostic);
+        } else track(paused({event, binding: binding(), send}),diagnostic);
       }
       } catch(error) {failure={...diagnostic,code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_NATIVE_EVENT_REFUSED'};throw error;}
     }});

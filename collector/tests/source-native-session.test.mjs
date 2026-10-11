@@ -93,3 +93,10 @@ test('public child quarantine requires the owned session and parent frame',async
   assert.equal(f.session.fenced(),true);
   await f.session.close();
 });
+test('async refusal retains structural event context without copying a request or exception text',async()=>{
+  const f=await fixture({paused:async()=>{throw new Error('SYNTHETIC sensitive error');}});
+  f.event('Fetch.requestPaused',{requestId:'image',frameId:'frame',resourceType:'Image',request:{url:'https://synthetic.invalid/sensitive',method:'GET'}});
+  for(let i=0;i<10&&!f.session.fenced();i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(f.session.failure(),{event:'Fetch.requestPaused',resource_type:'Image',response_status:null,response_error:null,code:'SOURCE_NATIVE_HANDLER_REFUSED'});
+  await f.session.close();
+});

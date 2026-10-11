@@ -21,6 +21,10 @@ const PHASES = Object.freeze({
   '/hub/auth/two-factor/validate-totp': ['otp_uncertain', 'otp_submit'],
   '/hub/auth/login-2fa': ['finalization_uncertain', 'password_finalize'],
 });
+// Retained app source derives Js from the auth Script directory. Its TOTP
+// selection uses `${Js}/system-totp.png` (including the doubled slash).
+const AUTH_PUBLIC_IMAGES = new Set(['/apps/auth/production//system-totp.png',
+  '/apps/auth/production/system-sms.png']);
 function nativeBody(value, limit = 1048576) {
   if (!value || typeof value.body !== 'string' || typeof value.base64Encoded !== 'boolean'
       || Buffer.byteLength(value.body) > limit) throw new Error();
@@ -53,7 +57,7 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
   async function publicRead(event,binding,send) {
     const p=event.params;
     if (!publicDecide({...p,sessionId:event.sessionId})) {
-      if(phase!=='preflight'||p.request.method!=='GET'||p.resourceType==='Document')throw new Error();
+      if(phase!=='preflight'||p.request.method!=='GET'||p.resourceType==='Document')throw new Error('SOURCE_PUBLIC_RESOURCE_OUTSIDE_PREFLIGHT');
       await retainSafe({role:'public_resource_blocked',url:p.request.url,method:'GET',resource_type:p.resourceType,
         request_id:p.requestId,session_id:event.sessionId,frame_id:p.frameId,dispatch_authority:false});
       await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
@@ -70,12 +74,19 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
   async function paused({event,binding,send}) {
     const p=event.params,url=new URL(p.request.url);
     if (url.origin!==policy.origin) {
-      if(phase!=='preflight'||p.request.method!=='GET'||p.resourceType==='Document')throw new Error();
+      if(phase!=='preflight'||p.request.method!=='GET'||p.resourceType==='Document')throw new Error('SOURCE_FOREIGN_RESOURCE_OUTSIDE_PREFLIGHT');
       await retainSafe({role:'public_resource_blocked',url:p.request.url,method:'GET',resource_type:p.resourceType,
         request_id:p.requestId,session_id:event.sessionId,frame_id:p.frameId,dispatch_authority:false});
       await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
     }
     if (pending.size>=256||pending.has(p.requestId))throw new Error();
+    if(phase==='password_accepted'&&appVerified&&p.request.method==='GET'&&p.resourceType==='Image'
+        &&AUTH_PUBLIC_IMAGES.has(url.pathname)&&!url.search&&!url.hash&&!url.username&&!url.password
+        &&!Object.hasOwn(p.request,'postData')) {
+      await retainSafe({role:'auth_public_image_blocked',url:p.request.url,method:'GET',resource_type:'Image',
+        source_sha256:pins.app_sha256,request_id:p.requestId,dispatch_authority:false});
+      await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId);return;
+    }
     const auth=PHASES[url.pathname];
     if(auth) {
       if(!appVerified||!gate||phase!==auth[0]||url.search||url.hash)throw new Error();

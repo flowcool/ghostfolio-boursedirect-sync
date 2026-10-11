@@ -289,3 +289,9 @@ the main-frame credential binding. Child POSTs, redirects, response ingress,
 foreign sessions and child events after preflight remain fatal. The default
 native transport still refuses child-frame attachment; this denial-only profile
 is selected solely by the qualification caller while it is credential-free.
+
+After a known password acceptance, the caller also denies the two exact TOTP/SMS
+selection image GETs derived from the pinned application source. These are
+same-origin `Image` requests without query/fragment; denial is retained before
+`Fetch.failRequest`. This grants no network dispatch or additional authentication
+attempt. Other requests and child frames after preflight still stop the session.

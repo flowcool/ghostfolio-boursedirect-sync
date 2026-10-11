@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 const origin = 'http://127.0.0.1:48123';
 let raw = ''; for await (const chunk of process.stdin) {raw += chunk; if (raw.length > 4096) throw new Error();}
 const input = JSON.parse(raw);
-if (!['success', 'wrong-body', 'fsync', 'pilot', 'pilot-bad-source'].includes(input.scenario)) throw new Error('SYNTHETIC_RUNTIME_REFUSED');
+if (!['success', 'wrong-body', 'fsync', 'pilot', 'pilot-bad-source', 'pilot-late-unknown'].includes(input.scenario)) throw new Error('SYNTHETIC_RUNTIME_REFUSED');
 const now = () => Math.floor(Date.now()/1000);
 const policy = syntheticPolicy(origin, input.allocation);
 const authority = sourceAuthenticationComposition(policy);
@@ -29,7 +29,7 @@ let outcome = {code: 'SYNTHETIC_NATIVE_QUALIFICATION_REFUSED', passed: false, on
 const app = `${pilotScenario?'<link rel="stylesheet" href="/public.css"><img src="/unqualified-public-image.png"><iframe src="/unqualified-public-frame"></iframe>':''}<link rel=icon href="data:,"><form id=f><input type=text id=bd_auth_login_type_login><input type=password id=bd_auth_login_type_password></form><section><h6>Authentification par application (TOTP)</h6><div class="code-input react-code-input">${Array.from({length:6},(_,i)=>`<input type=number inputmode=numeric data-id=${i}>`).join('')}</div><input type=radio name=devicestate id=trusted value=trusted><input type=radio name=devicestate id=distrusted value=distrusted checked></section><script>
 let credentials;function post(url,body){return new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST',url);x.setRequestHeader('Content-Type','application/json');x.onload=()=>ok(JSON.parse(x.responseText));x.onerror=no;x.send(JSON.stringify(body));});}
 ${pilotScenario?"post('/hub/auth/verify',{branding:'boursedirect'});const get=url=>{const x=new XMLHttpRequest();x.open('GET',url);x.send();};get('/hub/referential/branding/boursedirect');":''}
-f.onsubmit=e=>{e.preventDefault();credentials={username:bd_auth_login_type_login.value,password:bd_auth_login_type_password.value,branding:'boursedirect',redirect:null};post('/hub/auth/login',credentials)${pilotScenario?".then(()=>{get('/hub/auth/two-factor/login/active-systems/boursedirect');get('/hub/auth/two-factor/login/state/boursedirect');})":''};};
+f.onsubmit=e=>{e.preventDefault();credentials={username:bd_auth_login_type_login.value,password:bd_auth_login_type_password.value,branding:'boursedirect',redirect:null};post('/hub/auth/login',credentials)${pilotScenario?".then(()=>{get('/hub/auth/two-factor/login/active-systems/boursedirect');get('/hub/auth/two-factor/login/state/boursedirect');const image=new Image();image.src=" + JSON.stringify(input.scenario==='pilot-late-unknown'?'/unqualified-challenge-image.png':'/apps/auth/production//system-totp.png') + ";document.body.append(image);})":''};};
 document.querySelector('.code-input input').oninput=e=>{const code=e.target.value;post('/hub/auth/two-factor/validate-totp',{code,branding:'boursedirect',trusted_device:false}).then(()=>post('/hub/auth/login-2fa',credentials));};</script>`;
 try {
   stage = 'synthetic_server';
@@ -69,7 +69,7 @@ try {
   let protocolBytes=0;
   child.stdout.on('data',bytes=>{protocolBytes+=bytes.length;if(protocolBytes<=1048576)fs.appendFileSync('/home/fixture/bootstrap-protocol.bytes',bytes,{mode:0o600});if(!receive)throw new Error();try{receive.receive(bytes);}catch{}});
   if(pilotScenario) {
-    stage='pilot';let delivered=0,codes=0,retained=0,documents=0;
+    stage='pilot';let delivered=0,codes=0,retained=0,documents=0,blockedAuthImages=0;
     const used=new Set();
     const actualSha=createHash('sha256').update(app).digest('hex');
     const result=await qualifySourceForPolicy(policy,{
@@ -79,14 +79,14 @@ try {
       credentials:async()=>{delivered++;return {login:'SYNTHETIC',password:'SYNTHETIC_PASSWORD',profile:{algorithm:'SHA1',period:30,digits:6}};},
       enrollBound:async current=>{current.enroll();return true;},
       lateCode:async(request,expected)=>{codes++;return {...expected,code:'123456',startedAt:now(),completedAt:now(),profile:{algorithm:'SHA1',period:30,digits:6}};},
-      retain:value=>{atomicPrivate('/home/fixture/pilot-retained-'+(++retained)+'.yaml',value,{exclusive:true});return true;},
+      retain:value=>{if(value.role==='auth_public_image_blocked')blockedAuthImages++;atomicPrivate('/home/fixture/pilot-retained-'+(++retained)+'.yaml',value,{exclusive:true});return true;},
       consumeRead:grant=>{if(used.has(grant.grant))throw new Error();used.add(grant.grant);atomicPrivate('/home/fixture/pilot-grant-'+used.size+'.yaml',grant,{exclusive:true});return true;},
       verifyBrowser:async()=>{const until=Date.now()+10000;while(!sandbox){if(Date.now()>until)throw new Error();await new Promise(ok=>setTimeout(ok,50));}return true;},
       onDocument:document=>{if(document.url!==origin+'/fr/page/mes-comptes'||!document.body.includes('Captured account page'))throw new Error();documents++;return true;}});
     await result.captureDocument({url:result.document_url,role:'frame_document',sourceSha256:actualSha});
     await result.confirmAuthenticated({two_distinct_account_wrappers_verified:true});
     await result.close();
-    outcome={...outcome,passed:delivered===1&&codes===1&&documents===1&&childRequests===0,child_requests:childRequests,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
+    outcome={...outcome,passed:delivered===1&&codes===1&&documents===1&&childRequests===0&&blockedAuthImages===1,blocked_auth_images:blockedAuthImages,child_requests:childRequests,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
   } else {
   stage = 'native_bootstrap';
   session = await sourceNativeSession({write:bytes=>new Promise((resolve,reject)=>child.stdin.write(bytes,e=>e?reject(e):resolve())),
