@@ -12,7 +12,7 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
   let fenced = false, ordering, pipe, bootstrap, owner, frameId, contextId;
   const pageEpoch = randomUUID(), frameEpoch = randomUUID(), tasks = new Set();
   const quarantinedFrames = new Set();
-  let requests = 0, bytes = 0, failure;
+  let requests = 0, bytes = 0, failure, loadedDocuments = 0;
   function abort() {fenced = true; return ordering ? ordering.abort() : stopOwned();}
   function check() {if (fenced) throw new Error('SOURCE_NATIVE_SESSION_FENCED');}
   function track(promise, diagnostic = {}) {
@@ -42,6 +42,10 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
         track(ordering.cancelHttpAuth(event.sessionId, event.params.requestId)); return;
       }
       if (event.method === 'Network.requestWillBeSent' && event.params.redirectResponse) throw new Error();
+      if (event.method === 'Page.loadEventFired') {
+        if (event.sessionId !== owner?.sessionId) throw new Error();
+        loadedDocuments++;return;
+      }
       if (event.method === 'Page.frameAttached') {
         const p=event.params;
         if (publicPreflight()!==true || event.sessionId!==owner?.sessionId
@@ -111,7 +115,8 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
     }, stop: abort, product: 'HeadlessChrome', expectedVersion: chromeVersion});
   try {
     pipe.armEvents(); owner = await bootstrap.start();
-    return Object.freeze({binding, browserProcesses: () => send('SystemInfo.getProcessInfo'), send: (method, params = {}) => send(method, params, owner.sessionId),
+    return Object.freeze({binding, documentReady:()=>{check();return contextId===undefined?null:loadedDocuments;},
+      browserProcesses: () => send('SystemInfo.getProcessInfo'), send: (method, params = {}) => send(method, params, owner.sessionId),
       evaluate: async (fn, args = []) => {
         check();
         if (typeof fn !== 'function' || !Array.isArray(args)) throw new Error('SOURCE_NATIVE_REALM_MISSING');

@@ -30,6 +30,27 @@ export function inspectSourceRequestForPolicy(policy, {owner, candidate, event, 
     exact(candidate, ['role', 'url', 'method', 'resourceType', 'sourceSha256']);
     policyUrl(policy, candidate.url);
     if (!HASH.test(candidate.sourceSha256)) throw new Error();
+    const monthForm = candidate.role === 'frame_document' && candidate.method === 'POST';
+    if (monthForm) {
+      if (candidate.url !== policy.origin + '/priv/new/releves.php' || candidate.resourceType !== 'Document') throw new Error();
+      exact(expected, ['nc', 'RlvCombo']);
+      if (!/^[0-9]{1,3}$/.test(expected.nc) || !/^(?:[1-9]|1[0-9]|2[01])$/.test(expected.RlvCombo)) throw new Error();
+      exact(event, ['requestId', 'sessionId', 'frameId', 'resourceType', 'request']);
+      identifier(event.requestId);
+      if (event.sessionId !== owner.sessionId || event.frameId !== owner.frameId || event.resourceType !== 'Document') throw new Error();
+      exact(event.request, ['url', 'method', 'headers', 'postData']);
+      if (event.request.url !== candidate.url || event.request.method !== 'POST'
+          || typeof event.request.postData !== 'string' || event.request.postData.length > 128) throw new Error();
+      const types = Object.entries(event.request.headers ?? {}).filter(([key]) => key.toLowerCase() === 'content-type');
+      if (types.length !== 1 || !/^application\/x-www-form-urlencoded(?:; charset=UTF-8)?$/.test(types[0][1])) throw new Error();
+      const entries = [...new URLSearchParams(event.request.postData)];
+      if (entries.length !== 2 || new Set(entries.map(([key]) => key)).size !== 2
+          || entries.some(([key, value]) => !Object.hasOwn(expected, key) || expected[key] !== value)) throw new Error();
+      return Object.freeze({role: candidate.role, url: candidate.url, method: 'POST', resource_type: 'Document',
+        source_sha256: candidate.sourceSha256, request_id: event.requestId, session_id: event.sessionId,
+        frame_id: event.frameId, payload_keys: Object.freeze(['nc', 'RlvCombo']),
+        content_type: 'application/x-www-form-urlencoded', dispatch_authority: false, online_ready: false});
+    }
     const fields = POST_KEYS[candidate.role];
     if (!fields && !GET_ROLES.has(candidate.role)) throw new Error();
     if (candidate.method !== (fields ? 'POST' : 'GET')

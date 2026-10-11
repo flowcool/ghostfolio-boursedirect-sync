@@ -50,3 +50,29 @@ test('fencing while evidence is held prevents consuming or continuing', async ()
   await assert.rejects(pending, /SOURCE_READ_GATE_REFUSED/);
   assert.deepEqual(f.calls.map(row => row[0]), ['stop']);
 });
+
+function monthRequest() {
+  return {candidate:{role:'frame_document',url:origin+'/priv/new/releves.php',method:'POST',resourceType:'Document',sourceSha256:'c'.repeat(64)},
+    event:{sessionId:'session',frameId:'frame',requestId:'month',resourceType:'Document',request:{url:origin+'/priv/new/releves.php',method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},postData:'nc=2&RlvCombo=3'}},
+    expected:{nc:'2',RlvCombo:'3'},grant:'month-1'};
+}
+test('retained read-only month form consumes one grant before continuation',async()=>{
+  const f=fixture();await f.gate.paused(monthRequest());
+  assert.deepEqual(f.calls.map(row=>row[0]),['retain','consume','continue']);
+  assert.deepEqual(f.calls[0][1].payload_keys,['nc','RlvCombo']);
+  assert.equal(Object.hasOwn(f.calls[0][1],'postData'),false);
+});
+for(const mutate of [
+  v=>{v.event.request.postData='nc=1&RlvCombo=3';},
+  v=>{v.event.request.postData+='&password=SYNTHETIC';},
+  v=>{v.event.request.postData+='&nc=2';},
+  v=>{v.expected.RlvCombo='22';v.event.request.postData='nc=2&RlvCombo=22';},
+  v=>{v.candidate.url+='/other';v.event.request.url=v.candidate.url;},
+  v=>{v.event.frameId='foreign';},
+  v=>{v.event.redirectedRequestId='prior';},
+  v=>{v.event.request.headers['Content-Type']='application/json';},
+])test('ambiguous or unrelated month POST stops before a read grant',async()=>{
+  const f=fixture(),v=monthRequest();mutate(v);
+  await assert.rejects(f.gate.paused(v),/SOURCE_READ_GATE_REFUSED/);
+  assert.deepEqual(f.calls.map(row=>row[0]),['stop']);
+});

@@ -39,7 +39,9 @@ export function sourceReadGate(policy, {binding, retain, consume, continueReques
         if (candidate.url !== policy.origin + known[0] || candidate.method !== known[1]
             || candidate.resourceType !== 'XHR') throw new Error();
       } else if (!['frame_document', 'monthly_statement', 'contract_note'].includes(candidate.role)
-          || candidate.method !== 'GET' || candidate.resourceType !== 'Document') throw new Error();
+          || !(candidate.method === 'GET' || candidate.role === 'frame_document' && candidate.method === 'POST'
+            && candidate.url === policy.origin + '/priv/new/releves.php')
+          || candidate.resourceType !== 'Document') throw new Error();
       policyUrl(policy, candidate.url);
       if (!HASH.test(candidate.sourceSha256)) throw new Error();
       const observation = inspectSourceRequestForPolicy(policy, {owner: {sessionId: owner.sessionId, frameId: event.frameId},

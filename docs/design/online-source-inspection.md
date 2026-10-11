@@ -319,3 +319,17 @@ pages. A selected option proves its wrapper; each financial document must
 independently match that wrapper's stable identifier in its account header.
 Private receipts retain both values and their document provenance. A selector
 index alone cannot establish the identity of a financial document.
+
+Historical monthly reads use only the source-described `frmRlv` POST to
+`/priv/new/releves.php`, with the selected account index `nc` and an observed
+`RlvCombo` value from 1 through 21. The private grant binds the exact URL,
+owned session/frame, form content type and these two unique fields before
+continuation. Extra fields, credentials, duplicate keys, redirects, another
+account or another route refuse. The caller builds this read-only form in its
+owned inert capture page; it waits for the new page load and native realm
+before another form submission. Captured pages and response data stay inert.
+
+Document acceptance requires matching source-selected note and statement
+periods in addition to account identity. The operator can end a read session
+after retained absence evidence using the private finish receipt; its result
+remains incomplete and does not satisfy the document criterion or close Beads.

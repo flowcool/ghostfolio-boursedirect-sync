@@ -100,3 +100,15 @@ test('async refusal retains structural event context without copying a request o
   assert.deepEqual(f.session.failure(),{event:'Fetch.requestPaused',resource_type:'Image',response_status:null,response_error:null,code:'SOURCE_NATIVE_HANDLER_REFUSED'});
   await f.session.close();
 });
+
+test('document readiness requires a loaded owned page and its current native realm',async()=>{
+  const f=await fixture();assert.equal(f.session.documentReady(),0);
+  f.event('Page.frameNavigated',{frame:{id:'frame',url:'https://synthetic.invalid/captured'}});
+  assert.equal(f.session.documentReady(),null);
+  f.event('Runtime.executionContextCreated',{context:{id:2,uniqueId:'new-owned-realm',auxData:{isDefault:true,frameId:'frame'}}});
+  f.event('Page.loadEventFired',{timestamp:1});assert.equal(f.session.documentReady(),1);
+  await f.session.evaluate(function(){return 'SAFE';});
+  assert.equal(f.commands.findLast(row=>row.method==='Runtime.evaluate').params.uniqueContextId,'new-owned-realm');
+  assert.throws(()=>f.event('Page.loadEventFired',{timestamp:2},'foreign'),/CAPABILITY_SESSION_REJECTED/);
+  await f.session.close();
+});

@@ -71,18 +71,19 @@ def discover(state, url, raw, role):
         else:
             state['accounts'] = rows
             state['account_ids'] = identities
-            form = select.find_parent('form')
-            replay.require(form is not None and form.get('method', 'GET').upper() == 'GET')
-            base = source_url(url, form.get('action') or url)
-            fields = [(row['name'], row.get('value', '')) for row in form.select('input[name]')
-                if row.get('type', '').lower() == 'hidden']
-            replay.require(len(fields) <= 16 and not any(name == 'nc' for name, _ in fields))
-            parsed = urlsplit(base)
-            for kind, identifier in rows.items():
-                params = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-                    if key not in {'nc', *(name for name, _ in fields)}]
-                selected = urlunsplit((parsed.scheme, parsed.netloc, parsed.path,
-                    urlencode(params + fields + [('nc', identifier)]), ''))
+        form = select.find_parent('form')
+        replay.require(form is not None and form.get('method', 'GET').upper() == 'GET')
+        base = source_url(url, form.get('action') or url)
+        fields = [(row['name'], row.get('value', '')) for row in form.select('input[name]')
+            if row.get('type', '').lower() == 'hidden']
+        replay.require(len(fields) <= 16 and not any(name == 'nc' for name, _ in fields))
+        parsed = urlsplit(base)
+        for kind, identifier in rows.items():
+            params = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+                if key not in {'nc', *(name for name, _ in fields)}]
+            selected = urlunsplit((parsed.scheme, parsed.netloc, parsed.path,
+                urlencode(params + fields + [('nc', identifier)]), ''))
+            if (kind, selected, '') not in state['seen']:
                 state['queue'].append({'url': selected, 'role': 'frame_document', 'sourceSha256': parent,
                     'account': kind, 'verify_account': True})
         if current and current.get('verify_account'):
@@ -99,7 +100,13 @@ def discover(state, url, raw, role):
             if len(cells) == 2 and cells[0].get_text(' ', strip=True) == 'COMPTE N°':
                 headers.append(cells[1].get_text(' ', strip=True))
         replay.require(len(headers) == 1 and re.search(r'(?<![A-Za-z0-9_-])' + re.escape(state['account_ids'][account]) + r'(?![A-Za-z0-9_-])', headers[0]))
-        state['documents'].setdefault(account, {})[role] = {'sha256': parent, 'url': url}
+        params = dict(parse_qsl(urlsplit(url).query))
+        period = None
+        if role == 'monthly_statement' and re.fullmatch(r'[0-9]{8}', params.get('dt', '')):
+            period = params['dt'][:6]
+        if role == 'contract_note' and re.fullmatch(r'[0-9]{4}', params.get('year', '')) and re.fullmatch(r'(?:[1-9]|1[0-2])', params.get('month', '')):
+            period = params['year'] + params['month'].zfill(2)
+        state['documents'].setdefault(account, {})[role] = {'sha256': parent, 'url': url, 'period': period}
         return
     # Before selecting each wrapper, traverse only source-declared account frames.
     candidates = []
@@ -123,25 +130,51 @@ def discover(state, url, raw, role):
         if account is None and node.name == 'a' and path not in {'/fr/page/releves', '/fr/page/avis-operes', '/fr/page/avis-d-operes'}:
             continue
         if document_role != 'frame_document' and (account is None
-                or document_role in state['documents'].get(account, {})):
+                or document_role == 'monthly_statement' and document_role in state['documents'].get(account, {})):
             continue
         candidates.append({'url': target, 'role': document_role, 'sourceSha256': parent, 'account': account})
     # Finish the selected wrapper before switching the broker's account context.
+    if account in state['verified'] and urlsplit(url).path == '/priv/new/releves.php':
+        month_selects = soup.select('select[name=RlvCombo]')
+        replay.require(len(month_selects) == 1)
+        month_select = month_selects[0]
+        form = month_select.find_parent('form')
+        replay.require(form is not None and form.get('method', '').upper() == 'POST')
+        target = source_url(url, form.get('action') or url)
+        replay.require(urlsplit(target).path == '/priv/new/releves.php')
+        target = urlunsplit((*urlsplit(target)[:3], '', ''))
+        inputs = form.select('input[name]')
+        replay.require(len(inputs) == 1 and inputs[0].get('name') == 'nc'
+            and inputs[0].get('type', '').lower() == 'hidden'
+            and inputs[0].get('value') == state['accounts'][account])
+        options = month_select.find_all('option', recursive=False)
+        replay.require(1 <= len(options) <= 21 and len({row.get('value') for row in options}) == len(options))
+        for option in options:
+            value = option.get('value')
+            replay.require(re.fullmatch(r'(?:[1-9]|1[0-9]|2[01])', value or ''))
+            if not option.has_attr('selected'):
+                candidates.append({'url': target, 'role': 'frame_document', 'sourceSha256': parent,
+                    'account': account, 'verify_account': True, 'method': 'POST',
+                    'fields': {'nc': state['accounts'][account], 'RlvCombo': value}})
     state['queue'][0:0] = candidates
 
 
 def next_document(state):
     while state['queue']:
         row = state['queue'].pop(0)
-        key = (row['account'], row['url'])
-        if key in state['seen'] or row['role'] in state['documents'].get(row['account'], {}):
+        key = (row['account'], row['url'], json.dumps(row.get('fields', ''), sort_keys=True) if row.get('fields') else '')
+        if key in state['seen'] or row['role'] == 'monthly_statement' and row['role'] in state['documents'].get(row['account'], {}):
+            continue
+        if row.get('method') == 'POST' and 'monthly_statement' in state['documents'].get(row['account'], {}):
             continue
         state['seen'].add(key)
         state['current'] = row
         return {'accounts_verified': state['verified'] == {'PEA', 'PEA-PME'},
-            'document': {key: row[key] for key in ('url', 'role', 'sourceSha256')}}
+            'document': {key: row[key] for key in ('url', 'role', 'sourceSha256', 'method', 'fields') if key in row}}
     replay.require(state['verified'] == {'PEA', 'PEA-PME'})
     complete = all(set(state['documents'].get(kind, {})) == {'monthly_statement', 'contract_note'}
+        and state['documents'][kind]['monthly_statement'].get('period') is not None
+        and state['documents'][kind]['monthly_statement'].get('period') == state['documents'][kind]['contract_note'].get('period')
         for kind in state['verified'])
     return {'done': True, 'accounts_verified': True, 'documents': {'complete': complete,
         'monthly_statements': sum('monthly_statement' in value for value in state['documents'].values()),
@@ -153,8 +186,8 @@ def validate_selection(state, captured, choice):
         and choice['sourceSha256'] in captured and choice['account'] in state['verified']
         and choice['role'] in ('frame_document', 'monthly_statement', 'contract_note'))
     source_url(choice['url'], choice['url'])
-    replay.require((choice['account'], choice['url']) not in state['seen']
-        and choice['role'] not in state['documents'].get(choice['account'], {}))
+    replay.require((choice['account'], choice['url'], '') not in state['seen']
+        and (choice['role'] != 'monthly_statement' or choice['role'] not in state['documents'].get(choice['account'], {})))
     selected = dict(parse_qsl(urlsplit(choice['url']).query)).get('nc')
     current_account = state['current'].get('account')
     replay.require(selected is None or selected == state['accounts'][choice['account']])
@@ -309,6 +342,12 @@ def qualify(root, lab, inventory, public_only=False):
                     document = None
                 elif action == 'next_document':
                     if awaiting_selection:
+                        finish = output / 'finish-acquisition.yaml'
+                        if finish.exists():
+                            replay.require(replay.private._read(finish) == {'stop_after_retained_absence': True}
+                                and state['verified'] == {'PEA', 'PEA-PME'})
+                            write_frame(process, {'result': next_document(state)})
+                            continue
                         selection = output / 'selection.yaml'
                         until = min(deadline, time.monotonic() + 15)
                         while not selection.exists() and time.monotonic() < until:

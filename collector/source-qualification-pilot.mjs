@@ -115,8 +115,8 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
     if(documentGrants.has(p.request.url)) {
       const pin=documentGrants.get(p.request.url);documentGrants.delete(p.request.url);
       pending.set(p.requestId,{kind:'document',url:p.request.url,role:pin.role});
-      await reads.paused({candidate:candidate(pin.role,p.request.url,'GET','Document',pin.sha),event:envelope(event),
-        grant:'document-'+randomUUID(),expected:{}});return;
+      await reads.paused({candidate:candidate(pin.role,p.request.url,pin.method,'Document',pin.sha),event:envelope(event),
+        grant:'document-'+randomUUID(),expected:pin.fields??{}});return;
     }
     if(['finalized','authenticated'].includes(phase))throw new Error();
     await publicRead(event,binding,send);
@@ -230,11 +230,27 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
     await waitFor(()=>phase==='finalized');code=undefined;
     return Object.freeze({
       document_url:finalDocument,
-      captureDocument:async({url,role,sourceSha256})=>{
+      captureDocument:async({url,role,sourceSha256,method='GET',fields})=>{
         if(!['finalized','authenticated'].includes(phase)||fatal||!['frame_document','monthly_statement','contract_note'].includes(role)
             ||new URL(url).origin!==policy.origin||!/^[a-f0-9]{64}$/.test(sourceSha256))throw new Error();
-        documentGrants.set(url,{role,sha:sourceSha256});await session.send('Page.navigate',{url});
-        await waitFor(()=>!documentGrants.has(url)&&![...pending.values()].some(row=>row.url===url));return true;
+        const before=session.documentReady();
+        if(method==='POST') {
+          if(role!=='frame_document'||url!==policy.origin+'/priv/new/releves.php'
+              ||!fields||Object.keys(fields).length!==2||!/^[0-9]{1,3}$/.test(fields.nc)
+              ||!/^(?:[1-9]|1[0-9]|2[01])$/.test(fields.RlvCombo))throw new Error();
+          documentGrants.set(url,{role,sha:sourceSha256,method,fields});
+          await session.evaluate(function(url,fields){
+            if(document.location.origin!==new URL(url).origin||document.forms.length!==0)throw new Error();
+            const form=document.createElement('form');form.method='POST';form.action=url;
+            for(const name of ['nc','RlvCombo']){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=fields[name];form.append(input);}
+            document.body.append(form);form.submit();return 'SOURCE_MONTH_FORM_SUBMITTED';
+          },[url,fields]);
+        } else {
+          if(method!=='GET'||fields!==undefined)throw new Error();
+          documentGrants.set(url,{role,sha:sourceSha256,method});await session.send('Page.navigate',{url});
+        }
+        await waitFor(()=>!documentGrants.has(url)&&![...pending.values()].some(row=>row.url===url)
+          &&session.documentReady()!==null&&session.documentReady()>before);return true;
       },
       confirmAuthenticated:async evidence=>{if(phase!=='finalized'||fatal||evidence?.two_distinct_account_wrappers_verified!==true)throw new Error();authority.transition(handle,'authenticated',now());phase='authenticated';await retainSafe({authentication_verified:true});},
       close:async()=>{await session.close();authority.releasePrincipal(handle);selected=code=undefined;},

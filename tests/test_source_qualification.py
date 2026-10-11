@@ -77,13 +77,14 @@ def test_incomplete_lists_allow_only_a_retained_source_and_verified_account_sele
         'role': 'frame_document', 'sourceSha256': 'a' * 64, 'account': 'PEA'}
     captured = {'a' * 64: {'role': 'frame_document'}}
     assert qualification.validate_selection(state, captured, choice)['verify_account'] is True
-    state['seen'].add(('PEA', choice['url']))
+    state['seen'].add(('PEA', choice['url'], ''))
     with pytest.raises(RuntimeError):
         qualification.validate_selection(state, captured, choice)
     state['seen'].clear()
-    state['documents']['PEA'] = {'frame_document': {}}
+    state['documents']['PEA'] = {'monthly_statement': {}}
+    acquired = {**choice, 'role': 'monthly_statement'}
     with pytest.raises(RuntimeError):
-        qualification.validate_selection(state, captured, choice)
+        qualification.validate_selection(state, captured, acquired)
     state['documents'].clear()
     for invalid in ({**choice, 'sourceSha256': 'b' * 64}, {**choice, 'account': 'unknown'},
         {**choice, 'url': ORIGIN + '/priv/new/avis-operes.php'},
@@ -192,3 +193,34 @@ def test_selector_indexes_are_distinct_from_stable_account_identifiers():
 def test_inventory_refuses_missing_or_duplicate_stable_identifiers(changed):
     with pytest.raises(RuntimeError):
         qualification.discover(qualification.planner(), ORIGIN + '/priv/new/avis-operes.php', changed.encode(), 'frame_document')
+
+
+def test_saved_month_form_only_submits_exact_owned_account_and_observed_period():
+    state = qualification.planner()
+    html = ACCOUNT_FORM.replace('value=ACCOUNT_A', 'value=1').replace('value=ACCOUNT_B', 'value=2')
+    monthly = '<form method=post><input type=hidden name=nc value=1><select name=RlvCombo><option value=1 selected>September</option><option value=2>August</option></select></form>'
+    url = ORIGIN + '/priv/new/releves.php'
+    qualification.discover(state, url, (html + monthly).encode(), 'frame_document')
+    wrapper = qualification.next_document(state)['document']
+    qualification.discover(state, wrapper['url'], (html + monthly).encode(), 'frame_document')
+    period = qualification.next_document(state)['document']
+    assert period == {'url': url, 'role': 'frame_document', 'sourceSha256': qualification.digest((html + monthly).encode()), 'method': 'POST', 'fields': {'nc': '1', 'RlvCombo': '2'}}
+    state['documents']['PEA'] = {'monthly_statement': {}}
+    assert qualification.next_document(state)['document']['url'].endswith('nc=2')
+    bad = monthly.replace('name=nc value=1', 'name=nc value=2')
+    state['current'] = {'account': 'PEA', 'verify_account': True}
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, wrapper['url'], (html + bad).encode(), 'frame_document')
+
+
+def test_acquisition_is_complete_only_for_matching_note_and_statement_periods():
+    state = qualification.planner()
+    state['verified'] = {'PEA', 'PEA-PME'}
+    for account in state['verified']:
+        state['documents'][account] = {'monthly_statement': {'period': '202609'}, 'contract_note': {'period': '202610'}}
+    assert qualification.next_document(state)['documents']['complete'] is False
+    for account in state['verified']:
+        state['documents'][account]['contract_note']['period'] = '202609'
+    assert qualification.next_document(state)['documents']['complete'] is True
+    state['documents']['PEA']['contract_note']['period'] = None
+    assert qualification.next_document(state)['documents']['complete'] is False

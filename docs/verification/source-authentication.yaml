@@ -844,3 +844,68 @@ stable_account_identifier_binding:
     qualified proofs.
   full_offline: Final-head CI supplies full verification before another paced acquisition
     attempt.
+
+historical_month_form_read:
+  inputs:
+    scripts/source_qualification.py: 963dba4d1f11a1753d5c43818a275ac1293c2c9c7750868a2cceef0954a62966
+    tests/test_source_qualification.py: 3b29117e5887ff30fd0d323eff4f9b37f520f6d11783845229c89d62eade24b1
+    collector/source-request-inspection.mjs: aa050f2f37f8e2bcbc4c6ecfb4295a7dab2a15fd06d4ced0eb67ae3eef8d12d6
+    collector/source-read-gate.mjs: aaa13a004b4b9dbfc8abc0dd719a069fff00c35db829de04b5527ffba2de1f75
+    collector/source-qualification-pilot.mjs: ff6d5f7043f7e79f89ff822044936e362d1136271a31ceedd4bb1946c8d6f101
+    collector/source-native-session.mjs: ea4030592308a9f504ffa40196876acd8e1e2626c9067375558ea028bf6d246e
+    collector/lab/source-authentication-runtime.mjs: ae58b95a24e6587f902e9df82b5df8a1e8a209526aa7cff0620345a700ebe31e
+    collector/tests/source-read-gate.test.mjs: 781fd825f20c9db1ad3ee2094ec3c1834471f717f793678c08aa2204f6ba4aa0
+    collector/tests/source-native-session.test.mjs: 767d5f00dfe9189c7755e333c911692808b106108275a3d568eaf8f81cd8b87c
+    docs/design/online-source-inspection.md: 0b4c3d6b187a328fa9be2d78455a91ec2a8c1a677cb4765caa20527ef7ecbf84
+  checks:
+    python:
+      command: .venv/bin/python -m pytest tmp/source70-worktree/tests/test_source_qualification.py
+        -q
+      passed: 23
+      log_sha256: acbd8afb334d9f80dd17722f4dfed5570c321dcbb5f0a6037b4f5bc6d0c12f1b
+    node:
+      command: node --import ./tests/no-network.mjs --test tests/source-read-gate.test.mjs
+        tests/source-request-inspection.test.mjs tests/source-authentication-response.test.mjs
+        tests/source-native-session.test.mjs
+      passed: 75
+      log_sha256: 1d5495bb5c9f2dff1cfec2f968e44160c0a661e53e4942e8abd7491c4904274e
+  native:
+    owned_month_form:
+      password: 1
+      otp: 1
+      finalize: 1
+      documents: 2
+      month_posts: 1
+      owned_cleanup_verified: true
+    ambiguous_query:
+      refused: true
+      password: 1
+      otp: 0
+      finalize: 0
+      owned_cleanup_verified: true
+    missing_navigation_wait:
+      refused: true
+      code: CAPABILITY_COMMAND_REJECTED
+      native_error: uniqueContextId not found
+      owned_cleanup_verified: true
+  boundary: Exact same-origin source-described read-only monthly POST with unique
+    nc/RlvCombo fields and no additional payload; one-use durable read grant before
+    continuation. Native ownership, redirect and credential guards retained. Wait
+    for owned loaded document and its current unique realm before a form submit. Distinct
+    source-derived stable account identity and matching financial-document periods
+    required.
+  actual_previous:
+    source_commit: 306b30c83af7e0a31c2606f4dc4318450ddc2036
+    authentication_verified: true
+    distinct_selected_wrappers_verified: 2
+    captures: 27
+    pea_document_roles: 2
+    pea_note_statement_periods_match: false
+    pme_september_statement_absent: true
+    pme_note_search_months: October2026 through September2025; no note found, out-of-range
+      source fallback not proof of older absence
+    owned_cleanup_verified: true
+  reuse: Pinned browser image, sandbox, vault identity, OTP source acceptance and
+    cleanup proofs unchanged.
+  full_offline: Final-head CI supplies full verification before another paced real
+    acquisition; CodeRabbit waiting waived.

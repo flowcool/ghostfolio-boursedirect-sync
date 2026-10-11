@@ -23,7 +23,7 @@ let handle;if(!pilotScenario){authority.enroll();handle=authority.acquirePrincip
 const source = {schema_version: 2, origin, roles: {password: null, app_method: null, otp: null, finalize: null}};
 let phase = 'password_uncertain', session, child, server, exit, pipeClosed = false, sandbox = false, gate;
 const counts = {password: 0, otp: 0, finalize: 0};
-let childRequests=0,fontRequests=0;
+let childRequests=0,fontRequests=0,monthRequests=0;
 let stage = 'initialize';
 let outcome = {code: 'SYNTHETIC_NATIVE_QUALIFICATION_REFUSED', passed: false, online_ready: false, browser_codes: []};
 const app = `${pilotScenario?'<link rel="stylesheet" href="/public.css"><img src="/unqualified-public-image.png"><iframe src="/unqualified-public-frame"></iframe>':''}<link rel=icon href="data:,"><form id=f><input type=text id=bd_auth_login_type_login><input type=password id=bd_auth_login_type_password></form>${pilotScenario?'<template id="totp-template">':''}<section><h6>Authentification par application (TOTP)</h6><div class="code-input react-code-input">${Array.from({length:6},(_,i)=>`<input type=number inputmode=numeric data-id=${i}>`).join('')}</div><input type=radio name=devicestate id=trusted value=trusted><input type=radio name=devicestate id=distrusted value=distrusted checked></section>${pilotScenario?'</template>':''}<script>
@@ -47,6 +47,7 @@ try {
       else if(url.pathname==='/hub/referential/branding/boursedirect')res.end('{"two_factor_authentication":{"client":true}}');
       else if(url.pathname==='/hub/auth/two-factor/login/state/boursedirect')res.end('{"state":"ACTIVATED"}');
       else if(url.pathname==='/hub/auth/two-factor/login/active-systems/boursedirect')res.end('{"systems":[{"type":"totp","enabled":true}]}');
+      else if(url.pathname==='/priv/new/releves.php'&&req.method==='POST'&&body==='nc=2&RlvCombo=3'){monthRequests++;res.setHeader('Content-Type','text/html');res.end('<html><title>Captured historical month</title></html>');}
       else if (url.pathname === '/hub/auth/login') {counts.password++;res.writeHead(401);res.end('{"error":"2FA required"}');}
       else if (url.pathname === '/hub/auth/two-factor/validate-totp') {counts.otp++;res.end('null');}
       else if (url.pathname === '/hub/auth/login-2fa') {counts.finalize++;res.end('{"redirect":"/fr/page/mes-comptes"}');}
@@ -83,11 +84,12 @@ try {
       retain:value=>{if(value.role==='auth_public_image_blocked')blockedAuthImages++;if(value.role==='auth_public_font_blocked')blockedAuthFonts++;atomicPrivate('/home/fixture/pilot-retained-'+(++retained)+'.yaml',value,{exclusive:true});return true;},
       consumeRead:grant=>{if(used.has(grant.grant))throw new Error();used.add(grant.grant);atomicPrivate('/home/fixture/pilot-grant-'+used.size+'.yaml',grant,{exclusive:true});return true;},
       verifyBrowser:async()=>{const until=Date.now()+10000;while(!sandbox){if(Date.now()>until)throw new Error();await new Promise(ok=>setTimeout(ok,50));}return true;},
-      onDocument:document=>{if(document.url!==origin+'/fr/page/mes-comptes'||!document.body.includes('Captured account page'))throw new Error();documents++;return true;}});
+      onDocument:document=>{if(!((document.url===origin+'/fr/page/mes-comptes'&&document.body.includes('Captured account page'))||(document.url===origin+'/priv/new/releves.php'&&document.body.includes('Captured historical month'))))throw new Error();documents++;return true;}});
     await result.captureDocument({url:result.document_url,role:'frame_document',sourceSha256:actualSha});
+    await result.captureDocument({url:origin+'/priv/new/releves.php',role:'frame_document',sourceSha256:actualSha,method:'POST',fields:{nc:'2',RlvCombo:'3'}});
     await result.confirmAuthenticated({two_distinct_account_wrappers_verified:true});
     await result.close();
-    outcome={...outcome,passed:delivered===1&&codes===1&&documents===1&&childRequests===0&&fontRequests===0&&blockedAuthImages===1&&blockedAuthFonts===1,blocked_auth_images:blockedAuthImages,blocked_auth_fonts:blockedAuthFonts,font_requests:fontRequests,child_requests:childRequests,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
+    outcome={...outcome,passed:delivered===1&&codes===1&&documents===2&&monthRequests===1&&childRequests===0&&fontRequests===0&&blockedAuthImages===1&&blockedAuthFonts===1,blocked_auth_images:blockedAuthImages,blocked_auth_fonts:blockedAuthFonts,font_requests:fontRequests,month_requests:monthRequests,child_requests:childRequests,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
   } else {
   stage = 'native_bootstrap';
   session = await sourceNativeSession({write:bytes=>new Promise((resolve,reject)=>child.stdin.write(bytes,e=>e?reject(e):resolve())),
