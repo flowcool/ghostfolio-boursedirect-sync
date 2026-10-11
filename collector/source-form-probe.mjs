@@ -1,4 +1,16 @@
 // Fixed dummy values only. The caller must deny every non-public request.
+export function blockedFormEnvelope(request) {
+  const refuse = () => {throw new Error('SOURCE_FORM_ENVELOPE_REFUSED');};
+  if (!request || request.method !== 'POST' || !request.headers
+      || typeof request.headers !== 'object' || Array.isArray(request.headers)) refuse();
+  const types = Object.entries(request.headers).filter(([key]) => key.toLowerCase() === 'content-type');
+  if (types.length !== 1 || typeof types[0][1] !== 'string' || types[0][1].length > 256
+      || /[\r\n\0]/.test(types[0][1]) || typeof request.postData !== 'string'
+      || Buffer.byteLength(request.postData) > 8192 || request.postData.length === 0) refuse();
+  // Private observation only: do not retain Cookie, Authorization or other headers.
+  return {content_type: types[0][1], body: request.postData};
+}
+
 export function sourceFormProbe() {
   const login = document.querySelectorAll('#bd_auth_login_type_login');
   const password = document.querySelectorAll('#bd_auth_login_type_password');

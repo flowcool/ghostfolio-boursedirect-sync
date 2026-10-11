@@ -7,7 +7,7 @@ import {bootstrapExperiment} from '../capability-bootstrap.mjs';
 import {orderingExperiment} from '../capability-ordering.mjs';
 import {ownedBrowserLifecycle, sandboxStatus} from './browser-sandbox-proof.mjs';
 import {PUBLIC_LOGIN_URL, publicLoginPolicy, publicAssetDocumentPolicy} from '../public-login-policy.mjs';
-import {sourceFormProbe} from '../source-form-probe.mjs';
+import {sourceFormProbe, blockedFormEnvelope} from '../source-form-probe.mjs';
 
 let stage = 'input', pipe, lifecycle, ordering, timer;
 let retained;
@@ -94,7 +94,10 @@ async function run() {
           record(evidence.requests, {url: p.request.url, method: p.request.method,
             resource_type: p.resourceType, request_id: p.requestId, network_id: p.networkId,
             frame_id: p.frameId, session_id: event.sessionId, continued: allowed,
-            redirect: Object.hasOwn(p, 'redirectedRequestId')});
+            redirect: Object.hasOwn(p, 'redirectedRequestId'),
+            ...(formProbe && !allowed && p.request.method === 'POST'
+              && event.sessionId === owner?.sessionId && p.frameId === frameId
+              ? {blocked_form_envelope: blockedFormEnvelope(p.request)} : {})});
           queue = queue.then(() => {
             if (failed) throw new Error();
             return pipe.send(allowed ? 'Fetch.continueRequest' : 'Fetch.failRequest',

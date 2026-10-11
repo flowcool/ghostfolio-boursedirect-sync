@@ -914,3 +914,42 @@ blocked_form_characterization_offline:
   real_vault_session_started: false
   broker_authentication_started: false
   authentication_roles_qualified: false
+blocked_form_envelope_capture:
+  input_sha256:
+    collector/source-form-probe.mjs: 8b17e3f02fc142c0f02b1cb28b4d4684b26e95554439c049c745ad8175a45996
+    collector/tests/source-form-probe.test.mjs: 8eaf9875e22ed99770f5be023ed6db04ec7468e1a13134d9da0e0a8597e1a212
+    collector/lab/public-login-observation.mjs: 6c64b414ac4682314199e82f6137118392a7dceafb9a0c52d21124433a14219f
+    docs/operations/source-connection.md: d6f29812794b4d2d7501f4939ca6c3ab4fce37b0a45d4cede095ac642779b695
+    docs/design/online-source-inspection.md: 9667d09b95442646d4f3df9247f4b5eff024bad819b3a80eb1d31478cb7c88c9
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 510
+      log_sha256: a817139bbda8693b3f5a421083f0c632badf7272120fa3c5a2ef1c46c55c04c7
+    python_reused:
+      source_record: blocked_form_characterization_offline.checks.python_full
+      passed: 1186
+      python_implementation_and_tests_unchanged: true
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+  private_body_max_utf8_bytes: 8192
+  content_type_max_characters: 256
+  other_headers_retained: false
+  only_denied_POSTs_in_owned_frame_session: true
+  real_vault_session_started: false
+  broker_authentication_started: false
+  authentication_roles_enabled: false
+  initial_live_metadata_observation:
+    source_head: bbebe85d1ef6239bf63e385d91c9c24015a64812
+    command: .venv/bin/python scripts/source_connection.py characterize-password-request
+    exit_code: 0
+    requests: 42
+    permitted_GETs: 5
+    http200_responses: 5
+    blocked_requests: 37
+    blocked_POSTs: 2
+    owned_browser_exit_verified: true
+    body_and_content_type_missing: true
+    private_evidence_sha256: 024ff8004ae385a81cab8fcf562489ad0566019828dba14330293d22aa974c9b
+    private_inspection_sha256: 96ba6b86136f03ab6072e88f8d221f686d84aae5984ca9d4b9070586469a33b7

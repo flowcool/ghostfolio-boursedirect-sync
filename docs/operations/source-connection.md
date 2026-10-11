@@ -132,6 +132,15 @@ ambiguous inputs before any mutation. The captured metadata requires independent
 source inspection; it never establishes successful login. Real credential delivery
 and authentication retain their separate source, runtime and security gates.
 
+Inspect every denied POST separately. The current form observation produced a
+preliminary verification request and a password-submit request in the same owned
+frame/session. The opt-in dummy observer additionally retains each denied POST's
+bounded body and Content-Type in its private envelope; other headers are excluded.
+Earlier observations containing URL/method/type alone keep their missing-body
+gap. Saved application source can explain payload construction, but cannot replace
+actual envelope inspection. Keep these gaps explicit in the private source
+contract and leave authentication roles disabled.
+
 ## Bounded recovery
 
 If an exact owned browser was stopped and the receipt says

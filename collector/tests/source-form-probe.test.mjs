@@ -1,8 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {sourceFormProbe} from '../source-form-probe.mjs';
+import {sourceFormProbe, blockedFormEnvelope} from '../source-form-probe.mjs';
 import {publicLoginPolicy, PUBLIC_LOGIN_URL} from '../public-login-policy.mjs';
+
+test('blocked envelope retains bounded body and content type without sensitive headers', () => {
+  const body = JSON.stringify({username: 'SOURCE_PROBE_LOGIN', password: 'SOURCE_PROBE_NOT_A_PASSWORD'});
+  assert.deepEqual(blockedFormEnvelope({method: 'POST', postData: body,
+    headers: {'Content-Type': 'application/json', Cookie: 'PRIVATE_SYNTHETIC_COOKIE', Authorization: 'PRIVATE_SYNTHETIC_AUTH'}}),
+  {content_type: 'application/json', body});
+});
+for (const [name, request] of [
+  ['non-POST', {method: 'GET', postData: '{}', headers: {'Content-Type': 'application/json'}}],
+  ['missing body', {method: 'POST', headers: {'Content-Type': 'application/json'}}],
+  ['empty body', {method: 'POST', postData: '', headers: {'Content-Type': 'application/json'}}],
+  ['oversize multibyte body', {method: 'POST', postData: 'é'.repeat(4097), headers: {'Content-Type': 'application/json'}}],
+  ['missing content type', {method: 'POST', postData: '{}', headers: {}}],
+  ['ambiguous content type', {method: 'POST', postData: '{}', headers: {'Content-Type': 'a', 'content-type': 'b'}}],
+  ['injected content type', {method: 'POST', postData: '{}', headers: {'Content-Type': 'a\r\nb'}}],
+  ['oversize content type', {method: 'POST', postData: '{}', headers: {'Content-Type': 'a'.repeat(257)}}],
+]) test('blocked envelope refuses ' + name, () => {
+  assert.throws(() => blockedFormEnvelope(request), /^Error: SOURCE_FORM_ENVELOPE_REFUSED$/);
+});
 
 function fixture() {
   const events = [], inputs = [], owner = {frameId: 'synthetic-frame', sessionId: 'synthetic-session'};

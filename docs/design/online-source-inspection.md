@@ -153,6 +153,14 @@ URL/method/type, but proves no server acceptance, account ownership or successfu
 authentication. The source owner still owes independent inspection and a separately
 bound real credential attempt. No role becomes enabled from a counter alone.
 
+In this opt-in dummy mode, denied POSTs from the exact owned frame/session also
+retain their bounded request body (at most8192 UTF8 bytes) and unambiguous
+Content-Type (at most256 characters) in the private envelope. Missing or malformed
+fields refuse and retain the attempt. Cookie, Authorization and other headers are
+excluded. Ordinary public observation retains its metadata-only behavior. The
+source owner inspects each preliminary and submit request separately; envelope
+capture grants neither network dispatch nor server-acceptance authority.
+
 The canonical characterization command requires the pinned project-owned adapter
 and verified owned runtime. The fixed helper and POST-denial composition are
 qualified with synthetic DOM objects and socket-forbidden tests. This observation
