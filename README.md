@@ -144,7 +144,9 @@ false. The strict review below requires the separately established evidence.
 
 Save a complete Ghostfolio activity-list JSON and reviewed acquisition-history
 evidence privately. The [review command contract](docs/design/offline-review-cli.md)
-describes configuration and explicit manual-adoption resolutions.
+describes default explicit adoption and the schema2 `certain_unique` automatic
+mode. Automatic mode resolves exact globally unique verified matches without
+per-run manual resolutions; legacy date/fee uncertainty remains blocking.
 
 ```sh
 .venv/bin/python boursedirect_to_ghostfolio.py review \

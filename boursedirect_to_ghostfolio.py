@@ -1219,9 +1219,10 @@ def legacy_duplicate_candidate(activity, row):
             and abs((datetime.fromisoformat(row["operation_date"]).date() - source_day).days) <= 1)
 
 
-def reconcile_existing_activities(prepared, remote, resolutions):
+def reconcile_existing_activities(prepared, remote, resolutions, automatic=False):
     """Private offline adoption proposal; never changes remote records or readiness."""
-    if not isinstance(prepared, dict) or not isinstance(resolutions, dict):
+    if (not isinstance(prepared, dict) or not isinstance(resolutions, dict)
+            or type(automatic) is not bool or automatic and resolutions):
         fail("INVALID_ADOPTION_CONFIGURATION")
     if set(resolutions) - set(prepared):
         fail("STALE_ADOPTION_RESOLUTION")
@@ -1235,6 +1236,13 @@ def reconcile_existing_activities(prepared, remote, resolutions):
             if comment in owned:
                 fail("REMOTE_OWNED_MARKER_DUPLICATE")
             owned[comment] = row
+    owned_remote = {row["remote_id"] for row in owned.values()}
+    unowned_counts = {}
+    if automatic:
+        for event_id, activity in prepared.items():
+            if event_id not in owned:
+                fingerprint = activity_financial_fingerprint(activity)
+                unowned_counts[fingerprint] = unowned_counts.get(fingerprint, 0) + 1
     claimed_remote = set()
     for event_id, activity in prepared.items():
         if activity.get("id") != event_id:
@@ -1263,6 +1271,16 @@ def reconcile_existing_activities(prepared, remote, resolutions):
             result["new"].append(event_id)
             continue
         resolution = resolutions.get(event_id)
+        if automatic:
+            available = [r for r in candidates if r["remote_id"] not in owned_remote]
+            foreign = any(isinstance(r["comment"], str) and r["comment"].startswith("BD#")
+                          for r in available)
+            if unowned_counts[fingerprint] == 1 and len(available) == 1 and not foreign:
+                resolution = {"remote_id": available[0]["remote_id"], "financial_fingerprint": fingerprint}
+            else:
+                result["candidates"][event_id] = sorted(r["remote_id"] for r in candidates)
+                result["blockers"].add("AUTOMATIC_ACTIVITY_ADOPTION_UNCERTAIN")
+                continue
         if resolution is None:
             result["candidates"][event_id] = [r["remote_id"] for r in candidates]
             result["blockers"].add("MANUAL_ACTIVITY_ADOPTION_REQUIRED")
@@ -1728,11 +1746,11 @@ def _dispatch_single_intent(state_root, binding, reviewed, baseline_raw, max_byt
             os.close(descriptor)
 
 
-def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence):
+def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence, automatic=False):
     """Pure conservative coverage proof; never invent opening acquisitions."""
     build_wire_payload(prepared)
     remote = parse_remote_activity_snapshot(raw_snapshot)
-    adoption = reconcile_existing_activities(prepared, remote, resolutions)
+    adoption = reconcile_existing_activities(prepared, remote, resolutions, automatic=automatic)
     raw = raw_snapshot.encode("utf-8") if isinstance(raw_snapshot, str) else raw_snapshot
     snapshot_digest = hashlib.sha256(raw).hexdigest()
     target = next(iter(prepared.values()))["target_account_id"]
@@ -1923,8 +1941,10 @@ def diagnose_local_snapshot(config_path, input_root, max_bytes):
 def review_capture_configuration(config_raw):
     config = parse_keyed_yaml(config_raw)
     roles = ("prepared", "snapshot", "resolutions", "history_evidence")
-    if (set(config) != {"schema_version", *roles} or type(config["schema_version"]) is not int
-            or config["schema_version"] != 1
+    version = config.get("schema_version")
+    keys = {"schema_version", *roles} | ({"adoption_mode"} if version == 2 else set())
+    if (set(config) != keys or type(version) is not int or version not in (1, 2)
+            or version == 2 and config.get("adoption_mode") != "certain_unique"
             or any(not isinstance(config[k], str) or not config[k].strip() for k in roles)):
         fail("INVALID_REVIEW_CONFIGURATION")
     return config
@@ -1940,7 +1960,7 @@ def compute_offline_review(config_raw, captures, max_bytes):
     for raw in (config_raw, *captures.values()):
         if type(raw) is not bytes or len(raw) > max_bytes:
             fail("FROZEN_REVIEW_INPUT_LIMIT_EXCEEDED")
-    review_capture_configuration(config_raw)
+    config = review_capture_configuration(config_raw)
     prepared = validated_prepared_review(captures["prepared"])
     activities = prepared["activities"]
     resolutions = parse_keyed_yaml(captures["resolutions"])
@@ -1955,7 +1975,8 @@ def compute_offline_review(config_raw, captures, max_bytes):
                             for q in quantities) + 8)
     if precision > min(FROZEN_REVIEW_PRECISION_LIMIT, max_bytes):
         fail("FROZEN_REVIEW_PRECISION_LIMIT_EXCEEDED")
-    coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history)
+    coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history,
+                                             automatic=config.get("adoption_mode") == "certain_unique")
     adoption = coverage["adoption"]
     new = {marker: activities[marker] for marker in adoption["new"]}
     wire = build_wire_payload(new) if new else None

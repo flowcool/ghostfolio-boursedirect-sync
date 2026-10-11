@@ -164,7 +164,7 @@ target_service:
     ambiguous_or_changed: quarantine_conflict
     automatic_financial_rewrite: false
     automatic_delete: false
-    manual_resolution_for_normal_certain_match: not_required_in_target_not_yet_implemented
+    manual_resolution_for_normal_certain_match: not_required_in_schema2_certain_unique_review_default_schema1_retained
   unknown_operation_policy:
     quarantine: unknown_operation_and_demonstrated_dependents
     continue: independent_qualified_operations

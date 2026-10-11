@@ -1,7 +1,7 @@
 # Saved-snapshot review command
 
 `review --config FILE --input-root DIR --max-bytes N` is entirely offline. Its
-keyed YAML configuration has exactly schema_version1 and four file references:
+keyed YAML configuration defaults to schema_version1 and four file references:
 `prepared`, `snapshot`, `resolutions`, `history_evidence`. All inputs must be
 regular bounded local files inside the explicit root, with no symlinks. Each is
 read once into captured bytes, used for both parsing and provenance digest.
@@ -29,11 +29,32 @@ confirmed_by: YOUR_REVIEWER
 reference: YOUR_INDEPENDENT_HISTORY_EVIDENCE_REFERENCE
 ```
 
-An empty resolutions file must contain `{}`. Matching manual activities require
+An empty resolutions file must contain `{}`. In schema1 matching manual activities require
 the resolutions described in [adoption](offline-adoption.md); similarity is never
 enough. This command does not fetch a snapshot or establish history completeness.
 It fails on stale/missing evidence or unresolved adoption, and checks conservative
 [chronological coverage](chronological-holdings.md).
+
+For the approved automatic reconciliation policy, opt into schema2:
+
+```yaml
+schema_version: 2
+adoption_mode: certain_unique
+prepared: prepared.yaml
+snapshot: snapshot.json
+resolutions: empty-resolutions.yaml
+history_evidence: history-evidence.yaml
+```
+
+The resolutions file must contain `{}`; manual overrides cannot bypass automatic
+uniqueness. An exact match is adopted only when one unowned source occurrence
+matches one available remote record across the complete supplied source set.
+Verified owned markers reserve their remote records first. Identical repeated
+occurrences, multiple candidates, foreign ownership, unverified dates/currency,
+changed financial values and nearby legacy duplicates remain blocked. No date
+normalization, financial update or deletion occurs. Missing history or unresolved
+adoption still blocks publication of a usable review; schema2 does not yet implement
+independent exception processing or the daily scheduler.
 
 The private artifact `outputs/review-<account-key>.yaml` records engine contract,
 exact input SHA256s, source digests, full reconciliation/coverage and blockers.

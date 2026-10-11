@@ -1086,3 +1086,49 @@ historical_statement_selection:
   - Unknown operations still block conversion of the July period.
   - The separate GitGuardian false-positive issue remains unresolved; CodeRabbit waiting
     is waived.
+
+certain_unique_reconciliation:
+  owner: infra-4g8u.25
+  mode: schema2_certain_unique
+  inputs:
+    boursedirect_to_ghostfolio.py: 47f97fdaf3af4edec1e9964221ae342623f76756025e2f0ee657b62234ddbcaf
+    tests/test_adoption.py: b3c6e346c530aa89ded1d692c8810f312bd8c64cf323fb71a016038e1cff46cb
+    tests/test_frozen_review.py: a8bc149f9d81680e8305842f4df646b038090cc799f518d5bc3ffcba8e1149ee
+    tests/test_review_cli.py: e5a6f4f166a1513c237b0e86e1e48f58cccd9f22287a866f1e5f15cb5a7f0580
+  affected_checks:
+    shared_regressions:
+      command: root .venv/bin/python -m pytest -q tests/test_adoption.py tests/test_frozen_review.py
+        tests/test_holdings.py tests/test_review_cli.py tests/test_qualified_application.py
+      passed: 261
+    final_cli_and_matching_regressions:
+      command: root .venv/bin/python -m pytest -q tests/test_review_cli.py tests/test_adoption.py
+        tests/test_frozen_review.py
+      passed: 139
+  actual_disposable_383:
+    namespace: bd-acceptance-7301cfd1785443639f537d92344fdece
+    result_sha256: 4628115b24bdc2d76fca8ef39992dee30c80b2a070beec5bca2b24bb638673ac
+    harness_sha256: c51ecc24a02eb46dccffe3bdd3c8a003be6e05e00056103297a626870d684d18
+    passed: true
+    source_trades: 3
+    prior_synthetic_support_buys: 3
+    automatic_legacy_adoptions: 3
+    manual_resolution_entries: 0
+    source_import_posts: 0
+    frozen_replay_verified: true
+    repeat_review_identical: true
+    changed_financial_evidence_refused: true
+    previous_review_preserved: true
+    rollback_deleted_owned_rows: 6
+    rollback_remaining: 0
+    production_writes: 0
+  reuse:
+  - Credential transport, native browser and broker acquisition unchanged.
+  - Numeric/date/import and uncertain-write API proofs unchanged; this check exercises
+    actual saved API rows through automatic matching.
+  limits:
+  - UTC-midnight, active, exact financial and ownership gates remain unchanged.
+  - Real historical nonmidnight timestamps and fee conflicts remain blocked.
+  - Global multiplicity uncertainty blocks usable review; independent exception processing
+    and daily scheduling remain unimplemented.
+  - Full final-runtime CI is required before delivery; prose-only updates reuse its
+    runtime evidence.

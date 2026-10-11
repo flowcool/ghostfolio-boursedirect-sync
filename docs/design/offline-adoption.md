@@ -2,8 +2,9 @@
 
 Florent confirms that earlier acquisitions already exist in Ghostfolio. Import
 identity alone cannot prove those activities belong to this importer. The approved
-plan therefore requires explicit snapshot-bound adoption rather than date/quantity
-similarity skips. These pure helpers perform no HTTP request or server mutation.
+schema1 review therefore requires explicit snapshot-bound adoption rather than
+date/quantity similarity skips. Schema2 also supports the approved certain unique
+automatic policy below. These pure helpers perform no HTTP request or server mutation.
 
 `parse_remote_activity_snapshot(raw_json)` validates a complete activities response:
 exact integer count equals list length, unique remote IDs, required account/type/
@@ -76,7 +77,17 @@ prevent reimport without a per-run manual resolution, while conflicting or
 ambiguous matches remain exceptions. Uniqueness applies to a one-to-one assignment
 across all source operations and eligible remote records: two source operations
 cannot both adopt one remote record. Multiplicity conflicts remain quarantined.
-This is a future orchestration target; the
-current snapshot-bound explicit resolution requirements above remain implemented.
+The schema2 `certain_unique` review mode implements this matching policy: exact
+verified owned records are reserved before unowned assignment, and only a single
+unowned occurrence with one available eligible record receives an automatic
+snapshot-bound fingerprint resolution. Multiple identical sources or records have
+no unique assignment and remain candidates. Remote records cannot be reused or
+transferred from another Bourse Direct marker. Default schema1 keeps explicit
+resolutions. Both modes preserve the same active, financial and UTC-midnight date
+gates and the nearby legacy duplicate refusal. Automatic mode refuses nonempty
+manual resolutions. Frozen report validation recomputes the chosen policy against
+the exact captured configuration and inputs.
+The daily scheduler and independent exception processing remain future work;
+unresolved adoption still blocks chronological review.
 Neither target nor current code authorizes rewriting or deleting existing
 financial records.
