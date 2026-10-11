@@ -18,14 +18,17 @@ async function run() {
     let raw = '';
     timer = setTimeout(() => reject(new Error()), 10000);
     process.stdin.setEncoding('utf8');
-    process.stdin.on('data', value => {raw += value; if (raw.length > 4096) reject(new Error());});
+    process.stdin.on('data', value => {raw += value; if (raw.length > 131072) reject(new Error());});
     process.stdin.on('end', () => {clearTimeout(timer); try {resolve(JSON.parse(raw));} catch {reject(new Error());}});
     process.stdin.on('error', reject);
   });
-  if (!input || Object.keys(input).length !== 2 || !/^[a-f0-9]{64}$/.test(input.routing_receipt_sha256)
+  const assetsMode = input && Object.hasOwn(input, 'observed_assets');
+  if (!input || Object.keys(input).length !== (assetsMode ? 4 : 2)
+      || (assetsMode && (!/^[a-f0-9]{64}$/.test(input.reference_evidence_sha256) || !Array.isArray(input.observed_assets) || !input.observed_assets.length)) || !/^[a-f0-9]{64}$/.test(input.routing_receipt_sha256)
       || typeof input.proxy !== 'string' || !/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:8080$/.test(input.proxy)
       || new URL(input.proxy).origin !== input.proxy
       || new URL(input.proxy).hostname.split('.').some(value => Number(value) > 255)) throw new Error();
+  publicLoginPolicy({sessionId: 'validate', frameId: 'validate'}, input.observed_assets ?? []);
   stage = 'chrome_launch';
   const profile = fs.mkdtempSync('/home/fixture/public-observation-');
   const child = spawn('/opt/chrome-headless-shell-linux64/chrome-headless-shell', [
@@ -38,8 +41,9 @@ async function run() {
   lifecycle = ownedBrowserLifecycle(child);
   const evidence = {schema_version: 1, kind: 'single_public_document_observation',
     routing_receipt_sha256: input.routing_receipt_sha256, chrome_version: '155.0.8059.39',
-    authentication_requests: 0, credentials_read: false, scripts_disabled: true,
-    requests: [], responses: [], online_ready: false};
+    authentication_requests: 0, credentials_read: false, scripts_disabled: !assetsMode,
+    reference_evidence_sha256: input.reference_evidence_sha256 ?? null,
+    requests: [], responses: [], targets: [], online_ready: false};
   retained = evidence;
   let loaded = false;
   let decide, owner, frameId, primaryId, queue = Promise.resolve(), bytes = 0;
@@ -62,7 +66,12 @@ async function run() {
       write: raw => new Promise((resolve, reject) => child.stdio[3].write(raw, error => error ? reject(error) : resolve())),
       fence: () => {void fatal().catch(() => {});}, onEvent: event => {
         if (failed) return;
-        if (['Target.targetCreated', 'Target.attachedToTarget'].includes(event.method)) bootstrap.event(event);
+        if (['Target.targetCreated', 'Target.attachedToTarget'].includes(event.method)) {
+          const info = event.params.targetInfo;
+          if (info && typeof info.url === 'string' && info.url.length <= 4096)
+            record(evidence.targets, {type: info.type, url: info.url});
+          bootstrap.event(event);
+        }
         if (event.method === 'Fetch.authRequired') {
           track(ordering.cancelHttpAuth(event.sessionId, event.params.requestId)); return;
         }
@@ -98,9 +107,9 @@ async function run() {
     child.stdio[4].on('end', () => {if (!lifecycle.exited()) void fatal().catch(() => {});});
     ordering = orderingExperiment({send: pipe.send, installRoutes: () => {}, stopOwned: lifecycle.stop,
       closePipe: () => {child.stdio[3].destroy(); child.stdio[4].destroy();}, beforeResume: async session => {
-        await pipe.send('Emulation.setScriptExecutionDisabled', {value: true}, session);
+        await pipe.send('Emulation.setScriptExecutionDisabled', {value: !assetsMode}, session);
         frameId = (await pipe.send('Page.getFrameTree', {}, session)).frameTree.frame.id;
-        decide = publicLoginPolicy({sessionId: session, frameId});
+        decide = publicLoginPolicy({sessionId: session, frameId}, input.observed_assets ?? []);
       }});
     const bootstrap = bootstrapExperiment({send: pipe.send, registerSession: pipe.registerSession,
       initialize: ordering.initialize, stop: fatal, product: 'HeadlessChrome', expectedVersion: '155.0.8059.39'});
@@ -133,8 +142,17 @@ async function run() {
     const body = await pipe.send('Network.getResponseBody', {requestId: primaryId}, owner.sessionId);
     if (typeof body.body !== 'string' || Buffer.byteLength(body.body) > 1048576) throw new Error();
     evidence.document = {url: PUBLIC_LOGIN_URL, request_id: primaryId, body: body.body, base64_encoded: body.base64Encoded === true};
+    if (assetsMode) {
+      stage = 'bounded_public_dom';
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      if (failed) throw new Error();
+      const document = await pipe.send('DOM.getDocument', {depth: 0}, owner.sessionId);
+      const outer = await pipe.send('DOM.getOuterHTML', {nodeId: document.root.nodeId}, owner.sessionId);
+      if (typeof outer.outerHTML !== 'string' || Buffer.byteLength(outer.outerHTML) > 262144) throw new Error();
+      evidence.rendered_dom = {representation: 'CDP DOM serialization UTF8, not original response bytes', html: outer.outerHTML};
+    }
     await queue;
-    if (failed || permitted !== 1) throw new Error();
+    if (failed || (!assetsMode && permitted !== 1) || permitted < 1) throw new Error();
     evidence.counts = {requests, permitted, blocked};
     evidence.owned_browser_exit_verified = await lifecycle.stop();
     return evidence;

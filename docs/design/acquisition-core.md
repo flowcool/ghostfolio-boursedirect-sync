@@ -250,3 +250,17 @@ the explicit overlay and restores the received network-none browser; existing
 vault services, auth journals and prior observations are preserved. A public
 login GET cannot establish authenticated account or password/app-method/OTP
 roles, and all readiness flags remain false.
+
+
+A later explicitly selected public-page observation may accept up to32 immutable
+asset tuples (`observed_assets`: exact canonical URL plus Script/Stylesheet/Image/
+Font type) and `reference_evidence_sha256` alongside the route receipt. The
+private owning supervisor verifies those tuples against the retained public HTML
+references or previously paused metadata before supplying them. In this mode,
+page scripts can execute only after interception is installed; the initial public
+Document and each known asset GET are admitted once, in the owning session/frame,
+without redirects. XHR/Fetch, every POST, unknown assets and foreign targets remain
+blocked. Bounded target metadata, responses and a separately marked UTF8 DOM
+serialization retain source-discovery evidence. Authentication remains disabled;
+this is not recurring collection or permission to fill credentials. The default
+two-field input still grants only the public Document with scripts disabled.

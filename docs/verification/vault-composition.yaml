@@ -565,3 +565,28 @@ direct_lab_browser_recreation:
   new_source_requests: 0
   rollback_private_receipt: inputs/source-observations/browser-before-init.yaml
   actual_renderer_requalification_pending: true
+observed_public_assets_mode:
+  inputs:
+    collector/public-login-policy.mjs: e368a00c62a8192a7ddb8ad4550b3af68c6637e40c4c413dea9ece2eb988dcb5
+    collector/tests/public-login-policy.test.mjs: ddc81b4719325ca6cea691ba6da54d7a952a870f3b1ab641b3cfb9584106d9f4
+    collector/lab/public-login-observation.mjs: 87ff870ab14f147a81fc940ca1a3089924d1feba0f0aa233cd0fcad63287ac3f
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 455
+    log_sha256: cee4b650db3d1bd2a2067f51cc2bf8e1547b23ae2ec318f52f71802c62de62c4
+    observer_syntax_exit_code: 0
+    diagnostic_only_followup: bounded target metadata appended; focused policy and
+      syntax repeated
+  grants: One known public document then each observed exact canonical asset GET/type
+    once in the same frame/session; unknown auth/XHR/Fetch/POST/redirect/foreign targets
+    blocked.
+  reference_basis: Private supervisor must verify actual retained HTML attribute or
+    paused metadata and evidence hash before granting assets.
+  source_discovery_reason:
+    public_html_password_controls: 0
+    observed_canonical_script_references: 5
+    node_read_of_observed_routing_resource_http_status: 403
+    node_read_redirect_followed: false
+    node_read_credentials: false
+  actual_updated_observation_pending: true
