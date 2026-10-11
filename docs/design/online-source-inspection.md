@@ -311,3 +311,11 @@ valid opaque JSON without an explicit error or contradictory success flag. It re
 the outcome and status, never backend data. Other statuses, malformed or
 duplicate-key JSON and explicit errors remain refused;
 credential finalization still needs its independently verified redirect.
+
+Account navigation separates the GET selector value from the stable broker
+identifier at the start of each account option label. Both inventories must
+contain distinct PEA and PEA-PME entries and remain identical across inspected
+pages. A selected option proves its wrapper; each financial document must
+independently match that wrapper's stable identifier in its account header.
+Private receipts retain both values and their document provenance. A selector
+index alone cannot establish the identity of a financial document.

@@ -38,7 +38,7 @@ def source_url(base, relative):
 
 
 def planner():
-    return {'queue': [], 'seen': set(), 'accounts': {}, 'verified': set(),
+    return {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
         'documents': {}, 'current': None, 'captures': 0}
 
 
@@ -54,17 +54,23 @@ def discover(state, url, raw, role):
         select = selectors[0]
         options = select.find_all('option', recursive=False)
         rows = {}
+        identities = {}
         for option in options:
             label = ' '.join(option.get_text(' ', strip=True).upper().split())
             kind = 'PEA-PME' if 'PEA-PME' in label or 'PEA PME' in label else 'PEA' if 'PEA' in label else None
             if kind:
                 replay.require(kind not in rows and option.get('value'))
                 rows[kind] = option['value']
+                identity = option.get_text(' ', strip=True).split()[0]
+                replay.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63}', identity))
+                identities[kind] = identity
         replay.require(set(rows) == {'PEA', 'PEA-PME'} and len(set(rows.values())) == 2)
+        replay.require(len(set(identities.values())) == 2)
         if state['accounts']:
-            replay.require(rows == state['accounts'])
+            replay.require(rows == state['accounts'] and identities == state['account_ids'])
         else:
             state['accounts'] = rows
+            state['account_ids'] = identities
             form = select.find_parent('form')
             replay.require(form is not None and form.get('method', 'GET').upper() == 'GET')
             base = source_url(url, form.get('action') or url)
@@ -92,7 +98,7 @@ def discover(state, url, raw, role):
             cells = row.find_all('td', recursive=False)
             if len(cells) == 2 and cells[0].get_text(' ', strip=True) == 'COMPTE N°':
                 headers.append(cells[1].get_text(' ', strip=True))
-        replay.require(len(headers) == 1 and re.search(r'(?<![A-Za-z0-9])' + re.escape(state['accounts'][account]) + r'(?![A-Za-z0-9])', headers[0]))
+        replay.require(len(headers) == 1 and re.search(r'(?<![A-Za-z0-9_-])' + re.escape(state['account_ids'][account]) + r'(?![A-Za-z0-9_-])', headers[0]))
         state['documents'].setdefault(account, {})[role] = {'sha256': parent, 'url': url}
         return
     # Before selecting each wrapper, traverse only source-declared account frames.
@@ -295,7 +301,9 @@ def qualify(root, lab, inventory, public_only=False):
                     q.durable._sync_directory(output)
                     replay.private._publish(output / ('document-' + str(state['captures']) + '.yaml'), {
                         **document, 'sha256': digest(raw), 'path': path.name, 'original_response_bytes': False,
-                        'account_wrapper': state['current'].get('account') if state['current'] else None}, exclusive=True)
+                        'account_wrapper': state['current'].get('account') if state['current'] else None,
+                        'broker_account_id': state['account_ids'].get(state['current'].get('account'))
+                            if state['current'] else None}, exclusive=True)
                     captured[digest(raw)] = {key: document[key] for key in ('url', 'role')}
                     discover(state, document['url'], raw, document['role'])
                     document = None
@@ -317,7 +325,8 @@ def qualify(root, lab, inventory, public_only=False):
                     result = next_document(state)
                     if result.get('done') and not result['documents']['complete']:
                         replay.private._publish(output / 'read-selection-needed.yaml', {
-                            'accounts': state['accounts'], 'verified_wrappers': sorted(state['verified']),
+                            'accounts': state['accounts'], 'account_ids': state['account_ids'],
+                            'verified_wrappers': sorted(state['verified']),
                             'documents': state['documents'], 'captured_sources': captured,
                             'current_account': state['current'].get('account')}, exclusive=False)
                         print(json.dumps({'code': 'SOURCE_READ_SELECTION_REQUIRED', 'accounts': 2,
@@ -331,7 +340,9 @@ def qualify(root, lab, inventory, public_only=False):
                     replay.require(process.stdout.read(1) == b'' and process.stderr.read(1) == b'')
                     replay.require(row['documents'] == next_document(state)['documents'])
                     replay.private._publish(output / 'qualification.yaml', {**intent, **row,
-                        'state': 'owned_session_closed', 'captures': state['captures']}, exclusive=True)
+                        'state': 'owned_session_closed', 'captures': state['captures'],
+                        'accounts': state['accounts'], 'account_ids': state['account_ids'],
+                        'verified_wrappers': sorted(state['verified'])}, exclusive=True)
                     passed = True
                     return {'code': 'SOURCE_QUALIFICATION_COMPLETED' if row['documents']['complete'] else
                         'SOURCE_DOCUMENT_ACQUISITION_INCOMPLETE', 'accounts': 2, **row['documents']}
@@ -363,7 +374,8 @@ def qualify(root, lab, inventory, public_only=False):
                 'failed_phase': phase, 'exact_owned_cleanup_verified': cleanup,
                 'browser_stopped_owned': browser_stopped, 'cli_stopped_owned': None if public_only else cli_stopped,
                 'cli_unused': public_only,
-                'accounts': state['accounts'], 'verified_wrappers': sorted(state['verified']),
+                'accounts': state['accounts'], 'account_ids': state['account_ids'],
+                'verified_wrappers': sorted(state['verified']),
                 'documents': state['documents'], 'captures': state['captures']})
         if passed or cleanup:
             lease.rmdir()

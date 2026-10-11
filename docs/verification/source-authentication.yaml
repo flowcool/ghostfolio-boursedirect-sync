@@ -810,3 +810,37 @@ source_otp_opaque_json:
     evidence describes its historical runtime inputs.
   full_offline: Final-head CI supplies full verification before another spaced real
     attempt.
+
+stable_account_identifier_binding:
+  inputs:
+    scripts/source_qualification.py: b53b7dd8918dc7257d8f4dca19d97b8b39cd39c26bd1dc4d84dbbd581923a478
+    tests/test_source_qualification.py: ea52f955644269eee3649d56bdc088f979e772da8efc9f1d4d523081bf8979dc
+    docs/design/online-source-inspection.md: f78f987e18e159548856a04b91b013c31f0a5e3b867a712bfd0e65619b151d3d
+  checks:
+    command: .venv/bin/python -m pytest tmp/source70-worktree/tests/test_source_qualification.py
+      -q
+    red_failed: 3
+    green_passed: 21
+    exit_code: 0
+    log_sha256: 1a4adfba0ab4df2e40a34952594e7186cfc55e1281ad42743e3f814eef3e6370
+  actual_saved_analysis:
+    new_broker_requests: 0
+    distinct_inventory_identifiers: 2
+    pea_selected_wrapper_verified: true
+    pea_note_header_exact_stable_identifier_match: true
+    selector_values_equal_broker_identifiers: false
+  actual_attempt:
+    source_commit: 175365840d27e0130d69948ddc083c15a8273eb9
+    otp_outcome: otp_accepted
+    finalization_outcome: credentials_finalized
+    captures: 9
+    owned_browser_and_cli_stopped: true
+    both_selected_wrappers_verified: false
+  boundary: Bind source-derived label identifiers separately from GET selector indexes;
+    refuse missing, duplicate, changed or cross-account identities. Save stable identity
+    and selected wrapper with each document privately. No credentials, Ghostfolio
+    writes or new broker requests in saved analysis.
+  reuse: Native transport, vault and authentication boundaries unchanged; reuse their
+    qualified proofs.
+  full_offline: Final-head CI supplies full verification before another paced acquisition
+    attempt.

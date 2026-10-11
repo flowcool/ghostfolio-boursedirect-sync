@@ -9,8 +9,8 @@ import source_qualification as qualification
 
 ORIGIN = qualification.ORIGIN
 ACCOUNT_FORM = '''<form name=frmCompte method=GET><input type=hidden name=ong value=RO>
-<select id=nc name=nc><option value=ACCOUNT_A selected>Account PEA</option>
-<option value=ACCOUNT_B>Account PEA-PME</option></select></form>'''
+<select id=nc name=nc><option value=ACCOUNT_A selected>ACCOUNT_A Account PEA</option>
+<option value=ACCOUNT_B>ACCOUNT_B Account PEA-PME</option></select></form>'''
 
 
 def test_source_get_form_selection_keeps_wrappers_distinct_and_header_checked():
@@ -55,7 +55,7 @@ def test_wrong_selected_account_cannot_prove_navigation():
     ('PREFIXACCOUNT_A PEA', "Avis d'Opération"), ('ACCOUNT_A PEA', 'Login')])
 def test_document_requires_known_title_and_exact_account_token(header, title):
     state = qualification.planner()
-    state.update(accounts={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, verified={'PEA'}, current={'account': 'PEA'})
+    state.update(accounts={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, account_ids={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, verified={'PEA'}, current={'account': 'PEA'})
     html = f'<strong>{title}</strong><table><tr><td>COMPTE N°</td><td>{header}</td></tr></table>'
     with pytest.raises(RuntimeError):
         qualification.discover(state, ORIGIN + '/priv/new/releveOpe.php', html.encode(), 'contract_note')
@@ -164,3 +164,31 @@ def test_failed_delivery_attempts_both_owned_cleanups_and_retains_uncertain_leas
     assert record['cli_unused'] is public_only
     if public_only:
         assert record['cli_stopped_owned'] is None
+
+
+def test_selector_indexes_are_distinct_from_stable_account_identifiers():
+    form = ACCOUNT_FORM.replace('value=ACCOUNT_A', 'value=1').replace('value=ACCOUNT_B', 'value=2')
+    state = qualification.planner()
+    qualification.discover(state, ORIGIN + '/priv/new/avis-operes.php', form.encode(), 'frame_document')
+    first = qualification.next_document(state)['document']
+    assert first['url'].endswith('nc=1')
+    qualification.discover(state, first['url'], form.encode(), first['role'])
+    assert state['account_ids'] == {'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}
+    note = "<strong>Avis d'Opération</strong><table><tr><td>COMPTE N°</td><td>ACCOUNT_A PEA</td></tr></table>"
+    qualification.discover(state, ORIGIN + '/priv/new/releveOpe.php?id=synthetic', note.encode(), 'contract_note')
+    assert 'contract_note' in state['documents']['PEA']
+    wrong = note.replace('ACCOUNT_A PEA', '1 PEA')
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, ORIGIN + '/priv/new/releveOpe.php?id=wrong', wrong.encode(), 'contract_note')
+    changed = form.replace('ACCOUNT_A Account', 'ACCOUNT_C Account')
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, first['url'], changed.encode(), 'frame_document')
+
+
+@pytest.mark.parametrize('changed', [
+    ACCOUNT_FORM.replace('>ACCOUNT_B Account', '>ACCOUNT_A Account'),
+    ACCOUNT_FORM.replace('>ACCOUNT_A Account', '>1 Account'),
+])
+def test_inventory_refuses_missing_or_duplicate_stable_identifiers(changed):
+    with pytest.raises(RuntimeError):
+        qualification.discover(qualification.planner(), ORIGIN + '/priv/new/avis-operes.php', changed.encode(), 'frame_document')
