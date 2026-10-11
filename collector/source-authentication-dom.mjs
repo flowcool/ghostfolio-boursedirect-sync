@@ -21,6 +21,28 @@ export function submitSourceCredentials(login, password) {
   return {code: 'SOURCE_CREDENTIAL_SUBMIT_REQUESTED', fields: 2};
 }
 
+export function selectSourceTotpMethod() {
+  const refuse = () => {throw new Error('SOURCE_AUTHENTICATION_DOM_REFUSED');};
+  const lists = document.querySelectorAll('#list-system');
+  if (lists.length === 0) {
+    const headings = [...document.querySelectorAll('h6')].filter(node =>
+      node.ownerDocument === document && node.textContent === 'Authentification par application (TOTP)');
+    if (headings.length !== 1) refuse();
+    return {code: 'SOURCE_TOTP_METHOD_ALREADY_SELECTED'};
+  }
+  if (lists.length !== 1 || lists[0].ownerDocument !== document) refuse();
+  const choices = [...lists[0].querySelectorAll('li > a')].filter(anchor => {
+    const images = anchor.querySelectorAll('img');
+    return images.length === 1 && images[0].ownerDocument === document
+      && images[0].title === 'TOTP' && images[0].alt === 'TOTP';
+  });
+  if (choices.length !== 1 || choices[0].ownerDocument !== document || choices[0].tagName !== 'A'
+      || choices[0].closest('#list-system') !== lists[0]
+      || choices[0].getAttribute('href') !== 'javascript:void(0)') refuse();
+  choices[0].click();
+  return {code: 'SOURCE_TOTP_METHOD_SELECTED'};
+}
+
 export function inspectSourceTotpSelection(selectDistrusted = false) {
   const refuse = () => {throw new Error('SOURCE_AUTHENTICATION_DOM_REFUSED');};
   if (typeof selectDistrusted !== 'boolean') refuse();

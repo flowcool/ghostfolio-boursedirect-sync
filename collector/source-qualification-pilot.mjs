@@ -6,7 +6,7 @@ import {sourceAuthenticationComposition} from './source-authentication-gate.mjs'
 import {sourceReadGate} from './source-read-gate.mjs';
 import {publicLoginPolicy, PUBLIC_LOGIN_URL} from './public-login-policy.mjs';
 import {inspectSourceAuthenticationResponse} from './source-authentication-response.mjs';
-import {submitSourceCredentials, inspectSourceTotpSelection, submitSourceTotp} from './source-authentication-dom.mjs';
+import {submitSourceCredentials, selectSourceTotpMethod, inspectSourceTotpSelection, submitSourceTotp} from './source-authentication-dom.mjs';
 import {delayedOtpProvider, validateProviderCode} from './credential-provider.mjs';
 import {BROKER_POLICY, requirePolicy} from './internal/source-policy.mjs';
 
@@ -201,13 +201,18 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
       continueRequest:id=>session.send('Fetch.continueRequest',{requestId:id}),cancelAuth:()=>{throw new Error();},stop});
     await session.evaluate(submitSourceCredentials,[selected.login,selected.password]);
     await waitFor(()=>phase==='password_accepted'&&stateVerified&&systemsVerified);
+    await waitFor(()=>session.evaluate(function(){return document.querySelectorAll('#list-system').length===1
+      || document.querySelectorAll('.code-input.react-code-input input').length===6;}));
+    const method=await session.evaluate(selectSourceTotpMethod);
+    await retainSafe({role:'local_totp_method_selection',code:method.code,source_sha256:pins.app_sha256});
     await waitFor(()=>session.evaluate(function(){return document.querySelectorAll('.code-input.react-code-input input').length===6&&Boolean(document.querySelector('#distrusted'));}));
     await session.evaluate(inspectSourceTotpSelection,[true]);
     const selection=await session.evaluate(inspectSourceTotpSelection);
     authority.confirmLocalAppMethod(handle,source,{source_sha256:pins.app_sha256,page_epoch:bound.pageEpoch,
       frame_epoch:Object.values(bound.frames)[0].epoch,session_id:bound.sessionId,frame_id:Object.keys(bound.frames)[0],
       method:selection.method,trusted_device:selection.trusted_device,native_dom_checked:selection.native_dom_checked},now());
-    if(now()%30>20)await new Promise(resolve=>setTimeout(resolve,(30-now()%30)*1000+50));
+    // Leave the full period for the owned remote vault attestation and CLI read.
+    if(now()%30>2)await new Promise(resolve=>setTimeout(resolve,(30-now()%30)*1000+50));
     const expected={runNonce:randomUUID(),stageNonce:randomUUID()};
     const provider=delayedOtpProvider({...expected,fetchCode:request=>lateCode(request,expected),now});
     code=await provider.request(expected);

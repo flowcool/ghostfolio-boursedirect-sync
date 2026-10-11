@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {submitSourceCredentials, inspectSourceTotpSelection, submitSourceTotp} from '../source-authentication-dom.mjs';
+import {submitSourceCredentials, selectSourceTotpMethod, inspectSourceTotpSelection, submitSourceTotp} from '../source-authentication-dom.mjs';
 import {validateSourceBrowserRuntime} from '../lab/source-browser-pipe.mjs';
 
 function fixture() {
@@ -47,6 +47,30 @@ test('local TOTP inspection binds six empty source controls and distrust without
   const f = fixture(); const result = f.run(inspectSourceTotpSelection);
   assert.equal(result.native_dom_checked, true); assert.equal(result.trusted_device, false); assert.deepEqual(f.actions, []);
   f.run(inspectSourceTotpSelection, [true]); assert.deepEqual(f.actions, ['distrusted']);
+});
+function methodFixture() {
+  const f=fixture();
+  const image={ownerDocument:f.document,title:'TOTP',alt:'TOTP'};
+  const list={ownerDocument:f.document,querySelectorAll:()=>[anchor]};
+  const anchor={ownerDocument:f.document,tagName:'A',querySelectorAll:()=>[image],
+    getAttribute:()=> 'javascript:void(0)',closest:()=>list,click:()=>f.actions.push('select-totp')};
+  const query=f.document.querySelectorAll;
+  f.document.querySelectorAll=selector=>selector==='#list-system'?[list]:query(selector);
+  return {...f,list,anchor,image};
+}
+test('source method list selects the unique local TOTP choice once without submitting',()=>{
+  const f=methodFixture();assert.equal(f.run(selectSourceTotpMethod).code,'SOURCE_TOTP_METHOD_SELECTED');
+  assert.deepEqual(f.actions,['select-totp']);
+});
+for(const mutate of [f=>{f.list.querySelectorAll=()=>[f.anchor,f.anchor];},
+  f=>{f.image.alt='SMS';},f=>{f.anchor.ownerDocument={};},f=>{f.anchor.getAttribute=()=>'/unqualified';}])
+test('method selection refuses ambiguous or unqualified controls before clicking',()=>{
+  const f=methodFixture();mutate(f);assert.throws(()=>f.run(selectSourceTotpMethod),/SOURCE_AUTHENTICATION_DOM_REFUSED/);
+  assert.deepEqual(f.actions,[]);
+});
+test('already displayed TOTP form needs no method click',()=>{
+  const f=fixture();assert.equal(f.run(selectSourceTotpMethod).code,'SOURCE_TOTP_METHOD_ALREADY_SELECTED');
+  assert.deepEqual(f.actions,[]);
 });
 test('single multi-character TOTP input does not click or submit the form again', () => {
   const f = fixture(); const result = f.run(submitSourceTotp, ['123456']);

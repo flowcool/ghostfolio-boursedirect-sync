@@ -628,3 +628,44 @@ challenge_image_denial:
     journal recovery require renewed operator authority.
   full_offline: Final-head CI must supply full offline verification; previous 26beb2a
     CI passed 1221 Python/639 Node tests. CodeRabbit waiting waived by operator.
+
+local_method_choice:
+  inputs:
+    collector/lab/source-authentication-runtime.mjs: d1f0920071c83b227e3f2be8421407934420f35d4ae9752d3f04eb5c8fe91d37
+    collector/source-authentication-dom.mjs: 1882dc6b4d2a5141656490de9b5898d228292c6a4a462667de787553a1a1c8c0
+    collector/source-qualification-pilot.mjs: 4da4499960dab6429eceae69b116974a45a1f7f7cbbd727c29acab258840ae8d
+    collector/tests/source-authentication-dom.test.mjs: a35ea048194d6b763d5cf64d84c217846566c43cf9c5a850ef794dca4ed05612
+    docs/design/online-source-inspection.md: 0c3ad33b4a39274b645ac04fcd060c71c57102f84dd15f0c51ebbdc3461cc814
+  checks:
+    node:
+      command: node --import ./tests/no-network.mjs --test tests/source-authentication-dom.test.mjs
+        tests/source-native-session.test.mjs tests/source-authentication-gate.test.mjs
+      exit_code: 0
+      passed: 47
+      log_sha256: b5fbda8ddfe4569175d4a2ccd1c4540348c93bb2508b35aab28707bcd8938f48
+  native:
+    without_choice_action:
+      refused: true
+      password: 1
+      otp: 0
+      finalize: 0
+    with_choice_action:
+      passed: true
+      password: 1
+      otp: 1
+      finalize: 1
+      documents: 1
+      blocked_auth_images: 1
+      owned_cleanup_verified: true
+    unknown_image:
+      refused: true
+      password: 1
+      otp: 0
+      finalize: 0
+      owned_cleanup_verified: true
+  boundary: Select only the unique source-described local TOTP link or accept an already
+    displayed TOTP form; durable method proof and code freshness checks unchanged.
+    Begin the single delayed code request at the start of a period to leave time for
+    the remote vault attestation.
+  full_offline: Final-head CI supplies full verification before the explicitly renewed
+    real attempt; CodeRabbit wait waived by operator.

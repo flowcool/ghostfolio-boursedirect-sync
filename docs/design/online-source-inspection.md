@@ -295,3 +295,9 @@ selection image GETs derived from the pinned application source. These are
 same-origin `Image` requests without query/fragment; denial is retained before
 `Fetch.failRequest`. This grants no network dispatch or additional authentication
 attempt. Other requests and child frames after preflight still stop the session.
+
+When the source shows a method list, the caller selects the unique owned local
+TOTP choice before waiting for its six code controls. An already selected TOTP
+form needs no click. Ambiguous choices, foreign DOM ownership and navigation
+links refuse before code retrieval; the existing durable local-method proof
+still checks the actual TOTP form and untrusted-device selection afterwards.
