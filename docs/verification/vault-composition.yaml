@@ -953,3 +953,47 @@ blocked_form_envelope_capture:
     body_and_content_type_missing: true
     private_evidence_sha256: 024ff8004ae385a81cab8fcf562489ad0566019828dba14330293d22aa974c9b
     private_inspection_sha256: 96ba6b86136f03ab6072e88f8d221f686d84aae5984ca9d4b9070586469a33b7
+qualified_blocked_dummy_form_envelopes:
+  source_head: 127ed95f4d352cedb59ec54c7cd3dd65a3421dfd
+  command: .venv/bin/python scripts/source_connection.py characterize-password-request
+  exit_code: 0
+  source_sha256:
+    collector/capability-bootstrap.mjs: 360edd80eae8d31ee79dc77ba645963442c5fdb92942f9dbe55525283222f512
+    collector/capability-ordering.mjs: e66e15853c5ac0c28278c3be989cfa9cef2ccfaf277d7d1478aed142f134fab1
+    collector/capability-pipe.mjs: e13be86dfd1149d84483f1dda2b2be29259247c9a5da20a14b0e243d39d694e5
+    collector/lab/browser-sandbox-proof.mjs: b47b16d8a6ccb66b666c536fd208fbc8408647e7b5bcd8bfeca0c12ad80e8709
+    collector/lab/public-login-observation.mjs: 6c64b414ac4682314199e82f6137118392a7dceafb9a0c52d21124433a14219f
+    collector/public-login-policy.mjs: e9282ad2cdf7a5ff8014146004afffbe39f3090984bb8529e3d5e6efe7da93d5
+    collector/source-form-probe.mjs: 8b17e3f02fc142c0f02b1cb28b4d4684b26e95554439c049c745ad8175a45996
+  private_evidence_sha256: dcc43d880a40e00e14a43749754cb8ac1f7a97654b70f410336360a21b8ca075
+  private_inspection_sha256: c47fbf8731534fe639645cd6f99f08fa38ec06d0622c54d3dbeea7a94e5e05fb
+  requests: 42
+  continued_GETs: 5
+  http200_responses: 5
+  blocked_requests: 37
+  blocked_POST_XHRs: 2
+  same_owned_frame_and_session: true
+  owned_browser_exit_verified: true
+  actual_dummy_envelopes_inspected: true
+  content_type: application/json
+  preliminary_payload_keys:
+  - branding
+  password_payload_keys:
+  - username
+  - password
+  - branding
+  - redirect
+  only_fixed_dummy_credentials_present: true
+  real_credential_dispatch: false
+  server_acceptance_proved: false
+  authentication_roles_enabled: false
+  post_observation_status:
+    command: .venv/bin/python scripts/source_connection.py status
+    exit_code: 0
+    report_sha256: afe1eb3b96b2ae610688f8e04c3045bc300c38b16fa162619c7aa38323a63bb8
+    owned_containers: 4
+    new_vault_sessions: 0
+    new_broker_requests: 0
+  checks_reused: blocked_form_envelope_capture.checks
+  documentation_exit_code: 0
+  whitespace_exit_code: 0
