@@ -673,3 +673,60 @@ ci_inert_asset_implementation:
     conclusion: success
   external_review_latest_commit: c1d03dde80fb850433f26f23381b7e5f60a4a6dc
   exact_current_head_external_review_pending: true
+canonical_connection_replay:
+  command: scripts/source_connection.py check | status | restart-browser | stop-browser
+    | connect
+  runbook: docs/operations/source-connection.md
+  inputs:
+    AGENTS.md: aa30ed9598ef811560708958cd0b39bcaebd257af86fab8470925b7d9e5d8ea4
+    CLAUDE.md: dabfd833ece5386a7703e452294948c7931f70c9ee880a9d500b9609d799e26a
+    scripts/source_connection.py: 88d94ecfbc992124ebf35be727d4ea4e4ecd10b4d70c5ef15f68d09ee001100d
+    tests/test_source_connection.py: 40e0a40fdcc9ca35c4ca6adf6a7f2c1bf7c74383618ef12cfa679ff7e60e3fee
+    docs/operations/source-connection.md: 075f7f3bd91e36ba454e17fdaa11c1ea1f2f58567245b1192d2313636df3ac6b
+  private_index_sha256:
+    inputs/lab/replay.yaml: c8cd9a5bfb851fe71c596f3b7507d0b91d3642a7e3cafc2505f0e7e113ace563
+    inputs/lab/migration.yaml: 1f74128e47ed4a1babe31eeccf0b5469371e5165500080c9ccd4758546d5b1bd
+    inputs/source-observations/lab-access.yaml: ffcdd23a5696952fee5bc07f5a934480895f5ac2230ce9b957084df082eafc4c
+  checks:
+    python_full:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1179
+      log_sha256: a7bd1662eb29c30e6bc6c9e7108ec2b4f6e4e494aa9b9431e3f02dc84f6054f2
+    offline_replay_tests:
+      exit_code: 0
+      passed: 7
+    two_saved_replays:
+      exit_code: 0
+      byte_identical: true
+      new_vault_sessions: 0
+      new_broker_requests: 0
+    live_migrated_status:
+      exit_code: 0
+      owned_containers: 4
+      new_vault_sessions: 0
+      new_broker_requests: 0
+    unqualified_connect:
+      exit_code: 2
+      code: SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED
+      new_vault_sessions: 0
+      new_broker_requests: 0
+    documentation_exit_code: 0
+    python_syntax_exit_code: 0
+  historical_authentication_preserved: true
+  private_controls_consolidated_in_project: true
+  transient_entrypoints_retired: true
+  no_new_authentication_attempt: true
+  runtime_recovery_verification_pending: true
+canonical_replay_runtime_recovery:
+  same_owned_browser_id: true
+  stop_command_exit_code: 0
+  restart_terminal_code: SOURCE_BROWSER_RESTARTED_ATTESTED
+  post_restart_status_exit_code: 0
+  vault_receipt_unchanged: true
+  broker_proxy_receipt_unchanged: true
+  pid_netns_refreshed_and_acl_attested: true
+  new_vault_sessions: 0
+  new_broker_requests: 0
+  private_runtime_receipt_sha256: 067867544ddd73e0d143179fd18fb53369c47873d3d3ccf942dff2780782cbb7
+  private_status_sha256: afe1eb3b96b2ae610688f8e04c3045bc300c38b16fa162619c7aa38323a63bb8

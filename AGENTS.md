@@ -4,6 +4,13 @@ Read [CLAUDE.md](CLAUDE.md), then the scoped Beads issue and the owning contract
 selected through the [design index](docs/design/index.md).
 Global working agreement applies. Beads owns live work state.
 
+For acquisition resumption, SSH/lab operations or connection diagnosis, first run
+the [canonical connection procedure](docs/operations/source-connection.md).
+`scripts/source_connection.py check` loads preserved successes and named gaps;
+`status` verifies the existing lab. Resume the first unqualified stage and reuse
+unchanged evidence. Active private lab control and receipts belong to `inputs/lab/`;
+prior temporary controllers are provenance archives, not alternate entrypoints.
+
 ## Architecture and validation
 
 - `boursedirect_to_ghostfolio.py` is a functional mono-file document importer
