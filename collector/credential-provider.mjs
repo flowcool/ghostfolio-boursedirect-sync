@@ -1,5 +1,6 @@
 // Pure trusted-worker/provider interfaces; no CLI, networking or secret-store access.
 import {principal, brokerUrl, totp, otpFromEnvironment} from './core.mjs';
+import {createHash} from 'node:crypto';
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const PROFILE = Object.freeze({algorithm: 'SHA1', period: 30, digits: 6});
@@ -68,6 +69,31 @@ export function selectWorkerItem(item, binding, defaultsVerified = false) {
   } catch { throw new Error('PROVIDER_ITEM_INVALID'); }
 }
 
+// Private metadata pin; URI aliases are never navigation or lookup authority.
+export function workerUriAliasesHash(aliases) {
+  try {
+    if (!Array.isArray(aliases) || aliases.length < 1 || aliases.length > 16) throw new Error();
+    const rows = aliases.map(row => {
+      exact(row, Object.hasOwn(row ?? {}, 'match') ? ['uri', 'match'] : ['uri']);
+      text(row.uri);
+      const match = row.match ?? null;
+      if (match !== null && (!Number.isInteger(match) || match < 0 || match > 5)) throw new Error();
+      return {uri: row.uri, match};
+    });
+    return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
+}
+
+export function selectAliasedWorkerItem(item, binding, defaultsVerified = false) {
+  try {
+    exact(binding, ['itemId', 'name', 'uri', 'principalHash', 'uriAliasesSha256', 'accountConfig']);
+    if (!HASH.test(binding.uriAliasesSha256) || workerUriAliasesHash(item?.login?.uris) !== binding.uriAliasesSha256
+        || item.login.uris.filter(row => row.uri === binding.uri).length !== 1) throw new Error();
+    const {uriAliasesSha256, ...single} = binding;
+    return selectWorkerItem({...item, login: {...item.login, uris: [{uri: binding.uri}]}}, single, defaultsVerified);
+  } catch {throw new Error('PROVIDER_ITEM_INVALID');}
+}
+
 // Name lookup is explicit operator authority, not a fallback after UUID failure.
 export function selectNamedWorkerItem(items, binding, defaultsVerified = false) {
   try {
@@ -99,6 +125,7 @@ export function inspectNamedVaultItem(items, binding, defaultsVerified = false) 
     const fields = workerFields({...item, login: {...item.login, uris: [{uri: resolved.uri}]}}, resolved, defaultsVerified);
     return {itemId: fields.itemId, principalHash: fields.principalHash,
       uri: resolved.uri, uri_count: aliases.length, broker_uri_count: canonical.length,
+      uriAliasesSha256: workerUriAliasesHash(aliases),
       profile: fields.profile, online_ready: false};
   } catch {throw new Error('PROVIDER_ITEM_INVALID');}
 }

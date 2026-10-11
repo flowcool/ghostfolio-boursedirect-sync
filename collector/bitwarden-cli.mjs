@@ -40,8 +40,8 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
     [['login', '--apikey'], 'login', ['BW_CLIENTID', 'BW_CLIENTSECRET']],
     [['unlock', '--passwordenv', 'BW_PASSWORD', '--raw'], 'unlock', ['BW_PASSWORD']],
     [['sync'], 'sync', ['BW_SESSION']],
-    [config.schema_version === 1 ? ['get', 'item', config.binding.itemId]
-      : ['list', 'items', '--search', config.binding.name], config.schema_version === 1 ? 'item' : 'lookup', ['BW_SESSION']],
+    [[1, 4].includes(config.schema_version) ? ['get', 'item', config.binding.itemId]
+      : ['list', 'items', '--search', config.binding.name], [1, 4].includes(config.schema_version) ? 'item' : 'lookup', ['BW_SESSION']],
     [['get', 'totp', config.binding.itemId], 'totp', ['BW_SESSION']],
   ];
   if (config.schema_version === 3) {

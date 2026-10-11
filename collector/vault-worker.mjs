@@ -1,5 +1,5 @@
 // Fixed-command worker engine. Only its trusted launcher can supply execution.
-import {selectWorkerItem, selectNamedWorkerItem, inspectNamedVaultItem, validateProviderCode} from './credential-provider.mjs';
+import {selectWorkerItem, selectAliasedWorkerItem, selectNamedWorkerItem, inspectNamedVaultItem, validateProviderCode} from './credential-provider.mjs';
 import {brokerUrl} from './core.mjs';
 
 function exact(value, keys) {
@@ -16,12 +16,15 @@ function freeze(value) {Object.values(value).forEach(x => {if (x && typeof x ===
 export function providerConfiguration(value) {
   try {
     exact(value, ['schema_version', 'vaultOrigin', 'binding', 'cli']);
-    if (![1, 2, 3].includes(value.schema_version)) throw new Error();
+    if (![1, 2, 3, 4].includes(value.schema_version)) throw new Error();
     const url = new URL(value.vaultOrigin);
     if (url.protocol !== 'https:' || url.origin !== value.vaultOrigin || url.username || url.password) throw new Error();
-    if (value.schema_version === 1) {
-      exact(value.binding, ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
+    if ([1, 4].includes(value.schema_version)) {
+      exact(value.binding, value.schema_version === 4
+        ? ['itemId', 'name', 'uri', 'principalHash', 'uriAliasesSha256', 'accountConfig']
+        : ['itemId', 'name', 'uri', 'principalHash', 'accountConfig']);
       uuid(value.binding.itemId); boundedText(value.binding.name); brokerUrl(value.binding.uri); hash(value.binding.principalHash);
+      if (value.schema_version === 4) hash(value.binding.uriAliasesSha256);
     } else {
       exact(value.binding, value.schema_version === 3 ? ['name'] : ['name', 'accountConfig']);
       if (value.binding.name !== 'boursedirect.fr') throw new Error();
@@ -69,10 +72,10 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
       session = await command(['unlock', '--passwordenv', 'BW_PASSWORD', '--raw'], {...base, BW_PASSWORD: credentials.BW_PASSWORD});
       boundedText(session);
       await command(['sync'], {...base, BW_SESSION: session});
-      const raw = await command(config.schema_version === 1 ? ['get', 'item', config.binding.itemId]
+      const raw = await command([1, 4].includes(config.schema_version) ? ['get', 'item', config.binding.itemId]
         : ['list', 'items', '--search', config.binding.name], {...base, BW_SESSION: session});
       // Full item/seed is scoped to worker memory and is never sent through IPC.
-      selected = (config.schema_version === 1 ? selectWorkerItem
+      selected = (config.schema_version === 4 ? selectAliasedWorkerItem : config.schema_version === 1 ? selectWorkerItem
         : config.schema_version === 2 ? selectNamedWorkerItem : inspectNamedVaultItem)(
         JSON.parse(raw), config.binding, config.cli.defaultsVerified);
       if (config.schema_version === 3) {

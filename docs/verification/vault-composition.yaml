@@ -849,3 +849,34 @@ qualified_current_public_auth_form:
     passed: 478
     log_sha256: 8532588d0e2eeccd0a6274c438cb9e81063bcefab5427faee8c869f22955f270
     test_input_sha256: c16759a22d581fc7a86c0180949147a5d97530018929ddb0198029ec255dae65
+immutable_vault_uri_alias_binding:
+  provider_schema: 4
+  input_sha256:
+    collector/credential-provider.mjs: 43073a92ee2a1bcf92ef62331d8e27fe973c8180b00fd06fccb22e8e38e9a7bb
+    collector/vault-worker.mjs: de80599b9cee7d1ad0f5d93ba42181eaca9eaf5e638292cb89d2a40a1ab8ab01
+    collector/bitwarden-cli.mjs: 35af6cf09fb1c75760af7d0a48ad47f383fb7dc35eebca48664d2b371d668efe
+    collector/tests/credential-provider.test.mjs: c12b6241bd52c1b28dc03c96e2a7682a80e3db1d9ea6180f8ace56a148bbc4e5
+    collector/tests/vault-worker.test.mjs: 1d5740d677f7a2389e3042b85c57e64bcbd4df2045a8eaa5d1aa0e78fed4b4a8
+    collector/tests/bitwarden-cli.test.mjs: 3af149653af4d683addade0bc4f170824d492e0274cb9b3eba787d2cced45572
+    docs/design/acquisition-core.md: 68feafbc323ccca9d8a1aa39fada8e440d7d254ff047f343e48dbbb3af72a7ec
+  selected_UUID_and_principal_retained: true
+  selected_canonical_uri_occurs_once: true
+  ordered_URI_match_metadata_pinned: true
+  alias_navigation_or_lookup_authority: false
+  same_UUID_delayed_single_TOTP: true
+  metadata_inspection_exports_alias_hash_only: true
+  checks:
+    collector:
+      command: npm test --prefix collector
+      exit_code: 0
+      passed: 491
+      log_sha256: cff267cc6da8f8f77268c6c299df2e29a791bf15c5adaba933f063f466ccfe61
+    python_reused:
+      source_record: canonical_public_form_entrypoint.checks.python_full
+      passed: 1185
+      python_implementation_unchanged: true
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+  live_schema4_configuration_created: false
+  real_vault_session_started: false
+  broker_authentication_started: false

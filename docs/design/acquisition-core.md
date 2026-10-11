@@ -264,3 +264,26 @@ blocked. Bounded target metadata, responses and a separately marked UTF8 DOM
 serialization retain source-discovery evidence. Authentication remains disabled;
 this is not recurring collection or permission to fill credentials. The default
 two-field input still grants only the public Document with scripts disabled.
+
+### Explicit immutable alias binding
+
+Provider schema4 adds a pinned-UUID acquisition mode. Its binding retains the
+schema1 item UUID, expected name, selected canonical broker URI, principal hash
+and account-configuration reference, adding `uriAliasesSha256`. The worker hashes
+the ordered URI/match metadata privately after strict bounded validation; omitted
+and null match modes have the same representation. Every alias and match mode is
+pinned. Adding, removing, reordering or changing metadata refuses delivery.
+The selected URI must appear exactly once. Other aliases never supply a command,
+navigation destination or fallback. Credentials/profile then pass the existing
+strict UUID/name/principal/TOTP checks. The CLI uses `get item UUID`, and delayed
+one-use TOTP uses that same UUID. Schemas1/2 retain their single-URI requirements.
+
+Metadata-only inspection now includes this hash, without exporting extra URI
+strings, credentials, a seed or a code, and retains logout/status verification.
+The earlier successful inspection remains valid for its original fields; its
+missing alias hash cannot be invented from alias counts. Schema4 requires a
+fresh privately verified metadata hash and explicit configuration before use.
+Synthetic worker/CLI verification proves the new mode's logic, not a real vault
+session or broker readiness. Source/account, enrollment, runtime, egress and
+external security-review gates remain required; no real schema4 configuration or
+credential delivery is activated by this amendment.

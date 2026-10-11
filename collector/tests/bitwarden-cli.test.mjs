@@ -7,12 +7,13 @@ import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {bitwardenCli, sshCliTransport} from '../bitwarden-cli.mjs';
 import {vaultWorker, providerConfiguration} from '../vault-worker.mjs';
+import {workerUriAliasesHash} from '../credential-provider.mjs';
 import {principal} from '../core.mjs';
 import {executePrivate} from '../private-process.mjs';
 import {collectorEnvironment} from '../private-process.mjs';
 
 const credentials = {BW_CLIENTID:'SYNTHETIC_CLIENT', BW_CLIENTSECRET:'SYNTHETIC_API', BW_PASSWORD:'SYNTHETIC_UNLOCK'};
-function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=false,lookupFault,egressProxy,logoutFault,statusFault}={}) {
+function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=false,aliases=false,lookupFault,egressProxy,logoutFault,statusFault}={}) {
   const calls = [], id = 'b'.repeat(64), itemId = randomUUID(); let stops = 0, allowed = true;
   const configuration = {schema_version:1, vaultOrigin:'https://vault.synthetic.invalid', binding:{itemId,name:'invented',
     uri:'https://www.boursedirect.fr/synthetic',principalHash:principal('SYNTHETIC'),accountConfig:{path:'/synthetic/account.yaml',sha256:'a'.repeat(64)}},
@@ -22,6 +23,11 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=fal
   if(named || inspection){
     item.name='boursedirect.fr'; configuration.schema_version=inspection ? 3 : 2;
     configuration.binding=inspection ? {name:item.name} : {name:item.name,accountConfig:configuration.binding.accountConfig};
+  }
+  if(aliases){
+    configuration.schema_version=4;
+    item.login.uris.push({uri:'https://alias.synthetic.invalid/',match:null});
+    configuration.binding.uriAliasesSha256=workerUriAliasesHash(item.login.uris);
   }
   const adapter = bitwardenCli({configuration,containerId:id,egressProxy,attest:async value=>value===id && allowed,
     stopOwned:async value=>{assert.equal(value,id); stops++;}, transport:async (executable,args,env,timeout,input)=>{
@@ -40,9 +46,20 @@ function fixture({badHash=false,holdVersion,onVersion,named=false,inspection=fal
   const worker=vaultWorker({configuration,...adapter,appdata:'/data',now:()=>120});
   return {configuration,item,adapter,worker,calls,setAllowed:x=>{allowed=x;},stops:()=>stops};
 }
+test('fixed CLI adapter supports pinned aliases without name lookup or URI authority',async()=>{
+  const f=fixture({aliases:true}),result=await f.worker.initialize(credentials);
+  assert.equal(result.itemId,f.item.id);
+  assert.equal(f.calls.some(row=>row.args.includes('lookup')),false);
+  assert.equal(f.calls.some(row=>row.args.includes('item')),true);
+  assert.equal(JSON.stringify(f.calls.map(row=>row.args)).includes('alias.synthetic'),false);
+  const nonce={runNonce:randomUUID(),stageNonce:randomUUID()};
+  await f.worker.code(nonce,nonce);
+  assert.equal(f.calls.filter(row=>row.args.includes('totp')).length,1);
+  assert.equal(f.stops(),0);
+});
 test('independent vault inspection requires no importer binding and exports no broker secret',async()=>{
   const f=fixture({inspection:true}),result=await f.worker.initialize(credentials);
-  assert.deepEqual(Object.keys(result).sort(),['broker_uri_count','itemId','online_ready','principalHash','profile','uri','uri_count']);
+  assert.deepEqual(Object.keys(result).sort(),['broker_uri_count','itemId','online_ready','principalHash','profile','uri','uriAliasesSha256','uri_count']);
   for(const secret of ['SYNTHETIC','SYNTHETIC_PASSWORD','SYNTHETIC_SESSION','GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'])
     assert.equal(JSON.stringify(result).includes(secret),false);
   assert.equal(result.uri,f.item.login.uris[0].uri);
@@ -62,6 +79,7 @@ test('inspection with an inert URI alias still logs out and exports only origin 
   }});
   const result=await f.worker.initialize(credentials);
   assert.equal(result.uri_count,2); assert.equal(result.broker_uri_count,1);
+  assert.equal(result.uriAliasesSha256,workerUriAliasesHash(f.item.login.uris));
   assert.equal(result.uri,f.item.login.uris[0].uri);
   assert.equal(JSON.stringify(result).includes('alias.synthetic'),false);
   assert.deepEqual(f.calls.slice(-2).map(x=>x.args[x.args.indexOf('vault-cli')+1]),['logout','status']);
