@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {sourceFormProbe, blockedFormEnvelope, verifyBlockedFormProbe} from '../source-form-probe.mjs';
+import {sourceFormProbe, blockedFormEnvelope, observeBlockedFormEnvelope, verifyBlockedFormProbe} from '../source-form-probe.mjs';
 import {publicLoginPolicy, PUBLIC_LOGIN_URL} from '../public-login-policy.mjs';
 
 const probeOwner = {sessionId: 'synthetic-session', frameId: 'synthetic-frame'};
@@ -40,6 +40,12 @@ for (const [name, request] of [
   ['oversize content type', {method: 'POST', postData: '{}', headers: {'Content-Type': 'a'.repeat(257)}}],
 ]) test('blocked envelope refuses ' + name, () => {
   assert.throws(() => blockedFormEnvelope(request), /^Error: SOURCE_FORM_ENVELOPE_REFUSED$/);
+  const row = {url: 'https://www.boursedirect.fr/synthetic', method: request.method};
+  const retained = [row];
+  assert.throws(() => observeBlockedFormEnvelope(row, request), /^Error: SOURCE_FORM_ENVELOPE_REFUSED$/);
+  assert.deepEqual(retained, [{url: 'https://www.boursedirect.fr/synthetic', method: request.method,
+    envelope_refusal_code: 'SOURCE_FORM_ENVELOPE_REFUSED'}]);
+  assert.equal(Object.hasOwn(row, 'blocked_form_envelope'), false);
 });
 
 function fixture() {

@@ -2,7 +2,7 @@ name: ghostfolio-boursedirect-sync
 
 services:
   bitwarden-cli:
-    image: ${BITWARDEN_CLI_IMAGE:-archivage-bitwarden-cli}
+    image: ${BITWARDEN_CLI_IMAGE:?Supply the verified local Bitwarden CLI image SHA256 ID}
     pull_policy: never
     # The image's default entrypoint authenticates and starts bw serve.
     # Our source adapter invokes the CLI through private stdin instead.

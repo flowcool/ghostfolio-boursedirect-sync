@@ -32,6 +32,9 @@ The community entrypoint is the ENV-configured native `bitwarden` service in
 The existing dedicated lab retains `compose.lab.yaml` plus its broker overlay,
 private receipts and exact-owned SSH adapter. Its historical inspection is reused
 as evidence, while native image/runtime qualification is recorded separately.
+Lab creation requires `BITWARDEN_CLI_IMAGE` to be the independently verified local
+SHA256 image ID; there is no implicit mutable image name. The existing pinned
+creation adapter supplies that ID. This input is not needed by community Compose.
 
 | Purpose | Canonical location |
 | --- | --- |
@@ -141,7 +144,9 @@ markers to retain a blocked form request's URL/method/type. Every POST is denied
 it supplies no real credential and dispatches no broker authentication. It requires
 an actually intercepted and successfully blocked same-frame/session JSON POST
 containing both fixed dummy credential markers; requesting form submission alone
-does not qualify the observation. It requires
+does not qualify the observation. Malformed envelopes retain request metadata and
+a fixed refusal code before the attempt stops; raw sensitive headers are never
+retained. The operation requires
 the pinned private adapter and exact-owned runtime, and refuses prefilled or
 ambiguous inputs before any mutation. The captured metadata requires independent
 source inspection; it never establishes successful login. Real credential delivery

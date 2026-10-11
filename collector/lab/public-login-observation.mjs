@@ -7,7 +7,7 @@ import {bootstrapExperiment} from '../capability-bootstrap.mjs';
 import {orderingExperiment} from '../capability-ordering.mjs';
 import {ownedBrowserLifecycle, sandboxStatus} from './browser-sandbox-proof.mjs';
 import {PUBLIC_LOGIN_URL, publicLoginPolicy, publicAssetDocumentPolicy} from '../public-login-policy.mjs';
-import {sourceFormProbe, blockedFormEnvelope, verifyBlockedFormProbe} from '../source-form-probe.mjs';
+import {sourceFormProbe, observeBlockedFormEnvelope, verifyBlockedFormProbe} from '../source-form-probe.mjs';
 
 let stage = 'input', pipe, lifecycle, ordering, timer;
 let retained;
@@ -91,13 +91,19 @@ async function run() {
           if (!decide || ++requests > 256 || typeof p.request?.url !== 'string' || p.request.url.length > 4096) throw new Error();
           const allowed = decide({...p, sessionId: event.sessionId});
           if (allowed) permitted++; else blocked++;
-          record(evidence.requests, {url: p.request.url, method: p.request.method,
+          const row = {url: p.request.url, method: p.request.method,
             resource_type: p.resourceType, request_id: p.requestId, network_id: p.networkId,
             frame_id: p.frameId, session_id: event.sessionId, continued: allowed,
-            redirect: Object.hasOwn(p, 'redirectedRequestId'),
-            ...(formProbe && !allowed && p.request.method === 'POST'
-              && event.sessionId === owner?.sessionId && p.frameId === frameId
-              ? {blocked_form_envelope: blockedFormEnvelope(p.request)} : {})});
+            redirect: Object.hasOwn(p, 'redirectedRequestId')};
+          record(evidence.requests, row);
+          if (formProbe && !allowed && p.request.method === 'POST'
+              && event.sessionId === owner?.sessionId && p.frameId === frameId) {
+            // Reserve space for the fixed refusal field before parsing can fail.
+            if ((bytes += 64) > 262144) throw new Error();
+            const envelope = observeBlockedFormEnvelope(row, p.request);
+            if ((bytes += Buffer.byteLength(JSON.stringify(envelope))) > 262144) throw new Error();
+            row.blocked_form_envelope = envelope;
+          }
           queue = queue.then(() => {
             if (failed) throw new Error();
             return pipe.send(allowed ? 'Fetch.continueRequest' : 'Fetch.failRequest',

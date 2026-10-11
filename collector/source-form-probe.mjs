@@ -1,4 +1,13 @@
 // Fixed dummy values only. The caller must deny every non-public request.
+// The caller records metadata first; retain the reason even if parsing refuses.
+export function observeBlockedFormEnvelope(row, request) {
+  try {return blockedFormEnvelope(request);}
+  catch {
+    row.envelope_refusal_code = 'SOURCE_FORM_ENVELOPE_REFUSED';
+    throw new Error('SOURCE_FORM_ENVELOPE_REFUSED');
+  }
+}
+
 export function verifyBlockedFormProbe(rows, owner) {
   const matched = rows.some(row => {
     if (row.method !== 'POST' || row.continued !== false || row.redirect !== false

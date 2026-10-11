@@ -1133,3 +1133,33 @@ external_observation_review_fixes:
   bootstrap_exception_preserved: docs/operations/source-connection.md credential-free
     current-timestamp two-file opt-in profile; declared and bootstrap admission share
     one budget
+returned_review_retention_and_lab_image:
+  review_id: 5483359968
+  reviewed_head: bbb276ced3da0f61637b0afd04bccc4579ce4f8b
+  actionable_comment: 4241629553
+  source_sha256:
+    collector/source-form-probe.mjs: 7e586a532caf7df9137fab5280635d1927a4c5be78b670015eda51d46d791d5c
+    collector/lab/public-login-observation.mjs: 343bda2d2e7c525f54fe518f2bcf221f7f90136936200e6f0fb6fe68c1295cc6
+    collector/tests/source-form-probe.test.mjs: 498890ac58c46c1beb0fc250299c7e510be96db658eeff61524b9e06c553841d
+    compose.lab.yaml: 161e21aeb57a7ea28689fa92d79da48b657bbe3cdc714351be60afe32b18e748
+    docs/operations/source-connection.md: 2d5c6b324ba9a07207b202ae148c2f4ecac8c74b43cc3553c5931b33258c02aa
+    collector/package.json: 2d1b18693657a695495aa1f945241fa8810fe366e9e4ec78ea6fc37a5b4ff4ac
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+  collector:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 534
+    log_sha256: 40dbc465a88c355c14f8ab51e58a2571ef0e40aa30888989bf5cec47e31e4595
+  python_checks_reused:
+    run_id: 38140000744
+    head: bbb276ced3da0f61637b0afd04bccc4579ce4f8b
+    passed: 1188
+    python_source_or_runtime_changed: false
+  compose_config:
+    missing_cli_image_refuses: true
+    synthetic_sha256_id_accepted: true
+    existing_pinned_creation_adapter_supplies_image_id: true
+    daemon_contacted: false
+  live_observation_or_runtime_change: false
+  rollback: Revert this source change; preserve retained private evidence and original
+    lab migration receipt. Existing running lab containers are unchanged.
