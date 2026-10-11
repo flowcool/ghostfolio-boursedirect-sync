@@ -28,3 +28,7 @@ test('final response pins only one same-origin source page destination', () => {
 test('native base64 response decodes internally without returning its body', () => {
   assert.deepEqual(inspect(BROKER_POLICY, {...initial, body:Buffer.from(initial.body).toString('base64'),base64Encoded:true}), {outcome:'known_totp_challenge',status:401});
 });
+
+for (const body of ['', '[]', '"ok"', '{"success":false}', '{}', 'null'])
+  test('OTP refuses an unrecognized positive outcome: '+body, () =>
+    assert.throws(() => inspect(BROKER_POLICY,{phase:'otp_uncertain',status:200,body,base64Encoded:false}), /SOURCE_AUTHENTICATION_RESPONSE_REFUSED/));

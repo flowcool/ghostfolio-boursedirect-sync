@@ -238,3 +238,31 @@ PID. A retained `cli_stop_intent` can finish the bounded stop, or publish the
 stopped receipt when that exact container is already stopped. Changed ownership,
 PID or unknown receipt states refuse before mutation. This permits cleanup
 reconciliation only; it never restarts the CLI or retries authentication.
+
+## Explicit one-attempt qualification
+
+`scripts/source_connection.py qualify-connection` is separate from ordinary
+`connect`. Run it only under the scoped one-attempt authority, after offline
+verification, isolated Chromium qualification and external review of the exact
+committed head. It reuses the dedicated lab, independently pinned vault identity
+and app source, and existing SSH/provisioning. Explicit enrollment reserves the
+canonical principal namespace; existing or uncertain state refuses.
+
+The worker keeps full vault items, seeds, session material, credentials and
+authentication responses in private memory. It inspects and retains each native
+request before consuming its one-use permission. It accepts one known challenge,
+one application code and one separately permitted final credential request.
+Unknown responses or requests stop the owned attempt without retry.
+
+Captured account/document GETs are inert and private. Two distinct wrapper IDs
+and selected-account navigation must be observed; statement/note titles and
+account headers must match. When saved lists need further source inspection,
+`SOURCE_READ_SELECTION_REQUIRED` retains the current browser while waiting for
+a private `selection.yaml` in the current attempt directory. That record contains
+`url`, `role`, `sourceSha256` and `account`; the source hash must name a captured
+body and the selected account must be verified. Inspect the source before granting
+the exact next read; calendar scripts are retained as inert source documents.
+The original ten-minute browser lifetime and request budgets still apply. No
+password or OTP retry is granted. Cleanup verifies logout or stops the exact
+owned CLI, verifies browser exit or stops its exact container, and preserves
+uncertainty. This qualification does not enable recurring collection.

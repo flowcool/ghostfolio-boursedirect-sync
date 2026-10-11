@@ -1,0 +1,149 @@
+"""Saved source navigation must preserve account identity and source provenance."""
+from pathlib import Path
+import sys
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import source_qualification as qualification
+
+ORIGIN = qualification.ORIGIN
+ACCOUNT_FORM = '''<form name=frmCompte method=GET><input type=hidden name=ong value=RO>
+<select id=nc name=nc><option value=ACCOUNT_A selected>Account PEA</option>
+<option value=ACCOUNT_B>Account PEA-PME</option></select></form>'''
+
+
+def test_source_get_form_selection_keeps_wrappers_distinct_and_header_checked():
+    state = qualification.planner()
+    qualification.discover(state, ORIGIN + '/priv/new/avis-operes.php', ACCOUNT_FORM.encode(), 'frame_document')
+    first = qualification.next_document(state)['document']
+    assert first['url'] == ORIGIN + '/priv/new/avis-operes.php?ong=RO&nc=ACCOUNT_A'
+    qualification.discover(state, first['url'], (ACCOUNT_FORM + "<a href=\"javascript:ouvrePopup('releveOpe.php?id=synthetic',1)\">Note</a>").encode(), first['role'])
+    note = qualification.next_document(state)['document']
+    assert note['role'] == 'contract_note'
+    assert note['url'] == ORIGIN + '/priv/new/releveOpe.php?id=synthetic'
+    raw = b"<strong>Avis d'Op\xc3\xa9ration</strong><table><tr><td>COMPTE N\xc2\xb0</td><td>ACCOUNT_A PEA</td></tr></table>"
+    qualification.discover(state, note['url'], raw, note['role'])
+    second = qualification.next_document(state)['document']
+    assert second['url'].endswith('ong=RO&nc=ACCOUNT_B')
+    qualified_form = ACCOUNT_FORM.replace('ACCOUNT_A selected', 'ACCOUNT_A').replace('value=ACCOUNT_B>', 'value=ACCOUNT_B selected>')
+    qualification.discover(state, second['url'], qualified_form.encode(), second['role'])
+    result = qualification.next_document(state)
+    assert result['accounts_verified'] is True
+    assert result['documents'] == {'complete': False, 'monthly_statements': 0, 'contract_notes': 1}
+
+
+@pytest.mark.parametrize('html', [ACCOUNT_FORM.replace('PEA-PME', 'PEA'),
+    ACCOUNT_FORM.replace('ACCOUNT_B', 'ACCOUNT_A'), ACCOUNT_FORM.replace('method=GET', 'method=POST')])
+def test_ambiguous_inventory_and_mutating_forms_refuse(html):
+    with pytest.raises(RuntimeError):
+        qualification.discover(qualification.planner(), ORIGIN + '/priv/new/avis-operes.php', html.encode(), 'frame_document')
+
+
+def test_wrong_selected_account_cannot_prove_navigation():
+    state = qualification.planner()
+    qualification.discover(state, ORIGIN + '/priv/new/avis-operes.php', ACCOUNT_FORM.encode(), 'frame_document')
+    qualification.next_document(state)
+    qualification.discover(state, state['current']['url'], ACCOUNT_FORM.encode(), 'frame_document')
+    qualification.next_document(state)
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, state['current']['url'], ACCOUNT_FORM.encode(), 'frame_document')
+    assert state['verified'] == {'PEA'}
+
+
+@pytest.mark.parametrize('header,title', [('ACCOUNT_B PEA', "Avis d'Opération"),
+    ('PREFIXACCOUNT_A PEA', "Avis d'Opération"), ('ACCOUNT_A PEA', 'Login')])
+def test_document_requires_known_title_and_exact_account_token(header, title):
+    state = qualification.planner()
+    state.update(accounts={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, verified={'PEA'}, current={'account': 'PEA'})
+    html = f'<strong>{title}</strong><table><tr><td>COMPTE N°</td><td>{header}</td></tr></table>'
+    with pytest.raises(RuntimeError):
+        qualification.discover(state, ORIGIN + '/priv/new/releveOpe.php', html.encode(), 'contract_note')
+    assert not state['documents']
+
+
+@pytest.mark.parametrize('url', ['https://foreign.invalid/priv/new/releveOpe.php',
+    ORIGIN + '/fr/page/ordres', ORIGIN + '/priv/new/releveOpe.php#fragment'])
+def test_only_observed_read_paths_on_exact_origin_are_candidates(url):
+    with pytest.raises(RuntimeError):
+        qualification.source_url(ORIGIN + '/fr/page/inventaire', url)
+
+
+def test_incomplete_lists_allow_only_a_retained_source_and_verified_account_selection():
+    state = qualification.planner()
+    state.update(accounts={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, verified={'PEA', 'PEA-PME'},
+        current={'account': 'PEA-PME'})
+    choice = {'url': ORIGIN + '/priv/new/avis-operes.php?nc=ACCOUNT_A',
+        'role': 'frame_document', 'sourceSha256': 'a' * 64, 'account': 'PEA'}
+    captured = {'a' * 64: {'role': 'frame_document'}}
+    assert qualification.validate_selection(state, captured, choice)['verify_account'] is True
+    for invalid in ({**choice, 'sourceSha256': 'b' * 64}, {**choice, 'account': 'unknown'},
+        {**choice, 'url': ORIGIN + '/priv/new/avis-operes.php'},
+        {**choice, 'url': ORIGIN + '/priv/new/avis-operes.php?nc=ACCOUNT_B'}):
+        with pytest.raises(RuntimeError):
+            qualification.validate_selection(state, captured, invalid)
+
+
+@pytest.mark.parametrize('browser_failure,cli_result', [(False, True), (True, True), (False, False)])
+def test_failed_delivery_attempts_both_owned_cleanups_and_retains_uncertain_lease(tmp_path, monkeypatch,
+        browser_failure, cli_result):
+    import json
+    from types import SimpleNamespace
+    root = tmp_path / 'project'
+    root.mkdir(mode=0o700)
+    lab = root / 'inputs/lab'
+    lab.mkdir(parents=True, mode=0o700)
+    (root / 'inputs/source-observations').mkdir(mode=0o700)
+    code = root / 'collector/lab'
+    code.mkdir(parents=True)
+    (code / 'source-browser-pipe.mjs').write_text('// synthetic')
+    (root / 'binding.json').write_text(json.dumps({'containerId': 'a' * 64, 'destination': 'synthetic',
+        'egressProxy': 'http://10.1.2.3:8080', 'configuration': {'schema_version': 3,
+            'vaultOrigin': 'https://vault.synthetic.invalid', 'cli': {}}}))
+    (root / 'binding.json').chmod(0o600)
+    (root / 'contract.yaml').write_text('{}')
+    qualification.replay.private._publish(root / 'inspection.yaml', {'selected': {
+        'itemId': '11111111-1111-4111-8111-111111111111', 'principalHash': 'b' * 64,
+        'uri': ORIGIN + '/fr/login', 'uriAliasesSha256': 'c' * 64}}, exclusive=True)
+    inventory = {'_verified_helpers': {}, 'source_contract': 'contract.yaml', 'evidence': {
+        'vault_cli_binding': {'path': 'binding.json'}, 'vault_alias_inspection': {'path': 'inspection.yaml'}}}
+    calls = []
+
+    def delivery_failure(*args):
+        raise RuntimeError('SYNTHETIC_DELIVERY_FAILURE')
+
+    def browser_stop():
+        calls.append('browser')
+        if browser_failure:
+            raise RuntimeError('SYNTHETIC_STOP_FAILURE')
+
+    def helper(lab_path, name, verified):
+        assert lab_path == lab
+        if name == 'qualify':
+            return SimpleNamespace(owned=lambda *args: {'HostConfig': {'Init': True}}, checked=delivery_failure,
+                durable=SimpleNamespace(_sync_directory=lambda path: None))
+        if name == 'attest':
+            return SimpleNamespace(attest=lambda: {'containers': {'bitwarden-cli': {'id': 'a' * 64}}})
+        if name == 'broker-attest':
+            return SimpleNamespace(attest=lambda: {'containers': {'browser': {'id': 'b' * 64}}})
+        if name == 'broker-stop':
+            return SimpleNamespace(stop=browser_stop)
+        pytest.fail('No provision, SSH or credentials are allowed in this fixture')
+
+    def cli_stop(*args):
+        calls.append('cli')
+        return cli_result
+
+    monkeypatch.setattr(qualification, 'CODE_ROOT', root)
+    monkeypatch.setattr(qualification.replay, 'helper', helper)
+    monkeypatch.setattr(qualification, 'stop_owned_cli', cli_stop)
+    monkeypatch.setattr(qualification.subprocess, 'check_output',
+        lambda args, **kwargs: 'd' * 40 if kwargs.get('text') else b'')
+    with pytest.raises(RuntimeError, match='SYNTHETIC_DELIVERY_FAILURE'):
+        qualification.qualify(root, lab, inventory)
+    assert calls == ['browser', 'cli']
+    assert (lab / 'vault-operation.lock').exists() == (browser_failure or not cli_result)
+    attempt = next((root / 'inputs/source-observations').glob('qualification-*/attempt.yaml'))
+    record = qualification.replay.private._read(attempt)
+    assert record['failed_phase'] == 'source_delivery'
+    assert record['exact_owned_cleanup_verified'] == (not browser_failure and cli_result)

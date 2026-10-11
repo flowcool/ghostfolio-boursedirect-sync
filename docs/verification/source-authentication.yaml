@@ -405,3 +405,69 @@ native_building_blocks:
     resolution: Reattest exact CLI identity/configuration and original running PID;
       reconcile cli_stop_intent to bounded stop or verified stopped receipt. Reserve
       exclusive appdata lease before provisioning; uncertain cleanup retains lease.
+
+qualification_caller:
+  kind: source-specific-one-attempt-qualification-caller
+  inputs:
+    collector/source-qualification-pilot.mjs: 09017b7cf9c8724f29285b2021d9ddac27448a5a77763caed376c4b0ac4c8b64
+    collector/lab/source-qualification-command.mjs: 62b5a8f2d24949e877c248adae3ff232abce809767796a2c390480f043fb2f91
+    scripts/source_qualification.py: 806d89acb3c6cac76eb85227359a3fbbc0dfbe7af87bb681cd2826a7360fa758
+    scripts/source_connection.py: d6948b89f27b1c514cad89a83182af651ce3caa1e43d7434cced2f8bea2f4851
+    tests/test_source_qualification.py: c23847551b21dd201fc10cd2c588e730e9a2f95bcdeb2ac21ef3aecedb1d0817
+    collector/source-authentication-response.mjs: 0e35dafa083d2d698f88f1dcc510dab9d66c5c4e6b5ee8a877a086f913e7942d
+    collector/tests/source-authentication-response.test.mjs: ef327e869a1f1292d91a885c9d6b49fad256b42bdbaa3cd56e56d189d2465028
+    collector/lab/source-authentication-runtime.mjs: a6c6ee284364397d3a1ac699fac44082f1a13dc6abfd47949765c49d5deb5260
+    collector/source-native-session.mjs: db96fd6841a12bee0ca371dc4d33fdb5effde46c82d472636d8760806d3cd7d4
+    collector/lab/source-browser-pipe.mjs: 3be23d6dc7570d055ac045c401f25f45b3fd85a2723bc50d1dd986ecc81ab928
+    collector/package-lock.json: 7f0217b499166eb0db6336bb5b6f8f1493fb43d70a04bda05d465b28384612b9
+    docs/operations/source-connection.md: ae7a89bef1f45ac90a785d27fe88d5e69eb13b1f40fd257220c201146362d54f
+  checks:
+    local:
+      command: bash scripts/verify-local.sh
+      exit_code: 0
+      log_sha256: 18b6c743312a21668cbd71b57d389e8bb518ff714bea1d6baaa91c86a90919f9
+      python_passed: 1215
+      node_passed: 633
+      documentation_passed: true
+      whitespace_passed: true
+    affected_navigation:
+      command: .venv/bin/python -m pytest -q tests/test_source_qualification.py
+      exit_code: 0
+      passed: 15
+    native_pilot:
+      command: 'private owned network-none fixture: pilot and pilot-bad-source'
+      exit_code: 0
+      chrome_version: 155.0.8059.39
+      scenario_evidence:
+        pilot: 52fb5a84ab7fa56b017fd91d697d678fd67eb3dfd9571228933d5c0fce6f2bc7
+        pilot-bad-source: b2640b33d2008705ee754a816df8abf0abaa52c88ae449d570c86f0d28d5e2ec
+      success:
+        initial_password_posts: 1
+        otp_posts: 1
+        final_credential_posts: 1
+        saved_inert_documents: 1
+        renderer_sandbox_verified: true
+        owned_cleanup_verified: true
+      changed_source:
+        authentication_posts: 0
+        principal_enrolled: false
+        owned_cleanup_verified: true
+      scope: Native source caller and primitives; SSH/vault command and actual source
+        responses remain operational qualification gates.
+    final_python:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1218
+      log_sha256: 3a091af878b931ad961d7b541ab9e4b6df2302ce317a07b3d8cb3c1bd5dc02f9
+  review_corrections:
+    previous_head: e69ba5cdc0519cfedb3420a3bf1eb5af281732e0
+    external_comments:
+    - 4242450235
+    - 4242450241
+    otp_positive_response_required: true
+    stdio_drained_before_exit_proof: true
+  actual_broker_attempts: 0
+  new_real_vault_sessions: 0
+  account_discovery_completed: false
+  document_pairs_completed: false
+  online_ready: false

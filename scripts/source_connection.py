@@ -140,7 +140,7 @@ def restart_browser(lab, verified):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect', 'observe-public-form', 'characterize-password-request', 'inspect-vault-aliases'))
+    parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect', 'observe-public-form', 'characterize-password-request', 'inspect-vault-aliases', 'qualify-connection'))
     parser.add_argument('--lab-root', default='inputs/lab')
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -152,7 +152,10 @@ def main():
             report['code'] = 'SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED'
             print(json.dumps(report))
             return 2
-        if arguments.action == 'status':
+        if arguments.action == 'qualify-connection':
+            import source_qualification
+            report['live'] = source_qualification.qualify(root, lab, inventory)
+        elif arguments.action == 'status':
             report['live'] = live_status(lab, verified)
         elif arguments.action == 'inspect-vault-aliases':
             require('vault_cli_binding' in inventory['evidence'])
