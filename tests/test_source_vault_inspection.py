@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 
@@ -44,7 +45,9 @@ def test_private_metadata_inspection_never_exports_credentials_or_requests_totp(
         calls.append('stop')
         return True
 
-    process = subprocess.Popen(['/usr/bin/node', '--import', str(ROOT / 'collector/tests/no-network.mjs'),
+    node = shutil.which('node')
+    assert node is not None, 'Node test prerequisite is missing'
+    process = subprocess.Popen([node, '--import', str(ROOT / 'collector/tests/no-network.mjs'),
         str(ROOT / 'collector/lab/owned-vault-inspection-command.mjs')],
         env={'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path)},
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)

@@ -199,3 +199,18 @@ finalization_and_alias_metadata:
       summary: []
   broker_requests: 0
   vault_sessions: 0
+ci_node_path_correction:
+  input_sha256: 6245a147261c58a35f60d9e50b6eda42db37de0526ee1559264da182becdae8f
+  cause: GitHub setup-node installs outside /usr/bin; synthetic test child resolves
+    the installed absolute binary from PATH. Owned live adapter keeps its independently
+    known fixed local executable.
+  python:
+    command: .venv/bin/python -m pytest -q
+    exit_code: 0
+    passed: 1194
+    log_sha256: 1b1325f77dd138ca769897eab1e4f541ea62f6b12d0ef4d361ad3d709d6aa2df
+  collector_evidence_reused: 'finalization_and_alias_metadata.checks.collector: unchanged
+    Node sources and runtime'
+  failed_ci_run: 38147779684
+  broker_requests: 0
+  vault_sessions: 0
