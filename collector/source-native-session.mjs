@@ -6,17 +6,18 @@ import {orderingExperiment} from './capability-ordering.mjs';
 import {randomUUID} from 'node:crypto';
 
 export async function sourceNativeSession({write, stopOwned, closePipe, installReceive,
-  paused, response, chromeVersion = '155.0.8059.39'}) {
-  if ([write, stopOwned, closePipe, installReceive, paused, response].some(value => typeof value !== 'function')
+  paused, response, publicPreflight = () => false, chromeVersion = '155.0.8059.39'}) {
+  if ([write, stopOwned, closePipe, installReceive, paused, response, publicPreflight].some(value => typeof value !== 'function')
       || chromeVersion !== '155.0.8059.39') throw new Error('SOURCE_NATIVE_SESSION_REFUSED');
   let fenced = false, ordering, pipe, bootstrap, owner, frameId, contextId;
   const pageEpoch = randomUUID(), frameEpoch = randomUUID(), tasks = new Set();
-  let requests = 0, bytes = 0;
+  const quarantinedFrames = new Set();
+  let requests = 0, bytes = 0, failure;
   function abort() {fenced = true; return ordering ? ordering.abort() : stopOwned();}
   function check() {if (fenced) throw new Error('SOURCE_NATIVE_SESSION_FENCED');}
   function track(promise) {
     tasks.add(promise);
-    void promise.catch(() => abort()).catch(() => {}).finally(() => tasks.delete(promise));
+    void promise.catch(error => {failure ??= {code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_NATIVE_HANDLER_REFUSED'};return abort();}).catch(() => {}).finally(() => tasks.delete(promise));
   }
   function send(method, params = {}, sessionId) {check(); return pipe.send(method, params, sessionId);}
   function binding() {
@@ -30,16 +31,31 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
         || Object.hasOwn(event.params, 'redirectedRequestId')) throw new Error('SOURCE_NATIVE_EVENT_REFUSED');
   }
   pipe = capabilityPipe({write, limits: {...PIPE_LIMITS, sessionMs: 600000},
-    fence: () => {void abort().catch(() => {});}, onEvent: event => {
+    fence: code => {failure ??= {code};void abort().catch(() => {});}, onEvent: event => {
       if (fenced) return;
+      const diagnostic={event:event.method,resource_type:event.params.resourceType??null,
+        response_status:event.params.responseStatusCode??null,response_error:event.params.responseErrorReason??null};
+      try {
       if (['Target.targetCreated', 'Target.attachedToTarget'].includes(event.method)) {bootstrap.event(event); return;}
       if (event.method === 'Fetch.authRequired') {
         if (event.sessionId !== owner?.sessionId) throw new Error();
         track(ordering.cancelHttpAuth(event.sessionId, event.params.requestId)); return;
       }
       if (event.method === 'Network.requestWillBeSent' && event.params.redirectResponse) throw new Error();
-      if (event.method === 'Page.frameAttached') throw new Error();
+      if (event.method === 'Page.frameAttached') {
+        const p=event.params;
+        if (publicPreflight()!==true || event.sessionId!==owner?.sessionId
+            || typeof p.frameId!=='string' || !p.frameId || p.frameId.length>256
+            || p.frameId===frameId || quarantinedFrames.has(p.frameId) || quarantinedFrames.size>=32
+            || !(p.parentFrameId===frameId || quarantinedFrames.has(p.parentFrameId))) throw new Error();
+        quarantinedFrames.add(p.frameId);return;
+      }
       if (event.method === 'Page.frameNavigated') {
+        if (quarantinedFrames.has(event.params.frame?.id)) {
+          if (publicPreflight()!==true || event.sessionId!==owner?.sessionId
+              || !['about:blank','chrome-error://chromewebdata/'].includes(event.params.frame.url)) throw new Error();
+          return;
+        }
         if (event.sessionId !== owner?.sessionId || event.params.frame?.id !== frameId
             || event.params.frame.parentId) throw new Error();
         contextId = undefined;
@@ -48,6 +64,10 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
       if (event.method === 'Runtime.executionContextDestroyed' && event.params.executionContextId === contextId?.id) contextId = undefined;
       if (event.method === 'Runtime.executionContextCreated') {
         const context = event.params.context;
+        if (quarantinedFrames.has(context.auxData?.frameId)) {
+          if (publicPreflight()!==true || event.sessionId!==owner?.sessionId) throw new Error();
+          return; // Never expose a child realm through evaluate or binding.
+        }
         if (event.sessionId !== owner?.sessionId || context.auxData?.frameId !== frameId) throw new Error();
         if (context.auxData?.isDefault === true) {
           if (contextId !== undefined || !Number.isSafeInteger(context.id)
@@ -56,14 +76,21 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
         }
       }
       if (event.method === 'Fetch.requestPaused') {
-        ownedEvent(event);
         const p = event.params;
         if (++requests > 512 || (bytes += Buffer.byteLength(JSON.stringify(p))) > 2097152) throw new Error();
+        if (quarantinedFrames.has(p.frameId)) {
+          if (publicPreflight()!==true || event.sessionId!==owner?.sessionId || p.request.method!=='GET'
+              || Object.hasOwn(p,'redirectedRequestId') || Object.hasOwn(p,'responseStatusCode')
+              || Object.hasOwn(p,'responseErrorReason')) throw new Error();
+          track(send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'},event.sessionId));return;
+        }
+        ownedEvent(event);
         if (Object.hasOwn(p, 'responseStatusCode')) {
           if (p.responseStatusCode >= 300 && p.responseStatusCode < 400 || p.responseErrorReason) throw new Error();
           track(response({event, binding: binding(), send}));
         } else track(paused({event, binding: binding(), send}));
       }
+      } catch(error) {failure={...diagnostic,code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_NATIVE_EVENT_REFUSED'};throw error;}
     }});
   installReceive({receive: pipe.receive, lost: () => {pipe.lost(); void abort().catch(() => {});}});
   ordering = orderingExperiment({send, installRoutes: () => {}, stopOwned,
@@ -101,6 +128,6 @@ export async function sourceNativeSession({write, stopOwned, closePipe, installR
       }, disableScripts: () => send('Emulation.setScriptExecutionDisabled', {value: true}, owner.sessionId),
       stop: async () => {await abort(); return true;},
       close: async () => {await abort(); await Promise.allSettled([...tasks]); return true;},
-      fenced: () => fenced});
+      failure: () => structuredClone(failure), fenced: () => fenced});
   } catch (error) {await abort(); throw new Error(/^(CAPABILITY|SOURCE_NATIVE)_[A-Z_]+$/.test(error?.message ?? '') ? error.message : 'SOURCE_NATIVE_SESSION_REFUSED');}
 }

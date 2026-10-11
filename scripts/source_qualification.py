@@ -171,7 +171,8 @@ def source_pins(root, inventory):
     return {'app_sha256': inventory['evidence']['auth_app_body']['sha256'], 'assets': assets}
 
 
-def qualify(root, lab, inventory):
+def qualify(root, lab, inventory, public_only=False):
+    replay.require(type(public_only) is bool)
     verified = inventory['_verified_helpers']
     q = replay.helper(lab, 'qualify', verified)
     vault = replay.helper(lab, 'attest', verified).attest()
@@ -179,7 +180,7 @@ def qualify(root, lab, inventory):
     identifier = vault['containers']['bitwarden-cli']['id']
     browser_id = broker['containers']['browser']['id']
     replay.require(q.owned(broker, 'container', browser_id)['HostConfig']['Init'] is True)
-    replay.require(subprocess.check_output(['git', '-C', str(CODE_ROOT), 'status', '--porcelain']) == b'')
+    replay.require(public_only or subprocess.check_output(['git', '-C', str(CODE_ROOT), 'status', '--porcelain']) == b'')
     head = subprocess.check_output(['git', '-C', str(CODE_ROOT), 'rev-parse', 'HEAD'], text=True).strip()
     binding = json.loads(replay.private._read_bytes(replay.contained(root, inventory['evidence']['vault_cli_binding']['path'])))
     replay.require(binding['containerId'] == identifier)
@@ -191,7 +192,7 @@ def qualify(root, lab, inventory):
     output = root / ('inputs/source-observations/qualification-' + uuid.uuid4().hex)
     output.mkdir(mode=0o700)
     intent = {'schema_version': 1, 'owner': 'infra-4g8u.70', 'source_commit': head,
-        'state': 'reserved', 'source_contract_sha256': configuration['binding']['accountConfig']['sha256']}
+        'state': 'reserved', 'public_only': public_only, 'source_contract_sha256': configuration['binding']['accountConfig']['sha256']}
     replay.private._publish(output / 'attempt.yaml', intent, exclusive=True)
     lease = lab / 'vault-operation.lock'
     lease.mkdir(mode=0o700)
@@ -207,6 +208,8 @@ def qualify(root, lab, inventory):
     phase = 'source_delivery'
     try:
         # Reuse the existing owned-browser source delivery; no new image or service.
+        q.checked(['docker', 'exec', '-u', '1000:1000', browser_id,
+            'mkdir', '-p', '/home/fixture/proof/lab'])
         files = ['collector/lab/source-browser-pipe.mjs', 'collector/lab/browser-sandbox-proof.mjs', 'collector/capability-pipe.mjs']
         hashes = {}
         for name in files:
@@ -226,7 +229,7 @@ def qualify(root, lab, inventory):
         write_frame(process, {'destination': binding['destination'], 'browserId': browser_id,
             'browserProxy': 'http://' + broker['proxy_ip'] + ':8080', 'sourcePin': source_pins(root, inventory),
             'vault': {'configuration': configuration, 'containerId': identifier, 'egressProxy': binding['egressProxy']},
-            'credentials': replay.helper(lab, 'provision', verified).initial_environment()})
+            'publicOnly': public_only, 'credentials': None if public_only else replay.helper(lab, 'provision', verified).initial_environment()})
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
         selector.register(process.stderr, selectors.EVENT_READ, 'stderr')
@@ -352,13 +355,14 @@ def qualify(root, lab, inventory):
             except Exception:
                 pass
             try:
-                cli_stopped = stop_owned_cli(q, lab, identifier)
+                cli_stopped = True if public_only else stop_owned_cli(q, lab, identifier)
             except Exception:
                 pass
             cleanup = browser_stopped and cli_stopped
             replay.private._publish(output / 'attempt.yaml', {**intent, 'state': 'refused_preserved',
                 'failed_phase': phase, 'exact_owned_cleanup_verified': cleanup,
-                'browser_stopped_owned': browser_stopped, 'cli_stopped_owned': cli_stopped,
+                'browser_stopped_owned': browser_stopped, 'cli_stopped_owned': None if public_only else cli_stopped,
+                'cli_unused': public_only,
                 'accounts': state['accounts'], 'verified_wrappers': sorted(state['verified']),
                 'documents': state['documents'], 'captures': state['captures']})
         if passed or cleanup:

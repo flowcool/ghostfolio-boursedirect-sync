@@ -13,9 +13,9 @@ const channel=privateChannel({input:process.stdin,output:process.stdout,fence:()
 let serial=Promise.resolve();
 function request(value) {
   const next=serial.then(async()=>{
-    if(fenced)throw new Error();
+    if(channel.failed()||fenced&&!['retain','attest_vault','stop_vault','stop_browser'].includes(value.action))throw new Error();
     const response=channel.receive();await channel.send(value);const row=await response;
-    if(fenced||Object.keys(row).join(',')!=='result')throw new Error();return row.result;
+    if(channel.failed()||Object.keys(row).join(',')!=='result')throw new Error();return row.result;
   });
   serial=next.catch(()=>{fenced=true;});return next;
 }
@@ -63,7 +63,7 @@ try {
       const deadline=Date.now()+10000;while(!sandbox){if(fenced||Date.now()>deadline)throw new Error();await new Promise(ok=>setTimeout(ok,50));}
       return await request({action:'attest_browser'})===true;
     },
-    credentials:()=>worker.initialize(input.credentials),
+    credentials:()=>{if(input.publicOnly===true)throw new Error('SOURCE_PUBLIC_PREFLIGHT_COMPLETE');return worker.initialize(input.credentials);},
     enrollBound:async(authority,selected)=>{
       if(principal(selected.login)!==input.vault.configuration.binding.principalHash
           ||JSON.stringify(selected.accountConfig)!==JSON.stringify(input.vault.configuration.binding.accountConfig))throw new Error();

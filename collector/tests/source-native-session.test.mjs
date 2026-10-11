@@ -60,3 +60,36 @@ test('HTTP authentication uses CancelAuth then verifies stop before closing the 
   assert.deepEqual(cancel.params,{requestId:'challenge',authChallengeResponse:{response:'CancelAuth'}});
   assert.equal(f.stops(),1);
 });
+test('opt-in preflight quarantines child frames and denies every child GET without granting a realm',async()=>{
+  let preflight=true,callbacks=0;
+  const f=await fixture({publicPreflight:()=>preflight,paused:()=>{callbacks++;}});
+  f.event('Page.frameAttached',{frameId:'child',parentFrameId:'frame'});
+  f.event('Runtime.executionContextCreated',{context:{id:2,uniqueId:'child-realm',auxData:{isDefault:true,frameId:'child'}}});
+  f.event('Fetch.requestPaused',{requestId:'child-get',frameId:'child',resourceType:'Document',request:{url:'https://unqualified.invalid/',method:'GET'}});
+  for(let i=0;i<10&&!f.commands.some(row=>row.method==='Fetch.failRequest');i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(callbacks,0);assert.equal(f.session.fenced(),false);
+  assert.deepEqual(f.commands.find(row=>row.method==='Fetch.failRequest').params,{requestId:'child-get',errorReason:'BlockedByClient'});
+  await f.session.evaluate(function(){return 'SAFE';});
+  assert.equal(f.commands.find(row=>row.method==='Runtime.evaluate').params.uniqueContextId,'native-unique');
+  preflight=false;
+  assert.throws(()=>f.event('Fetch.requestPaused',{requestId:'late-get',frameId:'child',resourceType:'Image',request:{url:'https://unqualified.invalid/',method:'GET'}}),/CAPABILITY_EVENT_REJECTED/);
+  await f.session.close();
+});
+for(const request of [
+  {requestId:'child-post',frameId:'child',resourceType:'XHR',request:{url:'https://unqualified.invalid/',method:'POST'}},
+  {requestId:'child-redirect',frameId:'child',resourceType:'Document',redirectedRequestId:'prior',request:{url:'https://unqualified.invalid/',method:'GET'}},
+  {requestId:'child-response',frameId:'child',resourceType:'Document',responseStatusCode:200,request:{url:'https://unqualified.invalid/',method:'GET'}},
+])test('child quarantine refuses POST, redirects and response ingress before dispatch',async()=>{
+  const f=await fixture({publicPreflight:()=>true});
+  f.event('Page.frameAttached',{frameId:'child',parentFrameId:'frame'});
+  assert.throws(()=>f.event('Fetch.requestPaused',request),/CAPABILITY_EVENT_REJECTED/);
+  assert.equal(f.commands.some(row=>row.method==='Fetch.continueRequest'||row.method==='Fetch.failRequest'),false);
+  await f.session.close();
+});
+for(const [sessionId,parentFrameId] of [['foreign','frame'],['session','unknown']])
+test('public child quarantine requires the owned session and parent frame',async()=>{
+  const f=await fixture({publicPreflight:()=>true});
+  assert.throws(()=>f.event('Page.frameAttached',{frameId:'child',parentFrameId},sessionId),/CAPABILITY_(EVENT|SESSION)_REJECTED/);
+  assert.equal(f.session.fenced(),true);
+  await f.session.close();
+});

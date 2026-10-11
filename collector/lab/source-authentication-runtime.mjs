@@ -23,9 +23,10 @@ let handle;if(!pilotScenario){authority.enroll();handle=authority.acquirePrincip
 const source = {schema_version: 2, origin, roles: {password: null, app_method: null, otp: null, finalize: null}};
 let phase = 'password_uncertain', session, child, server, exit, pipeClosed = false, sandbox = false, gate;
 const counts = {password: 0, otp: 0, finalize: 0};
+let childRequests=0;
 let stage = 'initialize';
 let outcome = {code: 'SYNTHETIC_NATIVE_QUALIFICATION_REFUSED', passed: false, online_ready: false, browser_codes: []};
-const app = `${pilotScenario?'<img src="/unqualified-public-image.png">':''}<link rel=icon href="data:,"><form id=f><input type=text id=bd_auth_login_type_login><input type=password id=bd_auth_login_type_password></form><section><h6>Authentification par application (TOTP)</h6><div class="code-input react-code-input">${Array.from({length:6},(_,i)=>`<input type=number inputmode=numeric data-id=${i}>`).join('')}</div><input type=radio name=devicestate id=trusted value=trusted><input type=radio name=devicestate id=distrusted value=distrusted checked></section><script>
+const app = `${pilotScenario?'<link rel="stylesheet" href="/public.css"><img src="/unqualified-public-image.png"><iframe src="/unqualified-public-frame"></iframe>':''}<link rel=icon href="data:,"><form id=f><input type=text id=bd_auth_login_type_login><input type=password id=bd_auth_login_type_password></form><section><h6>Authentification par application (TOTP)</h6><div class="code-input react-code-input">${Array.from({length:6},(_,i)=>`<input type=number inputmode=numeric data-id=${i}>`).join('')}</div><input type=radio name=devicestate id=trusted value=trusted><input type=radio name=devicestate id=distrusted value=distrusted checked></section><script>
 let credentials;function post(url,body){return new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST',url);x.setRequestHeader('Content-Type','application/json');x.onload=()=>ok(JSON.parse(x.responseText));x.onerror=no;x.send(JSON.stringify(body));});}
 ${pilotScenario?"post('/hub/auth/verify',{branding:'boursedirect'});const get=url=>{const x=new XMLHttpRequest();x.open('GET',url);x.send();};get('/hub/referential/branding/boursedirect');":''}
 f.onsubmit=e=>{e.preventDefault();credentials={username:bd_auth_login_type_login.value,password:bd_auth_login_type_password.value,branding:'boursedirect',redirect:null};post('/hub/auth/login',credentials)${pilotScenario?".then(()=>{get('/hub/auth/two-factor/login/active-systems/boursedirect');get('/hub/auth/two-factor/login/state/boursedirect');})":''};};
@@ -34,6 +35,8 @@ try {
   stage = 'synthetic_server';
   server = http.createServer((req,res) => {
     const url = new URL(req.url, origin);
+    if(url.pathname==='/unqualified-public-frame')childRequests++;
+    if(url.pathname==='/public.css'){res.setHeader('Content-Type','text/css');res.end('/*'+ 'x'.repeat(1500000)+'*/');return;}
     if (req.method === 'GET' && ['/login','/fr/login'].includes(url.pathname)) {res.setHeader('Content-Type','text/html');res.end(app);return;}
     if(req.method==='GET'&&url.pathname==='/fr/page/mes-comptes'){res.end('<html><title>Captured account page</title></html>');return;}
     let body = '';req.on('data',bytes=>{body+=bytes;if(body.length>4096)req.destroy();});
@@ -70,7 +73,7 @@ try {
     const used=new Set();
     const actualSha=createHash('sha256').update(app).digest('hex');
     const result=await qualifySourceForPolicy(policy,{
-      sourcePin:{app_sha256:input.scenario==='pilot-bad-source'?'f'.repeat(64):actualSha,assets:[]},
+      sourcePin:{app_sha256:input.scenario==='pilot-bad-source'?'f'.repeat(64):actualSha,assets:[{url:origin+'/public.css',resourceType:'Stylesheet'}]},
       transport:{write:bytes=>new Promise((ok,no)=>child.stdin.write(bytes,error=>error?no(error):ok())),
         installReceive:value=>{receive=value;},stopOwned:async()=>{child.stdin.end();const [code]=await exit;return code===0&&pipeClosed;},closePipe:()=>child.stdout.destroy()},
       credentials:async()=>{delivered++;return {login:'SYNTHETIC',password:'SYNTHETIC_PASSWORD',profile:{algorithm:'SHA1',period:30,digits:6}};},
@@ -83,7 +86,7 @@ try {
     await result.captureDocument({url:result.document_url,role:'frame_document',sourceSha256:actualSha});
     await result.confirmAuthenticated({two_distinct_account_wrappers_verified:true});
     await result.close();
-    outcome={...outcome,passed:delivered===1&&codes===1&&documents===1,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
+    outcome={...outcome,passed:delivered===1&&codes===1&&documents===1&&childRequests===0,child_requests:childRequests,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
   } else {
   stage = 'native_bootstrap';
   session = await sourceNativeSession({write:bytes=>new Promise((resolve,reject)=>child.stdin.write(bytes,e=>e?reject(e):resolve())),

@@ -93,8 +93,9 @@ def test_incomplete_lists_allow_only_a_retained_source_and_verified_account_sele
 
 
 @pytest.mark.parametrize('browser_failure,cli_result', [(False, True), (True, True), (False, False)])
+@pytest.mark.parametrize('public_only', [False, True])
 def test_failed_delivery_attempts_both_owned_cleanups_and_retains_uncertain_lease(tmp_path, monkeypatch,
-        browser_failure, cli_result):
+        browser_failure, cli_result, public_only):
     import json
     from types import SimpleNamespace
     root = tmp_path / 'project'
@@ -118,6 +119,10 @@ def test_failed_delivery_attempts_both_owned_cleanups_and_retains_uncertain_leas
     calls = []
 
     def delivery_failure(*args):
+        # A restarted container has an empty tmpfs: prepare the delivery parent
+        # before attempting a shell redirection into it.
+        assert args[0] == ['docker', 'exec', '-u', '1000:1000', 'b' * 64,
+            'mkdir', '-p', '/home/fixture/proof/lab']
         raise RuntimeError('SYNTHETIC_DELIVERY_FAILURE')
 
     def browser_stop():
@@ -148,10 +153,14 @@ def test_failed_delivery_attempts_both_owned_cleanups_and_retains_uncertain_leas
     monkeypatch.setattr(qualification.subprocess, 'check_output',
         lambda args, **kwargs: 'd' * 40 if kwargs.get('text') else b'')
     with pytest.raises(RuntimeError, match='SYNTHETIC_DELIVERY_FAILURE'):
-        qualification.qualify(root, lab, inventory)
-    assert calls == ['browser', 'cli']
-    assert (lab / 'vault-operation.lock').exists() == (browser_failure or not cli_result)
+        qualification.qualify(root, lab, inventory, public_only=public_only)
+    assert calls == (['browser'] if public_only else ['browser', 'cli'])
+    cleanup = not browser_failure and (public_only or cli_result)
+    assert (lab / 'vault-operation.lock').exists() == (not cleanup)
     attempt = next((root / 'inputs/source-observations').glob('qualification-*/attempt.yaml'))
     record = qualification.replay.private._read(attempt)
     assert record['failed_phase'] == 'source_delivery'
-    assert record['exact_owned_cleanup_verified'] == (not browser_failure and cli_result)
+    assert record['exact_owned_cleanup_verified'] == cleanup
+    assert record['cli_unused'] is public_only
+    if public_only:
+        assert record['cli_stopped_owned'] is None

@@ -532,3 +532,51 @@ public_preflight_denial:
     owned_browser_and_cli_stop_verified: true
   scope: Unlisted GET subresources are denied during credential-free preflight only;
     later unqualified requests still fence the attempt.
+
+public_preflight_recovery:
+  inputs:
+    collector/lab/source-authentication-runtime.mjs: f4f09ac6cd4a60c973e83370e18bced3b8ec38b315596fc6c0ed4cb4f025495a
+    collector/lab/source-qualification-command.mjs: 2f52408dabf7b39a62201cd6a6af8f8e1c6af157ef35d0f980e633a62b35c6bb
+    collector/source-native-session.mjs: b81482719e57e6a2714dcf1f2b822fe80194e7963bd945f8f484eab89a7897a3
+    collector/source-qualification-pilot.mjs: d929dc1510e33e4aaea2ca2c186475c7a49f89e45f52bffa67b444a2fbe18d03
+    collector/tests/source-native-session.test.mjs: 592226120a6396fd3d58a080d21d50b29f33b03aef45ea9b4f757c9790a3c371
+    docs/design/online-source-inspection.md: b863337fc2da36d6309cefe35ff8b7d0740a0655663e68fe3fbadb5d0df2c875
+    scripts/source_qualification.py: ad1d093343539271c81c498f74201b269cc5424074ed6020574665d47e03bbf5
+    tests/test_source_qualification.py: 0706bc027d4590783b6e6d4fbb17b6ad788c57bede1a07c57748d617cfc5a6c3
+  checks:
+    python:
+      command: root .venv/bin/python -m pytest tmp/source70-worktree/tests/test_source_qualification.py
+        -q
+      exit_code: 0
+      summary: 18 passed
+      log_sha256: 729498e5bb74791c449bd81daae53960afaea75639e4957a5f7dd233cc52234e
+    node:
+      command: node --import ./tests/no-network.mjs --test tests/source-native-session.test.mjs
+        tests/source-authentication-gate.test.mjs
+      exit_code: 0
+      summary: 27 passed
+      log_sha256: dcafcea81a8a89fd8661a215f35ec67e7ac2b1a511851112ca44509f3f4b4d44
+  native:
+    chrome_version: 155.0.8059.39
+    pilot:
+      passed: true
+      child_requests: 0
+      password: 1
+      otp: 1
+      finalize: 1
+      documents: 1
+      public_css_bytes: 1500004
+      owned_cleanup_verified: true
+    bad_source:
+      credential_requests: 0
+      owned_cleanup_verified: true
+  reused: Unchanged pinned renderer/image, vault identity and authentication guards.
+    Final-head CI supplies full offline verification before real authentication.
+  actual_public_preflight:
+    app_sha256_verified: true
+    configuration_verified: true
+    preliminary_verified: true
+    form_ready: true
+    credentials_delivered: false
+    authentication_attempts: 0
+    owned_cleanup_verified: true

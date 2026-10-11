@@ -281,3 +281,11 @@ unknown-request refusal. Exact-head external security review, affected offline
 tests and owned synthetic runtime qualification remain prerequisites to use.
 The dedicated lab ownership, broker settings and financial boundaries remain
 unchanged; no Ghostfolio write or recurring activation is authorized.
+
+The qualification caller's public preflight quarantines bounded child frames
+attached beneath its owned main frame. It denies every intercepted child GET,
+never grants a child request or exposes a child execution realm, and retains
+the main-frame credential binding. Child POSTs, redirects, response ingress,
+foreign sessions and child events after preflight remain fatal. The default
+native transport still refuses child-frame attachment; this denial-only profile
+is selected solely by the qualification caller while it is credential-free.

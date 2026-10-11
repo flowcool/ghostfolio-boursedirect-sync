@@ -105,7 +105,11 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
   async function response({event,send}) {
     const p=event.params,record=pending.get(p.requestId);
     if(!record||responseSeen.has(p.requestId))throw new Error();responseSeen.add(p.requestId);
-    const body=await send('Fetch.getResponseBody',{requestId:p.requestId},event.sessionId);
+    // Public CSS and images are not source evidence. Reading their unbounded
+    // bodies can exhaust the private CDP envelope before the pinned app loads.
+    const appResponse=/^https:\/\/www\.boursedirect\.fr\/apps\/auth\/production\/auth\.js\?version=[0-9]{13}$/.test(record.url);
+    const body=record.kind!=='public'||synthetic&&record.url===loginUrl||appResponse
+      ?await send('Fetch.getResponseBody',{requestId:p.requestId},event.sessionId):undefined;
     if(record.kind==='authentication') {
       if(record.phase!==phase)throw new Error();
       const observed=inspectSourceAuthenticationResponse(policy,{phase,status:p.responseStatusCode,...body});
@@ -145,7 +149,7 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
       if(synthetic && record.url===loginUrl) {
         if(createHash('sha256').update(nativeBody(body)).digest('hex')!==pins.app_sha256)throw new Error();appVerified=true;
       }
-      if(/^https:\/\/www\.boursedirect\.fr\/apps\/auth\/production\/auth\.js\?version=[0-9]{13}$/.test(record.url)) {
+      if(appResponse) {
         if(createHash('sha256').update(nativeBody(body)).digest('hex')!==pins.app_sha256)throw new Error();appVerified=true;
       }
     }
@@ -157,13 +161,19 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
     while(!await condition()){if(fatal||session.fenced()||Date.now()>deadline)throw new Error();await new Promise(resolve=>setTimeout(resolve,50));}
   }
   try {
-    session=await sourceNativeSession({...transport,paused,response});
+    session=await sourceNativeSession({...transport,paused,response,publicPreflight:()=>phase==='preflight'});
     const bound=session.binding();
     if(synthetic) {
-      let used=false;
-      publicDecide=value=>{if(used || value.sessionId!==bound.sessionId || value.frameId!==Object.keys(bound.frames)[0]
-        || value.request.url!==loginUrl || value.request.method!=='GET'||value.resourceType!=='Document'
-        ||Object.hasOwn(value,'redirectedRequestId'))return false;used=true;return true;};
+      let used=false;const usedAssets=new Set();
+      publicDecide=value=>{
+        if(value.sessionId!==bound.sessionId || value.frameId!==Object.keys(bound.frames)[0]
+            ||value.request.method!=='GET'||Object.hasOwn(value,'redirectedRequestId'))return false;
+        if(!used&&value.request.url===loginUrl&&value.resourceType==='Document'){used=true;return true;}
+        const key=JSON.stringify([value.request.url,value.resourceType]);
+        if(!used||usedAssets.has(key)||value.resourceType!=='Stylesheet'
+            ||!pins.assets.some(row=>row.url===value.request.url&&row.resourceType==='Stylesheet'))return false;
+        usedAssets.add(key);return true;
+      };
     } else publicDecide=publicLoginPolicy({sessionId:bound.sessionId,frameId:Object.keys(bound.frames)[0]},pins.assets,true);
     reads=sourceReadGate(policy,{binding:bound,retain:async value=>{await retainSafe(value);return true;},consume:consumeRead,
       continueRequest:id=>session.send('Fetch.continueRequest',{requestId:id}),stop});
@@ -171,6 +181,7 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
     await waitFor(()=>appVerified&&configVerified&&preliminaryVerified);
     if(await verifyBrowser()!==true)throw new Error();
     await waitFor(()=>session.evaluate(function(){return document.readyState==='complete'&&Boolean(document.querySelector('#bd_auth_login_type_login'));}));
+    phase='credential_delivery';
     selected=await credentials();
     if(await enrollBound(authority,selected)!==true)throw new Error();
     handle=authority.acquirePrincipal(synthetic?undefined:selected.login);authority.startAttempt(handle,now(),'post-2fa-finalization');
@@ -204,7 +215,9 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
       confirmAuthenticated:async evidence=>{if(phase!=='finalized'||fatal||evidence?.two_distinct_account_wrappers_verified!==true)throw new Error();authority.transition(handle,'authenticated',now());phase='authenticated';await retainSafe({authentication_verified:true});},
       close:async()=>{await session.close();authority.releasePrincipal(handle);selected=code=undefined;},
       online_ready:false});
-  } catch {
+  } catch(error) {
+    await retainSafe({role:'qualification_refusal',phase,native_failure:session?.failure()??null,code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_QUALIFICATION_PILOT_REFUSED',
+      app_verified:appVerified,configuration_verified:configVerified,preliminary_verified:preliminaryVerified}).catch(()=>{});
     if(session)await session.close().catch(()=>{});
     if(handle)authority.releasePrincipal(handle);selected=code=undefined;
     throw new Error('SOURCE_QUALIFICATION_PILOT_REFUSED');
