@@ -623,3 +623,53 @@ inert_public_asset_documents:
   authority: Read only exact observed canonical Script references as documents with
     scripts disabled; no XHR, redirects, authentication or new target grants.
   runtime_execution_pending: true
+actual_inert_authentication_app_source:
+  schema_version: 1
+  source_commit: cc7433e4257dca7c07688519a45292e20b118012
+  stdout_sha256: b57c8871276d7846a92e64ee0abcfa8d76ee5420ed8ed9acc67d82fede76cd63
+  response_body_sha256: 2c04191e1b5e1775fbe4bdb153394bccb82fb019fc1324fc2e3c514321321101
+  response_bytes: 476068
+  reference_kind: actual_paused_canonical_Script_GET_not_reconstructed_query
+  reference_evidence_sha256: 1b2fa8acc6b8031c9f4a17c2c40faa97ad5c23e0cc5a116c44c5c23aae3ee610
+  response_kind: inert_Document_GET_response_with_scripts_disabled
+  http_status: 200
+  credentials_read: false
+  authentication_requests: 0
+  owned_browser_exit_verified: true
+  source_semantics_review_pending: true
+actual_browser_init_requalification:
+  browser_init: true
+  additional_renderer_seccomp_filter: true
+  nested_pid_namespace_depth: 3
+  owned_renderer_exit_verified: true
+  idle_process_inspection:
+    browser_init: true
+    counts:
+      disappeared: 0
+      live_chrome: 0
+      unexpected_proc_errors: 0
+      zombies: 0
+    inspection_code_sha256: 6a62b24d3a315fd03551bf48f1d3027526af78a5f4e7f948f5bfe63fd4e7ada3
+    kind: independent_owned_browser_idle_inspection
+    owner: infra-4g8u.70
+    runtime_receipt_sha256: 0c95328c6f485d1dc2847e2ce85d14d980ac1e2c0a2a9ba2481ca96b8206b149
+  private_idle_receipt_sha256: 1b50a36e6b24ca77ca4e6d2d1c073f141f2dfe13a6dd98c336e7f601b84b080c
+source_account_discovery_requirement:
+  contract: docs/design/source-contract.yaml#target_service.account_scope
+  private_operator_inventory_recorded: true
+  broker_account_ids_observed: false
+  destination_bindings_verified: false
+  no_implicit_default_account: true
+ci_inert_asset_implementation:
+  head: cc7433e4257dca7c07688519a45292e20b118012
+  tests:
+    run: 38120165373
+    conclusion: success
+  codeql:
+    run: 38120165410
+    conclusion: success
+  dependency_review:
+    run: 38120165257
+    conclusion: success
+  external_review_latest_commit: c1d03dde80fb850433f26f23381b7e5f60a4a6dc
+  exact_current_head_external_review_pending: true
