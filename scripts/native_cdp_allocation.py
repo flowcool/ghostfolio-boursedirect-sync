@@ -50,33 +50,41 @@ def _private_directory(directory, create=False):
     require(stat.st_uid == os.getuid() and stat.st_mode & 0o077 == 0, 'ALLOCATION_PERMISSIONS_INVALID')
 
 
-def _read(filename):
+def _read_bytes(filename, max_bytes=_LIMIT):
     _private_directory(filename.parent)
     fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         info = os.fstat(fd)
         require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.getuid()
-                and info.st_mode & 0o077 == 0 and info.st_size <= _LIMIT, 'ALLOCATION_FILE_INVALID')
-        raw = os.read(fd, _LIMIT + 1)
-        require(len(raw) == info.st_size and len(raw) <= _LIMIT, 'ALLOCATION_FILE_INVALID')
-        decoded = raw.decode('utf-8')
-        for token in yaml.scan(decoded):
-            require(not isinstance(token, (yaml.tokens.AliasToken, yaml.tokens.AnchorToken)), 'ALLOCATION_SCHEMA_INVALID')
-        def unique(node, depth=0):
-            require(depth <= 16, 'ALLOCATION_SCHEMA_INVALID')
-            if isinstance(node, yaml.nodes.MappingNode):
-                keys = [key.value for key, _ in node.value if isinstance(key, yaml.nodes.ScalarNode)
-                        and key.tag == 'tag:yaml.org,2002:str']
-                require(len(keys) == len(node.value) and len(keys) == len(set(keys)), 'ALLOCATION_SCHEMA_INVALID')
-                for _, value in node.value:
-                    unique(value, depth + 1)
-            elif isinstance(node, yaml.nodes.SequenceNode):
-                for value in node.value:
-                    unique(value, depth + 1)
-        unique(yaml.compose(decoded, Loader=yaml.SafeLoader))
-        return yaml.safe_load(decoded)
+                and info.st_mode & 0o077 == 0 and info.st_size <= max_bytes, 'ALLOCATION_FILE_INVALID')
+        raw = os.read(fd, max_bytes + 1)
+        require(len(raw) == info.st_size and len(raw) <= max_bytes, 'ALLOCATION_FILE_INVALID')
+        return raw
     finally:
         os.close(fd)
+
+
+def _decode(raw):
+    decoded = raw.decode('utf-8')
+    for token in yaml.scan(decoded):
+        require(not isinstance(token, (yaml.tokens.AliasToken, yaml.tokens.AnchorToken)), 'ALLOCATION_SCHEMA_INVALID')
+    def unique(node, depth=0):
+        require(depth <= 16, 'ALLOCATION_SCHEMA_INVALID')
+        if isinstance(node, yaml.nodes.MappingNode):
+            keys = [key.value for key, _ in node.value if isinstance(key, yaml.nodes.ScalarNode)
+                    and key.tag == 'tag:yaml.org,2002:str']
+            require(len(keys) == len(node.value) and len(keys) == len(set(keys)), 'ALLOCATION_SCHEMA_INVALID')
+            for _, value in node.value:
+                unique(value, depth + 1)
+        elif isinstance(node, yaml.nodes.SequenceNode):
+            for value in node.value:
+                unique(value, depth + 1)
+    unique(yaml.compose(decoded, Loader=yaml.SafeLoader))
+    return yaml.safe_load(decoded)
+
+
+def _read(filename):
+    return _decode(_read_bytes(filename))
 
 
 def _publish(filename, value, exclusive=False):

@@ -730,3 +730,37 @@ canonical_replay_runtime_recovery:
   new_broker_requests: 0
   private_runtime_receipt_sha256: 067867544ddd73e0d143179fd18fb53369c47873d3d3ccf942dff2780782cbb7
   private_status_sha256: afe1eb3b96b2ae610688f8e04c3045bc300c38b16fa162619c7aa38323a63bb8
+canonical_replay_review_corrections:
+  external_reviews:
+  - 5482406691
+  - 5482325002
+  inline_comment: 4240741297
+  input_sha256:
+    scripts/source_connection.py: b966b9c591a859e0a3533a26fca726eb9a0fce4cca1e856b8d1aa23aadd52595
+    scripts/native_cdp_allocation.py: a4b0bcdd72fe923bb0741f09648547596733d0ef5727666147b54d0b6f1dd013
+    collector/vault-egress.py: ef9a999642518a4228834d8fe69d6676eeff36e3509cb8b8b932924c3d0c4a7c
+    tests/test_source_connection.py: bff5a5fc6dc432d8e9f34bd8522db6a6751e76ee84e1b21ea413d192b5a75894
+    tests/test_vault_egress.py: e2038ec41976ff2453261a07d83d7aea3355afe1b1013d48dc0e38529fa7d3d7
+  same_snapshot_hash_parse_and_helper_execution: true
+  delayed_response_after_client_half_close_verified: true
+  checks:
+    python_full:
+      command: .venv/bin/python -m pytest -q
+      exit_code: 0
+      passed: 1183
+      log_sha256: b875b73481cc1b20827cbbf51aa08d09515cd7e06a060b2afa9c20e724c1f30e
+    affected:
+      command: .venv/bin/python -m pytest -q tests/test_source_connection.py tests/test_vault_egress.py
+      exit_code: 0
+      passed: 48
+      log_sha256: 3ef08400e69f8e78a4514428af14d0dccd6f9a4e3a5c296fe840acd23af483f7
+    live_status:
+      exit_code: 0
+      owned_containers: 4
+      new_vault_sessions: 0
+      new_broker_requests: 0
+      report_sha256: afe1eb3b96b2ae610688f8e04c3045bc300c38b16fa162619c7aa38323a63bb8
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+  deployed_immutable_proxy_runtime_unchanged: true
+  new_authentication_attempt: false

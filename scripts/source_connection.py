@@ -32,13 +32,18 @@ def inspect_saved(root, lab):
     evidence = {}
     for name, reference in inventory['evidence'].items():
         path = contained(root, reference['path'])
-        require(path.is_file() and path.stat().st_mode & 0o077 == 0, 'SOURCE_REPLAY_EVIDENCE_MISSING_OR_PUBLIC')
-        require(hashlib.sha256(path.read_bytes()).hexdigest() == reference['sha256'], 'SOURCE_REPLAY_EVIDENCE_CHANGED')
+        require(path.is_file(), 'SOURCE_REPLAY_EVIDENCE_MISSING_OR_PUBLIC')
+        raw = private._read_bytes(path, max_bytes=1048576 if name == 'auth_app_body' else private._LIMIT)
+        require(hashlib.sha256(raw).hexdigest() == reference['sha256'], 'SOURCE_REPLAY_EVIDENCE_CHANGED')
         if name != 'auth_app_body':
-            evidence[name] = private._read(path)
+            evidence[name] = private._decode(raw)
+    verified_helpers = {}
     for name, expected in inventory['trusted_helpers'].items():
         path = contained(lab / 'host', name)
-        require(hashlib.sha256(path.read_bytes()).hexdigest() == expected, 'SOURCE_REPLAY_HELPER_CHANGED')
+        raw = private._read_bytes(path)
+        require(hashlib.sha256(raw).hexdigest() == expected, 'SOURCE_REPLAY_HELPER_CHANGED')
+        verified_helpers[name] = raw
+    inventory['_verified_helpers'] = verified_helpers
     contract = private._read(contained(root, inventory['source_contract']))
     auth = evidence['historical_authentication_manifest']['authentication']
     journal = evidence['historical_authentication_journal']['accounts']
@@ -69,17 +74,20 @@ def inspect_saved(root, lab):
     }
 
 
-def helper(lab, name):
+def helper(lab, name, verified):
+    if name != 'qualify':
+        helper(lab, 'qualify', verified)
     spec = importlib.util.spec_from_file_location(name, lab / 'host' / (name + '.py'))
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    exec(compile(verified[name + '.py'], str(module.__file__), 'exec'), module.__dict__)
     return module
 
 
-def live_status(lab):
+def live_status(lab, verified):
     sys.path.insert(0, str(lab / 'host'))
-    vault = helper(lab, 'attest').attest()
-    broker = helper(lab, 'broker-attest').attest()
+    vault = helper(lab, 'attest', verified).attest()
+    broker = helper(lab, 'broker-attest', verified).attest()
     import qualify as q
     browser = q.owned(broker, 'container', broker['containers']['browser']['id'])
     require(browser['HostConfig']['Init'] is True)
@@ -87,8 +95,9 @@ def live_status(lab):
         'browser_init': True, 'new_vault_sessions': 0, 'new_broker_requests': 0}
 
 
-def restart_browser(lab):
+def restart_browser(lab, verified):
     sys.path.insert(0, str(lab / 'host'))
+    helper(lab, 'qualify', verified)
     import qualify as q
     path = lab / 'host' / 'broker-runtime.yaml'
     broker = private._read(path)
@@ -121,9 +130,9 @@ def restart_browser(lab):
         worker['state'] = 'started'
         broker['state'] = 'routes_qualified'
         private._publish(path, broker)
-        live_status(lab)
+        live_status(lab, verified)
     except Exception:
-        helper(lab, 'broker-stop').stop()
+        helper(lab, 'broker-stop', verified).stop()
         raise
     return {'code': 'SOURCE_BROWSER_RESTARTED_ATTESTED', 'new_broker_requests': 0}
 
@@ -136,18 +145,19 @@ def main():
     root = Path(__file__).resolve().parents[1]
     try:
         lab = contained(root, arguments.lab_root)
-        _, report = inspect_saved(root, lab)
+        inventory, report = inspect_saved(root, lab)
+        verified = inventory['_verified_helpers']
         if arguments.action == 'connect':
             report['code'] = 'SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED'
             print(json.dumps(report))
             return 2
         if arguments.action == 'status':
-            report['live'] = live_status(lab)
+            report['live'] = live_status(lab, verified)
         elif arguments.action == 'restart-browser':
-            report['live'] = restart_browser(lab)
+            report['live'] = restart_browser(lab, verified)
         elif arguments.action == 'stop-browser':
             sys.path.insert(0, str(lab / 'host'))
-            helper(lab, 'broker-stop').stop()
+            helper(lab, 'broker-stop', verified).stop()
         print(json.dumps(report))
         return 0
     except Exception as error:

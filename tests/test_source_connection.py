@@ -103,3 +103,39 @@ def test_successful_hashes_do_not_turn_uncertain_auth_into_success(saved):
     replay.private._publish(lab / 'replay.yaml', index)
     with pytest.raises(RuntimeError):
         replay.inspect_saved(root, lab)
+
+
+def test_connect_refuses_exactly_without_loading_live_adapter(saved, monkeypatch, capsys):
+    root, _ = saved
+    monkeypatch.setattr(replay, '__file__', str(root / 'scripts/source_connection.py'))
+    monkeypatch.setattr(replay.sys, 'argv', ['source_connection.py', 'connect', '--lab-root', 'inputs/lab'])
+    monkeypatch.setattr(replay, 'helper', lambda *args: pytest.fail('connect loaded a live adapter'))
+    assert replay.main() == 2
+    assert yaml.safe_load(capsys.readouterr().out)['code'] == 'SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED'
+
+
+def test_hash_and_yaml_use_the_same_bytes_when_file_is_replaced(saved, monkeypatch):
+    root, lab = saved
+    target = lab / 'historical_authentication_journal.yaml'
+    read = replay.private._read_bytes
+    replaced = False
+    def replace_after_read(path, **options):
+        nonlocal replaced
+        raw = read(path, **options)
+        if path == target and not replaced:
+            replaced = True
+            replay.private._publish(target, {'accounts': {'synthetic': {'stage': 'OUTCOME_UNCERTAIN'}}})
+        return raw
+    monkeypatch.setattr(replay.private, '_read_bytes', replace_after_read)
+    assert replay.inspect_saved(root, lab)[1]['historical_authentication_confirmed'] is True
+    with pytest.raises(RuntimeError, match='SOURCE_REPLAY_EVIDENCE_CHANGED'):
+        replay.inspect_saved(root, lab)
+
+
+def test_helper_executes_only_the_bytes_previously_verified(saved, monkeypatch):
+    root, lab = saved
+    inventory, _ = replay.inspect_saved(root, lab)
+    (lab / 'host/qualify.py').write_bytes(b'raise RuntimeError("unverified replacement executed")\n')
+    monkeypatch.setitem(replay.sys.modules, 'qualify', None)
+    loaded = replay.helper(lab, 'qualify', inventory['_verified_helpers'])
+    assert loaded.__file__ == str(lab / 'host/qualify.py')

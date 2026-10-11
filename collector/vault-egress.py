@@ -68,6 +68,8 @@ async def copy_stream(reader, writer):
     while True:
         data = await asyncio.wait_for(reader.read(65536), 60)
         if not data:
+            if getattr(writer, 'can_write_eof', lambda: False)():
+                writer.write_eof()
             return
         writer.write(data)
         await asyncio.wait_for(writer.drain(), 15)
@@ -86,7 +88,7 @@ async def serve_connection(reader, writer, connect=upstream, policy='vault'):
         tasks = [asyncio.create_task(copy_stream(reader, remote_writer)),
                  asyncio.create_task(copy_stream(remote_reader, writer))]
         try:
-            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED, timeout=120)
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION, timeout=120)
             for task in done:
                 task.result()
         finally:

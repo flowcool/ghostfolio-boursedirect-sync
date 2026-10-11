@@ -108,6 +108,28 @@ def test_allowed_tunnel_transfers_bytes_and_closes_both_streams():
     asyncio.run(run())
 
 
+def test_client_half_close_retains_delayed_server_response():
+    async def run():
+        reader, writer, output, closed = streams(b'CONNECT api.bitwarden.com:443 HTTP/1.1\r\n\r\nrequest')
+        _, remote_writer, remote_output, remote_closed = streams(b'')
+        remote_reader = asyncio.StreamReader()
+        half_closed = asyncio.Event()
+        remote_writer.can_write_eof = lambda: True
+        remote_writer.write_eof = half_closed.set
+        async def connected(host):
+            return remote_reader, remote_writer
+        async def respond_after_half_close():
+            await half_closed.wait()
+            await asyncio.sleep(0)
+            remote_reader.feed_data(b'delayed-complete-response')
+            remote_reader.feed_eof()
+        await asyncio.gather(proxy.serve_connection(reader, writer, connected), respond_after_half_close())
+        assert output == b'HTTP/1.1 200 Connection Established\r\n\r\ndelayed-complete-response'
+        assert remote_output == b'request'
+        assert closed and remote_closed
+    asyncio.run(run())
+
+
 def test_connection_limit_closes_without_upstream_or_response(monkeypatch):
     async def run():
         reader, writer, output, closed = streams(b'')
