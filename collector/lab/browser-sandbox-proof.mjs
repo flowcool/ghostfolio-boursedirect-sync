@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
-import {once} from 'node:events';
 import {capabilityPipe, PIPE_LIMITS} from '../capability-pipe.mjs';
 
 export function sandboxDetails(raw, baseline) {
@@ -80,6 +79,72 @@ function processTable() {
   return names.map(name => readIdentity(name)).filter(Boolean);
 }
 
+// Install lifecycle listeners before attempting proc acquisition or pipe setup.
+export function ownedBrowserLifecycle(child, {read = readIdentity, table = processTable,
+  signal = (pid, value) => process.kill(pid, value), delay = () => new Promise(resolve => setTimeout(resolve, 100))} = {}) {
+  let root, exited = false, closed = false, spawnFailed = false, stopping;
+  const known = new Map();
+  child.on('error', () => {spawnFailed = true;});
+  child.on('exit', () => {exited = true;});
+  child.on('close', () => {closed = true;});
+  function pin() {
+    if (!Number.isSafeInteger(child.pid) || child.pid < 2 || spawnFailed) throw new Error('SANDBOX_PROCESS_REFUSED');
+    const current = read(child.pid);
+    if (!current || exited) throw new Error('SANDBOX_PROCESS_REFUSED');
+    if (root && !sameProcess(root, current)) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
+    root = current; known.set(root.pid, root);
+  }
+  function observe() {
+    if (!root || !sameProcess(root, read(root.pid))) return new Map();
+    const owned = ownedDescendants(table(), root);
+    for (const [pid, row] of owned) {
+      if (known.has(pid) && !sameProcess(known.get(pid), row)) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
+      known.set(pid, row);
+    }
+    return owned;
+  }
+  function live() {
+    return [...known.values()].filter(row => {
+      const current = read(row.pid);
+      return sameProcess(row, current) && !['Z', 'X'].includes(current.state);
+    });
+  }
+  function signalOwned(value) {
+    for (const row of [...known.values()].reverse()) {
+      const current = read(row.pid);
+      if (!sameProcess(row, current) || ['Z', 'X'].includes(current.state)) continue;
+      try {signal(row.pid, value);} catch (error) {if (error.code !== 'ESRCH') throw error;}
+    }
+  }
+  function absentUnpinnedRoot() {
+    return !Number.isSafeInteger(child.pid) || child.pid < 2 || read(child.pid) === undefined;
+  }
+  function verified() {
+    return (exited || (spawnFailed && closed)) && live().length === 0
+      && (root !== undefined || absentUnpinnedRoot());
+  }
+  async function waitExit() {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      if (verified()) return;
+      await delay();
+    }
+    throw new Error('SANDBOX_EXIT_TIMEOUT');
+  }
+  function stop() {
+    stopping ??= (async () => {
+      // A failed initial proc read can still recover a pinned exact child before signaling.
+      if (!root && !exited && !spawnFailed && Number.isSafeInteger(child.pid) && read(child.pid)) pin();
+      observe();
+      signalOwned('SIGTERM');
+      try {await waitExit();} catch {signalOwned('SIGKILL'); await waitExit();}
+      if (!verified()) throw new Error('SANDBOX_EXIT_UNVERIFIED');
+      return true;
+    })();
+    return stopping;
+  }
+  return {pin, observe, stop, exited: () => exited, live};
+}
+
 let stage = 'runtime_prerequisites', sandboxUnavailable = false;
 const osObservation = {owned_descendant_processes: 0, renderers_found: 0, renderer_status: [], proc_read_failures: 0};
 async function prove() {
@@ -95,69 +160,24 @@ async function prove() {
     '--disable-component-update', '--disable-default-apps', '--no-first-run', '--no-default-browser-check'],
   {detached: true, env: {PATH: '/usr/bin:/bin', HOME: '/home/fixture'},
     stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe']});
-  if (!Number.isSafeInteger(child.pid) || child.pid < 2) throw new Error('SANDBOX_PROCESS_REFUSED');
-  let exited = false, fenced = false, stopping, stderrBytes = 0, pipe, result;
-  const exit = once(child, 'exit').then(() => {exited = true;});
-  exit.catch(() => {});
-  const root = readIdentity(child.pid);
-  if (!root) throw new Error('SANDBOX_PROCESS_REFUSED');
-  const known = new Map([[root.pid, root]]);
-  function observeOwned() {
-    if (!sameProcess(root, readIdentity(root.pid))) return new Map();
-    const owned = ownedDescendants(processTable(), root);
-    for (const [pid, row] of owned) {
-      if (known.has(pid) && !sameProcess(known.get(pid), row)) throw new Error('SANDBOX_OWNERSHIP_REFUSED');
-      known.set(pid, row);
-    }
-    return owned;
-  }
-  function liveOwned() {
-    return [...known.values()].filter(row => {
-      const current = readIdentity(row.pid);
-      return sameProcess(row, current) && !['Z', 'X'].includes(current.state);
-    });
-  }
-  function signalOwned(signal) {
-    // Identity is rechecked immediately before each signal; unrelated/reused PIDs are never targeted.
-    for (const row of [...known.values()].reverse()) {
-      const current = readIdentity(row.pid);
-      if (!sameProcess(row, current) || ['Z', 'X'].includes(current.state)) continue;
-      try {process.kill(row.pid, signal);} catch (error) {if (error.code !== 'ESRCH') throw error;}
-    }
-  }
-  async function waitExit() {
-    for (let attempt = 0; attempt < 50; attempt++) {
-      if (exited && liveOwned().length === 0) return;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    throw new Error('SANDBOX_EXIT_TIMEOUT');
-  }
-  function stop() {
-    stopping ??= (async () => {
-      observeOwned();
-      signalOwned('SIGTERM');
-      try {await waitExit();} catch {
-        signalOwned('SIGKILL');
-        await waitExit();
-      }
-      if (!exited || liveOwned().length) throw new Error('SANDBOX_EXIT_UNVERIFIED');
-    })();
-    return stopping;
-  }
+  const lifecycle = ownedBrowserLifecycle(child);
+  let fenced = false, stderrBytes = 0, pipe, result;
+  const stop = lifecycle.stop;
   function fence() {fenced = true; void stop().catch(() => {});}
-  child.on('error', fence);
-  child.stderr.on('data', bytes => {
-    stderrBytes += bytes.length;
-    if (/No usable sandbox|Failed to move to new namespace|Operation not permitted/.test(bytes.toString())) sandboxUnavailable = true;
-    if (stderrBytes > 32768) fence();
-  });
-  pipe = capabilityPipe({write: raw => new Promise((resolve, reject) => {
-    child.stdio[3].write(raw, error => error ? reject(error) : resolve());
-  }), onEvent: () => {}, fence, limits: {...PIPE_LIMITS, commandMs: 10000, sessionMs: 60000}});
-  child.stdio[4].on('data', bytes => {try {pipe.receive(bytes);} catch {fence();}});
-  child.stdio[4].on('end', () => {if (!exited) fence();});
-  pipe.armEvents();
   try {
+    lifecycle.pin();
+    child.on('error', fence);
+    child.stderr.on('data', bytes => {
+      stderrBytes += bytes.length;
+      if (/No usable sandbox|Failed to move to new namespace|Operation not permitted/.test(bytes.toString())) sandboxUnavailable = true;
+      if (stderrBytes > 32768) fence();
+    });
+    pipe = capabilityPipe({write: raw => new Promise((resolve, reject) => {
+      child.stdio[3].write(raw, error => error ? reject(error) : resolve());
+    }), onEvent: () => {}, fence, limits: {...PIPE_LIMITS, commandMs: 10000, sessionMs: 60000}});
+    child.stdio[4].on('data', bytes => {try {pipe.receive(bytes);} catch {fence();}});
+    child.stdio[4].on('end', () => {if (!lifecycle.exited()) fence();});
+    pipe.armEvents();
     stage = 'chrome_version';
     const version = await pipe.send('Browser.getVersion');
     if (!/^(?:HeadlessChrome|Chrome)\/155\.0\.8059\.39$/.test(version.product)) throw new Error();
@@ -184,7 +204,7 @@ async function prove() {
         || rendererIds.some(pid => !Number.isSafeInteger(pid) || pid < 2))
       throw new Error('SANDBOX_PROCESS_REFUSED');
     stage = 'renderer_ownership';
-    const owned = observeOwned(), renderers = [];
+    const owned = lifecycle.observe(), renderers = [];
     osObservation.owned_descendant_processes = owned.size;
     osObservation.renderers_found = rendererIds.length;
     for (const pid of rendererIds) {
@@ -205,10 +225,10 @@ async function prove() {
     try {await stop();} catch {stage = 'owned_browser_exit'; throw new Error('SANDBOX_EXIT_UNVERIFIED');}
     stage = failedStage;
     // Observe owned browser exit before intentional pipe closure.
-    pipe.lost();
+    pipe?.lost();
   }
   stage = 'owned_descendant_exit';
-  if (liveOwned().length) throw new Error('SANDBOX_DESCENDANTS_UNVERIFIED');
+  if (lifecycle.live().length) throw new Error('SANDBOX_DESCENDANTS_UNVERIFIED');
   result.owned_browser_exit_verified = true;
   result.owned_descendant_exit_verified = true;
   return result;

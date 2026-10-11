@@ -100,7 +100,11 @@ On 2026-10-10 Florent confirmed the architecture after a grilling interview. The
 canonical keyed target policy is `source-contract.yaml` under `target_service`.
 The product is an independent Bourse Direct service in the incremental application
 Compose: daily unattended acquisition and import, plus an operator trigger,
-revisiting the latest 90 days each run. This supersedes the earlier manual-only
+revisiting the latest 90 days each run. A coverage gap outside that window blocks
+both daily and manual resumption until explicit resolution: verified catch-up
+where the source supports it, or an operator acknowledgment of the missing period.
+Acquisition coverage derives from the last completed period; pending exceptions
+remain in the durable journal beyond the window. This supersedes the earlier manual-only
 **product target**; recurring broker execution is not activated by this decision.
 The currently implemented collector remains guarded by the acquisition procedure
 and actual source qualification above. Production Ghostfolio writes remain a

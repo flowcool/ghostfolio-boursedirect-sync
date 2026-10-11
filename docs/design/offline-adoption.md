@@ -73,7 +73,10 @@ reference at54958ab1035eb97a1f67f9072b79699813ec3800; no sibling code is copied.
 The `target_service.existing_activity_policy` in [the source contract](source-contract.yaml)
 records Florent's 2026-10-10 decision: a certain unique financial match should
 prevent reimport without a per-run manual resolution, while conflicting or
-ambiguous matches remain exceptions. This is a future orchestration target; the
+ambiguous matches remain exceptions. Uniqueness applies to a one-to-one assignment
+across all source operations and eligible remote records: two source operations
+cannot both adopt one remote record. Multiplicity conflicts remain quarantined.
+This is a future orchestration target; the
 current snapshot-bound explicit resolution requirements above remain implemented.
 Neither target nor current code authorizes rewriting or deleting existing
 financial records.

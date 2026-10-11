@@ -129,6 +129,8 @@ test('inspection observes canonical broker origin while inert aliases cannot del
   assert.equal(result.online_ready, false);
   for (const forbidden of ['login', 'password', 'uris', 'accountConfig']) assert.equal(Object.hasOwn(result, forbidden), false);
   assert.equal(JSON.stringify(result).includes('alias.synthetic'), false);
+  assert.throws(() => selectWorkerItem(item, {itemId: item.id, name: item.name,
+    uri: result.uri, principalHash: result.principalHash, accountConfig: {path: '/synthetic/account', sha256: 'a'.repeat(64)}}), /PROVIDER_ITEM_INVALID/);
   item.login.uris.push({uri: ORIGIN + '/other-login'});
   assert.equal(inspectNamedVaultItem([item], {name: item.name}).broker_uri_count, 2);
   assert.throws(() => selectWorkerItem(item, {itemId: item.id, name: item.name,

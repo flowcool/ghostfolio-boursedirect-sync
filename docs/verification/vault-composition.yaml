@@ -246,7 +246,7 @@ incremental_host_sandbox_runner:
   - pinned actual Chrome155.0.8059.39 renders syntheticdata document
   - renderer no-new-privileges, nested PIDnamespace and additional seccomp beyond
     Dockerbaseline
-  - owned browser and processgroup exit before successful result
+  - owned browser and pinned owned descendant exit before successful result
   actual_host_execution: false
   broker_requests_permitted: false
   credentials_permitted: false
@@ -338,3 +338,69 @@ sandbox_renderer_ancestry:
     pinned descendant with identity recheck. Renderer protection thresholds remain
     unchanged.
   ugreen_sandbox_qualified: false
+actual_ugreen_sandbox_0873efd:
+  source_commit: 0873efdc2f368c4d5e16a8426c77c64965bd9972
+  inputs:
+    collector/capability-pipe.mjs: e13be86dfd1149d84483f1dda2b2be29259247c9a5da20a14b0e243d39d694e5
+    collector/lab/browser-sandbox-proof.mjs: bd2546a7e9cf5922ea16a7123d514be3a41b2c0da34b60c075c118b3aa5a84c5
+  private_receipt_sha256: 54dbe69328a99f47eba63113ea1931f1f2f3108a8107a83295a1be6800b22e2d
+  command: Owned network-none browser docker exec env -i PATH=/usr/bin:/bin HOME=/home/fixture
+    node source-owned browser-sandbox-proof.mjs
+  exit_code: 0
+  result:
+    broker_requests: 0
+    chrome_version: 155.0.8059.39
+    code: BROWSER_SANDBOX_QUALIFIED
+    credentials_read: false
+    network_none: true
+    owned_browser_exit_verified: true
+    owned_descendant_exit_verified: true
+    renderer_count: 1
+    renderer_sandbox:
+    - additional_seccomp_filter: true
+      baseline_seccomp_filter_mode: true
+      baseline_seccomp_filters: 1
+      nested_pid_namespace: true
+      no_new_privileges: true
+      pid_namespace_depth: 3
+      seccomp_filter_mode: true
+      seccomp_filters: 2
+    synthetic_document_rendered: true
+  runtime_after: owned_browser_idle_cli_and_proxy_unchanged
+  limits: No broker egress, source/auth observation or credential qualification inferred.
+    Later source changes require host requalification.
+browser_early_failure_and_architecture_review:
+  inputs:
+    collector/lab/browser-sandbox-proof.mjs: 099918cd97737d72b9720800a12d92e4cdd0c9ec5e2be3fd4f772733667cd587
+    collector/tests/browser-sandbox-proof.test.mjs: 35601a46339c66716126708503abb403ee8bd9805f57dd62f5972cad9ade5bd4
+    collector/tests/credential-provider.test.mjs: 51a7cedc1d9fd3712944bfa18dfc40f45219992bcc337d9e52776fea3be8562e
+    docs/design/source-contract.yaml: 567444cdfb2ba8e9729e683c5c5d43ef6c0191449e44d293b002cc24ae36f16a
+  checks:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 429
+    log_sha256: 84cf35828a0fdef6c678b790ade87c5b6bd18756e1e0a9caa2c123f294979950
+    documentation_exit_code: 0
+    whitespace_exit_code: 0
+  review:
+    pr: 49
+    review_ids:
+    - 5480768874
+    - 5480870202
+    reviewed_heads:
+    - da6e45bc85edeb413cbd31e770908c91a1757a3c
+    - 0873efdc2f368c4d5e16a8426c77c64965bd9972
+    addressed_comments:
+    - 4239169092
+    - 4239169100
+    - 4239271125
+    - 4239271126
+    nitpick: credential-provider alias refusal now precedes second broker URI and
+      is repeated afterward
+  changes:
+  - Immediate child lifecycle listeners and finally cover early identity/pipe failures;
+    unverified cleanup cannot succeed.
+  - Global one-to-one financial adoption; multiplicity quarantined.
+  - Coverage gaps outside rolling window require explicit resolution for both triggers;
+    durable pending exceptions survive window.
+  actual_updated_host_proof_pending: true

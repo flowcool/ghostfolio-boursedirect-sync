@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sandboxStatus, loopbackNamespace, processIdentity, sameProcess, ownedDescendants} from '../lab/browser-sandbox-proof.mjs';
+import {sandboxStatus, loopbackNamespace, processIdentity, sameProcess, ownedDescendants, ownedBrowserLifecycle} from '../lab/browser-sandbox-proof.mjs';
 const baseline = 'Seccomp:\t2\nSeccomp_filters:\t1\n';
 const renderer = 'NoNewPrivs:\t1\nSeccomp:\t2\nSeccomp_filters:\t2\nNSpid:\t123 7\n';
 test('renderer proof requires extra Chromium seccomp and nested PID namespace', () => {
@@ -54,4 +54,43 @@ test('kernel stat parsing preserves start ticks and tolerates parentheses in com
   assert.deepEqual(processIdentity('30 (headless (shell)) ' + fields.join(' ')),
     {...rendererChild, start: '12345678901234567890'});
   assert.throws(() => processIdentity('30 (shell) S bad'), /SANDBOX_PROCESS_REFUSED/);
+});
+
+import {EventEmitter} from 'node:events';
+test('spawn failure without exit is handled immediately and closed absence verifies cleanup', async () => {
+  const child = new EventEmitter(), signals = [];
+  const lifecycle = ownedBrowserLifecycle(child, {read: () => undefined, table: () => [],
+    signal: (...args) => signals.push(args), delay: async () => {child.emit('close');}});
+  child.emit('error', new Error('synthetic spawn failure'));
+  assert.throws(lifecycle.pin, /SANDBOX_PROCESS_REFUSED/);
+  assert.equal(await lifecycle.stop(), true);
+  assert.deepEqual(signals, []);
+});
+test('exit before initial identity acquisition still verifies absence without signaling', async () => {
+  const child = new EventEmitter(); child.pid = root.pid;
+  const lifecycle = ownedBrowserLifecycle(child, {read: () => undefined, table: () => [],
+    signal: () => assert.fail('no live identity to signal'), delay: async () => {}});
+  child.emit('exit', 1);
+  assert.throws(lifecycle.pin, /SANDBOX_PROCESS_REFUSED/);
+  assert.equal(await lifecycle.stop(), true);
+});
+test('cleanup recovers an early proc acquisition failure and signals only pinned descendants', async () => {
+  const child = new EventEmitter(); child.pid = root.pid;
+  let first = true, stopped = false; const signals = [];
+  const lifecycle = ownedBrowserLifecycle(child, {read: pid => {
+    if (first) {first = false; throw new Error('synthetic read failure');}
+    return stopped ? undefined : tree.find(row => row.pid === pid);
+  }, table: () => tree, signal: (pid, value) => signals.push([pid, value]),
+  delay: async () => {stopped = true; child.emit('exit', 0);}});
+  assert.throws(lifecycle.pin, /synthetic read failure/);
+  assert.equal(await lifecycle.stop(), true);
+  assert.deepEqual(signals.map(row => row[0]).sort(), [20, 25, 30]);
+  assert.equal(await lifecycle.stop(), true);
+  assert.equal(signals.length, 3);
+});
+test('missing child identity with no exit refuses to claim cleanup', async () => {
+  const child = new EventEmitter(); child.pid = root.pid;
+  const lifecycle = ownedBrowserLifecycle(child, {read: () => undefined, table: () => [],
+    signal: () => assert.fail('unowned PID'), delay: async () => {}});
+  await assert.rejects(lifecycle.stop(), /SANDBOX_EXIT_TIMEOUT/);
 });
