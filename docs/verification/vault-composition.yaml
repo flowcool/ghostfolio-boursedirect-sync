@@ -823,3 +823,29 @@ observed_public_auth_cache_bootstrap:
     documentation_exit_code: 0
     whitespace_exit_code: 0
   fresh_owned_observation_pending: true
+qualified_current_public_auth_form:
+  source_head: 5a5d9e1
+  command: .venv/bin/python scripts/source_connection.py observe-public-form
+  exit_code: 0
+  continued_gets: 5
+  http200_responses: 5
+  blocked_requests: 36
+  login_selector_count: 1
+  password_selector_count: 1
+  same_owned_frame_and_session: true
+  owned_browser_exit_verified: true
+  credentials_read: false
+  authentication_requests: 0
+  authentication_submit_roles_qualified: false
+  private_evidence_sha256: 9e40b8d54a3ff2733aa65cc047ae0d1a97e0b5123c2af6585aebe3841185aa52
+  current_replay_index_sha256: e91c8baaa1fb95bba2a53df8badf1401f8307264febb587c9f86f39eb7ca3125
+  post_observation_status:
+    exit_code: 0
+    sha256: afe1eb3b96b2ae610688f8e04c3045bc300c38b16fa162619c7aa38323a63bb8
+    owned_containers: 4
+  clock_edge_tests:
+    command: npm test --prefix collector
+    exit_code: 0
+    passed: 478
+    log_sha256: 8532588d0e2eeccd0a6274c438cb9e81063bcefab5427faee8c869f22955f270
+    test_input_sha256: c16759a22d581fc7a86c0180949147a5d97530018929ddb0198029ec255dae65

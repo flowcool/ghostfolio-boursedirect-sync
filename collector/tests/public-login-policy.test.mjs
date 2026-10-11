@@ -113,3 +113,14 @@ test('auth bootstrap remains disabled by default and before initial document', (
   assert.equal(publicLoginPolicy(owner, [], true)(row), false);
   assert.throws(() => publicLoginPolicy(owner, [], {}), /ASSETS_REFUSED/);
 });
+
+for (const [name, offset] of [['expired observation', 60001], ['clock reversal', -1]])
+  test('auth bootstrap refuses ' + name, context => {
+    const initial = 1800000000000;
+    let clock = initial;
+    context.mock.method(Date, 'now', () => clock);
+    const decide = publicLoginPolicy(owner, [], true); decide(request);
+    clock += offset;
+    assert.equal(decide({...request, requestId: name, resourceType: 'Script',
+      request: {method: 'GET', url: `https://www.boursedirect.fr/apps/auth/production/auth.js?version=${initial}`}}), false);
+  });
