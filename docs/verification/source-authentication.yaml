@@ -1411,3 +1411,35 @@ community_private_ghostfolio_transport:
     broker_requests: 0
   deployment: Infra-owned UGreen overlay joins existing backend_ghost; exact daemon/network/service
     identity checked before start. No production service or route change.
+
+community_real_compose_acceptance:
+  owner: infra-4g8u.114
+  runtime_commit: 6a9dfe8fdaf78af5bf0c7a4f4afb5bbbb562ed33
+  invocation: docker compose create --no-build bitwarden; docker start -a exact_owned_id;
+    public connect command with approved infra network overlay
+  deployment: UGreen existing private Ghostfolio Docker network, separate owned one-shot
+    project
+  evidence_root: private_ignored_tmp/community114-b2b670e4b4df4146bb2685d39c3a0d82
+  source_receipt_sha256: fb65171efb095602b6804c3322716f828b242f36139d08fdd3b7dc81eb443178
+  report_sha256: c63a5557d59f6327597ccf5333515502547e62828150be87e494e8b47e4b8532
+  selected_source_and_target_verified: true
+  source_window_days: 90
+  captures: 27
+  contract_notes: 15
+  monthly_statements: 0
+  source_activities: 8
+  no_ISIN_skipped: 2
+  exceptions:
+  - SECURITY_CURRENCY_CONFLICT
+  - UNSUPPORTED_NOTICE_OPERATION
+  source_state: owned_session_closed
+  vault_logout_verified: true
+  browser_exit_verified: true
+  TOTP_requests: 1
+  container_state: stopped_retained
+  exit_code: 2
+  financial_writes: 0
+  first_run_interactive_selection: offline supervisor/planner proof; actual route
+    explicitly configured
+  full_final_CI: all required jobs passed on6a9dfe8 including Trivy0.75.0; final review
+    fixes recorded in owning issue

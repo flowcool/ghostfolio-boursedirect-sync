@@ -120,6 +120,20 @@ def reconcile_binding(saved, origin, source_ref, target_id):
     return account
 
 
+def wait_proxy_ready(proxy, timeout=15):
+    """The owned proxy emits its fixed signal only after binding the listener."""
+    deadline = time.monotonic() + timeout
+    pending = b''
+    while time.monotonic() < deadline:
+        require(proxy.poll() is None, 'SOURCE_PROXY_UNAVAILABLE')
+        if select.select([proxy.stdout], [], [], min(0.1, max(0, deadline - time.monotonic())))[0]:
+            pending += os.read(proxy.stdout.fileno(), 32)
+            require(pending and b'SOURCE_PROXY_READY\n'.startswith(pending), 'SOURCE_PROXY_UNAVAILABLE')
+            if pending == b'SOURCE_PROXY_READY\n':
+                return
+    raise RuntimeError('SOURCE_PROXY_UNAVAILABLE')
+
+
 def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_source=None):
     """Compose a local owned browser worker with the existing inert planner."""
     sequence = 0
@@ -159,9 +173,12 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
                         and source.re.fullmatch('[a-f0-9]{64}', row['principal']))
                 source.replay.private._publish(run / 'enrollment-intent.yaml', row, exclusive=True)
             elif action == 'retain':
+                require(set(row) == {'action', 'observation'} and isinstance(row['observation'], dict))
                 sequence += 1
                 source.replay.private._publish(run / f'request-{sequence}.yaml', row['observation'], exclusive=True)
             elif action == 'consume_read':
+                require(set(row) == {'action', 'grant'} and isinstance(row['grant'], dict)
+                        and isinstance(row['grant'].get('grant'), str) and 0 < len(row['grant']['grant']) <= 256)
                 grant = row['grant']
                 require(grant['grant'] not in consumed)
                 source.replay.private._publish(run / f'grant-{len(consumed)}.yaml', grant, exclusive=True)
@@ -258,10 +275,9 @@ def connect():
         importer.atomic_private_bytes(run / 'activities.json', activities_raw)
         as_of = importer.daily_preview_today()
         source.replay.private._publish(run / 'attempt.yaml', {'schema_version': 1, 'state': 'started', 'as_of': as_of}, exclusive=True)
-        proxy = subprocess.Popen(['/usr/bin/python3', '-I', str(ROOT / 'collector/vault-egress.py'), '--broker-inspection'],
-            env={'PATH': '/usr/bin:/bin'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.2)
-        require(proxy.poll() is None, 'SOURCE_PROXY_UNAVAILABLE')
+        proxy = subprocess.Popen(['/usr/bin/python3', '-I', str(ROOT / 'collector/vault-egress.py'), '--broker-inspection', '--ready'],
+            env={'PATH': '/usr/bin:/bin'}, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        wait_proxy_ready(proxy)
         account, documents = acquire(run, as_of, existing, source_ref, target_id, vault_env)
         relative = str(run.relative_to(root))
         configuration = {'schema_version': 1, 'source_mode': 'notices', 'account': account, 'mappings': mappings,
@@ -279,6 +295,8 @@ def connect():
         if proxy is not None and proxy.poll() is None:
             proxy.terminate()
             proxy.wait(timeout=10)
+        if proxy is not None:
+            proxy.stdout.close()
         os.close(lock)
 
 

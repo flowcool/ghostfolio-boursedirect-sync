@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import base64
 import io
+import subprocess
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -162,6 +163,22 @@ def test_private_transport_checks_peer_before_token_and_accepts_created_exchange
         with pytest.raises(RuntimeError, match='GHOSTFOLIO_ACCESS_REFUSED'):
             call()
         assert len([row for row in calls if isinstance(row, tuple)]) == (0 if peer in ('8.8.8.8', '127.0.0.1') else 1)
+
+
+@pytest.mark.parametrize('signal,passes', [('SOURCE_PROXY_READY', True), ('UNEXPECTED', False), ('', False)])
+def test_proxy_readiness_waits_for_owned_signal_and_refuses_missing_or_wrong(signal, passes):
+    process = subprocess.Popen([sys.executable, '-c',
+        'import time; time.sleep(.05); print(' + repr(signal) + ', flush=True); time.sleep(5)'], stdout=subprocess.PIPE)
+    try:
+        if passes:
+            community.wait_proxy_ready(process, timeout=1)
+        else:
+            with pytest.raises(RuntimeError, match='SOURCE_PROXY_UNAVAILABLE'):
+                community.wait_proxy_ready(process, timeout=1)
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+        process.stdout.close()
 
 
 @pytest.mark.parametrize('logout', [True, False])
