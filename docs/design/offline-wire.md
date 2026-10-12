@@ -5,7 +5,10 @@ bytes and their SHA256. This pure helper performs no persistence or HTTP and
 always returns `import_ready=false`. It accepts internal Decimal records or their
 canonical decimal strings from a preparation artifact. It requires one immutable
 account-key/target binding, valid stable ownership markers, explicit EUR YAHOO
-BUY/SELL, valid symbol/calendar date, positive quantity/price and nonnegative fee.
+BUY/SELL/DIVIDEND, valid symbol/calendar date, positive quantity/price and
+nonnegative fee. DIVIDEND requires quantity exactly 1 and fee exactly 0: unit
+price carries the verified net cash received. Source replay, rather than a wire
+shape alone, establishes that cash and booking day.
 It never derives activities from unsupported records or includes private source
 fields in the allowlisted DTO.
 

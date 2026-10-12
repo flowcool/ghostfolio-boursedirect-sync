@@ -562,9 +562,9 @@ def match_trade_notes(statement, documents):
             "unmatched_notes": sum(uses[i] == 0 for i in range(len(notes)))}
 
 
-def convert_matched_trades(statement, documents, account, mappings):
+def convert_matched_trades(statement, documents, account, mappings, include_dividends=False):
     """Return private internal records only; identity and API contracts are separate."""
-    if not isinstance(account, dict) or not isinstance(mappings, dict):
+    if type(include_dividends) is not bool or not isinstance(account, dict) or not isinstance(mappings, dict):
         fail("INVALID_CONVERSION_CONFIGURATION")
     for key in ("source_account_ref", "account_key", "target_account_id"):
         if not isinstance(account.get(key), str) or not account[key].strip():
@@ -572,12 +572,23 @@ def convert_matched_trades(statement, documents, account, mappings):
     if statement["account_ref"] != account["source_account_ref"]:
         fail("SOURCE_ACCOUNT_MISMATCH")
     statement = match_missing_isin_skips(statement, documents)
-    if any(e["kind"] not in ("BUY", "SELL") and not e.get("skip_reason") for e in statement["events"]):
+    coupons = None
+    if include_dividends and any(n["kind"] == "UNKNOWN" for doc in documents for n in doc["notes"]):
+        fail("UNSUPPORTED_OPERATION_PERIOD")
+    if include_dividends and (any(e["label"].startswith("COUPONS ") and not e.get("skip_reason") for e in statement["events"])
+                              or any(n["kind"] == "COUPON" for doc in documents for n in doc["notes"])):
+        coupons = review_coupon_cash(statement, documents)
+        if "UNSUPPORTED_OPERATION_PERIOD" in coupons["blockers"]:
+            fail("UNSUPPORTED_OPERATION_PERIOD")
+    if any(e["kind"] not in ("BUY", "SELL") and not e.get("skip_reason")
+           and not (coupons and str(e["slot"]) in coupons["coupons"]) for e in statement["events"]):
         fail("UNSUPPORTED_OPERATION_PERIOD")
     if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
         fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
     validate_ledger(statement["controls"], statement["events"])
-    result = match_trade_notes(statement, documents)
+    trade_documents = ([{**doc, "notes": [n for n in doc["notes"] if n["kind"] != "COUPON"]} for doc in documents]
+                       if include_dividends else documents)
+    result = match_trade_notes(statement, trade_documents)
     if set(result["blockers"]) - {"EXPLICIT_PRICE_CURRENCY_REQUIRED"}:
         fail("NOTE_MATCHING_NOT_COMPLETE")
     records = []
@@ -629,6 +640,24 @@ def convert_matched_trades(statement, documents, account, mappings):
                         "gross": note["gross"], "net": net, "net_currency": "EUR",
                         "brokerage": note["brokerage"], "vat": note["vat"], "fee": note["brokerage"],
                         "source_slot": event["slot"], "import_ready": False})
+    mapped_symbols = {record["symbol"]: record["isin"] for record in records}
+    for coupon in coupons["coupons"].values() if coupons else []:
+        mapping = mappings.get(coupon["isin"])
+        if mapping is None:
+            fail("SECURITY_MAPPING_MISSING")
+        if (not isinstance(mapping, dict) or mapping.get("data_source") != "YAHOO"
+                or mapping.get("target_currency") != "EUR"
+                or type(mapping.get("target_security_evidence")) is not str or not mapping["target_security_evidence"].strip()
+                or type(mapping.get("symbol")) is not str
+                or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", mapping["symbol"])):
+            fail("SECURITY_MAPPING_UNVERIFIED")
+        if mapping["symbol"] in mapped_symbols and mapped_symbols[mapping["symbol"]] != coupon["isin"]:
+            fail("SECURITY_MAPPING_AMBIGUOUS")
+        mapped_symbols[mapping["symbol"]] = coupon["isin"]
+        records.append({**coupon, "account_key": account["account_key"], "target_account_id": account["target_account_id"],
+                        "statement_period": statement["period"], "symbol": mapping["symbol"], "data_source": "YAHOO",
+                        "quantity": Decimal(1), "unit_price": Decimal(coupon["amount"]), "fee": Decimal(0),
+                        "price_currency": "EUR"})
     return records
 
 
@@ -733,7 +762,7 @@ def validate_account_key(account_key):
 def ledger_identity(statement, account_key):
     """Private semantic snapshot; preserves identical occurrences without guessing."""
     validate_account_key(account_key)
-    if any(e["kind"] not in ("BUY", "SELL") and not e.get("skip_reason") for e in statement["events"]):
+    if any(e["kind"] not in ("BUY", "SELL", "DIVIDEND") and not e.get("skip_reason") for e in statement["events"]):
         fail("UNSUPPORTED_OPERATION_PERIOD")
     if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
         fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
@@ -743,7 +772,7 @@ def ledger_identity(statement, account_key):
     normalized = []
     for event in statement["events"]:
         fields = (tuple(k for k in ("quantity", "unit_price", "debit", "credit") if k in event)
-                  if event.get("skip_reason") else ("quantity", "unit_price", "debit", "credit"))
+                  if event.get("skip_reason") or event["kind"] == "DIVIDEND" else ("quantity", "unit_price", "debit", "credit"))
         facts = ["v1", statement["period"], event["date"].isoformat(), "SKIPPED_NO_ISIN" if event.get("skip_reason") else event["kind"],
                  event["label"], *[canonical_decimal(event[k]) for k in
                                    fields]]
@@ -1168,9 +1197,11 @@ def compute_prepared_sources(config_raw, documents, max_bytes, max_depth):
         if statement["period"] in seen_periods:
             fail("DUPLICATE_STATEMENT_PERIOD")
         seen_periods.add(statement["period"])
-        notes = [parse_contract_note(decode_document(raw), max_depth, skip_missing_isin=True) for raw in capture["notes"]]
+        notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True, skip_missing_isin=True) for raw in capture["notes"]]
         statement = match_missing_isin_skips(statement, notes)
-        activities = convert_matched_trades(statement, notes, account, config["mappings"])
+        activities = convert_matched_trades(statement, notes, account, config["mappings"], include_dividends=True)
+        coupon_slots = {a["source_slot"] for a in activities if a["kind"] == "DIVIDEND"}
+        statement = {**statement, "events": [{**e, "kind": "DIVIDEND"} if e["slot"] in coupon_slots else e for e in statement["events"]]}
         snapshot = ledger_identity(statement, account["account_key"])
         identities = {e["source_slot"]: e["id"] for e in snapshot["events"]}
         for activity in activities:
@@ -1373,6 +1404,14 @@ def parse_remote_activity_snapshot(raw):
                     fail("REMOTE_ASSET_PROFILE_INVALID")
             financial_context_verified = profile["currency"] == price_currency and amount["unitPrice"] > 0
             symbol, source = profile["symbol"], profile["dataSource"]
+        elif row["type"] == "DIVIDEND":
+            # Preserve legacy cash rows for inspection even without a usable
+            # profile; only exact positive Yahoo/EUR context can qualify.
+            valid_profile = isinstance(profile, dict) and all(isinstance(profile.get(k), str) and profile[k].strip()
+                                                           for k in ("symbol", "dataSource", "currency"))
+            symbol, source = (profile["symbol"], profile["dataSource"]) if valid_profile else (None, None)
+            financial_context_verified = bool(valid_profile and profile["currency"] == price_currency
+                                              and amount["quantity"] > 0 and amount["unitPrice"] > 0 and amount["fee"] >= 0)
         else:
             symbol, source = None, None
         normalized.append({"remote_id": row["id"], "target_account_id": row["accountId"],
@@ -1869,10 +1908,12 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
             fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
         if notes is None:
             pass
-        elif all(event["kind"] in ("BUY", "SELL") or event.get("skip_reason") for event in statement["events"]):
+        elif all(event["kind"] in ("BUY", "SELL") or event.get("skip_reason") or event["label"].startswith("COUPONS ") for event in statement["events"]):
             one = {k: v for k, v in config.items() if k not in ("snapshot", "current_period")}
             one["documents"] = {alias: config["documents"][alias]}
             try:
+                if any(n["kind"] == "COUPON" for doc in notes for n in doc["notes"]):
+                    reviews[period] = review_coupon_cash(statement, notes)
                 prepared = compute_prepared_sources(yaml.safe_dump(one).encode(), {alias: capture}, max_bytes, max_depth)["artifact"]["activities"]
             except RuntimeError as error:
                 problems["source"] = str(error)
@@ -2209,11 +2250,15 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
 
 def legacy_duplicate_candidate(activity, row):
     """Bounded similarity for rejection/diagnosis only, never adoption."""
+    day = activity["operation_date"]
+    source_day = datetime.fromisoformat(day.isoformat() if hasattr(day, "isoformat") else day).date()
+    if activity["kind"] == "DIVIDEND":
+        return (row["kind"] == "DIVIDEND" and row["target_account_id"] == activity["target_account_id"]
+                and row["symbol"] in (None, activity["symbol"])
+                and abs((datetime.fromisoformat(row["operation_date"]).date() - source_day).days) <= 90)
     identity = ("target_account_id", "symbol", "data_source", "kind")
     if row["kind"] not in ("BUY", "SELL") or any(row[k] != activity[k] for k in identity):
         return False
-    day = activity["operation_date"]
-    source_day = datetime.fromisoformat(day.isoformat() if hasattr(day, "isoformat") else day).date()
     return (row["quantity"] == Decimal(activity["quantity"])
             and row["unit_price"] == Decimal(activity["unit_price"])
             and abs((datetime.fromisoformat(row["operation_date"]).date() - source_day).days) <= 1)
@@ -2257,7 +2302,7 @@ def reconcile_existing_activities(prepared, remote, resolutions, automatic=False
             result["owned"].append(event_id)
             claimed_remote.add(row["remote_id"])
             continue
-        candidates = [r for r in remote if r["kind"] in ("BUY", "SELL") and r["target_account_id"] == activity["target_account_id"]
+        candidates = [r for r in remote if r["kind"] in ("BUY", "SELL", "DIVIDEND") and r["target_account_id"] == activity["target_account_id"]
                       and activity_financial_fingerprint(r) == fingerprint]
         if any(not r["active"] or not r["date_context_verified"] or not r["financial_context_verified"] for r in candidates):
             fail("REMOTE_CANDIDATE_CONTEXT_UNVERIFIED")
@@ -2342,7 +2387,7 @@ def build_wire_payload(activities):
         if binding is not None and current != binding:
             fail("WIRE_ACCOUNT_BINDING_CONFLICT")
         binding = current
-        if activity.get("kind") not in ("BUY", "SELL") or activity.get("data_source") != "YAHOO" or activity.get("price_currency") != "EUR":
+        if activity.get("kind") not in ("BUY", "SELL", "DIVIDEND") or activity.get("data_source") != "YAHOO" or activity.get("price_currency") != "EUR":
             fail("UNSUPPORTED_WIRE_TRADE")
         symbol = activity.get("symbol")
         if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", symbol):
@@ -2358,6 +2403,8 @@ def build_wire_payload(activities):
         amounts = {key: wire_number(activity.get(key)) for key in ("quantity", "unit_price", "fee")}
         if amounts["quantity"] <= 0 or amounts["unit_price"] <= 0 or amounts["fee"] < 0:
             fail("WIRE_TRADE_AMOUNT_INVALID")
+        if activity["kind"] == "DIVIDEND" and (amounts["quantity"] != 1 or amounts["fee"] != 0):
+            fail("WIRE_DIVIDEND_NET_REPRESENTATION_REQUIRED")
         rows.append({"accountId": target, "comment": marker, "currency": "EUR", "dataSource": "YAHOO",
                      "date": day + "T00:00:00.000Z", "fee": amounts["fee"], "quantity": amounts["quantity"],
                      "symbol": symbol, "type": activity["kind"], "unitPrice": amounts["unit_price"]})
@@ -2761,7 +2808,7 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
         fail("COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED")
     if adoption["candidates"]:
         fail("HOLDINGS_ADOPTION_UNRESOLVED")
-    symbols = {a["symbol"] for a in prepared.values()}
+    symbols = {a["symbol"] for a in prepared.values() if a["kind"] in ("BUY", "SELL")}
     events = []
     for row in remote:
         if row["target_account_id"] != target or not row["active"]:
@@ -2777,6 +2824,8 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
         events.append(row)
     for marker in adoption["new"]:
         activity = prepared[marker]
+        if activity["kind"] == "DIVIDEND":
+            continue
         day = activity["operation_date"]
         day = day.isoformat() if hasattr(day, "isoformat") else day
         if day > datetime.now(timezone.utc).date().isoformat():

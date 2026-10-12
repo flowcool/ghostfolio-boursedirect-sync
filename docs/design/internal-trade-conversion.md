@@ -53,3 +53,11 @@ Blast radius is local project code/tests/docs. Rollback: revert the scoped
 conversion commit, leaving the earlier inspection probe and all ignored private
 inputs intact. Git/local file access was verified before editing; no external
 portfolio, broker, container or secret-store change is part of this contract.
+
+Preparation explicitly enables `include_dividends=True` on the existing converter.
+It validates the whole original cash ledger, matches all coupon evidence exactly,
+rejects unknown operations, then combines strict trades with approved net-cash
+DIVIDEND records. The default pure trade-call boundary stays strict. Dividend
+mapping requires an explicit Yahoo/EUR target and security-identity assertion;
+source gross price currency is not inferred. Colliding different-ISIN dividend
+and trade symbol mappings refuse. No incomplete period returns a partial list.

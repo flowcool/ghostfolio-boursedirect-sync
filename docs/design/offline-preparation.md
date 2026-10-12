@@ -11,7 +11,12 @@ aliases with a monthly statement plus daily note paths. The account namespace
 must be an immutable UUIDv4; source references and target IDs remain private.
 All statements/notes use the existing bounded no-follow local reader, explicit
 HTML charset and parser-depth budgets. Note matching/conversion enforce the
-strict validated EUR/zero-VAT financial scope. Unknown periods, unverified
+strict validated EUR/zero-VAT trade scope and approved net-cash EUR dividend
+scope. Complete mixed periods can be prepared together. Every coupon requires
+exact statement/note matching before its booking-day net credit becomes a
+DIVIDEND with quantity 1, unit price equal to received cash and fee 0. Displayed
+source gross, signed quantity and costs remain private evidence, without tax or
+holding inference. Unknown periods, unverified
 mappings, multiple supplied versions of a period or ambiguous notes block.
 
 The entire input set is validated before state/output mutation. Publication

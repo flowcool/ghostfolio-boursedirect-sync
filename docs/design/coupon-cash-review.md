@@ -45,7 +45,10 @@ The private YAML artifact is `source_coupon_cash_review_not_api_payload`.
 It carries input byte hashes, the original account reference, keyed ledger slots,
 source calendar dates and exact decimal strings. It does not carry target symbols,
 target account IDs, event ownership markers or executable financial wire bytes.
-Trade preparation and application cannot consume it. `import_ready` stays false.
+Preparation does not consume this generated report. It recomputes the same
+strict coupon matching from original saved HTML, then prepares complete supported
+mixed periods with the approved net-cash representation. No partial unsupported
+period is prepared and no generated cash report bypasses source replay. `import_ready` stays false.
 Unsupported statement or note operations keep `UNSUPPORTED_OPERATION_PERIOD`;
 this review does not authorize importing an independent subset of July.
 

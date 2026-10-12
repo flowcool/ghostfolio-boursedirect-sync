@@ -160,11 +160,12 @@ def test_old_exceptions_and_gaps_survive_window_and_absent_sources():
 def test_exact_coupon_replay_resolves_only_observed_exception():
     config = setup(coupon=True)
     run()
-    assert run()['unresolved_exceptions'] == 1
+    assert run()['unresolved_exceptions'] == 2
     Path('inputs/snapshot.json').write_text(json.dumps({'count': 1, 'activities': [row()]}))
-    assert run()['unresolved_exceptions'] == 0
+    assert run()['unresolved_exceptions'] == 1
     state = yaml.safe_load(paths(config)[0].read_text())
-    assert next(iter(state['exceptions'].values()))['status'] == 'resolved_by_saved_evidence'
+    assert all(v['status'] == 'resolved_by_saved_evidence' for k,v in state['exceptions'].items() if k.startswith('coupon:'))
+    assert state['exceptions']['2026-09:destination']['status'] == 'unresolved'
 
 
 def test_coupon_report_has_no_yaml_aliases_and_window_excludes_old_events():
@@ -280,7 +281,7 @@ def test_cli_exposes_counts_only(capsys):
     assert bd.main(['daily-preview', '--config', 'inputs/config.yaml', '--input-root', 'inputs',
                    '--as-of', '2026-10-12', '--max-bytes', '1000000', '--max-depth', '32']) == 2
     output = capsys.readouterr().out
-    assert json.loads(output)['unresolved_exceptions'] == 1
+    assert json.loads(output)['unresolved_exceptions'] == 2
     assert config['account']['source_account_ref'] not in output
 
 

@@ -227,3 +227,12 @@ both statement and complete note hashes must be byte-identical. The new hash and
 old hash remain in a resolved private parser-upgrade journal entry. Any changed
 source bytes or other fingerprint discrepancy still requires revision review.
 This upgrades parser classification, without clearing corporate-action refusals.
+
+Complete supported mixed periods use raw-source preparation for all BUY, SELL and
+net-cash DIVIDEND activities before marking source matching complete. Coupon
+observations remain separately available for legacy amount/date reconciliation.
+The existing `trade_observations` field now contains reconciliation results for
+all prepared activity kinds. Destination, holdings, history and application gates
+remain unresolved until their own evidence passes; complete source matching does
+not grant import readiness. A malformed trade or unsupported corporate action
+still prevents complete-period preparation, even when coupon review succeeds.
