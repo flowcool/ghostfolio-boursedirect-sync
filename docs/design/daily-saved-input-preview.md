@@ -117,7 +117,9 @@ Missing, duplicate, conflicting or ambiguous matches refuse. Skipped cash remain
 in the original monthly balance controls and ledger identity. Exclusion changes
 candidate selection, not the source accounting or source-revision protection.
 `skipped_source_operations` exposes each excluded closed-period operation with
-its source slot, date, label, cash and `SOURCE_ISIN_ABSENT` reason.
+its source slot, date, label hash, cash and `SOURCE_ISIN_ABSENT` reason.
+Ignored current notes retain only slot, date, currency, cash, reason and hash
+provenance; their names and auxiliary source text remain in original private inputs.
 
 Current notes without ISIN expose `SKIPPED_NO_ISIN`, the retained source hash and
 cash, and empty destination candidates. Their original exception-journal entry

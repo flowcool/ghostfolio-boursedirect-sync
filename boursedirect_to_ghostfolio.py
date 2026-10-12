@@ -742,7 +742,8 @@ def ledger_identity(statement, account_key):
     events = []
     normalized = []
     for event in statement["events"]:
-        fields = ("debit", "credit") if event.get("skip_reason") else ("quantity", "unit_price", "debit", "credit")
+        fields = (tuple(k for k in ("quantity", "unit_price", "debit", "credit") if k in event)
+                  if event.get("skip_reason") else ("quantity", "unit_price", "debit", "credit"))
         facts = ["v1", statement["period"], event["date"].isoformat(), "SKIPPED_NO_ISIN" if event.get("skip_reason") else event["kind"],
                  event["label"], *[canonical_decimal(event[k]) for k in
                                    fields]]
@@ -1735,7 +1736,9 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
             if comparisons > 1000000:
                 fail("DAILY_CURRENT_COMPARISON_LIMIT_EXCEEDED")
             for note in parsed["notes"]:
-                record = {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v for k, v in note.items()}
+                selected = ({k: note[k] for k in ("slot", "kind", "isin", "date", "net_currency", "debit", "credit", "skip_reason", "financial_conversion")}
+                            if note["kind"] == "SKIPPED_NO_ISIN" else note)
+                record = {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v for k, v in selected.items()}
                 mapping = config["mappings"].get(note["isin"])
                 record["destination_candidates"] = []
                 if note["kind"] in ("BUY", "SELL") and isinstance(mapping, dict):
@@ -1859,7 +1862,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
             problems["source"] = str(error)
         if notes is not None:
             skipped_operations[period] = [{"source_slot": e["slot"], "operation_date": e["date"].isoformat(),
-                "source_label": e["label"], "debit": canonical_decimal(e["debit"]), "credit": canonical_decimal(e["credit"]),
+                "source_label_sha256": hashlib.sha256(e["label"].encode()).hexdigest(), "debit": canonical_decimal(e["debit"]), "credit": canonical_decimal(e["credit"]),
                 "currency": "EUR", "skip_reason": "SOURCE_ISIN_ABSENT", "financial_conversion": False}
                 for e in statement["events"] if e.get("skip_reason")]
         if notes is not None and any(n["account_ref"] != account["source_account_ref"] for n in notes):

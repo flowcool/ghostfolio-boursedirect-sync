@@ -113,3 +113,22 @@ def test_saved_source_preparation_replays_skips_without_fee_wire_or_identity_los
     assert bd.validate_prepared_sources(prepared, raw_config, captures, 100000, 32) == result['artifact']
     rows = json.loads(bd.build_wire_payload(result['artifact']['activities'])['body'])['activities']
     assert len(rows) == 3 and all(row['type'] in ('BUY', 'SELL') for row in rows)
+
+
+@pytest.mark.parametrize('changed_field', ['quantity', 'unit_price'])
+def test_skipped_trade_retains_quantity_and_price_revision_guard(changed_field):
+    statement, documents, account, _, _ = source()
+    note = documents[0]['notes'][0]
+    note.update(kind='SKIPPED_NO_ISIN', isin=None, source_kind='ACHAT COMPTANT')
+    matched = bd.match_missing_isin_skips(statement, documents)
+    original = bd.ledger_identity(matched, account['account_key'])
+    changed = copy.deepcopy(matched)
+    skipped_trade = next(e for e in changed['events'] if e['kind'] == 'BUY')
+    assert skipped_trade['skip_reason'] == 'SOURCE_ISIN_ABSENT'
+    skipped_trade[changed_field] += Decimal('1')
+    revised = bd.ledger_identity(changed, account['account_key'])
+    assert original['fingerprint'] != revised['fingerprint']
+    from test_identity import empty
+    journal = bd.register_statement_snapshot(empty(), original)
+    with pytest.raises(RuntimeError, match='^STATEMENT_REVISION_CONFLICT$'):
+        bd.register_statement_snapshot(journal, revised)

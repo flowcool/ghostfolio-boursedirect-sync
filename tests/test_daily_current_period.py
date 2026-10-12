@@ -95,6 +95,7 @@ def test_custody_without_isin_is_skipped_and_never_compared_as_a_fee():
     assert skipped['isin'] is None and skipped['kind'] == 'SKIPPED_NO_ISIN'
     assert skipped['debit'] == '0.97' and skipped['skip_reason'] == 'SOURCE_ISIN_ABSENT'
     assert skipped['financial_conversion'] is False and skipped['destination_candidates'] == []
+    assert 'name' not in skipped and 'source_fields' not in skipped and 'source_kind' not in skipped
     assert not any(v['operation_date'] == '2026-10-01' for k, v in report['exceptions'].items() if k.startswith('current_note:'))
     assert report['import_ready'] is False
 

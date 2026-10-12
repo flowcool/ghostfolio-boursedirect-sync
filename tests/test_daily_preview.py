@@ -327,3 +327,18 @@ def test_note_account_mismatch_refuses_command_without_publishing_state():
     with pytest.raises(RuntimeError, match='^DAILY_SOURCE_ACCOUNT_CONFLICT$'):
         run()
     assert not any(path.exists() for path in paths(config))
+
+
+def test_skipped_closed_coupon_report_keeps_cash_and_label_hash_without_auxiliary_text():
+    config = setup(coupon=True)
+    path = Path('inputs/note.html')
+    soup = BeautifulSoup(path.read_text(), 'html.parser')
+    field(soup, 1, 1).string = ''
+    path.write_text(str(soup))
+    run()
+    report = bd.parse_keyed_yaml(paths(config)[1].read_bytes())
+    skipped = report['skipped_source_operations']['2026-09']
+    assert len(skipped) == 1 and skipped[0]['credit'] == '1.9'
+    assert len(skipped[0]['source_label_sha256']) == 64
+    assert 'source_label' not in skipped[0] and 'source_fields' not in skipped[0]
+    assert skipped[0]['financial_conversion'] is False and report['import_ready'] is False
