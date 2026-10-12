@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 import boursedirect_to_ghostfolio as bd
-from test_contract_notes import note_source, coupon_source, field, paired_statement
+from test_contract_notes import note_source, coupon_source, field, paired_statement, vectors
 from test_daily_preview import isolated, setup, write, run, paths
 
 
@@ -61,6 +61,58 @@ def refresh(config, day=None):
     path.write_text(yaml.safe_dump(meta))
 
 
+def custody_setup():
+    config = current_setup()
+    path = Path('inputs/current-1.html')
+    soup = BeautifulSoup(path.read_text(), 'html.parser')
+    field(soup, 1, 0).string = 'DROITS DE GARDE'
+    field(soup, 1, 1).string = ''
+    field(soup, 1, 2).string = 'CONSERV ETG 2026T3'
+    for vector in vectors(soup):
+        for row in vector[3:]:
+            row.decompose()
+    bd.cells(vectors(soup)[2][1])[0].string = '0,97'
+    bd.cells(vectors(soup)[3][1])[0].string = ''
+    path.write_text(str(soup))
+    refresh(config, '2026-10-01')
+    return config
+
+
+def test_custody_without_isin_is_skipped_and_never_compared_as_a_fee():
+    from test_coupon_reconciliation import row
+    config = custody_setup()
+    candidate = row('same-fee')
+    target = config['account']['target_account_id']
+    candidate.update(accountId=target, account={'id': target, 'tags': []}, type='FEE',
+                     date='2026-10-01T00:00:00.000Z', fee=0.97, unitPrice=0)
+    Path('inputs/snapshot.json').write_text(json.dumps({'count': 1, 'activities': [candidate]}))
+    run()
+    report = saved(config)
+    note = report['current_period_observations']['notes']['2026-10-01']
+    assert note['code'] == 'SKIPPED_NO_ISIN'
+    assert 'custody_fee_observation' not in note
+    skipped = note['notes'][0]
+    assert skipped['isin'] is None and skipped['kind'] == 'SKIPPED_NO_ISIN'
+    assert skipped['debit'] == '0.97' and skipped['skip_reason'] == 'SOURCE_ISIN_ABSENT'
+    assert skipped['financial_conversion'] is False and skipped['destination_candidates'] == []
+    assert 'name' not in skipped and 'source_fields' not in skipped and 'source_kind' not in skipped
+    assert not any(v['operation_date'] == '2026-10-01' for k, v in report['exceptions'].items() if k.startswith('current_note:'))
+    assert report['import_ready'] is False
+
+
+@pytest.mark.parametrize('security', ['INVALID', 'FR0000000000'])
+def test_present_invalid_isin_is_not_silently_skipped(security):
+    config = custody_setup()
+    path = Path('inputs/current-1.html')
+    soup = BeautifulSoup(path.read_text(), 'html.parser')
+    field(soup, 1, 1).string = security
+    path.write_text(str(soup))
+    refresh(config, '2026-10-01')
+    run()
+    note = saved(config)['current_period_observations']['notes']['2026-10-01']
+    assert note['code'] == 'INVALID_NOTE_SECURITY' and note['notes'] == []
+
+
 def test_actual_failure_and_success_notes_are_retained_without_monthly_readiness():
     config = current_setup(); before = {p: p.read_bytes() for p in Path('inputs').iterdir()}
     result = run(); report = saved(config)
@@ -68,13 +120,13 @@ def test_actual_failure_and_success_notes_are_retained_without_monthly_readiness
     assert current['offered_note_days'] == ['2026-10-01', '2026-10-02']
     assert current['every_offered_note_retained'] and current['through_day_verified'] is False
     assert current['monthly_cash_controls_verified'] is False and current['import_ready'] is False
-    assert current['notes']['2026-10-01']['code'] == 'INVALID_NOTE_SECURITY'
-    assert current['notes']['2026-10-01']['notes'] == []
+    assert current['notes']['2026-10-01']['code'] == 'SKIPPED_NO_ISIN'
+    assert current['notes']['2026-10-01']['notes'][0]['kind'] == 'SKIPPED_NO_ISIN'
     assert current['notes']['2026-10-02']['notes'][0]['kind'] == 'BUY'
     assert current['notes']['2026-10-02']['notes'][0]['price_currency'] is None
     assert current['notes']['2026-10-02']['code'] == 'CURRENT_NOTE_REQUIRES_CLOSED_STATEMENT'
     assert report['last_completed_acquisition_period'] == '2026-09' and result['import_ready'] is False
-    assert sum(k.startswith('current_note:') for k in report['exceptions']) == 2
+    assert sum(k.startswith('current_note:') for k in report['exceptions']) == 1
     assert before == {p: p.read_bytes() for p in Path('inputs').iterdir()}
     state, output = paths(config); previous = state.read_bytes(), output.read_bytes(); run()
     assert previous == (state.read_bytes(), output.read_bytes())
@@ -94,9 +146,9 @@ def test_unrelated_layout_does_not_abort_quarantined_current_note(layout):
     refresh(config, '2026-10-01')
     run()
     notes = saved(config)['current_period_observations']['notes']
-    assert notes['2026-10-01']['code'] == 'INVALID_NOTE_SECURITY'
+    assert notes['2026-10-01']['code'] == 'SKIPPED_NO_ISIN'
     assert notes['2026-10-01']['operation_date_verified'] is True
-    assert notes['2026-10-01']['notes'] == []
+    assert notes['2026-10-01']['notes'][0]['kind'] == 'SKIPPED_NO_ISIN'
     assert notes['2026-10-02']['notes'][0]['kind'] == 'BUY'
 
 
@@ -180,7 +232,7 @@ def test_later_invocation_does_not_expire_current_note_exceptions():
 
 def test_closed_source_dependency_requires_the_exact_retained_note_hash():
     config = current_setup(); run()
-    before = saved(config)['exceptions']
+    before = bd.parse_keyed_yaml(paths(config)[0].read_bytes())['exceptions']
     valid_hash = hashlib.sha256(Path('inputs/current-2.html').read_bytes()).hexdigest()
     invalid_hash = hashlib.sha256(Path('inputs/current-1.html').read_bytes()).hexdigest()
     # The complete October ledger matches the saved buy plus both saved sells.
@@ -220,7 +272,7 @@ def test_current_cli_stdout_contains_only_counts_and_codes(capsys):
     assert bd.main(['daily-preview', '--config', 'inputs/config.yaml', '--input-root', 'inputs',
                     '--as-of', '2026-10-12', '--max-bytes', '1000000', '--max-depth', '32']) == 2
     output = capsys.readouterr().out; summary = json.loads(output)
-    assert summary['unresolved_exceptions'] == 3 and summary['import_ready'] is False
+    assert summary['unresolved_exceptions'] == 2 and summary['import_ready'] is False
     assert config['account']['source_account_ref'] not in output and 'www.boursedirect.fr' not in output
 
 

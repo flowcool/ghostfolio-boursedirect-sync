@@ -1,5 +1,16 @@
 # Interactive source acquisition amendment
 
+## Daily source scope amendment, 2026-10-12
+
+Florent explicitly removed cross-checking between operation notices and monthly
+statements from the daily product. Follow the [amended daily contract](daily-saved-input-preview.md):
+collect notices within the approved window and derive candidates directly from
+them, including the current month. Do not wait for a monthly statement or add a
+later monthly reconciliation cycle. Historical statement acquisition and its
+completed evidence remain valid but do not define daily acceptance. This changes
+source requirements, not broker-attempt, recurring-activation or financial-write
+authority.
+
 ## Authorization and retained gates
 
 On 2026-10-08 Florent replaced manual-only source acquisition with direct online

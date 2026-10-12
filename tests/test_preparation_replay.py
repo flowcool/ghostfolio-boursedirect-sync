@@ -144,8 +144,8 @@ def test_byte_only_document_change_and_financial_mapping_change_are_detected():
     with pytest.raises(RuntimeError, match='PREPARED_SOURCE_CONTENT_CONFLICT'):
         bd.validate_prepared_sources(expected, raw, docs, 100000, 32)
     docs['month-a']['statement'] = docs['month-a']['statement'][:-1]
-    for mapping in config['mappings'].values():
-        mapping['symbol'] = 'OTHER'
+    for index, mapping in enumerate(config['mappings'].values()):
+        mapping['symbol'] = 'OTHER' + str(index)
     with pytest.raises(RuntimeError, match='PREPARED_SOURCE_CONTENT_CONFLICT'):
         bd.validate_prepared_sources(expected, dump(config), docs, 100000, 32)
 

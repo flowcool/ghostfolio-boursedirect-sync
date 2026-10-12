@@ -91,3 +91,19 @@ The daily scheduler and independent exception processing remain future work;
 unresolved adoption still blocks chronological review.
 Neither target nor current code authorizes rewriting or deleting existing
 financial records.
+
+## Prepared net-cash dividends
+
+Prepared DIVIDEND activities use the same account-bound marker, exact financial
+fingerprint, current profile precedence, active context and UTC-midnight guards.
+Only quantity 1, unit price equal to source net cash and fee 0 is a supported
+prepared representation. Legacy dividend rows remain inspectable when profile or
+financial context is unqualified; they cannot be positively adopted.
+
+An unowned same-symbol/account dividend within 90 calendar days of the source
+booking day is a potential legacy duplicate even if date, quantity, price or fee
+differ. It refuses new classification rather than silently adding a duplicate.
+Exact unique candidates retain the existing adoption rules. This conservative
+90-day diagnostic boundary does not decide which historical dividend to rewrite;
+existing activities remain unchanged. Dividends never supply acquisition history
+or change security quantities in chronological holdings controls.

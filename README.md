@@ -323,6 +323,12 @@ records implementation hashes and results so unchanged checks can be reused.
 
 ## Daily saved-acquisition Compose preview
 
+The [daily product contract](docs/design/daily-saved-input-preview.md) now requires
+independent operation notices, with no monthly statement cross-checking. Set
+`source_mode: notices` in the daily configuration to discover notices from
+completed acquisition folders without reading statements or waiting for month-end. Destination date, amount and fee
+differences belong in the dry run and do not require a legacy correction workflow.
+
 The [daily preview service](compose.daily.yaml) packages the Python analysis stage
 with read-only original inputs and a persistent private journal. It discovers
 saved documents from completed acquisition folders; no document list is required.
@@ -333,6 +339,12 @@ install -d -m 700 tmp/daily-compose
 docker compose -f compose.daily.yaml build preview
 DAILY_CONFIG=account/daily.yaml docker compose -f compose.daily.yaml run --rm preview
 ```
+
+The saved daily report includes candidate wire bytes only for unowned, unambiguous
+activities inside the approved 90-day window, after complete source validation.
+Owned/adopted rows and older new rows are excluded. Candidate bytes remain a
+private preview; unresolved history, source, current-period and application gates
+stay visible and no production write is authorized.
 
 The private work directory must belong to UID/GID 1000. A completed preview exits
 2, including retained financial blockers. The [daily contract](docs/design/daily-saved-input-preview.md#compose-execution)

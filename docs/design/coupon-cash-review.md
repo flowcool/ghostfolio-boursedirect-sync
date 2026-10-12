@@ -1,5 +1,16 @@
 # Source coupon cash review
 
+## Scope after the 2026-10-12 daily amendment
+
+The statement-based commands below retain their existing behavior. Their exact
+statement/note matching and monthly completeness requirements are not acceptance
+conditions for the amended [daily product contract](daily-saved-input-preview.md).
+Daily dividends come directly from operation notices, using received net cash
+and the Bourse Direct booking date. Differences with Ghostfolio are highlighted
+in the dry run without correcting existing rows or requiring a resolution list.
+Notice-only daily conversion is provided by `daily-preview` with
+`source_mode: notices`; the statement-based commands below stay unchanged.
+
 `review-coupons` converts verified monthly coupon credits into a private source
 cash review, retaining unsupported-period gates and never producing an API payload.
 
@@ -22,8 +33,11 @@ outside the statement month refuse. The whole original statement cash controls
 are verified before conversion; no filtered ledger is represented as complete.
 The ISIN comes from the checksum-validated note, never a destination name match.
 
-Missing-ISIN coupons and subscription-right corporate actions remain exceptions.
-Florent explicitly excludes resolving these cases from the delivered tool's
+The daily/preparation missing-ISIN policy explicitly excludes coupons without
+source ISIN from import candidates after exact saved-source matching; see the
+[daily contract](daily-saved-input-preview.md). The strict standalone coupon
+inspection still refuses missing ISIN. Subscription-right corporate actions with
+valid ISIN remain exceptions: Florent excludes their resolution from the tool's
 capabilities. An explicitly authorized manual reconciliation may use external
 primary evidence outside the importer, retaining the original missing identity
 and source movements in a private report. Such a report is not importer input,
@@ -42,7 +56,10 @@ The private YAML artifact is `source_coupon_cash_review_not_api_payload`.
 It carries input byte hashes, the original account reference, keyed ledger slots,
 source calendar dates and exact decimal strings. It does not carry target symbols,
 target account IDs, event ownership markers or executable financial wire bytes.
-Trade preparation and application cannot consume it. `import_ready` stays false.
+Preparation does not consume this generated report. It recomputes the same
+strict coupon matching from original saved HTML, then prepares complete supported
+mixed periods with the approved net-cash representation. No partial unsupported
+period is prepared and no generated cash report bypasses source replay. `import_ready` stays false.
 Unsupported statement or note operations keep `UNSUPPORTED_OPERATION_PERIOD`;
 this review does not authorize importing an independent subset of July.
 

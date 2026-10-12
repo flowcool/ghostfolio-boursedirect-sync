@@ -56,6 +56,34 @@ normalization, financial update or deletion occurs. Missing history or unresolve
 adoption still blocks publication of a usable review; schema2 does not yet implement
 independent exception processing or the daily scheduler.
 
+Schema3 adds the approved rolling window to the same frozen review:
+
+```yaml
+schema_version: 3
+adoption_mode: certain_unique
+as_of: '2026-10-12'
+prepared: prepared.yaml
+snapshot: snapshot.json
+resolutions: empty-resolutions.yaml
+history_evidence: history-evidence.yaml
+```
+
+The inclusive booking window is exactly 90 days ending on `as_of`; the explicit
+calendar day is pinned by the configuration and recomputed with the report.
+Complete preparation and global ownership/adoption checks precede selection.
+Only new activities in that window enter the wire and holdings projection.
+Older unimported buys cannot cover selected sales. Verified existing acquisitions
+in the complete snapshot still supply chronological positions. The report retains
+all reconciliation results and records `holdings.booking_window` and
+`holdings.selected_new`; CLI new counts describe selected activities.
+Changing the clock invalidates a pinned review even when its wire is identical.
+Schema1/2 retain their existing complete-source behavior.
+
+This selection does not establish current-period cutoff, missing source coverage
+or destination-history completeness. Existing history, legacy context, holdings,
+source replay, external declaration and production authorization gates remain.
+The daily preview's candidate bytes alone cannot replace this frozen review.
+
 The private artifact `outputs/review-<account-key>.yaml` records engine contract,
 exact input SHA256s, source digests, full reconciliation/coverage and blockers.
 Only new activities become the [wire](offline-wire.md) body's UTF-8 string plus

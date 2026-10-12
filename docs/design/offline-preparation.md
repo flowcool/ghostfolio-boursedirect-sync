@@ -1,5 +1,14 @@
 # Offline preparation contract
 
+## Scope after the 2026-10-12 daily amendment
+
+This contract documents the existing statement-based `prepare` command.
+Monthly statement matching and whole-period validation remain its current
+behavior, not prerequisites for the amended [daily product contract](daily-saved-input-preview.md).
+Daily candidate preparation must consume original operation notices independently.
+This documentation change does not claim that `prepare` already supports that
+path or alter its qualified historical behavior.
+
 `prepare --config FILE --input-root DIR --max-bytes N --max-depth N` reads only
 bounded local files. Config must live inside the declared input root. Safe YAML
 requires string mapping keys, no aliases/anchors, no duplicate keys, and bounded
@@ -11,7 +20,12 @@ aliases with a monthly statement plus daily note paths. The account namespace
 must be an immutable UUIDv4; source references and target IDs remain private.
 All statements/notes use the existing bounded no-follow local reader, explicit
 HTML charset and parser-depth budgets. Note matching/conversion enforce the
-strict validated EUR/zero-VAT financial scope. Unknown periods, unverified
+strict validated EUR/zero-VAT trade scope and approved net-cash EUR dividend
+scope. Complete mixed periods can be prepared together. Every coupon requires
+exact statement/note matching before its booking-day net credit becomes a
+DIVIDEND with quantity 1, unit price equal to received cash and fee 0. Displayed
+source gross, signed quantity and costs remain private evidence, without tax or
+holding inference. Unknown periods, unverified
 mappings, multiple supplied versions of a period or ambiguous notes block.
 
 The entire input set is validated before state/output mutation. Publication
@@ -56,7 +70,13 @@ contains counts, readiness and gate codes.
 The artifact has `artifact_kind: internal_activity_review_not_api_payload`, keyed
 activities, source digests, `import_ready: false`, and explicit remote-adoption/API
 blockers. No prepare run removes these blocks. Unknown operation periods are not
-silently skipped. Production writes, remote existing-activity adoption and isolated
+silently skipped. The explicit operator policy excludes notes without source ISIN
+only after exact account/month/day/label/cash matching to the monthly statement.
+Their cash remains in balance controls and ledger identities; raw-source replay
+rederives the exclusion. Present invalid ISINs and ambiguous matches refuse, and
+unknown operations with valid ISIN still block their period. The daily preview
+lists excluded operations; preparation emits no fee or synthetic security for them.
+Production writes, remote existing-activity adoption and isolated
 API/date/wire-number tests remain separate gates; there is no apply command.
 
 Synthetic end-to-end tests cover reprepare/renaming, financial label revisions,

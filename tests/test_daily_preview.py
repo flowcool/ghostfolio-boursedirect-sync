@@ -99,7 +99,7 @@ def test_missing_note_security_quarantines_only_its_period_and_retains_prior_des
     run()
     report = bd.parse_keyed_yaml(paths(config)[1].read_bytes())
     assert report['last_completed_acquisition_period'] == '2026-09'
-    assert report['exceptions']['2026-08:source']['code'] == 'INVALID_NOTE_SECURITY'
+    assert report['exceptions']['2026-08:source']['code'] == 'SKIPPED_NOTE_CONTEXT_CONFLICT'
     assert report['exceptions']['2026-09:destination']['status'] == 'unresolved'
     assert '2026-08' not in report['missing_closed_statement_periods']
     assert '2026-08' in report['unqualified_observed_closed_periods']
@@ -160,11 +160,14 @@ def test_old_exceptions_and_gaps_survive_window_and_absent_sources():
 def test_exact_coupon_replay_resolves_only_observed_exception():
     config = setup(coupon=True)
     run()
-    assert run()['unresolved_exceptions'] == 1
+    assert run()['unresolved_exceptions'] == 2
     Path('inputs/snapshot.json').write_text(json.dumps({'count': 1, 'activities': [row()]}))
-    assert run()['unresolved_exceptions'] == 0
+    assert run()['unresolved_exceptions'] == 1
     state = yaml.safe_load(paths(config)[0].read_text())
-    assert next(iter(state['exceptions'].values()))['status'] == 'resolved_by_saved_evidence'
+    coupon_exceptions = [v for k,v in state['exceptions'].items() if k.startswith('coupon:')]
+    assert coupon_exceptions
+    assert all(v['status'] == 'resolved_by_saved_evidence' for v in coupon_exceptions)
+    assert state['exceptions']['2026-09:destination']['status'] == 'unresolved'
 
 
 def test_coupon_report_has_no_yaml_aliases_and_window_excludes_old_events():
@@ -280,7 +283,7 @@ def test_cli_exposes_counts_only(capsys):
     assert bd.main(['daily-preview', '--config', 'inputs/config.yaml', '--input-root', 'inputs',
                    '--as-of', '2026-10-12', '--max-bytes', '1000000', '--max-depth', '32']) == 2
     output = capsys.readouterr().out
-    assert json.loads(output)['unresolved_exceptions'] == 1
+    assert json.loads(output)['unresolved_exceptions'] == 2
     assert config['account']['source_account_ref'] not in output
 
 
@@ -318,3 +321,27 @@ def test_default_day_crosses_midnight_in_broker_summer_and_winter_time(instant):
         clock.now.side_effect = lambda zone: moment.astimezone(zone)
         assert bd.daily_preview_today() == instant[:8] + '13'
         assert clock.now.call_args.args[0].key == 'Europe/Paris'
+
+
+def test_note_account_mismatch_refuses_command_without_publishing_state():
+    config = setup(coupon=True)
+    note = Path('inputs/note.html')
+    note.write_text(note.read_text().replace(config['account']['source_account_ref'], 'OTHER_SOURCE_ACCOUNT'))
+    with pytest.raises(RuntimeError, match='^DAILY_SOURCE_ACCOUNT_CONFLICT$'):
+        run()
+    assert not any(path.exists() for path in paths(config))
+
+
+def test_skipped_closed_coupon_report_keeps_cash_and_label_hash_without_auxiliary_text():
+    config = setup(coupon=True)
+    path = Path('inputs/note.html')
+    soup = BeautifulSoup(path.read_text(), 'html.parser')
+    field(soup, 1, 1).string = ''
+    path.write_text(str(soup))
+    run()
+    report = bd.parse_keyed_yaml(paths(config)[1].read_bytes())
+    skipped = report['skipped_source_operations']['2026-09']
+    assert len(skipped) == 1 and skipped[0]['credit'] == '1.9'
+    assert len(skipped[0]['source_label_sha256']) == 64
+    assert 'source_label' not in skipped[0] and 'source_fields' not in skipped[0]
+    assert skipped[0]['financial_conversion'] is False and report['import_ready'] is False

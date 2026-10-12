@@ -1,5 +1,157 @@
 # Daily saved-input preview
 
+## Daily product contract — operator amendment, 2026-10-12
+
+The daily importer consumes Bourse Direct operation notices independently, without
+cross-checking them against monthly statements.
+
+Florent explicitly removed source cross-checking from the product contract.
+This amendment supersedes the older monthly matching, whole-period validation,
+closed-statement dependency and monthly coverage prerequisites below and in the
+linked preparation/conversion contracts for the daily journey.
+
+- Collect operation notices within the approved rolling 90-day window. A notice
+  is usable in the current month without waiting for a monthly statement.
+- Derive each supported operation from its own original notice. Verify its
+  account binding, source identity, explicit financial fields, date, currency
+  and internal arithmetic; preserve exact decimals and original bytes.
+- Do not require, acquire for validation, or match a monthly statement. Do not
+  introduce a later monthly reconciliation pass, monthly cash-control gate,
+  reconstructed monthly ledger or source-to-source resolution workflow.
+- Skip operations without source ISIN, regardless of label. A present invalid
+  ISIN or unsupported financial operation stays visible and is not converted
+  by guessing. Subscription-right conversion remains outside the tool.
+- Dividends use net cash actually received and the Bourse Direct booking date.
+  Their Ghostfolio representation remains quantity 1, unit price equal to net
+  cash, fee 0 and EUR. Explicit verified security mappings remain required.
+- Compare candidates with Ghostfolio in the dry run to highlight possible
+  duplicates and date, amount or fee differences. This destination comparison
+  is the requested diagnostic; it is not source cross-checking. Legacy
+  differences do not prevent producing the diagnostic candidate report.
+- Leave existing Ghostfolio rows unchanged. Do not add automatic corrections,
+  timestamp normalization, manual resolution lists or special-case legacy
+  matching to make the dry run pass. An uncertain duplicate is reported rather
+  than silently imported as new.
+- Keep account-scoped event identity and repeat-import protection. A dry run
+  never authorizes writes. Production application remains separately gated;
+  no recurring activation or production financial write is authorized here.
+
+Acceptance is a daily notice-to-candidate dry run that works before the monthly
+statement exists and shows destination discrepancies without resolving them.
+Missing monthly statements and unrelated historical monthly discrepancies are
+not prerequisites for that result. Credential confinement, one-attempt broker
+protection, private provenance and uncertain-write journals remain in force.
+
+## Community account routing
+
+The community product must use an explicit user-configured binding between one
+chosen Bourse Direct account and one Ghostfolio destination account. Florent's
+private account inventory is qualification evidence, not a deployment default.
+
+- `source_account_ref` identifies the chosen broker account, including its
+  wrapper. Select it from the observed broker account selector by stable account
+  reference, then verify the selected account and each notice's account identity.
+  Never choose the first option, an option position, or a wrapper label alone.
+- `target_account_id` identifies the existing Ghostfolio destination. Every
+  candidate and any separately authorized import use this explicit ID; do not
+  select a destination by name or fall back to another account.
+- `account_key` is the persistent UUID namespace for this source portfolio.
+  Keep it across runs; a changed destination must not silently reuse retained
+  target-bound state or redirect already reviewed activities.
+- Missing, ambiguous or mismatched source/destination bindings refuse the
+  affected account before import. The dry run identifies the source and target
+  privately so the operator can check the configured route.
+- Keep user bindings in a private configuration file mounted by Compose.
+  Public examples contain placeholders; credentials use the approved secret
+  delivery path. Do not embed account references, destination IDs or a private
+  host in the community image or Compose defaults.
+
+The offline importer already consumes this three-field account binding. The
+current acquisition qualifier instead requires the specific PEA/PEA-PME pair
+used for real-source qualification. A community acquisition entrypoint must
+accept the configured source selection without requiring that pair. This
+selection interface is not implemented yet; the current two-account qualifier
+does not establish community deployment acceptance.
+
+## Source window acquisition
+
+The existing source [connection entrypoint](../operations/source-connection.md#notice-only-window-acquisition-planning)
+accepts `qualify-connection --notice-window-as-of YYYY-MM-DD` to plan observed
+operation calendars and notices for both verified accounts across the approved
+window. No monthly documents are selected. This plan requires the known source
+previous-month function and retained explicit empty calendars, and preserves
+existing broker-attempt controls. It has offline saved-source qualification;
+actual acquisition with this option and recurring activation remain unverified.
+
+## Notice-only daily preview
+
+Select `source_mode: notices` on `daily-preview` with the existing account,
+per-ISIN mappings, complete destination snapshot and keyed `acquisition_runs`.
+No statement paths, calendar capture or index encoding are needed:
+
+```yaml
+schema_version: 1
+source_mode: notices
+account:
+  source_account_ref: '<broker account reference with wrapper>'
+  account_key: '<immutable UUIDv4>'
+  target_account_id: '<Ghostfolio account ID>'
+mappings: {} # Populate verified per-ISIN mappings; missing evidence is reported.
+snapshot: saved/activities.json
+acquisition_runs:
+  latest: saved/completed-collector-run
+```
+
+The command discovers account-bound operation notices from completed collector
+receipts and never reads monthly statement or calendar bodies in this mode.
+It retains the existing receipt hash, origin, exact request query, account,
+logout and browser-exit checks. Conflicting same-day captures refuse. Original
+note financial dates define the window; observed calendar and financial dates
+may differ inside one month, without changing the booking date.
+
+The strict note parser checks structure, signed quantities and trade cash
+arithmetic. Supported notes convert independently; unknown operations and
+missing mapping/currency evidence are visible source exceptions rather than
+blocking an unrelated month's notices. No monthly ledger is manufactured.
+Net dividend cash is read from the note credit, without a second commission
+subtraction or inferred withholding. Original financial fields remain private.
+
+`outputs/daily-notices-<account-uuid>.yaml` contains source activities, original
+source evidence, missing-ISIN skips, exceptions and destination diagnosis.
+`candidate_export` is diagnostic wire for all supported window activities,
+including possible existing matches; it is not a list to import blindly.
+`new_candidate_export` excludes owned rows and every observed nearby legacy
+candidate. Neither export authorizes dispatch or proves completeness/holdings.
+An owned-marker financial conflict is reported without producing a new row.
+Destination differences never suppress the diagnostic export.
+
+Notice event markers use the account namespace, original economic note fields
+and occurrence, with an explicit independent-notice identity basis. Target
+symbol mapping and filenames do not redefine source event identity. These
+markers differ from historical statement identities; existing unmarked or
+statement-marked rows remain destination candidates, not automatic adoption.
+The target-bound notice journal retains source-day hashes and unresolved source
+exceptions. Changed original notice bytes refuse instead of replacing retained
+evidence. Missing old inputs do not clear exceptions. Shared account/target
+locks, binding checks, input/output collision protection and private atomic
+publication remain in force. An unchanged repeat is byte-identical.
+
+This delivers offline notice preparation and destination diagnosis. Acquisition,
+a fresh snapshot and separately authorized financial application remain distinct
+stages; this mode does not yet provide an unattended daily importer.
+The existing qualified application now replays notice preparation artifacts
+through the [notice source boundary](preparation-source-replay.md); its write
+authority and financial uncertainty gates remain separate from this report.
+
+## Existing statement implementation reference — not daily acceptance
+
+The sections below describe the current saved-statement implementation and its
+qualified historical/lab behavior. In statement mode it requires statement/note matching
+and can suppress candidate wire on legacy uncertainty; use notice mode for the
+amended daily preparation and diagnostic path. Those checks remain intact in the existing
+standalone statement tooling. They must not be carried forward as daily product
+requirements or described as delivered notice-only support.
+
 `daily-preview` recomputes an account's approved 90-day window from original saved
 statements, notes and a complete saved Ghostfolio snapshot, retaining unresolved
 exceptions and source coverage in private keyed YAML.
@@ -92,8 +244,8 @@ It applies only to this nonfinancial index. Financial notes still use the unchan
 strict declared-encoding reader; original index and note bytes remain untouched.
 
 `current_period_observations` exposes the inventory, byte hashes, parsed source
-fields and conservative nearby destination candidates. A missing-ISIN note retains
-its refusal and is not converted. Source execution-price currency remains unknown;
+fields and conservative nearby destination candidates. A note without source ISIN
+is explicitly skipped and has no destination candidates or financial conversion. Source execution-price currency remains unknown;
 target-profile currency never fills it. Candidates retain original timestamps,
 fee differences and context flags; none is classified as certain, new or adopted.
 This path does not manufacture a monthly ledger, cash controls, holding movements,
@@ -102,6 +254,30 @@ Each note's refusal or closed-statement dependency remains in the existing priva
 exception journal when inputs disappear or age out. A parsed note's closed-source
 dependency can resolve only when a later fully matched closed statement includes
 the exact retained note hash; destination and application gates remain separate.
+
+### Missing source ISIN policy
+
+Operations without source ISIN are excluded from import candidates, regardless of
+label. This includes standalone custody charges and cash coupons without ISIN;
+the importer does not manufacture a security, fee category or corporate-action
+conversion. A present but invalid ISIN still refuses. Unknown operations with a
+valid ISIN retain the existing affected-period refusal.
+
+Closed-period exclusion requires one-to-one matching of the saved note and
+statement by account, month, booking day, source label and exact debit/credit.
+Missing, duplicate, conflicting or ambiguous matches refuse. Skipped cash remains
+in the original monthly balance controls and ledger identity. Exclusion changes
+candidate selection, not the source accounting or source-revision protection.
+`skipped_source_operations` exposes each excluded closed-period operation with
+its source slot, date, label hash, cash and `SOURCE_ISIN_ABSENT` reason.
+Ignored current notes retain only slot, date, currency, cash, reason and hash
+provenance; their names and auxiliary source text remain in original private inputs.
+
+Current notes without ISIN expose `SKIPPED_NO_ISIN`, the retained source hash and
+cash, and empty destination candidates. Their original exception-journal entry
+remains retained as `resolved_by_saved_evidence`; disappearance of a file cannot
+clear unrelated uncertainty. This observation does not establish monthly
+completeness, import readiness or destination acceptance.
 
 An unsupported or malformed daily note records its fixed refusal code as an
 unresolved source exception for that period, with the original source digests
@@ -129,6 +305,19 @@ application remain unqualified in this preview. Dividends reuse original-source
 cash review and global snapshot comparison, with net received cash and broker
 booking date. Existing destination activities are never rewritten, adopted or
 deleted; absent candidates never authorize creation.
+
+`destination_diagnosis` explains destination refusals for every fully prepared
+source activity, before window selection. It reuses the bounded
+[saved-snapshot diagnosis](offline-diagnosis.md): source financial fields,
+candidate IDs, differing fields, exact/similar observations and one keyed map of
+original timestamps, decimal financial values and eligibility flags. A legacy
+time of day remains visible even when the calendar day agrees; a fee or dividend
+amount/date difference remains a discrepancy. No timestamp is normalized and
+no context flag, adoption decision or exception is cleared by this evidence.
+Private free-text comments are excluded. The one-million comparison and
+ten-thousand candidate limits apply; a budget refusal preserves existing output.
+Unsupported periods still require complete source preparation before entering
+this diagnosis; their source and coupon observations remain separately visible.
 
 `state/daily-<target-sha256>.yaml` owns observed period fingerprints and keyed
 exceptions. `outputs/daily-<account-uuid>.yaml` publishes the current preview.
@@ -196,3 +385,48 @@ Retain original documents, snapshot, binding and journal. If a newly created
 journal must be removed from active use, verify its binding and move it to private
 recovery storage; do not delete it or reset uncertain history. There is no service
 deployment, broker attempt or production financial mutation to roll back.
+
+When foreign-sale recognition upgrades a retained period, the old financial hash
+must equal the exact previous UNKNOWN projection of those foreign sale rows, and
+both statement and complete note hashes must be byte-identical. The new hash and
+old hash remain in a resolved private parser-upgrade journal entry. Any changed
+source bytes or other fingerprint discrepancy still requires revision review.
+This upgrades parser classification, without clearing corporate-action refusals.
+
+Complete supported mixed periods use raw-source preparation for all BUY, SELL and
+net-cash DIVIDEND activities before marking source matching complete. Coupon
+observations remain separately available for legacy amount/date reconciliation.
+The existing `trade_observations` field now contains reconciliation results for
+all prepared activity kinds. Destination, holdings, history and application gates
+remain unresolved until their own evidence passes; complete source matching does
+not grant import readiness. A malformed trade or unsupported corporate action
+still prevents complete-period preparation, even when coupon review succeeds.
+
+## Rolling-window candidate bytes
+
+`candidate_export` previews deterministic reviewed wire for unowned, unambiguous
+activities from source-complete closed periods. The entire supported prepared
+set is reconciled together before selecting the inclusive 90-day source booking
+window. Owned markers and certain unique adopted records are excluded; old new
+activities are counted as `excluded_outside_window`. A legacy-context refusal or
+unresolved automatic multiplicity produces no wire and retains a fixed
+`reconciliation_code`. Invalid or unsupported source periods are listed separately.
+
+The preview contains a private `body_utf8` and SHA256, and is explicitly
+`daily_candidate_wire_not_apply_authorization` with false readiness. Its subset
+can be inspected even while another source period refuses. Original whole-ledger
+controls, unresolved exceptions, incomplete history, current-month cutoff and
+application gates remain in the enclosing report. No caller may dispatch this
+subset merely because bytes exist: it is not a frozen application review and
+does not authorize a partial unsupported-period import. The existing source
+replay/frozen-review/exact-wire application boundary remains mandatory.
+
+Filtering cannot hide old malformed sources or clear prior uncertainty. A repeat
+against identical captures/snapshot/day is byte-identical. This saved-input stage
+still performs no broker request, Ghostfolio GET/POST or financial mutation.
+
+For the separately qualified application path, schema3 [frozen review](offline-review-cli.md)
+binds the same explicit 90-day clock and recomputes complete source/adoption evidence.
+Its holdings projection includes selected new activities only: an excluded, unimported
+old buy cannot cover a selected sale. Daily candidate bytes do not replace that report
+or its history, current-source and external application gates.

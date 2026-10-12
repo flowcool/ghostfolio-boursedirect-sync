@@ -107,6 +107,41 @@ the private manifest/journal. That exploration used an earlier browser controlle
 its success is preserved, while current collector request-role qualification is
 reported separately by `check`. Source feasibility is not reopened at each resume.
 
+## Notice-only window acquisition planning
+
+For the amended daily contract, the existing qualified entrypoint accepts an
+explicit broker calendar clock:
+
+```sh
+.venv/bin/python scripts/source_connection.py qualify-connection \
+  --notice-window-as-of 2026-10-12
+```
+
+This selects the approved90day notice window and ignores the historical monthly
+statement preference. It navigates the observed operation calendars for both
+verified accounts, follows offered notice links and interprets only the exact
+source-described previous-month function. Monthly statement routes and form
+submissions are not selected. The first window month is read in full so source
+calendar/financial-day differences can be handled by the notice parser; daily
+candidate selection still uses the actual financial booking day.
+
+Calendar headings, selected account, source navigation arguments and explicit
+empty-month messages must agree. A calendar that references the separate inert
+`avis-operes.js` body waits until its exact known function has been captured;
+changed, missing or ambiguous navigation refuses rather than constructing an
+unqualified URL. All requests retain the existing bounded origin, exact request
+role and source provenance guards. Month/year rollover uses that observed source
+function, not an invented endpoint. Completion requires all window months for
+both accounts; a verified empty calendar supplies absence evidence without
+manufacturing a contract note. Qualification receipts record the selected window.
+
+This option changes read planning only. It retains the existing one-attempt,
+credential, TOTP, account, logout and browser-exit controls. It does not authorize
+an automatic broker retry or activate recurring authentication. Offline replay
+of saved calendars qualifies planning, not a fresh session or actual acquisition
+with this option; its live qualification remains separate from existing historical
+acquisition evidence. Ordinary `connect` remains guarded as described below.
+
 ## Current connection command boundary
 
 ```sh

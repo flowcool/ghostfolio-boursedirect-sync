@@ -14,6 +14,14 @@ external SHA256 binds bytes; it proves neither reviewer identity nor the truth o
 freshness of security, recovery, version, rendered dates or exclusive access.
 Those facts require real independent evidence before an operator runs it.
 
+The existing controller also consumes schema3 frozen reviews with an explicit
+90-day booking window. It recomputes complete preparation and global adoption,
+but emits and checks holdings for selected new activities only. Older unimported
+source buys do not supply positions for selected sales. Raw-source replay still
+checks excluded documents, and the complete review/configuration clock remains
+bound by the external pins. No recurring broker or production-write authority is
+granted by selecting a window.
+
 The controller fully recomputes the frozen review and current preparation from
 bounded local HTML/configuration bytes. It refuses unresolved adoption, holdings
 shortfalls, unsupported operations, changed raw documents and financially different
@@ -28,6 +36,22 @@ complete archive replay and owned rollback. See the keyed
 [verification evidence](../verification/source-authentication.yaml).
 No server-version detection or universal timezone
 policy is claimed. Per-symbol execution/target currency must be explicit EUR.
+
+## Notice-only application sources
+
+The existing application boundary also accepts notice preparation configuration
+and artifacts from the [source replay contract](preparation-source-replay.md).
+`prepare` and the application capture step read only each independent notice;
+`validate_prepared_sources` recomputes the artifact from original HTML and the
+pinned preparation configuration. There is no statement cross-check or monthly
+coverage gate in this source mode. Notice bytes are archived as their own roles.
+
+Frozen destination review, exact baseline, conservative duplicate/holdings
+checks and external write authorization remain separate from the diagnostic
+preview. A date/fee/amount difference is visible in daily diagnostics without
+blocking that report; it does not grant automatic adoption or permission to
+send a possible duplicate. No legacy correction list is added. The supported
+clean notice path uses the existing application controller and recovery journal.
 
 ## Public workflow
 

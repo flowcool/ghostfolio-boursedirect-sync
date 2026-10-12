@@ -17,7 +17,11 @@ are excluded. These enrichment/configuration changes cannot create new identitie
 Blank-row changes and reorder of unique trades preserve IDs. Two identical
 trades receive occurrences 1 and 2, retaining multiplicity; the helper does not
 claim to distinguish which original trade changed if a statement is corrected.
-All unknown or outside-period operations block. Cash controls are revalidated.
+Complete source preparation annotates exactly matched coupon ledger rows as
+DIVIDEND. Their identity uses original label/day/debit/credit and occurrence,
+without deriving holdings from coupon quantity or embedding destination mapping.
+Explicit no-ISIN exclusions retain every available quantity/price/cash ledger fact.
+Other unknown or outside-period operations block. Cash controls are revalidated.
 
 A separate normalized statement fingerprint includes the unordered multiset of
 ledger facts and dated opening/cumulative/closing control values. It ignores blank

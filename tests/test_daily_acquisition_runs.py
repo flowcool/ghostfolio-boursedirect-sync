@@ -48,7 +48,7 @@ def test_discovers_statement_and_current_notes_preserves_inputs_and_repeats():
     run(); report = saved(config)
     assert report['last_completed_acquisition_period'] is None  # Synthetic statement also contains unmatched sells.
     assert report['current_period_observations']['offered_note_days'] == ['2026-10-01', '2026-10-02']
-    assert report['current_period_observations']['notes']['2026-10-01']['code'] == 'INVALID_NOTE_SECURITY'
+    assert report['current_period_observations']['notes']['2026-10-01']['code'] == 'SKIPPED_NO_ISIN'
     assert report['acquisition_runs']['first']['captures'] == 5
     assert report['import_ready'] is False
     prior = tuple(p.read_bytes() for p in paths(config)); run()
