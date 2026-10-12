@@ -5,6 +5,9 @@ offline preparation/reconciliation, default preview and explicitly qualified
 single-event application. The implemented `inspect` command reads monthly statement
 HTML, preserves aligned ledger slots and checks cash controls with Decimal.
 Optional `--notes` inputs inspect daily contract notes and match trades exactly.
+`review-coupons` creates a private review of source net dividend cash and broker
+booking dates, retaining original note fields and unsupported-period gates. See
+the [coupon cash contract](docs/design/coupon-cash-review.md). It does not import.
 Inspection does not submit activities or contact either service. A pure internal
 [conversion helper](docs/design/internal-trade-conversion.md) validates matched
 EUR trades and explicit mappings; identity, adoption and API delivery are separate

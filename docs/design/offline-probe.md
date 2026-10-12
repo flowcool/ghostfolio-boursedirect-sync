@@ -148,8 +148,9 @@ corporate action is converted. Invalid layouts or security identifiers refuse.
 
 Mixed coupon/unknown documents cannot enter trade matching or preparation through
 this mode: `NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW` preserves the boundary. Dividend
-amount/date policy, source-to-destination binding and uncertain historical
-reconciliation require separate qualified implementation. All returned fields
-remain private; `COUPON_FINANCIAL_POLICY_REQUIRED` and `UNKNOWN_OPERATIONS` expose
+source-to-destination binding and uncertain historical reconciliation require
+separate qualified implementation. The approved net-cash/date conversion is
+available through [source coupon cash review](coupon-cash-review.md). All fields
+remain private; `COUPON_STATEMENT_REVIEW_REQUIRED` and `UNKNOWN_OPERATIONS` expose
 only safe codes. Revert this scoped commit to remove inspection support while
 retaining acquired documents and journals.

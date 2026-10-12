@@ -599,6 +599,86 @@ def convert_matched_trades(statement, documents, account, mappings):
     return records
 
 
+def review_coupon_cash(statement, documents):
+    """Source cash conversion only; never an API/adoption/period-coverage artifact."""
+    validate_ledger(statement["controls"], statement["events"])
+    if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
+        fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
+    if any(d["account_ref"] != statement["account_ref"] for d in documents):
+        fail("NOTE_ACCOUNT_MISMATCH")
+    if any(n["date"].strftime("%Y-%m") != statement["period"] for d in documents for n in d["notes"]):
+        fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
+    events = [e for e in statement["events"] if e["label"].startswith("COUPONS ")]
+    notes = [n for d in documents for n in d["notes"] if n["kind"] == "COUPON"]
+    if not events or not notes:
+        fail("COUPON_EVIDENCE_MISSING")
+    candidates = [[i for i, n in enumerate(notes)
+                   if e["label"] == "COUPONS " + n["name"]
+                   and all(e[k] == n[k] for k in ("date", "debit", "credit"))]
+                  for e in events]
+    uses = {i: sum(i in group for group in candidates) for i in range(len(notes))}
+    if any(len(c) != 1 or uses[c[0]] != 1 for c in candidates) or any(v != 1 for v in uses.values()):
+        fail("COUPON_NOTE_MATCHING_NOT_COMPLETE")
+    records = {}
+    for event, indices in zip(events, candidates):
+        note = notes[indices[0]]
+        if not valid_isin(note["isin"]) or note["net_currency"] != "EUR":
+            fail("COUPON_IDENTITY_OR_CURRENCY_UNVERIFIED")
+        amounts = [note[k] for k in ("quantity", "unit_gross", "gross", "commission", "debit", "credit")]
+        if any(not isinstance(v, Decimal) or not v.is_finite() for v in amounts):
+            fail("INVALID_COUPON_AMOUNT")
+        if (note["quantity"] >= 0 or note["unit_gross"] <= 0 or note["gross"] <= 0
+                or note["commission"] < 0 or note["debit"] != 0 or note["credit"] <= 0):
+            fail("COUPON_DIRECTION_CONFLICT")
+        if any(not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", canonical_decimal(v))
+               for v in (note["gross"], note["commission"], note["credit"])):
+            fail("INVALID_CASH_PRECISION")
+        tax_credit = note.get("tax_credit")
+        if tax_credit is not None and (not isinstance(tax_credit, Decimal) or not tax_credit.is_finite()
+                or tax_credit < 0 or not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", canonical_decimal(tax_credit))):
+            fail("INVALID_COUPON_TAX_CREDIT")
+        records[str(event["slot"])] = {
+            "kind": "DIVIDEND", "isin": note["isin"], "source_name": note["name"],
+            "operation_date": event["date"].isoformat(), "date_basis": "broker_booking_day",
+            "amount": canonical_decimal(event["credit"]), "currency": "EUR", "amount_basis": "net_received",
+            "source_label": event["label"], "source_slot": event["slot"], "note_slot": note["slot"],
+            "source_fields": {k: canonical_decimal(note[k]) for k in ("quantity", "unit_gross", "gross", "commission")},
+            "tax_credit": canonical_decimal(tax_credit) if tax_credit is not None else None,
+            "withholding": None, "gross_semantics_verified": False, "import_ready": False}
+    unsupported = sum(e["kind"] not in ("BUY", "SELL") and not e["label"].startswith("COUPONS ")
+                      for e in statement["events"])
+    blockers = ["DIVIDEND_DESTINATION_MAPPING_AND_API_QUALIFICATION_REQUIRED",
+                "COMPLETE_PERIOD_CONVERSION_REQUIRED", "DESTINATION_RECONCILIATION_REQUIRED"]
+    if unsupported or any(n["kind"] == "UNKNOWN" for d in documents for n in d["notes"]):
+        blockers.append("UNSUPPORTED_OPERATION_PERIOD")
+    return {"schema_version": 1, "artifact_kind": "source_coupon_cash_review_not_api_payload",
+            "source_account_ref": statement["account_ref"], "statement_period": statement["period"],
+            "policy": {"amount": "net_received", "date": "broker_booking_day", "historic_rewrite": False},
+            "coupons": records, "unsupported_statement_operations": unsupported,
+            "ledger_reconciled": True, "import_ready": False, "blockers": blockers}
+
+
+def review_local_coupons(statement_path, note_paths, input_root, output, max_bytes, max_depth):
+    paths = [Path(statement_path), *map(Path, note_paths)]
+    if len(paths) > 257:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    captures = [read_local_bytes(p, input_root, max_bytes) for p in paths]
+    if sum(map(len, captures)) > 64 * 1024 * 1024:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    statement = parse_statement(decode_document(captures[0]), max_depth)
+    documents = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True)
+                 for raw in captures[1:]]
+    artifact = review_coupon_cash(statement, documents)
+    artifact["source_sha256"] = {str(i): hashlib.sha256(raw).hexdigest() for i, raw in enumerate(captures)}
+    reject_output_input_collision(output, paths)
+    validate_proposal_destination(output, paths)
+    private_directory(Path(output).parent)
+    atomic_private_yaml(output, artifact)
+    return {"coupons": len(artifact["coupons"]), "ledger_reconciled": True,
+            "unsupported_statement_operations": artifact["unsupported_statement_operations"],
+            "import_ready": False, "blockers": artifact["blockers"]}
+
+
 def canonical_decimal(value):
     if not isinstance(value, Decimal) or not value.is_finite():
         fail("INVALID_IDENTITY_DECIMAL")
@@ -2831,6 +2911,13 @@ def main(argv=None):
     note.add_argument("--max-bytes", type=int, required=True)
     note.add_argument("--max-depth", type=int, required=True)
     note.add_argument("--include-coupons", action="store_true", help="Read coupon fields without tax or import claims")
+    coupons = subparsers.add_parser("review-coupons", help="Review source net dividend cash and booking dates offline")
+    coupons.add_argument("path", help="Saved monthly statement")
+    coupons.add_argument("--notes", nargs="+", required=True)
+    coupons.add_argument("--input-root", required=True)
+    coupons.add_argument("--output", required=True, help="Private review file under outputs")
+    coupons.add_argument("--max-bytes", type=int, required=True)
+    coupons.add_argument("--max-depth", type=int, required=True)
     prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
     prepare.add_argument("--config", required=True, help="Local keyed YAML inside input root")
     prepare.add_argument("--input-root", required=True)
@@ -2884,12 +2971,16 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "review-coupons":
+            print(json.dumps(review_local_coupons(args.path, args.notes, args.input_root,
+                args.output, args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
         if args.command == "inspect-note":
             html, _ = read_document(args.path, args.input_root, args.max_bytes)
             document = parse_contract_note(html, args.max_depth, include_coupons=args.include_coupons)
             coupons = sum(n["kind"] == "COUPON" for n in document["notes"])
             unknown = sum(n["kind"] == "UNKNOWN" for n in document["notes"])
-            blockers = (["COUPON_FINANCIAL_POLICY_REQUIRED"] if coupons else ["REAL_SOURCE_ACCEPTANCE_PENDING"])
+            blockers = (["COUPON_STATEMENT_REVIEW_REQUIRED"] if coupons else ["REAL_SOURCE_ACCEPTANCE_PENDING"])
             if unknown:
                 blockers.append("UNKNOWN_OPERATIONS")
             print(json.dumps({"notes": len(document["notes"]), "coupons": coupons,

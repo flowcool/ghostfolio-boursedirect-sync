@@ -122,7 +122,7 @@ def test_coupon_cli_reports_counts_without_personal_or_financial_fields(tmp_path
                    '--max-depth', '32', '--include-coupons']) == 2
     summary = json.loads(capsys.readouterr().out)
     assert summary == {'notes': 1, 'coupons': 1, 'trades': 0, 'unknown': 0, 'import_ready': False,
-                       'blockers': ['COUPON_FINANCIAL_POLICY_REQUIRED']}
+                       'blockers': ['COUPON_STATEMENT_REVIEW_REQUIRED']}
 
 
 def test_coupon_inspection_keeps_adjacent_split_unknown_without_inventing_conversion():

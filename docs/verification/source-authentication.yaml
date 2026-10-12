@@ -1185,3 +1185,30 @@ coupon_source_inspection:
   - Mixed nontrade notes cannot pass strict trade preparation.
   - Dividend amount/date conversion policy requires separate approved implementation.
   - No production financial writes.
+
+coupon_net_cash_review:
+  runtime_sha256: 77ee59ce57b860e379f4571f1ba31d0f2f1682ff23a6693262c135e13ff404ed
+  operator_policy:
+    approved_on: '2026-10-12'
+    amount: actual_net_received_EUR_cash
+    date: Bourse_Direct_booking_calendar_day
+    historical_rewrite: false
+  affected_regressions:
+    command: root .venv/bin/python -m pytest -q tests/test_coupon_cash.py tests/test_contract_notes.py tests/test_conversion.py tests/test_prepare.py tests/test_preparation_replay.py tests/test_wire.py
+    passed: 254
+  actual_saved_source_check:
+    exact_coupon_date_credit_ISIN_pairs: 7
+    original_statement_cash_controls: reconciled
+    unsupported_statement_operations: 5
+    unsupported_period_gate_retained: true
+    input_hashes_verified: true
+    report_repeat_identical: true
+    inferred_withholding: false
+    source_commission_not_deducted_again: true
+    source_signed_quantity_retained: true
+    production_writes: 0
+  limits:
+  - Source-only review is rejected by existing trade preparation and wire paths.
+  - Actual source-to-Yahoo mapping and historical reconciliation remain separate.
+  - Unknown July operations still block financial period import.
+  - No broker authentication or remote request occurs during this review.
