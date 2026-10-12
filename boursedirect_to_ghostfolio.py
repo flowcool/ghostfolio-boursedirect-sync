@@ -223,7 +223,7 @@ def parse_statement(html, max_depth):
         date = parse_date(date_text)
         if debit_text and credit_text:
             fail("AMBIGUOUS_OPERATION_DIRECTION")
-        kind = "SELL" if label.startswith("VTE CPT ") else "BUY" if label.startswith("ACH CPT ") else "UNKNOWN"
+        kind = "SELL" if label.startswith(("VTE CPT ", "VENTE ETRANGER ")) else "BUY" if label.startswith("ACH CPT ") else "UNKNOWN"
         event = {"slot": slot, "date": date, "label": label, "kind": kind,
                  "debit": debit, "credit": credit}
         if kind in ("BUY", "SELL"):
@@ -348,7 +348,7 @@ def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isi
     if not count or not (include_coupons or skip_missing_isin) and count % 9:
         fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
     groups = []
-    labels = {"ACHAT COMPTANT": "BUY", "ACHAT ETRANGER": "BUY", "VENTE COMPTANT": "SELL"}
+    labels = {"ACHAT COMPTANT": "BUY", "ACHAT ETRANGER": "BUY", "VENTE COMPTANT": "SELL", "VENTE ETRANGER": "SELL"}
     start = 0
     while start < count:
         if count - start < 2:
@@ -1800,7 +1800,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
             fail("INVALID_DAILY_JOURNAL_OR_BINDING")
         capture_period("statement", exception.get("period"))
     # Detach nested structures; failed recomputation must preserve retained state.
-    journal = parse_keyed_yaml(yaml.safe_dump(previous).encode())
+    journal = parse_keyed_yaml(yaml.safe_dump(previous, sort_keys=False).encode())
     remote = parse_remote_activity_snapshot(snapshot_raw)
     reviews = {}
     trade_observations = {}
@@ -1827,7 +1827,22 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
         fingerprint = hashlib.sha256(json.dumps(semantic, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         retained = journal["periods"].get(period)
         if retained is not None and retained.get("financial_sha256") != fingerprint:
-            fail("DAILY_SOURCE_REVISION_REVIEW_REQUIRED")
+            # The previous parser kept foreign sales as UNKNOWN. Qualify only
+            # that exact projection, with byte-identical statement and notes.
+            legacy_events = [{**{k: v for k, v in event.items() if k not in ("quantity", "unit_price")}, "kind": "UNKNOWN"}
+                             if event["kind"] == "SELL" and event["label"].startswith("VENTE ETRANGER ") else event
+                             for event in events]
+            legacy = {**semantic, "events": sorted(legacy_events, key=lambda e: json.dumps(e, sort_keys=True))}
+            legacy_fingerprint = hashlib.sha256(json.dumps(legacy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if (legacy_fingerprint != retained["financial_sha256"]
+                    or retained["statement_sha256"] != hashlib.sha256(capture["statement"]).hexdigest()
+                    or retained["note_sha256"] != sorted(hashlib.sha256(raw).hexdigest() for raw in capture["notes"])):
+                fail("DAILY_SOURCE_REVISION_REVIEW_REQUIRED")
+            journal["exceptions"][period + ":foreign_sale_parser_upgrade"] = {
+                "period": period, "status": "resolved_by_saved_evidence",
+                "code": "BYTE_IDENTICAL_FOREIGN_SALE_CLASSIFICATION_UPGRADE",
+                "previous_financial_sha256": legacy_fingerprint, "financial_sha256": fingerprint,
+                "statement_sha256": retained["statement_sha256"], "note_sha256": retained["note_sha256"]}
         source = {"financial_sha256": fingerprint, "statement_sha256": hashlib.sha256(capture["statement"]).hexdigest(),
                   "note_sha256": sorted(hashlib.sha256(raw).hexdigest() for raw in capture["notes"]),
                   "complete_source_matching": False}

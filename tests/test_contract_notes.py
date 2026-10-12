@@ -180,7 +180,7 @@ def test_explicit_fields_and_two_daily_sales_keep_separate_groups():
 
 
 @pytest.mark.parametrize('slot,cell,value,error', [
-    (1, 0, 'VENTE ETRANGER', 'UNSUPPORTED_NOTE_OPERATION'),
+    (1, 0, 'VENTE INCONNUE', 'UNSUPPORTED_NOTE_OPERATION'),
     (1, 1, 'FR0000000000', 'INVALID_NOTE_SECURITY'),
     (3, 0, 'QUANTITE : -3', 'NOTE_DIRECTION_CONFLICT'),
     (3, 1, 'TAXE : 1,00', 'UNSUPPORTED_NOTE_EXTRA_FIELD'),

@@ -22,8 +22,11 @@ outside the statement month refuse. The whole original statement cash controls
 are verified before conversion; no filtered ledger is represented as complete.
 The ISIN comes from the checksum-validated note, never a destination name match.
 
-Missing-ISIN coupons and subscription-right corporate actions remain exceptions.
-Florent explicitly excludes resolving these cases from the delivered tool's
+The daily/preparation missing-ISIN policy explicitly excludes coupons without
+source ISIN from import candidates after exact saved-source matching; see the
+[daily contract](daily-saved-input-preview.md). The strict standalone coupon
+inspection still refuses missing ISIN. Subscription-right corporate actions with
+valid ISIN remain exceptions: Florent excludes their resolution from the tool's
 capabilities. An explicitly authorized manual reconciliation may use external
 primary evidence outside the importer, retaining the original missing identity
 and source movements in a private report. Such a report is not importer input,

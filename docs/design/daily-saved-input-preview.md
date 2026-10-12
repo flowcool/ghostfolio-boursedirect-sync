@@ -218,3 +218,10 @@ Retain original documents, snapshot, binding and journal. If a newly created
 journal must be removed from active use, verify its binding and move it to private
 recovery storage; do not delete it or reset uncertain history. There is no service
 deployment, broker attempt or production financial mutation to roll back.
+
+When foreign-sale recognition upgrades a retained period, the old financial hash
+must equal the exact previous UNKNOWN projection of those foreign sale rows, and
+both statement and complete note hashes must be byte-identical. The new hash and
+old hash remain in a resolved private parser-upgrade journal entry. Any changed
+source bytes or other fingerprint discrepancy still requires revision review.
+This upgrades parser classification, without clearing corporate-action refusals.

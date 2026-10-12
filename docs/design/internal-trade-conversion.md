@@ -7,8 +7,13 @@ source matrix own the evidence and limitations; Beads owns execution gates.
 
 `convert_matched_trades(statement, note_documents, account, mappings)` is a pure
 internal helper. It consumes the strict parser results, checks the source account,
-revalidates monthly cash controls, rejects all non-trades and out-of-period dates,
-and requires complete unambiguous exact note matching. No partial subset is
+revalidates monthly cash controls, rejects unsupported non-trades and out-of-period dates,
+and requires complete unambiguous exact note matching. The explicit missing-ISIN
+policy excludes exactly matched operations while retaining original cash controls.
+Domestic and foreign sale labels use the same strict nine-slot note and
+three-column statement trade fields. `VENTE ETRANGER` does not establish currency:
+explicit execution-price evidence remains mandatory, with unchanged gross, costs,
+sign, VAT, date and account guards. No partial subset is
 returned after a failure. It does not read configuration files, create activities
 on a server, serialize a Ghostfolio payload or print financial records.
 
