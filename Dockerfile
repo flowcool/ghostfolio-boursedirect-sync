@@ -30,7 +30,8 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 RUN ln -s /usr/local/bin/node /usr/bin/node
 WORKDIR /opt/app
 COPY requirements.txt ./
-RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt \
+    && /opt/venv/bin/pip uninstall -y setuptools pip
 COPY collector/package.json collector/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 RUN rm -rf /usr/local/lib/node_modules/npm /opt/yarn-* \
