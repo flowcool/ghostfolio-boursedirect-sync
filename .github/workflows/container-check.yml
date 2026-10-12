@@ -31,6 +31,7 @@ jobs:
       - name: Scan image for fixable high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
+          version: v0.75.0
           input: ${{ runner.temp }}/image.tar
           scanners: vuln
           severity: HIGH,CRITICAL
@@ -64,6 +65,7 @@ jobs:
       - name: Scan image for fixable high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
+          version: v0.75.0
           input: ${{ runner.temp }}/image.tar
           scanners: vuln
           severity: HIGH,CRITICAL
