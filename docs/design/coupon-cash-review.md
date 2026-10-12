@@ -22,6 +22,15 @@ outside the statement month refuse. The whole original statement cash controls
 are verified before conversion; no filtered ledger is represented as complete.
 The ISIN comes from the checksum-validated note, never a destination name match.
 
+Missing-ISIN coupons and subscription-right corporate actions remain exceptions.
+Florent explicitly excludes resolving these cases from the delivered tool's
+capabilities. An explicitly authorized manual reconciliation may use external
+primary evidence outside the importer, retaining the original missing identity
+and source movements in a private report. Such a report is not importer input,
+does not qualify the affected period and cannot bypass its refusal gates.
+Testing a manually prepared entry in an owned disposable lab does not add an
+automatic resolution capability or authorize production writes.
+
 The amount is the exact EUR statement credit, with `amount_basis: net_received`.
 Source signed quantity, displayed unit gross/gross, commission and optional tax
 credit remain distinct evidence fields. Commission is not deducted again.
