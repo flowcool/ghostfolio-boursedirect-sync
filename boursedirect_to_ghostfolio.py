@@ -2109,6 +2109,8 @@ def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
         root = Path(directory)
         raw = read(root / "qualification.yaml")
         receipt = parse_keyed_yaml(raw)
+        if "account_binding" in receipt and receipt["account_binding"] != account:
+            fail("DAILY_ACQUISITION_RUN_UNVERIFIED")
         if (receipt.get("schema_version") != 1 or type(receipt.get("schema_version")) is not int
                 or receipt.get("state") != "owned_session_closed"
                 or any(receipt.get(k) is not True for k in ("accounts_verified", "session_logged_out", "browser_exit_verified"))

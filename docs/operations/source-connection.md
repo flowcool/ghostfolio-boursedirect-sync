@@ -117,9 +117,35 @@ explicit broker calendar clock:
   --notice-window-as-of 2026-10-12
 ```
 
+To collect only the configured source account, use the same private schema-1
+`source_mode: notices` configuration as the importer:
+
+```sh
+.venv/bin/python scripts/source_connection.py qualify-connection \
+  --notice-window-as-of 2026-10-12 --account-config inputs/account/daily.yaml
+```
+
+The configuration's `account` contains `source_account_ref`, persistent
+`account_key` UUIDv4 and explicit `target_account_id`; see
+[community account routing](../design/daily-saved-input-preview.md#community-account-routing).
+The path is relative to the project root and must be a private regular file.
+Only the configured stable source reference is selected, even when multiple
+accounts have the same wrapper label. Missing, ambiguous or wrong references,
+selected-option mismatches and unsupported wrappers refuse. Supported wrappers
+remain PEA and PEA-PME. The original two-account qualification is retained when
+this option is absent. This option is accepted only with notice-window
+qualification; it does not change ordinary `connect` or credential delivery.
+
+Private attempt and completion receipts retain the three-field binding and
+configuration hash. The daily importer refuses a changed binding before
+producing candidates, preserving the configured Ghostfolio destination. No
+account references or destination IDs are printed by the connection command.
+This interface has offline and disposable synthetic browser evidence; fresh
+single-account broker acquisition remains unverified.
+
 This selects the approved90day notice window and ignores the historical monthly
 statement preference. It navigates the observed operation calendars for both
-verified accounts, follows offered notice links and interprets only the exact
+verified accounts (or the single configured account), follows offered notice links and interprets only the exact
 source-described previous-month function. Monthly statement routes and form
 submissions are not selected. The first window month is read in full so source
 calendar/financial-day differences can be handled by the notice parser; daily
@@ -132,7 +158,7 @@ changed, missing or ambiguous navigation refuses rather than constructing an
 unqualified URL. All requests retain the existing bounded origin, exact request
 role and source provenance guards. Month/year rollover uses that observed source
 function, not an invented endpoint. Completion requires all window months for
-both accounts; a verified empty calendar supplies absence evidence without
+all selected accounts; a verified empty calendar supplies absence evidence without
 manufacturing a contract note. Qualification receipts record the selected window.
 
 This option changes read planning only. It retains the existing one-attempt,

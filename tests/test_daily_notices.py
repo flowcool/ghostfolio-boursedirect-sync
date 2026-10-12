@@ -28,6 +28,23 @@ def run_notices():
     return bd.preview_local_daily('inputs/config.yaml', 'inputs', '2026-10-12', 2000000, 256)
 
 
+def test_explicit_acquisition_binding_reaches_configured_destination():
+    config = setup_notices()
+    mutate(Path('inputs/run-a/qualification.yaml'), 'account_binding', config['account'])
+    run_notices()
+    rows = json.loads(report(config)['candidate_export'])['activities']
+    assert rows and all(row['accountId'] == config['account']['target_account_id'] for row in rows)
+
+
+@pytest.mark.parametrize('key,value', [('target_account_id', 'another-destination'),
+    ('account_key', '22222222-2222-4222-8222-222222222222'), ('source_account_ref', 'OTHER_ACCOUNT PEA')])
+def test_acquisition_binding_cannot_be_redirected_by_import_configuration(key, value):
+    config = setup_notices()
+    mutate(Path('inputs/run-a/qualification.yaml'), 'account_binding', {**config['account'], key: value})
+    with pytest.raises(RuntimeError, match='^DAILY_ACQUISITION_RUN_UNVERIFIED$'): run_notices()
+    assert not Path('outputs', 'daily-notices-' + config['account']['account_key'] + '.yaml').exists()
+
+
 def report(config):
     return yaml.safe_load(Path('outputs', 'daily-notices-' + config['account']['account_key'] + '.yaml').read_bytes())
 
