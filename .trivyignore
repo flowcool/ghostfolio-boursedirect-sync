@@ -1,12 +1,3 @@
-# Scoped Trivy allowlist for the BLOCKING image scan (docker-publish.yml).
-#
-# The supercronic binary (/usr/local/bin/supercronic) is no longer listed here:
-# it is excluded from the blocking scan via `skip-files` in docker-publish.yml,
-# and surfaced by the non-blocking advisory scan instead. Its Go-stdlib CVEs are
-# denial-of-service only, not fixable by us until upstream rebuilds with a newer
-# Go, and unreachable in this image (local cron only, no HTTP listener, no TLS
-# client). This stops every new supercronic Go-stdlib CVE from blocking all PRs.
-#
-# Add an entry below only for a genuine, case-by-case suppression in a package we
-# DO control (base image / Python). Each entry needs a reason and a re-review date.
-# (Currently none.)
+# Scoped Trivy allowlist for blocking scans in `container-check.yml` and
+# `release-image.yml`. It is intentionally empty: add a CVE only with a specific
+# reason, re-review date, and an issue that tracks its removal.

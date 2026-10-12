@@ -4,17 +4,19 @@
 
 Every pull request runs the versioned offline Python and Node.js suites, the
 documentation catalogue and local-link check, and a whitespace check. The
-container workflow builds and scans the native connector image for both AMD64 and
-ARM64 without publishing it; a separate build and scan covers the saved-input
-preview image. CodeQL analyzes Python and JavaScript, and Dependency Review blocks
-new moderate-or-higher dependency findings, including development dependencies.
+container workflow builds and scans the connector image for AMD64 and ARM64
+without publishing either image. The ARM64 check only detects build regressions:
+the browser-qualified release and supported connection path are AMD64-only. A
+separate build and scan covers the saved-input preview image. CodeQL analyzes
+Python and JavaScript, and Dependency Review blocks new moderate-or-higher
+dependency findings, including development dependencies.
 All workflows use read-only repository access unless a specific job needs a
 narrower permission grant.
 
 The opt-in disposable acceptance lab is not run by CI. It uses local Docker,
 synthetic data and resources owned by the invocation. CI tests use synthetic
-inputs and isolated state; they must never use broker credentials, production
-Ghostfolio, or the shared Beads database.
+inputs and isolated state; they must never use broker credentials or production
+Ghostfolio.
 
 ## Tagged release
 

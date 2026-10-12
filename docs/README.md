@@ -1,32 +1,28 @@
 # Documentation map
 
-Use this page to find the current operator guidance and the historical project
-record. The product's supported path is the AMD64 Docker Compose acquisition and
-preview described in the [top-level README](../README.md).
+The supported product path is the AMD64 Docker Compose acquisition and preview
+in the [top-level README](../README.md).
 
-## Use the release
+## Start here
 
-- [v0.1.0 release notes](releases/v0.1.0.md): supported behavior and known limits.
-- [Configuration mappings](../config/README.md): private, verified ISIN mappings.
+| Audience | Read |
+| --- | --- |
+| Operator | [README](../README.md), [v0.1.0 release notes](releases/v0.1.0.md), and [configuration mappings](../config/README.md) |
+| Contributor | [CONTRIBUTING](../CONTRIBUTING.md), [design contracts](design/index.md), and [build/release guarantees](../.github/BUILD.md) |
+| Auditor | [release notes](releases/v0.1.0.md), [build/release guarantees](../.github/BUILD.md), [release process](operations/releasing.md), and [license](../LICENSE) |
+
+## Current guidance
+
+- [Design contracts](design/index.md): acquisition, account, financial, preview,
+  and recovery boundaries.
 - [Release process](operations/releasing.md): tagged image and archive publication.
-- [Build and release guarantees](../.github/BUILD.md): CI, scanning and rollback.
 - [Changelog](../CHANGELOG.md): user-visible changes by release.
-- [License](../LICENSE) and [Playwright third-party license](../collector/licenses/playwright-LICENSE).
+- [Playwright third-party license](../collector/licenses/playwright-LICENSE).
 
-## Understand or change behavior
+## Historical and laboratory material
 
-- [Design contracts](design/index.md): current acquisition, account, financial,
-  preview and recovery boundaries.
-- [Plans](plans/README.md): historical proposals and implementation plans.
-- [Reviews](reviews/README.md): historical independent review findings.
-
-Plans, reviews and archived CLI material record earlier project stages. They are
-not additional product entrypoints or a substitute for the v0.1.0 release notes.
-The previous statement-based CLI guide is preserved in the
-[archive](archive/README.md) for source-checkout research only.
-
-## Operate the dedicated private lab
-
-- [Private lab connection procedures](operations/source-connection.md): lab
-  access, qualification and recovery. The released community Compose entrypoint
-  is documented in the [README quick start](../README.md#quick-start).
+[Plans](plans/README.md), [reviews](reviews/README.md), and the
+[archive](archive/README.md) preserve development history. They are not product
+instructions or a substitute for the release notes. The private
+[source-connection procedure](operations/source-connection.md) is for a
+dedicated laboratory path, not the released Compose quick start.
