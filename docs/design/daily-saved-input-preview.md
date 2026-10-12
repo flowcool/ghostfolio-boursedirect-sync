@@ -19,6 +19,39 @@ completed preview, including blocked previews; exit 1 indicates refusal. Standar
 output contains counts and fixed codes only. Scheduling this saved-input command
 does not activate unattended broker authentication or financial application.
 
+Instead of `documents` and `current_period`, the configuration can name completed
+collector directories. Keep `schema_version`, `account`, `mappings` and `snapshot`,
+and add these fields:
+
+```yaml
+acquisition_runs:
+  first: source-observations/qualification-example-a
+  second: source-observations/qualification-example-b
+index_encoding: observed_cp1252_declared_utf8
+```
+
+The command reads each `qualification.yaml` and its numbered `document-N.yaml`
+receipts, then discovers account-bound monthly statements, daily notes and the
+current calendar. There is no per-document list to maintain. Runs must confirm
+verified accounts, completed logout and browser exit. Receipt hashes, account IDs,
+wrapper, document names and observed URLs are checked against original saved
+bodies. Identical captures for a role and period/day are deduplicated; different
+bodies for that identity refuse before any journal replacement. Closed notes
+without a statement and a missing current calendar also refuse. Historic calendars
+are distinguished by their observed month navigation and URL parameters. A closed
+note's calendar day can differ from its financial dates within the same month;
+these differences are reported, and parsed financial dates remain unchanged.
+Cross-month disagreement refuses. Current notes retain their existing exact-day
+check.
+
+The same captured bytes are used for discovery and analysis, with no second body
+read. All read receipts and bodies participate in publication collision guards.
+The report records run receipt hashes and capture counts. At most 16 runs and 256
+capture receipts are inspected, within the aggregate 64 MiB limit. Authentication
+captures and other accounts' bodies are not read. These private receipts describe
+completed saved sessions; they do not establish today's acquisition cutoff.
+Existing financial refusal, currency and corporate-action boundaries still apply.
+
 The explicit broker calendar day defines an inclusive 90-day window. All supplied
 closed periods are validated before window selection; out-of-window sources can
 provide catch-up evidence. Future/current monthly statements are refused. The

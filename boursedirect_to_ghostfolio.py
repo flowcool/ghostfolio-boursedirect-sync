@@ -1888,12 +1888,174 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
     return journal, report
 
 
+def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth):
+    """Resolve original collector receipts; no fetching or freshness inference."""
+    runs = config.get("acquisition_runs")
+    if (not isinstance(runs, dict) or not 0 < len(runs) <= 16
+            or any(not isinstance(k, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", k)
+                   or not isinstance(v, str) or not v.strip() for k, v in runs.items())
+            or config.get("index_encoding") not in ("declared", "observed_cp1252_declared_utf8")):
+        fail("INVALID_DAILY_ACQUISITION_CONFIGURATION")
+    account = config["account"]
+    if not isinstance(account, dict) or not isinstance(account.get("source_account_ref"), str):
+        fail("INVALID_ACCOUNT_CONFIGURATION")
+    ref = account["source_account_ref"]
+    wrapper = next((w for w in ("PEA-PME", "PEA") if ref.endswith(" " + w)), None)
+    if wrapper is None:
+        fail("DAILY_ACQUISITION_ACCOUNT_UNVERIFIED")
+    broker_id = ref[:-(len(wrapper) + 1)]
+    paths, total, count, selected, captured = [], 0, 0, {}, {}
+    evidence = {}
+
+    def read(reference):
+        nonlocal total
+        path = Path(input_root) / reference
+        try:
+            raw = read_local_bytes(path, input_root, min(max_bytes, 4 * 1024 * 1024))
+        except OSError:
+            fail("DAILY_ACQUISITION_INPUT_UNAVAILABLE")
+        total += len(raw)
+        if total > 64 * 1024 * 1024:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        paths.append(path)
+        captured[str(reference)] = raw
+        return raw
+
+    for alias, directory in sorted(runs.items()):
+        root = Path(directory)
+        raw = read(root / "qualification.yaml")
+        receipt = parse_keyed_yaml(raw)
+        if (receipt.get("schema_version") != 1 or type(receipt.get("schema_version")) is not int
+                or receipt.get("state") != "owned_session_closed"
+                or any(receipt.get(k) is not True for k in ("accounts_verified", "session_logged_out", "browser_exit_verified"))
+                or not isinstance(receipt.get("account_ids"), dict)
+                or receipt["account_ids"].get(wrapper) != broker_id
+                or not isinstance(receipt.get("accounts"), dict)
+                or not isinstance(receipt["accounts"].get(wrapper), str)
+                or not re.fullmatch(r"[1-9][0-9]*", receipt["accounts"][wrapper])
+                or type(receipt.get("captures")) is not int or not 0 < receipt["captures"] <= 256):
+            fail("DAILY_ACQUISITION_RUN_UNVERIFIED")
+        count += receipt["captures"]
+        if count > 256:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        nc = receipt["accounts"][wrapper]
+        evidence[alias] = {"receipt_sha256": hashlib.sha256(raw).hexdigest(), "captures": receipt["captures"]}
+        for n in range(1, receipt["captures"] + 1):
+            metadata_ref = root / f"document-{n}.yaml"
+            metadata_raw = read(metadata_ref)
+            metadata = parse_keyed_yaml(metadata_raw)
+            role = metadata.get("role")
+            if metadata.get("account_wrapper") != wrapper or role not in ("monthly_statement", "contract_note", "frame_document"):
+                continue
+            # Ignore other frame roles without reading their bodies.
+            if role == "frame_document":
+                if not isinstance(metadata.get("url"), str):
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                try:
+                    frame_path = urlsplit(metadata["url"]).path
+                except ValueError:
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                if frame_path != "/priv/new/avis-operes.php":
+                    continue
+            if metadata.get("path") != f"document-{n}.html":
+                fail("DAILY_ACQUISITION_PATH_CONFLICT")
+            body_ref = root / metadata["path"]
+            body = read(body_ref)
+            meta = daily_current_metadata(metadata_raw, body, account, role)
+            url = urlsplit(meta["url"])
+            try:
+                query = parse_qs(url.query, strict_parsing=True)
+            except ValueError:
+                fail("DAILY_ACQUISITION_URL_CONFLICT")
+            if any(len(v) != 1 for v in query.values()) or query.get("nc") != [nc]:
+                fail("DAILY_ACQUISITION_URL_CONFLICT")
+            if role == "monthly_statement":
+                if (url.path != "/priv/new/releveCompte.php" or set(query) != {"nc", "dt", "type"}
+                        or query["type"] != ["RE"] or not re.fullmatch(r"[0-9]{8}", query["dt"][0])):
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                parsed = parse_statement(decode_document(body), max_depth)
+                period = parsed["period"]
+                next_month = (datetime.strptime(period, "%Y-%m").replace(day=28) + timedelta(days=4)).replace(day=1)
+                if (parsed["account_ref"] != ref or query["dt"][0] != (next_month - timedelta(days=1)).strftime("%Y%m%d")
+                        or period >= as_of[:7]):
+                    fail("DAILY_ACQUISITION_STATEMENT_CONFLICT")
+            elif role == "contract_note":
+                if (url.path != "/priv/new/releveOpe.php" or set(query) != {"nc", "type", "year", "month", "day", "trash"}
+                        or query["type"] != ["RO"] or query["trash"] != ["/avis.pdf"]
+                        or not re.fullmatch(r"[0-9]{4}", query["year"][0])
+                        or any(not re.fullmatch(r"[0-9]{1,2}", query[k][0]) for k in ("month", "day"))):
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                period = query["year"][0] + "-" + query["month"][0].zfill(2) + "-" + query["day"][0].zfill(2)
+                capture_period("note", period)
+                if period > as_of:
+                    fail("CURRENT_NOTE_DAY_CONFLICT")
+                soup = BeautifulSoup(decode_document(body), "html.parser")
+                refs = [text(cells(row)[1]) for row in soup.find_all("tr") if len(cells(row)) == 2 and text(cells(row)[0]) == "COMPTE N°"]
+                if refs != [ref]:
+                    fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+                try:
+                    parsed_note = parse_contract_note(decode_document(body), max_depth, include_coupons=True)
+                except RuntimeError:
+                    # The preview retains the original refusal for this period.
+                    pass
+                else:
+                    financial_days = sorted({note["date"].isoformat() for note in parsed_note["notes"]})
+                    if (any(day[:7] != period[:7] for day in financial_days)
+                            or period[:7] == as_of[:7] and financial_days != [period]):
+                        fail("DAILY_ACQUISITION_NOTE_DAY_CONFLICT")
+                    if financial_days != [period]:
+                        evidence[alias].setdefault("note_date_differences", {})[meta["sha256"]] = {
+                            "calendar_day": period, "financial_days": financial_days}
+            else:
+                periods = set(re.findall(rb"javascript:(?:AnneePrecedente|AnneeSuivante|MoisPrecedent|MoisSuivant)\('RO',[1-9][0-9]*,([0-9]{1,2}),([0-9]{4})\)", body))
+                if len(periods) != 1:
+                    fail("CURRENT_INDEX_PERIOD_UNVERIFIED")
+                month, year = next(iter(periods))
+                period = year.decode("ascii") + "-" + month.decode("ascii").zfill(2)
+                capture_period("statement", period)
+                if period != as_of[:7]:
+                    if (set(query) not in ({"nc", "tr", "month", "year"}, {"nc", "tr", "month", "year", "ong"})
+                            or query.get("tr") != ["RO"] or query.get("year") != [period[:4]]
+                            or query.get("month") != [str(int(period[5:]))]
+                            or "ong" in query and query["ong"] != ["5"]):
+                        fail("DAILY_ACQUISITION_URL_CONFLICT")
+                    continue
+                if set(query) != {"nc", "ong"} or query["ong"] != ["5"]:
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+            key = (role, period)
+            existing = selected.get(key)
+            if existing is not None and existing["sha256"] != meta["sha256"]:
+                fail("DAILY_ACQUISITION_CAPTURE_CONFLICT")
+            if existing is None:
+                selected[key] = {"document": str(body_ref), "metadata": str(metadata_ref), "sha256": meta["sha256"], "url": meta["url"]}
+    statements = {period: value for (role, period), value in selected.items() if role == "monthly_statement"}
+    notes = {period: value for (role, period), value in selected.items() if role == "contract_note"}
+    if any(day[:7] != as_of[:7] and day[:7] not in statements for day in notes):
+        fail("DAILY_ACQUISITION_NOTE_WITHOUT_STATEMENT")
+    expanded = {k: v for k, v in config.items() if k not in ("acquisition_runs", "index_encoding")}
+    expanded["documents"] = {"period_" + period.replace("-", "_"): {"statement": value["document"],
+        "notes": [note["document"] for day, note in sorted(notes.items()) if day[:7] == period]}
+        for period, value in sorted(statements.items())}
+    index = selected.get(("frame_document", as_of[:7]))
+    if index is None:
+        fail("DAILY_ACQUISITION_CURRENT_INDEX_MISSING")
+    expanded["current_period"] = {"period": as_of[:7], "index": index["document"], "index_metadata": index["metadata"],
+        "index_encoding": config["index_encoding"], "notes": {day: {k: note[k] for k in ("document", "metadata")}
+            for day, note in sorted(notes.items()) if day[:7] == as_of[:7]}}
+    return expanded, paths, total, evidence, captured
+
+
 def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
     if type(max_bytes) is not int or not 0 < max_bytes <= 64 * 1024 * 1024 or type(max_depth) is not int or not 0 < max_depth <= 256:
         fail("INVALID_DAILY_PREVIEW_LIMITS")
     daily_preview_day(as_of)
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
     config = parse_keyed_yaml(config_raw)
+    acquisition_paths, acquisition_bytes, acquisition_evidence, acquisition_capture = [], 0, None, None
+    if isinstance(config, dict) and "acquisition_runs" in config:
+        if set(config) != {"schema_version", "account", "mappings", "snapshot", "acquisition_runs", "index_encoding"}:
+            fail("INVALID_DAILY_ACQUISITION_CONFIGURATION")
+        config, acquisition_paths, acquisition_bytes, acquisition_evidence, acquisition_capture = discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
     if (not isinstance(config, dict) or set(config) not in ({"schema_version", "account", "mappings", "documents", "snapshot"},
             {"schema_version", "account", "mappings", "documents", "snapshot", "current_period"}) or type(config["snapshot"]) is not str):
         fail("INVALID_DAILY_PREVIEW_CONFIGURATION")
@@ -1901,7 +2063,13 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
     preparation_configuration(prep_raw, max_bytes, max_depth)
     if sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
         fail("DAILY_INPUT_LIMIT_EXCEEDED")
-    documents, paths = capture_preparation_sources(prep_raw, input_root, min(max_bytes, 4 * 1024 * 1024), max_depth)
+    if acquisition_capture is None:
+        documents, paths = capture_preparation_sources(prep_raw, input_root, min(max_bytes, 4 * 1024 * 1024), max_depth)
+    else:
+        documents = {alias: {"statement": acquisition_capture[entry["statement"]],
+            "notes": [acquisition_capture[path] for path in entry["notes"]]}
+            for alias, entry in config["documents"].items()}
+        paths = []
     current_capture = None
     if "current_period" in config:
         references = daily_current_configuration(config["current_period"], as_of)
@@ -1911,7 +2079,8 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
         captured_bytes = len(config_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values())
         for key, reference in references.items():
             path = Path(input_root) / reference
-            body = read_local_bytes(path, input_root, min(max_bytes, 4 * 1024 * 1024))
+            body = (read_local_bytes(path, input_root, min(max_bytes, 4 * 1024 * 1024))
+                    if acquisition_capture is None else acquisition_capture[reference])
             captured_bytes += len(body)
             if captured_bytes > 64 * 1024 * 1024:
                 fail("DAILY_INPUT_LIMIT_EXCEEDED")
@@ -1921,7 +2090,9 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
     snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
     if len(config_raw) + len(snapshot_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values()) + sum(map(len, (current_capture or {}).values())) > 64 * 1024 * 1024:
         fail("DAILY_INPUT_LIMIT_EXCEEDED")
-    inputs = [Path(config_path), snapshot_path, *paths]
+    if acquisition_bytes + len(config_raw) + len(snapshot_raw) > 64 * 1024 * 1024:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    inputs = [Path(config_path), snapshot_path, *paths, *acquisition_paths]
     account = config["account"]
     target = hashlib.sha256(account["target_account_id"].encode()).hexdigest()
     state = Path("state")
@@ -1954,6 +2125,8 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
                 fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
         previous = read_keyed_yaml(journal_path, state, max_bytes) if journal_path.exists() or journal_path.is_symlink() else None
         journal, report = compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth, current_capture)
+        if acquisition_evidence is not None:
+            report["acquisition_runs"] = acquisition_evidence
         if any(len(yaml.safe_dump(value).encode()) > max_bytes for value in (journal, report)):
             fail("DAILY_REPORT_LIMIT_EXCEEDED")
         atomic_private_yaml(binding, account)
