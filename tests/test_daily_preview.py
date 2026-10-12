@@ -164,7 +164,9 @@ def test_exact_coupon_replay_resolves_only_observed_exception():
     Path('inputs/snapshot.json').write_text(json.dumps({'count': 1, 'activities': [row()]}))
     assert run()['unresolved_exceptions'] == 1
     state = yaml.safe_load(paths(config)[0].read_text())
-    assert all(v['status'] == 'resolved_by_saved_evidence' for k,v in state['exceptions'].items() if k.startswith('coupon:'))
+    coupon_exceptions = [v for k,v in state['exceptions'].items() if k.startswith('coupon:')]
+    assert coupon_exceptions
+    assert all(v['status'] == 'resolved_by_saved_evidence' for v in coupon_exceptions)
     assert state['exceptions']['2026-09:destination']['status'] == 'unresolved'
 
 

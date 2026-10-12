@@ -165,3 +165,19 @@ def test_legacy_dividend_uncertain_profile_cannot_disappear_from_duplicate_guard
         existing['currency'] = 'USD'
     with pytest.raises(RuntimeError, match='^REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED$'):
         bd.reconcile_existing_activities(p, snapshot([existing]), {}, automatic=True)
+
+
+def test_trade_symbol_collision_cannot_be_hidden_by_last_isin_before_dividend_conversion():
+    raw, documents = sources()
+    config = bd.parse_keyed_yaml(raw)
+    for mapping in config['mappings'].values():
+        mapping['symbol'] = 'COLLISION.PA'
+    with pytest.raises(RuntimeError, match='^SECURITY_MAPPING_AMBIGUOUS$'):
+        bd.compute_prepared_sources(bd.yaml.safe_dump(config).encode(), documents, 1000000, 32)
+
+
+def test_same_isin_trade_and_dividend_can_share_the_verified_symbol():
+    artifact = plan()
+    dividend = next(a for a in artifact['activities'].values() if a['kind'] == 'DIVIDEND')
+    buy = next(a for a in artifact['activities'].values() if a['kind'] == 'BUY')
+    assert dividend['isin'] == buy['isin'] and dividend['symbol'] == buy['symbol']

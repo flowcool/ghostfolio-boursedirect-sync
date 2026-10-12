@@ -640,7 +640,11 @@ def convert_matched_trades(statement, documents, account, mappings, include_divi
                         "gross": note["gross"], "net": net, "net_currency": "EUR",
                         "brokerage": note["brokerage"], "vat": note["vat"], "fee": note["brokerage"],
                         "source_slot": event["slot"], "import_ready": False})
-    mapped_symbols = {record["symbol"]: record["isin"] for record in records}
+    mapped_symbols = {}
+    for record in records:
+        if record["symbol"] in mapped_symbols and mapped_symbols[record["symbol"]] != record["isin"]:
+            fail("SECURITY_MAPPING_AMBIGUOUS")
+        mapped_symbols[record["symbol"]] = record["isin"]
     for coupon in coupons["coupons"].values() if coupons else []:
         mapping = mappings.get(coupon["isin"])
         if mapping is None:
