@@ -1815,7 +1815,7 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
 
 
 def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth, current_capture=None):
-    """Saved-source continuity only; no acquisition clock, wire or remote write."""
+    """Saved-source continuity and candidate evidence; no acquisition clock or remote write."""
     day = daily_preview_day(as_of)
     window_start = (day - timedelta(days=89)).isoformat()
     account = config["account"]
@@ -1954,6 +1954,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
     # filtering must not hide duplicate source occurrences or ownership.
     all_prepared = {marker: activity for period in sorted(prepared_periods)
                     for marker, activity in prepared_periods[period].items()}
+    destination_diagnosis = observe_snapshot_discrepancies(all_prepared, remote, snapshot_raw)
     candidate_export = {"artifact_kind": "daily_candidate_wire_not_apply_authorization",
                         "import_ready": False, "activity_count": 0, "wire": None,
                         "excluded_outside_window": 0, "owned_count": 0, "adopted_count": 0,
@@ -2023,7 +2024,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
               "current_period_through_day_verified": False, "resume_requires_catchup": bool(stale),
               "exceptions": unresolved, "trade_observations": trade_observations, "coupon_observations": coupons,
               "window_source_events": window_events, "skipped_source_operations": skipped_operations,
-              "candidate_export": candidate_export,
+              "candidate_export": candidate_export, "destination_diagnosis": destination_diagnosis,
               "snapshot_sha256": hashlib.sha256(snapshot_raw).hexdigest(), "import_ready": False,
               "blockers": ["CURRENT_PERIOD_CUTOFF_UNVERIFIED", "FINANCIAL_APPLICATION_NOT_ACTIVATED"]}
     if gaps:
@@ -2919,26 +2920,11 @@ def reject_output_input_collision(destination, input_paths):
             fail("OUTPUT_INPUT_COLLISION")
 
 
-def diagnose_local_snapshot(config_path, input_root, max_bytes):
-    """Private uncertainty evidence, without adoption/history/delivery claims."""
-    config_raw = read_local_bytes(config_path, input_root, max_bytes)
-    config = parse_keyed_yaml(config_raw)
-    if set(config) != {"schema_version", "prepared", "snapshot"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
-        fail("INVALID_DIAGNOSIS_CONFIGURATION")
-    captures = {}
-    paths = [Path(config_path)]
-    for key in ("prepared", "snapshot"):
-        if not isinstance(config[key], str) or not config[key].strip():
-            fail("INVALID_DIAGNOSIS_CONFIGURATION")
-        paths.append(Path(input_root) / config[key])
-        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
-    prepared = validated_prepared_review(captures["prepared"])
-    started_at = datetime.now(timezone.utc).isoformat()
-    remote = parse_remote_activity_snapshot(captures["snapshot"])
-    activities = prepared["activities"]
+def observe_snapshot_discrepancies(activities, remote, snapshot_raw):
+    """Bounded source/snapshot evidence only; no adoption or date normalization."""
     if len(activities) * len(remote) > 1000000:
         fail("DIAGNOSIS_COMPARISON_LIMIT_EXCEEDED")
-    original = json.loads(captures["snapshot"], parse_float=Decimal, object_pairs_hook=unique_json_object)
+    original = json.loads(snapshot_raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
     timestamps = {r["id"]: r["date"] for r in original["activities"]}
     fingerprints = {r["remote_id"]: activity_financial_fingerprint(r) for r in remote}
     fields = ("target_account_id", "operation_date", "kind", "symbol", "data_source", "price_currency",
@@ -2995,6 +2981,27 @@ def diagnose_local_snapshot(config_path, input_root, max_bytes):
     for entry in sources.values():
         if any(uses[key] > 1 for key in entry["candidates"]):
             entry["codes"] = sorted(set(entry["codes"]) | {"SHARED_CANDIDATE_REVIEW_REQUIRED"})
+    return {"activities": sources, "remote_evidence": evidence}
+
+
+def diagnose_local_snapshot(config_path, input_root, max_bytes):
+    """Private uncertainty evidence, without adoption/history/delivery claims."""
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "prepared", "snapshot"} or type(config["schema_version"]) is not int or config["schema_version"] != 1:
+        fail("INVALID_DIAGNOSIS_CONFIGURATION")
+    captures = {}
+    paths = [Path(config_path)]
+    for key in ("prepared", "snapshot"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            fail("INVALID_DIAGNOSIS_CONFIGURATION")
+        paths.append(Path(input_root) / config[key])
+        captures[key] = read_local_bytes(paths[-1], input_root, max_bytes)
+    prepared = validated_prepared_review(captures["prepared"])
+    started_at = datetime.now(timezone.utc).isoformat()
+    remote = parse_remote_activity_snapshot(captures["snapshot"])
+    diagnosis = observe_snapshot_discrepancies(prepared["activities"], remote, captures["snapshot"])
+    sources, evidence = diagnosis["activities"], diagnosis["remote_evidence"]
     artifact = {"schema_version": 1, "artifact_kind": "offline_diagnosis_not_adoption_or_delivery",
                 "engine_contract": "strict-offline-diagnosis-v1", "import_ready": False,
                 "evaluation_started_at_utc": started_at, "account_key": prepared["account_key"],

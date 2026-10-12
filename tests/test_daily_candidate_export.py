@@ -136,3 +136,61 @@ def test_source_subset_wire_remains_blocked_by_unqualified_period_and_current_cu
     assert export['import_ready'] is saved['import_ready'] is False
     assert saved['exceptions']['2026-08:source']['status']=='unresolved'
     assert 'ACQUISITION_COVERAGE_GAP' in saved['blockers']
+
+
+def test_daily_diagnosis_explains_legacy_timestamp_and_fee_difference_without_adoption():
+    config = setup()
+    raw = bd.yaml.safe_dump({k:v for k,v in config.items() if k!='snapshot'}).encode()
+    captures, _ = bd.capture_preparation_sources(raw, 'inputs', 1000000, 32)
+    prepared = bd.compute_prepared_sources(raw, captures, 1000000, 32)['artifact']['activities']
+    rows = []
+    for i, activity in enumerate(prepared.values()):
+        activity = {**activity, 'operation_date':date.fromisoformat(activity['operation_date'])}
+        remote = row(activity, 'legacy-'+str(i))
+        remote['date'] = activity['operation_date'].isoformat()+'T13:14:15.123Z'
+        remote['comment'] = 'Private manual entry text'
+        if i == 1:
+            remote['fee'] += 1
+        rows.append(remote)
+    Path('inputs/snapshot.json').write_text(json.dumps({'count':3, 'activities':rows}))
+    before = Path('inputs/snapshot.json').read_bytes()
+    run()
+    saved = report(config)
+    diagnosis = saved['destination_diagnosis']
+    assert len(diagnosis['activities']) == len(diagnosis['remote_evidence']) == 3
+    for i, marker in enumerate(prepared):
+        observed = diagnosis['activities'][marker]
+        candidate = observed['candidates']['legacy-'+str(i)]
+        assert candidate['exact_financial_match'] is (i != 1)
+        assert candidate['different_fields'] == (['fee'] if i == 1 else [])
+        evidence = diagnosis['remote_evidence']['legacy-'+str(i)]
+        assert evidence['original_timestamp'] == rows[i]['date']
+        assert evidence['date_context_verified'] is False
+        assert 'CANDIDATE_CONTEXT_UNVERIFIED' in observed['codes']
+    assert saved['candidate_export']['reconciliation_code'] == 'REMOTE_CANDIDATE_CONTEXT_UNVERIFIED'
+    assert saved['candidate_export']['wire'] is None and saved['import_ready'] is False
+    assert rows[0]['comment'] not in paths(config)[1].read_text()
+    assert Path('inputs/snapshot.json').read_bytes() == before
+    original = paths(config)[1].read_bytes()
+    run()
+    assert paths(config)[1].read_bytes() == original
+
+
+def test_daily_dividend_diagnosis_retains_booking_day_and_net_amount_discrepancies():
+    config = mixed_setup()
+    activity = next(a for a in internal_plan().values() if a['kind']=='DIVIDEND')
+    remote = row(activity)
+    remote.update(date='2026-09-13T22:00:00.000Z', quantity=3, unitPrice=0.8)
+    Path('inputs/snapshot.json').write_text(json.dumps({'count':1, 'activities':[remote]}))
+    run()
+    saved = report(config)
+    observed = saved['destination_diagnosis']['activities'][activity['id']]
+    candidate = observed['candidates'][remote['id']]
+    assert candidate['exact_financial_match'] is False
+    assert candidate['different_fields'] == ['operation_date', 'quantity', 'unit_price']
+    evidence = saved['destination_diagnosis']['remote_evidence'][remote['id']]
+    assert evidence['original_timestamp'] == remote['date']
+    assert evidence['quantity'] == '3' and evidence['unit_price'] == '0.8'
+    assert observed['source']['quantity'] == '1' and observed['source']['unit_price'] == '1.9'
+    assert saved['candidate_export']['wire'] is None
+    assert saved['candidate_export']['reconciliation_code'] == 'REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED'

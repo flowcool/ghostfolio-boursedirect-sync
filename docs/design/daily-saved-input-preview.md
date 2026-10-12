@@ -154,6 +154,19 @@ cash review and global snapshot comparison, with net received cash and broker
 booking date. Existing destination activities are never rewritten, adopted or
 deleted; absent candidates never authorize creation.
 
+`destination_diagnosis` explains destination refusals for every fully prepared
+source activity, before window selection. It reuses the bounded
+[saved-snapshot diagnosis](offline-diagnosis.md): source financial fields,
+candidate IDs, differing fields, exact/similar observations and one keyed map of
+original timestamps, decimal financial values and eligibility flags. A legacy
+time of day remains visible even when the calendar day agrees; a fee or dividend
+amount/date difference remains a discrepancy. No timestamp is normalized and
+no context flag, adoption decision or exception is cleared by this evidence.
+Private free-text comments are excluded. The one-million comparison and
+ten-thousand candidate limits apply; a budget refusal preserves existing output.
+Unsupported periods still require complete source preparation before entering
+this diagnosis; their source and coupon observations remain separately visible.
+
 `state/daily-<target-sha256>.yaml` owns observed period fingerprints and keyed
 exceptions. `outputs/daily-<account-uuid>.yaml` publishes the current preview.
 Existing `state/binding-<account-uuid>.yaml` and preparation ledger bindings are
