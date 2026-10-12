@@ -334,6 +334,12 @@ docker compose -f compose.daily.yaml build preview
 DAILY_CONFIG=account/daily.yaml docker compose -f compose.daily.yaml run --rm preview
 ```
 
+The saved daily report includes candidate wire bytes only for unowned, unambiguous
+activities inside the approved 90-day window, after complete source validation.
+Owned/adopted rows and older new rows are excluded. Candidate bytes remain a
+private preview; unresolved history, source, current-period and application gates
+stay visible and no production write is authorized.
+
 The private work directory must belong to UID/GID 1000. A completed preview exits
 2, including retained financial blockers. The [daily contract](docs/design/daily-saved-input-preview.md#compose-execution)
 explains configuration, persistent state, date replay and scheduling boundaries.

@@ -1846,6 +1846,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
     remote = parse_remote_activity_snapshot(snapshot_raw)
     reviews = {}
     trade_observations = {}
+    prepared_periods = {}
     window_events = {}
     skipped_operations = {}
     seen = set()
@@ -1919,6 +1920,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
                 problems["source"] = str(error)
             else:
                 source["complete_source_matching"] = True
+                prepared_periods[period] = prepared
                 try:
                     trade_observations[period] = reconcile_existing_activities(prepared, remote, {}, automatic=True)
                 except RuntimeError as error:
@@ -1944,6 +1946,38 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
                 journal["exceptions"][key] = {"period": period, "status": "unresolved", "code": problems[role]}
             elif key in journal["exceptions"] and (role == "source" or source["complete_source_matching"]):
                 journal["exceptions"][key]["status"] = "resolved_by_saved_evidence"
+    # Reconcile the entire qualified set before selecting days. Window
+    # filtering must not hide duplicate source occurrences or ownership.
+    all_prepared = {marker: activity for period in sorted(prepared_periods)
+                    for marker, activity in prepared_periods[period].items()}
+    candidate_export = {"artifact_kind": "daily_candidate_wire_not_apply_authorization",
+                        "import_ready": False, "activity_count": 0, "wire": None,
+                        "excluded_outside_window": 0, "owned_count": 0, "adopted_count": 0,
+                        "source_complete_periods": sorted(prepared_periods),
+                        "blocked_source_periods": sorted(p for p, evidence in journal["periods"].items()
+                                                         if not evidence["complete_source_matching"]),
+                        "reconciliation_code": None}
+    try:
+        combined = reconcile_existing_activities(all_prepared, remote, {}, automatic=True)
+    except RuntimeError as error:
+        candidate_export["reconciliation_code"] = str(error)
+    else:
+        candidate_export["owned_count"] = len(combined["owned"])
+        candidate_export["adopted_count"] = len(combined["adopted"])
+        if combined["candidates"]:
+            candidate_export["reconciliation_code"] = "AUTOMATIC_ACTIVITY_ADOPTION_UNCERTAIN"
+        else:
+            selected = {marker: all_prepared[marker] for marker in combined["new"]
+                        if window_start <= all_prepared[marker]["operation_date"] <= as_of}
+            candidate_export["excluded_outside_window"] = len(combined["new"]) - len(selected)
+            try:
+                candidate_wire = build_wire_payload(selected) if selected else None
+            except RuntimeError as error:
+                candidate_export["reconciliation_code"] = str(error)
+            else:
+                candidate_export["activity_count"] = len(selected)
+                candidate_export["wire"] = None if candidate_wire is None else {
+                    "body_utf8": candidate_wire["body"].decode("utf-8"), "sha256": candidate_wire["sha256"]}
     coupons = compare_coupon_snapshot(reviews, account, config["mappings"], snapshot_raw) if reviews else None
     if coupons is not None:
         occurrences = {}
@@ -1985,6 +2019,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
               "current_period_through_day_verified": False, "resume_requires_catchup": bool(stale),
               "exceptions": unresolved, "trade_observations": trade_observations, "coupon_observations": coupons,
               "window_source_events": window_events, "skipped_source_operations": skipped_operations,
+              "candidate_export": candidate_export,
               "snapshot_sha256": hashlib.sha256(snapshot_raw).hexdigest(), "import_ready": False,
               "blockers": ["CURRENT_PERIOD_CUTOFF_UNVERIFIED", "FINANCIAL_APPLICATION_NOT_ACTIVATED"]}
     if gaps:

@@ -236,3 +236,26 @@ all prepared activity kinds. Destination, holdings, history and application gate
 remain unresolved until their own evidence passes; complete source matching does
 not grant import readiness. A malformed trade or unsupported corporate action
 still prevents complete-period preparation, even when coupon review succeeds.
+
+## Rolling-window candidate bytes
+
+`candidate_export` previews deterministic reviewed wire for unowned, unambiguous
+activities from source-complete closed periods. The entire supported prepared
+set is reconciled together before selecting the inclusive 90-day source booking
+window. Owned markers and certain unique adopted records are excluded; old new
+activities are counted as `excluded_outside_window`. A legacy-context refusal or
+unresolved automatic multiplicity produces no wire and retains a fixed
+`reconciliation_code`. Invalid or unsupported source periods are listed separately.
+
+The preview contains a private `body_utf8` and SHA256, and is explicitly
+`daily_candidate_wire_not_apply_authorization` with false readiness. Its subset
+can be inspected even while another source period refuses. Original whole-ledger
+controls, unresolved exceptions, incomplete history, current-month cutoff and
+application gates remain in the enclosing report. No caller may dispatch this
+subset merely because bytes exist: it is not a frozen application review and
+does not authorize a partial unsupported-period import. The existing source
+replay/frozen-review/exact-wire application boundary remains mandatory.
+
+Filtering cannot hide old malformed sources or clear prior uncertainty. A repeat
+against identical captures/snapshot/day is byte-identical. This saved-input stage
+still performs no broker request, Ghostfolio GET/POST or financial mutation.
