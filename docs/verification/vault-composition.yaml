@@ -1163,3 +1163,104 @@ returned_review_retention_and_lab_image:
   live_observation_or_runtime_change: false
   rollback: Revert this source change; preserve retained private evidence and original
     lab migration receipt. Existing running lab containers are unchanged.
+security_review_58_release_hardening:
+  source_issue: https://github.com/flowcool/ghostfolio-boursedirect-sync/issues/58
+  scope: 'GitHub security review #58 approved release hardening; synthetic/offline
+    only'
+  source_sha256:
+    .github/BUILD.md: f1b249f0f9076d28830903e4a8ddf5993abac6e377344be5d186016dc014ad6d
+    .github/ISSUE_TEMPLATE/bug_report.yml: 84a63e10cd592870ad66361fa4f74fdff338f651938bb47f3a1c7333c564d0b9
+    .github/SECURITY.md: c87b0448d3ff71c7abfa4f5954171520cc8e30629a5e0c3f23bff2bb26963b41
+    .github/workflows/container-check.yml: 7a8e3f255d6ac0625cdb1d2d1c2bdf09dbb5ac8beac422c44283f90b3daed645
+    .github/workflows/release-image.yml: 9762a5e8fe797770b52d7293db9510133dbb24b67cd288f733de313d933744ed
+    .trivyignore: 10aadbdf525862f3d64338cece6f0ee8db82629cd35f3c44a3dc13a6e317db61
+    CONTRIBUTING.md: 9cc0b9cd84d265434302546962dfdcd270c22becc861af3f65d166baad7e78ea
+    Dockerfile: 83fe20f1724d51eab648633ec2fe4a10ea90a518428144a190512f96b5c081c2
+    README.md: 444953ac9911f98960c65cc99ce71ff3704d7299a06709e5fb8a4bf7149629ad
+    compose.yaml: 25e9c8e8bfb5490f27e97ca4845e6627052b51972d8e05b18a3c3c845dc34249
+    docs/operations/releasing.md: 38411b30e9afcb9ac1d67ed53f7f421ae94963ed92792dc9d71400c841f1cf19
+    docs/operations/source-connection.md: 833c1a9f9154bfed555758b0078177128540b47d954fe1a0998e40a136b5e2c1
+    scripts/release_package.py: 62b3356653c6ee954c6d0b78aa930d1f3a91318704505b21696e45210515deb1
+    scripts/smoke-connector-image.sh: 8f6ce30ae8b576ae8c2d3538e6965cb010c1dfa2858cbd008179083b30866f19
+    tests/test_native_cdp_runner.py: 56e216a24f4b7b3c2c3b40272e26a74c7dad48533ca805190285272aaad5d2c9
+    tests/test_release_labels.py: 8da579999d94e82b1b106460850268097e60c106d8097ac276cf98aeb7f81d1c
+    tests/test_release_package.py: 92231cfffb2916b217ffe89c76b65da1d0e0dbc3772047c70a8fc2a33d006a74
+  runtime_inputs_sha256: cc2253df7ee54dc3df09f4ce97d940b6f18366750e1ff90ea51d83a42f9ef0b6
+  runtime_input_set: Tracked .py/.mjs/.sh outside root tests/, docs/ and .github/,
+    plus Dockerfiles, .dockerignore, requirements and collector package/source/browser
+    pins; clean checkout bytes matched
+  full_offline:
+    command: bash scripts/verify-local.sh
+    environment: Isolated fresh local checkout; new venv and npm ci; no private inputs/outputs/state
+      copied
+    python_version: Python 3.13.5
+    node_version: v20.19.2
+    exit_code: 0
+    python_passed: 1631
+    node_passed: 672
+    documentation_and_whitespace: passed
+    log_sha256: d3f65ea83bb8be8466df5de5941942fbb44c912c9ac9c3320e017dc87f59a9ed
+    unchanged_runtime_proof_reuse: Subsequent workflow/prose/evidence or regression-only
+      edits do not change qualified importer/collector/image inputs
+  final_affected:
+    command: .venv/bin/python -m pytest tests/test_release_labels.py -q
+    exit_code: 0
+    passed: 10
+    reason: Final workflow regression additionally asserts pull_request_target remains
+      the sole trigger
+  image:
+    build_command: docker build --platform linux/amd64 --label io.flowcool.qualification=security-review-58
+      --iidfile tmp/security-58-image-id .
+    image_id: sha256:c5a9cc135f5fc3139fc8b959a2fa890c998cffacf1207745f1395bd897428adf
+    architecture: amd64
+    exit_code: 0
+    build_log_sha256: 5ab8c1840b0c6ce8e6f56d812c824c01fc5f1172e5cf6d34323b63a46bf31b22
+    smoke_command: bash scripts/smoke-connector-image.sh <retained-image-id>
+    smoke_exit_code: 0
+    smoke_log_sha256: 4297c6a43f59e5bb11f7a69e5333caa3ed189deefbdbb261163545bdeb3e9f0d
+    network: none
+    credentials: none
+    persistent_mounts: none
+    created_containers_cleanup: automatic --rm
+    checks:
+    - system Python proxy import
+    - venv/application dependencies
+    - Node/YAML imports
+    - actual CLI executable SHA256/version
+    - browser version execution
+    - curl/unzip/python3-venv/versioned-venv packages absent
+    unsupported_architecture: TARGETARCH=arm64 override on AMD64 refused before tool
+      downloads, exit 1; no ARM runtime qualification claimed
+    browser_sandbox_evidence: Unchanged pinned browser/source/security profile; reused,
+      no broker login or sandbox requalification attempted
+  registry_read_only:
+    reference: ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0
+    digest: sha256:7a810263c0042fba2c163600287acb27bee597542010113e3cf3b151781daa89
+    raw_manifest_sha256: 7a810263c0042fba2c163600287acb27bee597542010113e3cf3b151781daa89
+    config_digest: sha256:1c35e98ba152886d5a755a23366f6bb32b9c0b3f3c1b985ca10e9d2bede71294
+  reported_test_failures:
+    missing_node_dependency: Reproduced in isolated checkout before npm ci; explicit
+      setup assertion gives required command, exit 1
+    vault_logout_status: Unreproduced with complete prerequisites; targeted and full
+      clean-checkout tests pass; original cause not claimed
+  qualification_boundary:
+    final_head_ci_trivy_executed: false
+    final_head_external_review_executed: false
+    existing_releases_replaced: false
+    broker_attempts: 0
+    financial_writes: 0
+  rollback: Revert the atomic hardening commit; existing production/lab services and
+    published release assets are unchanged
+  documentation_pr_59_integration:
+    base_commit: 2dc229b6ea80877a42bac4185d02a8ca82aac254
+    preserved: Ordered operator README, synthetic examples, SVG banner and archive inclusion
+    affected_command: .venv/bin/python -m pytest tests/test_release_package.py tests/test_release_labels.py -q
+    affected_passed: 44
+    docs_command: python3 scripts/check-docs.py
+    docs_result: passed
+    source_sha256:
+      scripts/release_package.py: 14231041207a0b2800dfaba930cfbc56c701e4f45503024d20cafaf49fdb27f0
+      tests/test_release_package.py: a5892f75b5b8862995052ae4391f308070f72a6b7427ef8f8dd636a67e1187e1
+      README.md: 12caafe4ba8f9d4c7eef69ddec3fd4c51423cf7924c1249aa28200af0c87cde9
+    prior_proof: Full offline and image results above precede this integration; packaging
+      changed only to preserve the SVG allowlist and its regression. Final-head CI remains required.

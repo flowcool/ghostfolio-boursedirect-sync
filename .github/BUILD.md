@@ -4,13 +4,10 @@
 
 Every pull request runs the versioned offline Python and Node.js suites, the
 documentation catalogue and local-link check, and a whitespace check. The
-container workflow builds and scans the connector image for AMD64 and ARM64
-without publishing either image. The ARM64 build-and-scan check detects build
-and image-vulnerability regressions; it does not qualify the browser-dependent
-product path, which remains AMD64-only. A separate build and scan covers the
-saved-input preview image. CodeQL analyzes
-Python and JavaScript, and Dependency Review blocks new moderate-or-higher
-dependency findings, including development dependencies.
+container workflow builds, smoke-checks and scans the native connector image for
+AMD64 only without publishing it; a separate AMD64 build and scan covers the saved-input
+preview image. CodeQL analyzes Python and JavaScript, and Dependency Review blocks
+new moderate-or-higher dependency findings, including development dependencies.
 All workflows use read-only repository access unless a specific job needs a
 narrower permission grant.
 
@@ -29,7 +26,10 @@ verifies an anonymous pull of the versioned image and publishes the draft;
 the publication event promotes that same version to `latest`. A new GHCR package defaults to private and may need its visibility changed to public in
 package settings before it can be pulled anonymously; see GitHub's
 [container registry visibility guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
-The release archive pins the matching image version and includes the required Compose files,
+The release archive pins the matching image version **and SHA256 digest**. After
+the checked image is pushed, the workflow reads its repository digest to generate
+the archive and `IMAGE_DIGEST`; `SHA256SUMS` covers both downloadable files. The
+archive includes the required Compose files,
 browser seccomp profile, example environment file, configuration guide,
 third-party license text and tracked documentation. It excludes application
 source and local build inputs.

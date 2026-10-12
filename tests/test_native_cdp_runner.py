@@ -33,6 +33,10 @@ def result(code=0, stdout=b'', stderr=b''):
 
 
 def test_archive_preserves_transitive_imports_and_pins_final_sources(runner):
+    assert (ROOT / 'collector/node_modules/yaml/package.json').is_file(), (
+        'Missing collector dependencies: run '
+        'npm ci --prefix collector --ignore-scripts --no-audit --no-fund before pytest'
+    )
     raw, hashes = runner.archive_sources()
     with tarfile.open(fileobj=io.BytesIO(raw), mode='r:') as archive:
         names = set(archive.getnames())

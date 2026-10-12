@@ -6,6 +6,43 @@ dedicated private acquisition lab. Before operating that lab, resume through
 `scripts/source_connection.py` and its private `inputs/lab/replay.yaml` inventory;
 those SSH and Docker procedures do not apply to the community Compose path.
 
+## Broker site changes and requalification
+
+An unexpected form, ambiguous account inventory, foreign realm/frame, redirect,
+request role, or document header must refuse rather than guess a new route or
+continue with credentials. The community terminal can report the broad fixed
+`SOURCE_CONNECT_REFUSED` code; that code alone does not identify a site change.
+The private receipts retain structural context for diagnosis without making raw
+broker pages or authentication data safe to publish.
+
+1. Stop the attempt and preserve its private journal, receipts and original
+   documents. An uncertain password/OTP outcome is not a failed attempt that can
+   safely be repeated. Never loop logins, replay an OTP, or remove a fence; three
+   wrong passwords can lock the broker account.
+2. Reproduce the structural mismatch with synthetic saved HTML/native events
+   before editing policy. Compare the relevant owned form, origin, request role,
+   frame/realm, selected account header and document window with the existing
+   [acquisition contract](../design/online-source-inspection.md). Keep private
+   source evidence off Git and use neutral aliases in public regressions.
+3. If current public authentication source is indispensable, use only the
+   separately gated credential-free observation procedure below. Requalification
+   is not permission for a new broker login or an expanded endpoint allowlist.
+   A source-pin update needs evidence for the changed source and affected roles;
+   changing a hash alone cannot grant credential dispatch.
+4. Run affected offline refusal/success regressions. The existing coverage includes
+   one bound password submission and no second TOTP form submission
+   (`collector/tests/source-authentication-dom.test.mjs`); expiry, redirect/frame
+   drift and crash-after-consumption restart fences (`collector/tests/core.test.mjs`);
+   durable retention before request continuation and HTTP-auth cancellation
+   (`collector/tests/source-authentication-gate.test.mjs`); finalization before
+   success (`collector/tests/auth-finalization.test.mjs`); and exact account/header
+   and observed read-path matching (`tests/test_source_qualification.py`).
+5. Qualify only changed native/browser boundaries in an owned disposable,
+   credential-free environment, then require the final offline suite, CI and
+   external review. Reuse unchanged browser/vault/cleanup evidence. A later real
+   broker attempt still requires its separate explicit authority and verified
+   retained state; synthetic success cannot clear an uncertain live journal.
+
 ## Dedicated private lab entry sequence
 
 Run from the project root:

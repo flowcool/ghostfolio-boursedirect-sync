@@ -27,6 +27,14 @@ npm ci --prefix collector --ignore-scripts --no-audit --no-fund
 npm test --prefix collector
 ```
 
+Install the collector dependencies **before pytest**, even if you only want the
+Python suite: the synthetic vault IPC and native source-archive tests invoke
+Node.js or include its pinned YAML dependency. A missing
+`collector/node_modules/yaml/package.json` is a setup failure; the archive test
+reports the exact `npm ci` command. Report other failures with the failing test
+IDs, Node/Python versions and synthetic assertion output after completing both
+installation steps. Do not substitute real credentials or lab state for fixtures.
+
 Checks use synthetic inputs and isolated state. Do not put broker documents,
 credentials, account identifiers, or private acquisition receipts in GitHub
 issues, pull requests, or fixtures. Never point a test or disposable lab at a
