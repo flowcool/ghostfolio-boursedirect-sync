@@ -36,6 +36,22 @@ binds the published manifest to the scanned/smoked image without confusing a loc
 image ID with a registry digest. See Docker's
 [registry manifest inspection](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/).
 
+## Release notes
+
+Use the same two-part release format as the DEGIRO connector: concise operator
+notes from `docs/releases/vX.Y.Z.md`, followed by GitHub's generated changelog.
+Start the notes with `# vX.Y.Z — Short operator benefit`; the workflow uses that
+heading as the public release title.
+The workflow converts local documentation links to absolute URLs at the release
+version and uses `gh release create --generate-notes --notes-file` to prepend the
+operator notes. `.github/release.yml` groups merged PRs by the labels assigned by
+`pr-release-labels.yml`; keep these categories and label names aligned across the
+connector repositories. GitHub adds PR/author links and the full comparison link.
+No additional GitHub repository setting is needed for this notes format.
+
+Editing a published release's prose does not change its image, tag or assets.
+Keep artifact corrections in a new version; never replace published assets.
+
 ## Release checklist
 
 1. Update the changelog, release notes, versioned image reference and release
