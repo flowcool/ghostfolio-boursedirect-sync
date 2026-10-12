@@ -46,7 +46,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         "CHANGELOG.md": "# Changes\n",
         "CONTRIBUTING.md": "# Contributing\n",
         "LICENSE": "license\n",
-        "README.md": "# Operator bundle\n[Build source](Dockerfile)\n[Bundle docs](docs/)\n[Source scripts](scripts/)\n",
+        "README.md": "# Operator bundle\n```yaml\nimage: ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:" + "b" * 64 + "\n```\n[Build source](Dockerfile)\n[Bundle docs](docs/)\n[Source scripts](scripts/)\n",
         "Dockerfile": "FROM scratch\n",
         "compose.yaml": "services:\n  bitwarden:\n    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0}\n",
         "compose.ghostfolio.yaml": "services:\n  bitwarden:\n    networks: [ghostfolio]\n",
@@ -91,6 +91,9 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
     assert b"v0.1.0" not in content["compose.yaml"]
     reference = "ghcr.io/flowcool/ghostfolio-boursedirect-sync:v1.2.3@" + DIGEST
     assert reference.encode() in content["compose.yaml"]
+    assert reference.encode() in content["README.md"]
+    assert b"v0.1.0" not in content["README.md"]
+    assert ("b" * 64).encode() not in content["README.md"]
     assert content["IMAGE_DIGEST"] == (reference + "\n").encode()
     assert (output / "IMAGE_DIGEST").read_bytes() == content["IMAGE_DIGEST"]
     assert b"[Bundle docs](docs/)" in content["README.md"]

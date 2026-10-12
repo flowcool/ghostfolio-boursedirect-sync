@@ -24,7 +24,7 @@ third-party license text, example environment file, mapping guide, README,
 CONTRIBUTING, CHANGELOG, LICENSE, and tracked documentation. It does not contain
 the application source, Docker build context, or local build override. The image
 reference is pinned to the release version and the pushed image's SHA256 digest
-in the bundled default Compose file. `IMAGE_DIGEST` contains that exact reference
+in the bundled default Compose file and the copied README image example. `IMAGE_DIGEST` contains that exact reference
 inside the archive and as a separate release asset. `SHA256SUMS` covers the archive
 and the separate reference file. The workflow validates public inputs before
 building, then packages only after the scanned/smoked image is pushed and its

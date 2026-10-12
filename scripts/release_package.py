@@ -166,6 +166,7 @@ def create_bundle(root, tag, output_dir, tracked_paths, image_digest):
     reference = image_reference(tag, image_digest)
     entries = bundle_entries(root, tag, tracked_paths)
     entries["compose.yaml"] = render_compose(entries["compose.yaml"], tag, image_digest)
+    entries["README.md"] = IMAGE_REFERENCE.sub(reference, entries["README.md"].decode("utf-8")).encode("utf-8")
     entries["IMAGE_DIGEST"] = (reference + "\n").encode("utf-8")
     bundle_name = "ghostfolio-boursedirect-sync-" + tag
     output_dir.mkdir(parents=True, exist_ok=True)
