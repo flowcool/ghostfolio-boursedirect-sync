@@ -2038,11 +2038,12 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
 
 def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth):
     """Resolve original collector receipts; no fetching or freshness inference."""
+    notice_only = config.get("source_mode") == "notices"
     runs = config.get("acquisition_runs")
     if (not isinstance(runs, dict) or not 0 < len(runs) <= 16
             or any(not isinstance(k, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", k)
                    or not isinstance(v, str) or not v.strip() for k, v in runs.items())
-            or config.get("index_encoding") not in ("declared", "observed_cp1252_declared_utf8")):
+            or not notice_only and config.get("index_encoding") not in ("declared", "observed_cp1252_declared_utf8")):
         fail("INVALID_DAILY_ACQUISITION_CONFIGURATION")
     account = config["account"]
     if not isinstance(account, dict) or not isinstance(account.get("source_account_ref"), str):
@@ -2093,6 +2094,8 @@ def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
             metadata_raw = read(metadata_ref)
             metadata = parse_keyed_yaml(metadata_raw)
             role = metadata.get("role")
+            if notice_only and role != "contract_note":
+                continue
             if metadata.get("account_wrapper") != wrapper or role not in ("monthly_statement", "contract_note", "frame_document"):
                 continue
             # Ignore other frame roles without reading their bodies.
@@ -2178,6 +2181,8 @@ def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
                 selected[key] = {"document": str(body_ref), "metadata": str(metadata_ref), "sha256": meta["sha256"], "url": meta["url"]}
     statements = {period: value for (role, period), value in selected.items() if role == "monthly_statement"}
     notes = {period: value for (role, period), value in selected.items() if role == "contract_note"}
+    if notice_only:
+        return notes, paths, total, evidence, captured
     if any(day[:7] != as_of[:7] and day[:7] not in statements for day in notes):
         fail("DAILY_ACQUISITION_NOTE_WITHOUT_STATEMENT")
     expanded = {k: v for k, v in config.items() if k not in ("acquisition_runs", "index_encoding")}
@@ -2193,12 +2198,201 @@ def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
     return expanded, paths, total, evidence, captured
 
 
+def notice_activity(note, account, mappings):
+    """Independent notice conversion; never manufacture a monthly ledger."""
+    if note["kind"] not in ("BUY", "SELL", "COUPON"):
+        fail("UNSUPPORTED_NOTICE_OPERATION")
+    mapping = mappings.get(note["isin"])
+    if (not isinstance(mapping, dict) or mapping.get("data_source") != "YAHOO"
+            or mapping.get("target_currency") != "EUR"
+            or not isinstance(mapping.get("target_security_evidence"), str) or not mapping["target_security_evidence"].strip()
+            or not isinstance(mapping.get("symbol"), str)
+            or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", mapping["symbol"])):
+        fail("SECURITY_MAPPING_UNVERIFIED")
+    if note["kind"] != "COUPON":
+        if (mapping.get("execution_price_currency") != "EUR"
+                or not isinstance(mapping.get("currency_evidence"), str) or not mapping["currency_evidence"].strip()):
+            fail("SECURITY_CURRENCY_CONFLICT")
+        if note["price_currency"] not in (None, "EUR") or note["net_currency"] != "EUR":
+            fail("SOURCE_PRICE_CURRENCY_CONFLICT")
+        if note["vat"] != 0:
+            fail("UNVERIFIED_VAT_TREATMENT")
+    record = {"account_key": account["account_key"], "target_account_id": account["target_account_id"],
+              "operation_date": note["date"].isoformat(), "isin": note["isin"],
+              "symbol": mapping["symbol"], "data_source": "YAHOO", "price_currency": "EUR",
+              "kind": "DIVIDEND" if note["kind"] == "COUPON" else note["kind"],
+              "quantity": "1" if note["kind"] == "COUPON" else canonical_decimal(note["quantity"].copy_abs()),
+              "unit_price": canonical_decimal(note["credit"] if note["kind"] == "COUPON" else note["unit_price"]),
+              "fee": "0" if note["kind"] == "COUPON" else canonical_decimal(note["brokerage"])}
+    if note["kind"] == "COUPON":
+        record["amount_basis"] = "net_received"
+    else:
+        record["execution_time"] = note["execution_time"]
+    return record
+
+
+def compute_notice_preview(account, mappings, notes, captured, snapshot_raw, previous, as_of, max_depth):
+    """Diagnostic candidates survive legacy differences; no application authority."""
+    day = daily_preview_day(as_of)
+    first = (day - timedelta(days=89)).isoformat()
+    remote = parse_remote_activity_snapshot(snapshot_raw)
+    if previous is None:
+        previous = {"schema_version": 1, "binding": account, "as_of": as_of, "notice_hashes": {}, "exceptions": {}}
+    if (not isinstance(previous, dict) or set(previous) != {"schema_version", "binding", "as_of", "notice_hashes", "exceptions"}
+            or type(previous["schema_version"]) is not int or previous["schema_version"] != 1
+            or previous["binding"] != account or not isinstance(previous["notice_hashes"], dict)
+            or not isinstance(previous["exceptions"], dict)):
+        fail("INVALID_NOTICE_JOURNAL")
+    if daily_preview_day(previous["as_of"]) > day:
+        fail("DAILY_CLOCK_REVERSED")
+    for calendar_day, digest in previous["notice_hashes"].items():
+        capture_period("note", calendar_day)
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            fail("INVALID_NOTICE_JOURNAL")
+    hashes, exceptions = dict(previous["notice_hashes"]), dict(previous["exceptions"])
+    activities, skips, source_fields, occurrences, symbols = {}, {}, {}, {}, {}
+    for calendar_day, entry in sorted(notes.items()):
+        capture_period("note", calendar_day)
+        digest = entry["sha256"]
+        if calendar_day in hashes and hashes[calendar_day] != digest:
+            fail("NOTICE_SOURCE_REVISION")
+        hashes[calendar_day] = digest
+        body = captured[entry["document"]]
+        if hashlib.sha256(body).hexdigest() != digest:
+            fail("NOTICE_CAPTURE_CONFLICT")
+        try:
+            document = parse_contract_note(decode_document(body), max_depth, include_coupons=True, skip_missing_isin=True)
+        except RuntimeError as error:
+            exceptions[digest] = {"code": str(error), "source_sha256": digest}
+            continue
+        if document["account_ref"] != account["source_account_ref"]:
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        exceptions.pop(digest, None)
+        for note in document["notes"]:
+            financial_day = note["date"].isoformat()
+            if financial_day[:7] != calendar_day[:7] or financial_day > as_of:
+                fail("DAILY_ACQUISITION_NOTE_DAY_CONFLICT")
+            if not first <= financial_day <= as_of:
+                continue
+            key = digest + ":" + str(note["slot"])
+            if note["kind"] == "SKIPPED_NO_ISIN":
+                skips[key] = {"date": financial_day, "reason": "SOURCE_ISIN_ABSENT",
+                              "debit": canonical_decimal(note["debit"]), "credit": canonical_decimal(note["credit"])}
+                exceptions.pop(key, None)
+                continue
+            try:
+                activity = notice_activity(note, account, mappings)
+            except RuntimeError as error:
+                exceptions[key] = {"code": str(error), "source_sha256": digest, "source_slot": note["slot"]}
+                continue
+            if activity["symbol"] in symbols and symbols[activity["symbol"]] != activity["isin"]:
+                fail("SECURITY_MAPPING_AMBIGUOUS")
+            symbols[activity["symbol"]] = activity["isin"]
+            source_identity = {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                               for k, v in note.items() if k not in ("slot", "name", "venue")}
+            identity = json.dumps({"basis": "independent_notice_v1", "source": source_identity}, sort_keys=True, separators=(",", ":"))
+            occurrence = occurrences.get(identity, 0) + 1
+            occurrences[identity] = occurrence
+            marker = "BD#v1#" + account["account_key"] + "#" + hashlib.sha256((identity + ":" + str(occurrence)).encode()).hexdigest()
+            activities[marker] = {**activity, "id": marker}
+            source_fields[marker] = {"source_sha256": digest, "source_slot": note["slot"],
+                                     "fields": {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                                                for k, v in note.items()}}
+            exceptions.pop(key, None)
+    diagnosis = observe_snapshot_discrepancies(activities, remote, snapshot_raw)
+    dispositions = {}
+    new = {}
+    for marker, activity in activities.items():
+        entry = diagnosis["activities"][marker]
+        candidates = entry["candidates"]
+        owned = [r for r in remote if r["comment"] == marker]
+        if owned:
+            status = "OWNED_OBSERVED" if len(owned) == 1 and activity_financial_fingerprint(owned[0]) == activity_financial_fingerprint(activity) else "OWNED_CONFLICT"
+        elif candidates:
+            status = "EXISTING_CANDIDATE_REVIEW"
+        else:
+            status = "NO_EXISTING_CANDIDATE_OBSERVED"
+            new[marker] = activity
+        dispositions[marker] = status
+    report = {"schema_version": 1, "source_mode": "notices", "as_of": as_of,
+              "window": {"first": first, "last": as_of}, "import_ready": False,
+              "blockers": ["FINANCIAL_APPLICATION_NOT_AUTHORIZED"], "activities": activities,
+              "source_evidence": source_fields, "skipped_source_operations": skips, "exceptions": exceptions,
+              "destination_diagnosis": diagnosis, "dispositions": dispositions,
+              "candidate_export": build_wire_payload(activities)["body"].decode() if activities else None,
+              "new_candidate_export": build_wire_payload(new)["body"].decode() if new else None,
+              "snapshot_sha256": hashlib.sha256(snapshot_raw).hexdigest()}
+    journal = {"schema_version": 1, "binding": account, "as_of": as_of, "notice_hashes": hashes, "exceptions": exceptions}
+    return journal, report
+
+
+def preview_local_notices(config, config_path, config_raw, input_root, as_of, max_bytes, max_depth):
+    if (set(config) not in ({"schema_version", "source_mode", "account", "mappings", "snapshot", "acquisition_runs"},
+                           {"schema_version", "source_mode", "account", "mappings", "snapshot", "acquisition_runs", "index_encoding"})
+            or type(config["schema_version"]) is not int or config["schema_version"] != 1):
+        fail("INVALID_NOTICE_CONFIGURATION")
+    account = config["account"]
+    if (not isinstance(account, dict) or set(account) != {"source_account_ref", "account_key", "target_account_id"}
+            or any(not isinstance(v, str) or not v.strip() for v in account.values())
+            or not isinstance(config["mappings"], dict) or not isinstance(config["snapshot"], str)):
+        fail("INVALID_NOTICE_CONFIGURATION")
+    validate_account_key(account["account_key"])
+    notes, paths, total, evidence, captured = discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
+    snapshot_path = Path(input_root) / config["snapshot"]
+    snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
+    if total + len(config_raw) + len(snapshot_raw) > 64 * 1024 * 1024:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    paths.extend([Path(config_path), snapshot_path])
+    state = Path("state")
+    output = Path("outputs") / ("daily-notices-" + account["account_key"] + ".yaml")
+    target = hashlib.sha256(account["target_account_id"].encode()).hexdigest()
+    journal_path = state / ("daily-notices-" + target + ".yaml")
+    binding = state / ("binding-" + account["account_key"] + ".yaml")
+    locks = [state / ("prepare-" + target + ".lock"), state / ("account-" + account["account_key"] + ".lock")]
+    for path in (output, journal_path, binding, *locks):
+        reject_output_input_collision(path, paths)
+    private_directory(state)
+    private_directory(output.parent)
+    descriptors = []
+    try:
+        for lock in locks:
+            descriptor = os.open(lock, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            descriptors.append(descriptor)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                fail("INVALID_DAILY_LOCK")
+            os.fchmod(descriptor, 0o600)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                fail("DAILY_ACCOUNT_OR_TARGET_LOCKED")
+        if binding.exists() or binding.is_symlink():
+            if read_keyed_yaml(binding, state, max_bytes) != account:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        previous = read_keyed_yaml(journal_path, state, max_bytes) if journal_path.exists() or journal_path.is_symlink() else None
+        journal, report = compute_notice_preview(account, config["mappings"], notes, captured, snapshot_raw, previous, as_of, max_depth)
+        report["acquisition_runs"] = evidence
+        report["config_sha256"] = hashlib.sha256(config_raw).hexdigest()
+        if any(len(yaml.safe_dump(value).encode()) > max_bytes for value in (journal, report)):
+            fail("DAILY_REPORT_LIMIT_EXCEEDED")
+        atomic_private_yaml(binding, account)
+        atomic_private_yaml(journal_path, journal)
+        atomic_private_yaml(output, report)
+        return {"source_mode": "notices", "source_activities": len(report["activities"]),
+                "skipped_operations": len(report["skipped_source_operations"]), "unresolved_exceptions": len(report["exceptions"]),
+                "import_ready": False, "blockers": report["blockers"]}
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
     if type(max_bytes) is not int or not 0 < max_bytes <= 64 * 1024 * 1024 or type(max_depth) is not int or not 0 < max_depth <= 256:
         fail("INVALID_DAILY_PREVIEW_LIMITS")
     daily_preview_day(as_of)
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
     config = parse_keyed_yaml(config_raw)
+    if isinstance(config, dict) and config.get("source_mode") == "notices":
+        return preview_local_notices(config, config_path, config_raw, input_root, as_of, max_bytes, max_depth)
     acquisition_paths, acquisition_bytes, acquisition_evidence, acquisition_capture = [], 0, None, None
     if isinstance(config, dict) and "acquisition_runs" in config:
         if set(config) != {"schema_version", "account", "mappings", "snapshot", "acquisition_runs", "index_encoding"}:

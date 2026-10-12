@@ -324,9 +324,9 @@ records implementation hashes and results so unchanged checks can be reused.
 ## Daily saved-acquisition Compose preview
 
 The [daily product contract](docs/design/daily-saved-input-preview.md) now requires
-independent operation notices, with no monthly statement cross-checking. The
-Compose preview below still implements the older statement-based path; it does
-not yet satisfy that notice-only contract. Destination date, amount and fee
+independent operation notices, with no monthly statement cross-checking. Set
+`source_mode: notices` in the daily configuration to discover notices from
+completed acquisition folders without reading statements or waiting for month-end. Destination date, amount and fee
 differences belong in the dry run and do not require a legacy correction workflow.
 
 The [daily preview service](compose.daily.yaml) packages the Python analysis stage

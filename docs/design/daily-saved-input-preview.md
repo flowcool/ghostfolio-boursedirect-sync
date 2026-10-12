@@ -42,12 +42,70 @@ Missing monthly statements and unrelated historical monthly discrepancies are
 not prerequisites for that result. Credential confinement, one-attempt broker
 protection, private provenance and uncertain-write journals remain in force.
 
-## Existing implementation reference — not daily acceptance
+## Notice-only daily preview
+
+Select `source_mode: notices` on `daily-preview` with the existing account,
+per-ISIN mappings, complete destination snapshot and keyed `acquisition_runs`.
+No statement paths, calendar capture or index encoding are needed:
+
+```yaml
+schema_version: 1
+source_mode: notices
+account:
+  source_account_ref: '<broker account reference with wrapper>'
+  account_key: '<immutable UUIDv4>'
+  target_account_id: '<Ghostfolio account ID>'
+mappings: {} # Populate verified per-ISIN mappings; missing evidence is reported.
+snapshot: saved/activities.json
+acquisition_runs:
+  latest: saved/completed-collector-run
+```
+
+The command discovers account-bound operation notices from completed collector
+receipts and never reads monthly statement or calendar bodies in this mode.
+It retains the existing receipt hash, origin, exact request query, account,
+logout and browser-exit checks. Conflicting same-day captures refuse. Original
+note financial dates define the window; observed calendar and financial dates
+may differ inside one month, without changing the booking date.
+
+The strict note parser checks structure, signed quantities and trade cash
+arithmetic. Supported notes convert independently; unknown operations and
+missing mapping/currency evidence are visible source exceptions rather than
+blocking an unrelated month's notices. No monthly ledger is manufactured.
+Net dividend cash is read from the note credit, without a second commission
+subtraction or inferred withholding. Original financial fields remain private.
+
+`outputs/daily-notices-<account-uuid>.yaml` contains source activities, original
+source evidence, missing-ISIN skips, exceptions and destination diagnosis.
+`candidate_export` is diagnostic wire for all supported window activities,
+including possible existing matches; it is not a list to import blindly.
+`new_candidate_export` excludes owned rows and every observed nearby legacy
+candidate. Neither export authorizes dispatch or proves completeness/holdings.
+An owned-marker financial conflict is reported without producing a new row.
+Destination differences never suppress the diagnostic export.
+
+Notice event markers use the account namespace, original economic note fields
+and occurrence, with an explicit independent-notice identity basis. Target
+symbol mapping and filenames do not redefine source event identity. These
+markers differ from historical statement identities; existing unmarked or
+statement-marked rows remain destination candidates, not automatic adoption.
+The target-bound notice journal retains source-day hashes and unresolved source
+exceptions. Changed original notice bytes refuse instead of replacing retained
+evidence. Missing old inputs do not clear exceptions. Shared account/target
+locks, binding checks, input/output collision protection and private atomic
+publication remain in force. An unchanged repeat is byte-identical.
+
+This delivers offline notice preparation and destination diagnosis. Acquisition,
+a fresh snapshot and separately authorized financial application remain distinct
+stages; this mode does not yet provide an unattended daily importer or the
+qualified application's notice-source replay boundary.
+
+## Existing statement implementation reference — not daily acceptance
 
 The sections below describe the current saved-statement implementation and its
-qualified historical/lab behavior. It still requires statement/note matching
-and can suppress candidate wire on legacy uncertainty; it does not yet implement
-the amended daily product contract. Those checks remain intact in the existing
+qualified historical/lab behavior. In statement mode it requires statement/note matching
+and can suppress candidate wire on legacy uncertainty; use notice mode for the
+amended daily preparation and diagnostic path. Those checks remain intact in the existing
 standalone statement tooling. They must not be carried forward as daily product
 requirements or described as delivered notice-only support.
 
