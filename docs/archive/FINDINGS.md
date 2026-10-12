@@ -2,7 +2,7 @@
 
 **Status:** Reconnaissance and source evidence with an offline inspection probe. Initial handoff by Claude
 (Opus 4.8), followed by dated Codex checkpoints. Initial sections retain their historical context;
-later checkpoints supersede pending evidence. See the [gated proposal](docs/plans/2026-10-08-manual-document-import.md).
+later checkpoints supersede pending evidence. See the [gated proposal](../plans/2026-10-08-manual-document-import.md).
 
 **Initial reconnaissance verdict (historical; see later checkpoints):** This is the **hard case**. Bourse Direct has **no API** and no PSD2 coverage for
 the securities account. Every existing building block gives **positions only** — a snapshot, not the
@@ -466,7 +466,7 @@ with independent Astra review before further work. This authorizes planning and
 review, not application code or live writes. The scoped candidate is manual
 saved-HTML ingestion; complete activity coverage remains gated by source evidence.
 
-[Plan](docs/plans/2026-10-08-manual-document-import.md) records pinned sibling/API
+[Plan](../plans/2026-10-08-manual-document-import.md) records pinned sibling/API
 source evidence, source characterization, exact parsing and identity candidates,
 financial semantics, adoption, API side effects, isolated verification and recovery.
 Beads owns current approval and execution state; CLAUDE.md holds structural pointers.
@@ -484,7 +484,7 @@ are still unverified. No CSV/Excel export has been confirmed.**
 
 Florent authorized direct online exploration through his existing Puppet and
 an independent Bitwarden reader. This supersedes the historical manual-only
-acquisition boundary; see the [amendment](docs/design/online-source-inspection.md).
+acquisition boundary; see the [amendment](../design/online-source-inspection.md).
 Private infrastructure reuse is exploration only. The public product must use
 its own configurable interfaces, with provenance/license review before reuse.
 
@@ -637,7 +637,7 @@ context and explicit resolutions for existing manual activities. They are not
 yet exposed through a CLI. All artifacts remain not import-ready; there is no
 public HTTP transport or apply command.
 
-The [isolated API report](docs/design/ghostfolio-api-lab.md) records synthetic
+The [isolated API report](../design/ghostfolio-api-lab.md) records synthetic
 Ghostfolio3.80.2 tests on agentvm-local Docker, without production access. Numeric
 fields, explicit UTC dates and ownership comments survive the tested round trips.
 Identical imports can return HTTP201 with no rows, and native duplicate comparison
@@ -665,16 +665,16 @@ fresh processes; absent readback cannot authorize replay. Conservative historica
 coverage uses earlier validated acquisitions, counts owned/adopted trades once
 and never invents an opening BUY or uses later/same-day acquisitions for a sale.
 
-The [recovery report](docs/design/ghostfolio-recovery-lab.md) records an isolated
+The [recovery report](../design/ghostfolio-recovery-lab.md) records an isolated
 INSERT stall after duplicate inspection, full empty/partial GETs, lost responses,
 fresh-process replay fences and bounded single-instance cancellation proof.
 Both disposable laboratories were cleaned up; private uncertainty journals remain.
 This does not establish quiescence for a replicated or shared production service.
 
-The [offline review CLI](docs/design/offline-review-cli.md) joins prepared source,
+The [offline review CLI](../design/offline-review-cli.md) joins prepared source,
 saved snapshot and explicit adoption/history evidence into a private diagnostic
 artifact, containing exact new-only wire bytes and captured-input provenance.
-The optional [snapshot CLI](docs/design/readonly-snapshot.md) uses one exact-
+The optional [snapshot CLI](../design/readonly-snapshot.md) uses one exact-
 allowlisted HTTPS GET, an existing environment-only session bearer, no redirects,
 no retries and no authentication POST. Its new credential/HTTP path passed
 independent security review with fake HTTPS tests; no real Ghostfolio call was
@@ -696,7 +696,7 @@ activity write, restart or deployment occurred. Credentials were consumed from
 the runtime environment; personal responses remain ignored private evidence.
 
 Actual nullable currency and unassigned-account records required the
-[source-proven compatibility contract](docs/design/remote-schema-compatibility.md).
+[source-proven compatibility contract](../design/remote-schema-compatibility.md).
 The complete saved response now normalizes without replacing raw financial
 numbers. Unsupported FX/zero-price contexts remain quarantined at financial
 gates. Synthetic tests and independent security/financial review verify this
@@ -726,7 +726,7 @@ target-account candidate with exact type, quantity and price. Their UTC and Pari
 calendar days agree with the notes, but all have nonmidnight timestamps. Two fees
 match exactly; one differs. Similarity does not prove adoption or date provenance.
 
-The [Astra-approved quarantine](docs/plans/2026-10-09-legacy-candidate-quarantine.md)
+The [Astra-approved quarantine](../plans/2026-10-09-legacy-candidate-quarantine.md)
 blocks new classification when no exact fingerprint exists but an otherwise
 identical target trade lies within one UTC calendar day. It ignores fee, currency,
 ownership and eligibility for this rejection only; existing strict adoption,
@@ -743,17 +743,17 @@ review evidence while the repository is private; CodeRabbit is not assumed to ru
 ## 18. Reproducible strict synthetic delivery evidence
 
 The destination-version uncertainty is narrowed by the
-[3.81.0 parity rehearsal](docs/design/ghostfolio-381-parity.md): selected native
+[3.81.0 parity rehearsal](../design/ghostfolio-381-parity.md): selected native
 import/account/date behavior and delayed/lost/partial-write fencing were verified
 on disposable resources. Bounded cancellation of the sole owned lab app with
 zero remaining application database sessions resolved a partial outcome without
 replay. This is not production quiescence evidence or permission to interrupt a
 shared service.
 
-The [synthetic lifecycle](docs/design/synthetic-import-lifecycle.md) then joined
+The [synthetic lifecycle](../design/synthetic-import-lifecycle.md) then joined
 saved statement/note preparation to three exact accepted trades, complete readback
 and a second review with zero new/three owned/no wire. The
-[portable opt-in runner](docs/design/disposable-acceptance.md) reproduces that
+[portable opt-in runner](../design/disposable-acceptance.md) reproduces that
 fixture chain from versioned files with fixed owned local Docker resources;
 its first explicit rehearsal passed and cleaned all resources. Initial and
 repeated reviews, snapshots and private uncertainty journals remain retained.
@@ -761,7 +761,7 @@ These observations demonstrate the supported synthetic chain, not complete real
 history, legacy fee/date adoption or an application dispatcher.
 
 Local evidence preservation is separately guarded: review/diagnosis and
-[preparation](docs/design/offline-preparation.md) reject generated destinations
+[preparation](../design/offline-preparation.md) reject generated destinations
 aliasing captured inputs. An isolated preparation-config replacement was
 reproduced before its guard and regression-tested afterward. Exact source hashes
 alone do not prove that original local inputs survive output publication.
@@ -779,7 +779,7 @@ is described below; real source/history/production gates remain separate.
 
 The strict first importer now provides a complete operator path from saved HTML
 through preparation, snapshot reconciliation, preview and explicitly qualified
-single-event application. The [qualified design](docs/plans/2026-10-09-qualified-application.md)
+single-event application. The [qualified design](../plans/2026-10-09-qualified-application.md)
 was independently approved by Astra after two corrections: current config
 qualification must not claim absent historical config provenance, and a complete
 run evidence bundle must survive before the first request.
@@ -798,7 +798,7 @@ sole POST is uncertainty-fenced and positively confirmed only after exact
 acceptance and full readback. Timeout or observer failure stops without retry,
 retaining confirmed and uncertain evidence. All-existing/null wire has no
 credentials, request, state or archive effect. No DELETE option was added.
-See the [operator workflow](docs/design/qualified-application.md).
+See the [operator workflow](../design/qualified-application.md).
 
 Socket-forbidden local verification passed938 tests, including93 qualified
 application cases plus the existing source, intent, transport, preservation and

@@ -1,0 +1,4 @@
+services:
+  bitwarden:
+    build: .
+    image: ghostfolio-boursedirect-sync:local

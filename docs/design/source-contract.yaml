@@ -7,13 +7,13 @@ document_kinds:
   monthly_statement:
     input: local_saved_html
     evidence:
-      observed_layout: FINDINGS.md#10-phase-0--supplied-statement-html-source-2026-10-08
+      observed_layout: docs/archive/FINDINGS.md#10-phase-0--supplied-statement-html-source-2026-10-08
       synthetic_fixture: tests/fixtures/statement-synthetic.html
-      interactive_observation: FINDINGS.md#12-authorized-online-source-inspection-2026-10-08
+      interactive_observation: docs/archive/FINDINGS.md#12-authorized-online-source-inspection-2026-10-08
       limitation: Four UTF-8 DOM captures inspected, including three adjacent months
         and earliest offered month; all reconcile. Original response bytes, all-month
         continuity and revisions unverified.
-      resumed_observation: FINDINGS.md#13-resumed-source-characterization-2026-10-08
+      resumed_observation: docs/archive/FINDINGS.md#13-resumed-source-characterization-2026-10-08
     parser_variant:
       columns:
       - Date
@@ -33,7 +33,7 @@ document_kinds:
   contract_note:
     input: local_saved_html
     evidence:
-      observed_layout: FINDINGS.md#13-resumed-source-characterization-2026-10-08
+      observed_layout: docs/archive/FINDINGS.md#13-resumed-source-characterization-2026-10-08
       synthetic_fixtures:
       - tests/fixtures/note-buy-synthetic.html
       - tests/fixtures/note-multi-sell-synthetic.html

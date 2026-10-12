@@ -1,434 +1,211 @@
-# ghostfolio-boursedirect-sync
+<div align="center">
 
-A strict EUR BUY/SELL document importer for Bourse Direct → Ghostfolio, with
-offline preparation/reconciliation, default preview and explicitly qualified
-single-event application. The implemented `inspect` command reads monthly statement
-HTML, preserves aligned ledger slots and checks cash controls with Decimal.
-Optional `--notes` inputs inspect daily contract notes and match trades exactly.
-`review-coupons` creates a private review of source net dividend cash and broker
-booking dates, retaining original note fields and unsupported-period gates. See
-the [coupon cash contract](docs/design/coupon-cash-review.md). It does not import.
-`reconcile-coupons` compares those original sources with a complete saved target
-snapshot and verified symbol mappings, retaining legacy differences and ambiguity
-in a private preview. It never rewrites history or classifies absence as a new import.
-Inspection does not submit activities or contact either service. A pure internal
-[conversion helper](docs/design/internal-trade-conversion.md) validates matched
-EUR trades and explicit mappings; identity, adoption and API delivery are separate
-gates.
+# Bourse Direct → Ghostfolio
 
-Read [FINDINGS.md](FINDINGS.md), the [reviewed plan](docs/plans/2026-10-08-manual-document-import.md)
-and the [probe contract](docs/design/offline-probe.md). Beads epic `infra-4g8u`
-owns approval, source acceptance and delivery gates. Parser tests on synthetic
-documents do not prove complete historical import viability.
+**Your operation notices. A clear dry run. Your data stays yours.**
 
-## Run locally
+[![Release](https://img.shields.io/github/v/release/flowcool/ghostfolio-boursedirect-sync)](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/latest)
+[![Offline tests](https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/offline-tests.yml/badge.svg)](https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/offline-tests.yml)
+[![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](#quick-start)
+[![AMD64](https://img.shields.io/badge/platform-linux%2Famd64-blue)](#requirements)
+[![Preview only](https://img.shields.io/badge/financial_writes-none-success)](#what-you-get)
+[![License](https://img.shields.io/github/license/flowcool/ghostfolio-boursedirect-sync)](LICENSE)
 
-Run commands from the repository root. The current working directory is the
-local workspace root: generated artifacts go to its `outputs/` and journals/locks
-to its `state/`, both covered by this repository's ignore rules. `--input-root`
-restricts source reads; even an absolute input root does not select an output or
-state root. Configuration and report arguments follow the working directory;
-references inside configuration follow the specified input root.
+[Quick start](#quick-start) · [Configuration](#configuration) · [Results](#reading-the-results) · [Troubleshooting](#troubleshooting) · [Contributing](CONTRIBUTING.md)
 
-Python 3.13 is the verified bench interpreter. Install runtime dependencies for
-inspection, or development dependencies to run tests:
+</div>
 
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q
-.venv/bin/python boursedirect_to_ghostfolio.py inspect \
-  tests/fixtures/statement-synthetic.html --input-root tests/fixtures \
-  --max-bytes 100000 --max-depth 32
+Connect to Bourse Direct, choose your PEA or PEA-PME and an existing Ghostfolio
+account, then review the operation notices from the last **90 days**. The connector
+saves the original documents and a detailed report in a persistent Docker volume.
+
+**v0.1.0 delivers acquisition and preview.** It does not add, change or delete
+financial records in Ghostfolio. Differences in existing records appear in the
+dry run for you to review.
+
+## What you get
+
+```text
+Bitwarden → Bourse Direct → 90 days of operation notices
+                                  ↓
+                  Ghostfolio snapshot + dry run
+                                  ↓
+                   Terminal summary + saved files
 ```
 
-Pull requests run versioned `tests/` on Python3.13 in GitHub Actions with read-only
-repository permission and pinned action commits. Local full discovery may also
-include ignored private exploration tests; those are not part of public CI.
-
-The last command exits **2**, with a safe JSON summary: one buy, two sells, cash
-controls reconciled, import readiness blocked. Exit **1** means unreadable or
-inconsistent input. Input size/depth budgets are explicit; the example budgets
-are for the synthetic bench, not established broker-document limits.
-
-Save original statement and contract-note HTML locally under ignored `inputs/`
-with private permissions. Do not put account documents in Git or Beads. PDFs,
-pasted plain text and an authenticated URL cannot replace the saved HTML inputs.
-Saved note layout and exact enrichment are evidenced for one month; explicit EUR
-and security mappings are evidenced for that private sample. Complete historical
-coverage and legacy adoption remain gates. Florent approved a
-strict BUY/SELL first version with unsupported periods blocked and existing
-Ghostfolio acquisitions used for adoption. Actual history, dates, fees and explicit
-adoption still require acceptance before a real run.
-Florent has also authorized agent-led interactive collection through a private
-browser; its [acquisition amendment](docs/design/online-source-inspection.md)
-defines authentication, document privacy and infrastructure boundaries.
-
-The scaffold license is retained verbatim from the IBKR sibling; this probe uses
-original code and does not copy sibling functions.
-
-For a saved statement and its daily notes:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py inspect \
-  inputs/statement.html --input-root inputs --max-bytes 1048576 --max-depth 32 \
-  --notes inputs/note-day-a.html inputs/note-day-b.html
-```
-
-The JSON contains matching counts and blocker codes. Account mismatches and
-invalid notes fail with exit 1; missing, extra or ambiguous matches block with
-exit 2. Exact matching never infers currency or silently discards duplicate trades.
-Even complete matching leaves `import_ready=false`: inspection alone does not
-export activities or write Ghostfolio. The limits above are example local budgets.
-
-
-## Prepare an offline review plan
-
-`prepare` validates all supplied statements and daily notes using explicit keyed
-YAML configuration. Run from this repository so private artifacts remain covered
-by `.gitignore`. The entirely synthetic bench example is runnable:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py prepare \
-  --config tests/fixtures/import-config-synthetic.yaml --input-root tests/fixtures \
-  --max-bytes 100000 --max-depth 32
-```
-
-For real inputs, copy the example to ignored `inputs/import-config.yaml` and
-replace synthetic account bindings, paths, ISIN mappings and evidence. Generate
-one UUIDv4 account key, persist it, and do not rotate it between runs. Validate
-execution and target-symbol currencies explicitly. Do not place tokens/passwords
-in this configuration. Any unsupported operation blocks its entire period.
-
-The command exits 2 and writes a private internal review artifact under ignored
-`outputs/` plus keyed source-revision state under `state/`, both with private
-permissions. Repeating equivalent inputs preserves identities; source corrections
-and account-binding changes require review. Target/account locks prevent concurrent
-local preparation. These artifacts contain private financial details and are
-**not Ghostfolio API payloads**. They remain `import_ready=false` because existing
-actual activity adoption, historical holdings and destination validation remain
-unverified. The isolated API/date/number and recovery evidence describes synthetic
-laboratories only.
-The `apply` command provides default offline preview/export and a separately
-[qualified execution route](docs/design/qualified-application.md). See the [preparation contract](docs/design/offline-preparation.md).
-
-Pure offline [adoption helpers](docs/design/offline-adoption.md) validate complete
-saved Ghostfolio snapshots and propose explicit reconciliation of existing manual
-activities. The offline `review` CLI joins these helpers without contacting Ghostfolio.
-The [pinned disposable API bench](docs/design/ghostfolio-api-lab.md) establishes
-basic numeric/date/marker behavior, account namespace requirements and bounded
-activity deletion. It also demonstrates that HTTP201 can create nothing and that
-bare date strings shift under the server timezone. Full uncertain-write recovery,
-actual historical holdings and destination validation remain gates;
-these observations do not make preparation artifacts import-ready.
-
-Pure [wire review](docs/design/offline-wire.md) and
-[durable intent](docs/design/write-intents.md) helpers now enforce exact numeric
-bytes and uncertainty fences. The [recovery bench](docs/design/ghostfolio-recovery-lab.md)
-demonstrates delayed/lost/partial outcomes in an owned disposable instance.
-[Chronological holdings](docs/design/chronological-holdings.md) checks saved
-history conservatively. Private actual destination snapshots were captured with
-read-only GET requests; source mappings are evidenced for the sample, while legacy
-dates, one fee discrepancy, explicit adoption and complete acquisition history
-remain blocking. No production activity was written. See [actual evidence](FINDINGS.md#17-source-bound-mappings-and-legacy-duplicate-quarantine)
-and the [legacy duplicate quarantine](docs/plans/2026-10-09-legacy-candidate-quarantine.md).
-
-## Reconcile against a saved snapshot
-
-To inspect saved coupon-note fields without converting or importing them:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py inspect-note inputs/operation-note.html \
-  --include-coupons --input-root inputs --max-bytes 1048576 --max-depth 64
-```
-
-This reports operation counts, import readiness and fixed blocker codes, and preserves unknown tax/corporate-action semantics.
-See the [source inspection contract](docs/design/offline-probe.md#coupon-operation-note-inspection).
-
-For an initial [offline diagnosis](docs/design/offline-diagnosis.md) without
-inventing a complete-history assertion or adoption resolutions:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py diagnose \
-  --config inputs/diagnosis-config.yaml --input-root inputs --max-bytes 1048576
-```
-
-It saves a private candidate/discrepancy report with exact input provenance. Exact
-matches are observations, and missing matches never declare new imports. No wire,
-adoption, holdings verdict or write intent is emitted. Success exits 2 with readiness
-false. The strict review below requires the separately established evidence.
-
-Save a complete Ghostfolio activity-list JSON and reviewed acquisition-history
-evidence privately. The [review command contract](docs/design/offline-review-cli.md)
-describes default explicit adoption and the schema2 `certain_unique` automatic
-mode. Automatic mode resolves exact globally unique verified matches without
-per-run manual resolutions; legacy date/fee uncertainty remains blocking.
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py review \
-  --config inputs/review-config.yaml --input-root inputs --max-bytes 1048576
-```
-
-The [frozen validation boundary](docs/design/frozen-review-validation.md) shares
-this calculation and verifies externally pinned saved reports against captured
-inputs. It proves computational equivalence, with readiness still false.
-
-To check an existing report against the same saved inputs without creating or
-changing files:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py check-review \
-  --config inputs/review-config.yaml --review outputs/review-YOUR_ACCOUNT_KEY.yaml \
-  --review-sha256 YOUR_EXTERNALLY_RECORDED_REPORT_SHA256 \
-  --input-root . --max-bytes 1048576
-```
-
-Config/report paths follow the working directory; each config reference follows
-input-root. With the common root above, reference values include `inputs/`.
-The supplied hash pins report bytes and is not human approval. Success exits2
-with verified counts, blockers and false readiness; invalid input exits1. An
-all-existing or shortfall report can verify without becoming dispatchable.
-
-The `review` command writes a private reconciliation artifact and exact new-activity wire body,
-with readiness false. Stdout contains counts and blockers only. It never fetches,
-sends or changes Ghostfolio; application execution remains gated.
-
-## Observe retained write-intent evidence offline
-
-The [verify command](docs/design/offline-intent-verification.md) compares a retained
-journal with a saved snapshot and records exact presence/conflicts privately:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py verify \
-  --config inputs/verify.yaml --input-root inputs --max-bytes 1048576
-```
-
-Configuration has only schema_version1, journal and snapshot file references.
-Verification does not resolve journals, clear fences, fetch data or submit anything.
-Recorded settlement and presence in supplied bytes are separate observations.
-
-## Inspect compensation association candidates offline
-
-The [rollback-plan command](docs/design/offline-compensation-candidates.md) inspects
-one retained intent against saved readback:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py rollback-plan \
-  --config inputs/compensation.yaml --input-root inputs --max-bytes 1048576
-```
-
-Configuration adds the exact retained `wire_sha256` to schema1 journal/snapshot
-references. Uncertainty or identity conflicts suppress candidates. An exact
-association does not prove the importer created the row; deletion remains
-unauthorized. No request or journal change occurs.
-
-## Save a read-only Ghostfolio snapshot
-
-The optional [GET-only snapshot command](docs/design/readonly-snapshot.md) requires
-an explicit private HTTPS allowlist and an existing session bearer supplied by
-environment. It does not exchange a Security Token or renew credentials.
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py snapshot \
-  --config inputs/snapshot-config.yaml --input-root inputs \
-  --max-bytes 1048576 --timeout 30
-```
-
-It makes one GET and saves private raw activity JSON. No import/update/delete or
-authentication POST exists. Actual read-only evidence used the authorized private
-runtime route described in [FINDINGS.md](FINDINGS.md#16-actual-destination-read-only-evidence);
-the public HTTPS command is tested with fake responses and forbidden real sockets.
-
-The importer consumes saved HTML; unattended broker collection is outside its
-design. Unsupported periods and uncertain legacy matches block; `apply` defaults to offline preview and optional private export. Personal
-documents, configuration, outputs and journals stay ignored and private. Synthetic
-CI verifies each PR; PR review and CodeRabbit triggering are managed externally.
-The authorized agent integrates checked PRs and manages releases.
-PRs remain open while independent project work continues.
-
-## Reproduce the synthetic import lifecycle
-
-On a trusted Linux lab host with local Docker and the pinned cached images, the
-opt-in [disposable acceptance runner](docs/design/disposable-acceptance.md) creates
-its own synthetic account and resources:
-
-```sh
-.venv/bin/python scripts/disposable_acceptance.py --run-disposable-lab
-```
-
-It verifies exact three-trade acceptance/readback and a zero-new second review,
-then compensates its owned activities and removes its resources. It accepts no
-production endpoint or credentials. Ordinary pytest/CI never launches the lab.
-Prerequisites, provider dependency, retained private evidence and cleanup limits
-are documented in the linked contract. The runner now exercises qualified application
-with explicitly synthetic declarations and complete archive cold replay.
-
-## Preview an application and export its manual proposal
-
-The [operator application](docs/design/operator-application.md) is offline by default:
-
-```sh
-.venv/bin/python boursedirect_to_ghostfolio.py apply \
-  --config inputs/review-config.yaml --review inputs/review-report.yaml \
-  --review-sha256 YOUR_EXTERNALLY_RECORDED_REPORT_SHA256 \
-  --input-root inputs --max-bytes 1048576 \
-  --export outputs/manual-import-proposal.json
-```
-
-Config role references in this example are relative to inputs. Omit export for a
-read-only diagnostic preview. Success exits2 with counts and readinessfalse. Export
-requires clean chronological holdings and new activities; actual unresolved legacy
-inputs cannot be silently exported. The private JSON is exact Ghostfolio import
-format, but is a proposal: no upload occurs and a manual batch upload would not
-inherit our single-event uncertainty/readback protocol.
-
-DRY_RUN absent or1 forces preview even with `--execute`;0 without execute also
-previews. Other values fail. `DRY_RUN=0` plus execute requires the separately
-qualified declaration and source replay described below. Preview accesses no
-destination credential or network.
-
-The [bounded HTTPS adapter](docs/design/https-request-adapter.md) is implemented
-for future qualified execution: fixed GET/import one-event requests, exact origin,
-verified TLS, bounded responses and no retries. It uses an existing environment
-session bearer; no authentication exchange exists. The qualified route below
-constructs this adapter only after complete preflight.
-
-
-## Qualified application under explicit operator responsibility
-
-A complete future execution route is available through `apply --execute` with
-`DRY_RUN=0`, an externally pinned execution declaration, source/config/report
-replay and complete private evidence retention before any request. The
-[operator workflow](docs/design/qualified-application.md) describes exact arguments,
-external proof boundaries, version/timezone scope, no-op behavior and recovery.
-The [declaration template](examples/execution-declaration.yaml) has placeholders
-and false confirmations. Credentials remain environment-only. No production
-execution has been performed or authorized in this project session.
-
-Each event is fenced before its sole POST and confirmed only after complete
-acceptance plus exact readback. Later failure keeps partial evidence and stops;
-no retry, resume, DELETE or automatic compensation is offered. Actual legacy
-history/date/fee/adoption acceptance and external security/recovery/exclusivity
-reviews are required separately from successful synthetic tests. Exit0 means a
-completed nonempty positively confirmed run, exit2 a diagnostic, exit1 failure.
-
-The portable acquisition [authority core](docs/design/acquisition-core.md) now
-provides offline principal fencing and one-use authentication permits. It does
-not connect to Bourse Direct; the browser driver still needs its separately
-reviewed capability proof. Source collection remains an operator-run activity.
-
-The same contract describes the private vault worker and isolated synthetic
-credential/OTP composition. Its retained [qualification evidence](docs/verification/vault-composition.yaml)
-records implementation hashes and results so unchanged checks can be reused.
-
-## Daily saved-acquisition Compose preview
-
-The [daily product contract](docs/design/daily-saved-input-preview.md) now requires
-independent operation notices, with no monthly statement cross-checking. Set
-`source_mode: notices` in the daily configuration to discover notices from
-completed acquisition folders without reading statements or waiting for month-end. Destination date, amount and fee
-differences belong in the dry run and do not require a legacy correction workflow.
-
-The [daily preview service](compose.daily.yaml) packages the Python analysis stage
-with read-only original inputs and a persistent private journal. It discovers
-saved documents from completed acquisition folders; no document list is required.
-It runs without vault credentials or network access.
-
-```sh
-install -d -m 700 tmp/daily-compose
-docker compose -f compose.daily.yaml build preview
-DAILY_CONFIG=account/daily.yaml docker compose -f compose.daily.yaml run --rm preview
-```
-
-The saved daily report includes candidate wire bytes only for unowned, unambiguous
-activities inside the approved 90-day window, after complete source validation.
-Owned/adopted rows and older new rows are excluded. Candidate bytes remain a
-private preview; unresolved history, source, current-period and application gates
-stay visible and no production write is authorized.
-
-The private work directory must belong to UID/GID 1000. A completed preview exits
-2, including retained financial blockers. The [daily contract](docs/design/daily-saved-input-preview.md#compose-execution)
-explains configuration, persistent state, date replay and scheduling boundaries.
-Acquisition, a fresh destination snapshot and financial application remain
-separate stages; this command does not activate them.
-
-## Application Compose
-
-The [Compose](compose.yaml) runs the community acquisition and dry run on AMD64
-(Intel/AMD). It packages the pinned Bitwarden CLI, qualified Chrome155 browser
-and existing notice importer; no lab host, Docker socket or published port is needed.
-The standalone vault inspection image can still build on ARM, but full `connect`
-is not qualified there.
-
-Copy [.env.example](.env.example) to a private `.env` and supply:
-
-| Variable | Meaning |
+| Feature | v0.1.0 |
 | --- | --- |
-| `BW_SERVER` | Canonical HTTPS vault origin; defaults to `https://vault.bitwarden.com` |
-| `BW_CLIENTID` | Your Bitwarden personal API client ID |
-| `BW_CLIENTSECRET` | Your Bitwarden personal API client secret |
-| `BW_PASSWORD` | Your vault master password |
-| `BW_ITEM_NAME` | Exact login-item name; defaults to `boursedirect.fr` |
-| `GHOSTFOLIO_ORIGIN` | Canonical HTTPS origin; exact `http://ghostfolio:3333` on a trusted private Docker network |
-| `GHOSTFOLIO_SECURITY_TOKEN` | Long-lived Ghostfolio Security Token, supplied privately by your deployment |
-| `BD_SOURCE_ACCOUNT_REF` | Optional exact source reference including `PEA` or `PEA-PME` |
-| `GHOSTFOLIO_ACCOUNT_ID` | Optional existing destination account ID |
+| Source accounts | PEA and PEA-PME; one account pair per persistent state volume |
+| Documents | Operation notices offered within the rolling 90-day window |
+| Preview | EUR buys, sells and dividends; differences and unsupported operations reported |
+| Dividends | Amount actually received, using the Bourse Direct booking date |
+| General fees / rows without ISIN | Skipped |
+| Account selection | Explicit configuration, or a terminal choice retained for later runs |
+| Retention | Original HTML, receipts, snapshots, reports and recovery journals |
+| Financial writes / automatic scheduling | None |
+
+No monthly statement cross-check is required. Currency and security mappings
+must be explicit: the connector does not guess them or automatically convert
+corporate actions such as subscription rights. A 90-day window is not a complete
+account history. ARM is outside this release's supported connection path.
+
+## Requirements
+
+- Linux on Intel/AMD (**AMD64**) with Docker Engine and Docker Compose v2.
+- A Bitwarden-compatible HTTPS vault with a personal API key and master password.
+- One uniquely named login item containing your Bourse Direct login, password and
+  TOTP setup, normally named `boursedirect.fr`.
+- Ghostfolio, an existing destination account and its long-lived **Security Token**.
+- About 1.5 GiB of container memory; outbound access to the vault, broker and
+  configured Ghostfolio origin.
+
+The release includes the qualified browser and Bitwarden CLI. No local Python,
+Node.js, browser installation, Docker socket mount or published port is needed.
+
+## Quick start
+
+Download **`ghostfolio-boursedirect-sync-v0.1.0.tar.gz`** and **`SHA256SUMS`** from
+[the release](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v0.1.0),
+then run:
 
 ```bash
-docker compose build bitwarden
+sha256sum -c SHA256SUMS
+tar -xzf ghostfolio-boursedirect-sync-v0.1.0.tar.gz
+cd ghostfolio-boursedirect-sync-v0.1.0
+cp .env.example .env
+chmod 600 .env
+```
+
+Fill in `.env` using the settings below, then:
+
+```bash
+docker compose pull
 docker compose run --rm bitwarden connect
 ```
 
-At first launch, missing account choices are shown in the terminal. Choose one
-supported Bourse Direct account and one Ghostfolio destination. The route is
-retained in the private persistent `bitwarden-binding` volume. Explicit Compose
-settings are respected; an unavailable account or a setting conflicting with
-retained routing stops instead of silently selecting another account.
+The service is named **`bitwarden`**. Keep the terminal attached on the first run:
+if accounts are not configured, it presents the available accounts and saves
+your selection. Configured values are respected; a conflict with the saved pair
+stops the run instead of changing accounts.
 
-`connect` authenticates once, saves the offered operation notices in the rolling
-90-day window, closes vault and browser, and produces the existing notice-only
-dry run. Ghostfolio access exchanges the long-lived token once, then GETs accounts
-and activities; it never writes financial records. No monthly statement is used.
-HTTPS is the normal transport. The exact `http://ghostfolio:3333` origin is also
-supported for an explicitly trusted private Docker deployment, as in the DEGIRO
-connector. Its connected peer must be an RFC1918 address before the token is sent.
-The deployment owns the matching network/service identity; the default Compose
-does not attach a production network. Other HTTP origins and redirects refuse.
-Source differences and unsupported operations stay visible in the report.
+The Compose project pins `ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0`.
+Keep `collector/browser-seccomp.json` beside the Compose files; it is included in
+the archive and required by the browser sandbox.
 
-The terminal prints counts and the private report path. The volume retains
-original documents, acquisition receipts, account identity, authentication
-journals and `outputs/daily-notices-<account-key>.yaml`. An unfinished or uncertain
-authentication attempt remains fenced; do not delete its journal to retry.
-Verified successful closure permits a later deliberate launch, not an automatic
-retry or a scheduled production import.
+## Configuration
 
-Optional verified security mappings go in ignored `config/mappings.yaml`, mounted
-read-only. Use the existing per-ISIN mapping format described in the
-[daily contract](docs/design/daily-saved-input-preview.md). Missing mappings are
-reported; no symbol or execution currency is inferred. Operations without ISIN
-are skipped. Exit0 means the dry run completed without unresolved source
-exceptions, exit2 means its diagnostic report contains exceptions, and exit1
-means the run failed. Every result remains preview-only.
+| Setting | Purpose |
+| --- | --- |
+| `BW_SERVER` | Canonical HTTPS vault origin; default `https://vault.bitwarden.com` |
+| `BW_CLIENTID`, `BW_CLIENTSECRET` | Bitwarden personal API credentials |
+| `BW_PASSWORD` | Vault master password |
+| `BW_ITEM_NAME` | Exact, unique login-item name; default `boursedirect.fr` |
+| `GHOSTFOLIO_ORIGIN` | Ghostfolio HTTPS origin, without path, query or fragment |
+| `GHOSTFOLIO_SECURITY_TOKEN` | Permanent Security Token; not an expiring JWT |
+| `BD_SOURCE_ACCOUNT_REF` | Optional exact source reference, for example `ABC12345 PEA` |
+| `GHOSTFOLIO_ACCOUNT_ID` | Optional existing destination account ID |
+| `BOURSEDIRECT_IMAGE` | Optional image override for a deliberate upgrade or rollback |
 
-`docker compose run --rm bitwarden inspect` remains a vault-only inspection.
-It resolves one exact item, retains its immutable identity and verifies logout
-without submitting broker credentials. A changed item identity or aliases refuse.
-Vault appdata and the browser profile live in separate per-execution tmpfs.
-The renderer receives no vault ENV; its sandbox and owned exit are verified.
-Compose secrets remain inspectable by trusted Docker administrators. Keep `.env`
-private; it is excluded from Git and the image build context.
+Source and destination settings remain visible in Compose and are never silently
+overridden. Leave both account fields blank to select in the terminal, or supply
+the exact account references. Changing a previously retained pair requires an
+explicitly reviewed state change; editing `.env` alone will not reroute it.
 
-The existing dedicated acquisition lab is retained in
-[compose.lab.yaml](compose.lab.yaml), with the
-[broker-inspection overlay](compose.broker-inspection.yaml). Its pinned runtime,
-external networks, receipts and lifecycle remain governed by the
-[canonical connection procedure](docs/operations/source-connection.md). These
-lab files are not prerequisites for the community CLI connector. The browser's
-[seccomp profile](collector/browser-seccomp.json) and retained
-[Apache2.0 license](collector/licenses/playwright-LICENSE) remain unchanged.
+### Ghostfolio on a private Docker network
 
-Completed saved acquisition bundles can be checked with the offline
-[`qualify-captures` command](docs/design/acquisition-bundles.md). It creates a new
-private prepare proposal from explicit existing mappings, preserves input files,
-and grants neither browser freshness nor import readiness.
+For a deployment using the internal service **`ghostfolio:3333`**, set:
+
+```dotenv
+GHOSTFOLIO_ORIGIN=http://ghostfolio:3333
+GHOSTFOLIO_NETWORK=your-existing-private-network
+```
+
+Use the included overlay for both commands:
+
+```bash
+docker compose -f compose.yaml -f compose.ghostfolio.yaml pull
+docker compose -f compose.yaml -f compose.ghostfolio.yaml run --rm bitwarden connect
+```
+
+The network must already exist and resolve `ghostfolio` to your trusted service.
+Only this exact HTTP origin is accepted, and its connected peer must have an
+RFC1918 address before credentials are sent. Other HTTP origins and redirects
+are refused. The default Compose does not join a production network.
+
+### Security mappings
+
+Put verified mappings in **`config/mappings.yaml`**. The directory is mounted
+read-only. A missing mapping is reported in the dry run; acquisition can still
+save the documents. See the [mapping format](config/README.md).
+
+Keep `.env`, mappings and the state volume private. Docker administrators can
+inspect container environment variables. Never publish documents, credentials,
+account identifiers or report contents in an issue or pull request.
+
+## Reading the results
+
+The terminal prints a JSON summary with document counts, candidate activity counts,
+exception counts and the saved report path.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Dry run completed without unresolved source exceptions |
+| `2` | Dry run completed; the report contains exceptions to review |
+| `1` | Connection, configuration or processing failed |
+
+A completed dry run is a preview, regardless of exit code. Inspect the exceptions
+before considering any later import. Currency conflicts, missing mappings,
+unsupported operations and existing-record differences remain visible.
+
+The **`bitwarden-binding`** volume, named within the Compose project, retains:
+
+- `community-binding.yaml`: the selected source/destination pair.
+- `runs/<run-id>/`: original documents, destination snapshots and acquisition receipts.
+- `outputs/daily-notices-<account-key>.yaml`: the detailed private report.
+- `state/`: journals needed to preserve identity and uncertain-attempt fences.
+
+The state root is `/state` inside the container. To copy the retained files into a
+private local directory without another connection attempt:
+
+```bash
+install -d -m 700 saved-run
+docker compose run --rm --no-deps --entrypoint /bin/sh \
+  -v "$PWD/saved-run:/export" bitwarden -c 'cp -a /state/. /export/'
+```
+
+The export directory must be writable by UID/GID 1000, used by the container.
+Preserve the whole volume for backups and reuse the same Compose project directory
+for later deliberate launches. `docker compose down -v` removes this history.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Account selection requires a terminal | Run interactively or configure both exact account fields |
+| Saved account conflicts with configuration | Restore the intended settings; do not silently replace the binding |
+| Missing security mapping or currency conflict | Review the report and verified per-ISIN mapping |
+| Exit `2` | Read the diagnostic report; this is a completed preview with exceptions |
+| Vault item cannot be resolved | Check the exact item name, uniqueness and stored TOTP setup |
+| HTTP origin refused | Use HTTPS, or the exact private-network setup documented above |
+| Browser sandbox fails | Keep the supplied seccomp profile and Compose capabilities |
+| An unfinished authentication attempt blocks another run | Retain its journal and inspect the failure before an explicit recovery |
+
+Do not loop failed broker logins or remove authentication journals to bypass a
+fence. A successfully closed session permits a later deliberate launch; it does
+not enable automatic retries or scheduling.
+
+The optional `docker compose run --rm bitwarden inspect` checks vault item identity
+and logout without submitting credentials to Bourse Direct.
+
+## Documentation and development
+
+- [Documentation map](docs/README.md): current contracts, operational guidance and archives.
+- [Contributing](CONTRIBUTING.md): local builds and synthetic verification.
+- [Release process](docs/operations/releasing.md) and [changelog](CHANGELOG.md).
+- [Design contracts](docs/design/index.md): financial, acquisition and recovery boundaries.
+
+This is a community project, unaffiliated with Bourse Direct or Ghostfolio.
+The project uses the terms in its [MIT Non-AI License](LICENSE). The bundled
+browser includes third-party components; see the [Playwright Apache 2.0 license](collector/licenses/playwright-LICENSE)
+and its attribution notices. See the [build and release guarantees](.github/BUILD.md)
+for image scanning and artifact publication.
