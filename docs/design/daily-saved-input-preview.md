@@ -103,6 +103,31 @@ exception journal when inputs disappear or age out. A parsed note's closed-sourc
 dependency can resolve only when a later fully matched closed statement includes
 the exact retained note hash; destination and application gates remain separate.
 
+### Standalone custody-fee boundary
+
+Standalone custody debits remain unsupported importer inputs. An owned disposable
+Ghostfolio 3.83.0 qualification establishes a native representation for a separately
+reviewed fee: `type: FEE`, `dataSource: MANUAL`, a stable category UUID as `symbol`,
+`quantity: 1`, `unitPrice: 0` and the exact positive source cash debit as `fee`.
+The category UUID identifies the fee category, not a security or an inferred ISIN.
+Currency and booking day need their own source evidence. Midnight UTC is a wire
+representation of a reviewed booking day, not evidence of the source execution time.
+
+The qualified native import preserves the explicit account, MANUAL profile, date,
+currency and fee on readback. Replaying identical bytes creates zero new activities;
+account balances remain unchanged and owned activity deletion restores the empty
+lab. A free-text description as an explicit MANUAL symbol is rejected. These
+observations qualify destination behavior, not automatic source conversion,
+current-period completeness or production application.
+
+Native duplicate detection can suppress an otherwise identical activity in another
+account. Future fee preparation must therefore use an account-bound source marker
+and reconcile the exact returned account and stored activity; HTTP success or an
+empty created-activity list cannot establish cross-account acceptance. Reuse the
+[reviewed-wire and acceptance boundary](offline-wire.md) rather than dispatching
+directly from the current-period observation. An unidentified cash debit still
+retains its refusal; it must not be classified as a fee just to remove an exception.
+
 An unsupported or malformed daily note records its fixed refusal code as an
 unresolved source exception for that period, with the original source digests
 retained. It cannot mark source matching complete, clear prior destination
