@@ -369,7 +369,7 @@ Copy [.env.example](.env.example) to a private `.env` and supply:
 | `BW_CLIENTSECRET` | Your Bitwarden personal API client secret |
 | `BW_PASSWORD` | Your vault master password |
 | `BW_ITEM_NAME` | Exact login-item name; defaults to `boursedirect.fr` |
-| `GHOSTFOLIO_ORIGIN` | Canonical HTTPS Ghostfolio origin, supplied by your deployment |
+| `GHOSTFOLIO_ORIGIN` | Canonical HTTPS origin; exact `http://ghostfolio:3333` on a trusted private Docker network |
 | `GHOSTFOLIO_SECURITY_TOKEN` | Long-lived Ghostfolio Security Token, supplied privately by your deployment |
 | `BD_SOURCE_ACCOUNT_REF` | Optional exact source reference including `PEA` or `PEA-PME` |
 | `GHOSTFOLIO_ACCOUNT_ID` | Optional existing destination account ID |
@@ -389,6 +389,11 @@ retained routing stops instead of silently selecting another account.
 90-day window, closes vault and browser, and produces the existing notice-only
 dry run. Ghostfolio access exchanges the long-lived token once, then GETs accounts
 and activities; it never writes financial records. No monthly statement is used.
+HTTPS is the normal transport. The exact `http://ghostfolio:3333` origin is also
+supported for an explicitly trusted private Docker deployment, as in the DEGIRO
+connector. Its connected peer must be an RFC1918 address before the token is sent.
+The deployment owns the matching network/service identity; the default Compose
+does not attach a production network. Other HTTP origins and redirects refuse.
 Source differences and unsupported operations stay visible in the report.
 
 The terminal prints counts and the private report path. The volume retains

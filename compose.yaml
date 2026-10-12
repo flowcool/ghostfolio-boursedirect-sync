@@ -14,7 +14,8 @@ services:
       BW_CLIENTID: ${BW_CLIENTID:?Supply your Bitwarden personal API client ID}
       BW_CLIENTSECRET: ${BW_CLIENTSECRET:?Supply your Bitwarden personal API client secret}
       BW_PASSWORD: ${BW_PASSWORD:?Supply your Bitwarden master password}
-      # Infra supplies the HTTPS origin and long-lived Ghostfolio Security Token.
+      # Infra supplies the origin and long-lived Ghostfolio Security Token.
+      # HTTPS normally; exact http://ghostfolio:3333 requires a trusted private network.
       GHOSTFOLIO_ORIGIN: ${GHOSTFOLIO_ORIGIN:-}
       GHOSTFOLIO_SECURITY_TOKEN: ${GHOSTFOLIO_SECURITY_TOKEN:-}
       # Optional explicit routing. Missing fields are selected once in the terminal.

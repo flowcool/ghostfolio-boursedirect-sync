@@ -2,6 +2,7 @@
 import base64
 import fcntl
 import http.client
+import ipaddress
 import json
 import os
 import platform
@@ -30,19 +31,36 @@ def require(condition, code='COMMUNITY_CONNECT_REFUSED'):
         raise RuntimeError(code)
 
 
+def ghostfolio_origin(origin):
+    """HTTPS by default; exact operator-approved private Docker service only."""
+    if origin == 'http://ghostfolio:3333':
+        return 'ghostfolio', 3333, False
+    host, port = importer.validated_ghost_origin(origin)
+    return host, port, True
+
+
 def ghostfolio_snapshot(origin, security_token, request=None):
     """One anonymous token exchange and two fixed GETs; no redirect or retry."""
-    host, port = importer.validated_ghost_origin(origin)
+    host, port, secure = ghostfolio_origin(origin)
     require(isinstance(security_token, str) and 0 < len(security_token) <= 4096
             and security_token.isascii() and not any(ord(c) < 33 or ord(c) == 127 for c in security_token),
             'GHOSTFOLIO_ACCESS_INVALID')
 
     def send(method, path, body, headers):
-        connection = http.client.HTTPSConnection(host, port, timeout=30)
+        connection = (http.client.HTTPSConnection if secure else http.client.HTTPConnection)(host, port, timeout=30)
         try:
+            if not secure:
+                connection.connect()
+                peer = ipaddress.ip_address(connection.sock.getpeername()[0])
+                require(any(peer in ipaddress.ip_network(network) for network in
+                            ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')),
+                        'GHOSTFOLIO_ACCESS_REFUSED')
             connection.request(method, path, body=body, headers=headers)
             response = connection.getresponse()
-            require(response.status == 200, 'GHOSTFOLIO_ACCESS_REFUSED')
+            require(200 <= response.status < 300 if method == 'POST' else response.status == 200,
+                    'GHOSTFOLIO_ACCESS_REFUSED')
+            require(response.getheader('Content-Type', '').split(';')[0].strip().lower() == 'application/json',
+                    'GHOSTFOLIO_ACCESS_REFUSED')
             raw = response.read(MAX_BYTES + 1)
             require(len(raw) <= MAX_BYTES, 'GHOSTFOLIO_RESPONSE_TOO_LARGE')
             return raw
@@ -210,7 +228,7 @@ def connect():
     root = Path('/state')
     source.replay.private._private_directory(root)
     origin = os.environ.get('GHOSTFOLIO_ORIGIN')
-    importer.validated_ghost_origin(origin)
+    ghostfolio_origin(origin)
     source_ref = os.environ.get('BD_SOURCE_ACCOUNT_REF', '')
     target_id = os.environ.get('GHOSTFOLIO_ACCOUNT_ID', '')
     if source_ref:

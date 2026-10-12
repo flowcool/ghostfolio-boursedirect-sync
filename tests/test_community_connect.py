@@ -125,6 +125,45 @@ def test_configured_target_is_selected_without_terminal_and_unknown_target_refus
         community.choose(options, 'Destination', 'missing')
 
 
+@pytest.mark.parametrize('origin', ['http://example.com', 'http://ghostfolio:3333/',
+    'http://ghostfolio:80', 'http://user@ghostfolio:3333', 'http://ghostfolio:3333?x',
+    'http://ghostfolio:3333#x', 'http://192.168.2.1:3333'])
+def test_private_http_exception_never_expands_to_other_origins(origin):
+    with pytest.raises(RuntimeError):
+        community.ghostfolio_origin(origin)
+
+
+@pytest.mark.parametrize('peer,status,content_type,passes', [
+    ('172.20.0.5', 201, 'application/json', True),
+    ('8.8.8.8', 201, 'application/json', False),
+    ('127.0.0.1', 201, 'application/json', False),
+    ('172.20.0.5', 302, 'application/json', False),
+    ('172.20.0.5', 200, 'text/html', False)])
+def test_private_transport_checks_peer_before_token_and_accepts_created_exchange(monkeypatch, peer, status, content_type, passes):
+    calls = []
+    payloads = iter([b'{"authToken":"SYNTHETIC_JWT"}',
+        b'{"accounts":[{"id":"destination-b","name":"Synthetic"}]}', b'{"activities":[],"count":0}'])
+
+    def connection(host, port, timeout):
+        assert (host, port, timeout) == ('ghostfolio', 3333, 30)
+        return SimpleNamespace(connect=lambda: calls.append('connect'),
+            sock=SimpleNamespace(getpeername=lambda: (peer, port)),
+            request=lambda method, path, **kwargs: calls.append((method, path)),
+            getresponse=lambda: SimpleNamespace(status=status if len(calls) == 2 else 200,
+                getheader=lambda *args: content_type, read=lambda limit: next(payloads)),
+            close=lambda: calls.append('close'))
+
+    monkeypatch.setattr(community.http.client, 'HTTPConnection', connection)
+    call = lambda: community.ghostfolio_snapshot('http://ghostfolio:3333', 'SYNTHETIC_TOKEN')
+    if passes:
+        assert call()[0][0]['id'] == 'destination-b'
+        assert len([row for row in calls if isinstance(row, tuple)]) == 3
+    else:
+        with pytest.raises(RuntimeError, match='GHOSTFOLIO_ACCESS_REFUSED'):
+            call()
+        assert len([row for row in calls if isinstance(row, tuple)]) == (0 if peer in ('8.8.8.8', '127.0.0.1') else 1)
+
+
 @pytest.mark.parametrize('logout', [True, False])
 def test_public_supervisor_retains_complete_readable_receipts_only_after_logout(tmp_path, monkeypatch, logout):
     """Replay the worker protocol through the real planner and importer receipt reader."""

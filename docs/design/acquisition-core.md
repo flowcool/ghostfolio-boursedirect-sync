@@ -349,7 +349,13 @@ metadata-only inspection still logs out and supplies no credentials. Publication
 or binding failures refuse delivery and perform the existing one-time cleanup.
 The worker verifies vault logout before successful browser/journal completion.
 The supervisor saves source-derived notices and a GET-only destination snapshot,
-then runs the existing offline preview. Public commands never select a test
+then runs the existing offline preview. HTTPS remains the default destination
+transport. The explicit private Docker origin `http://ghostfolio:3333` is allowed
+only after its connected peer is verified as RFC1918, before sending the token;
+the operator owns the trusted network/service binding. Other HTTP targets refuse.
+One token exchange accepts JSON 2xx; account/activity GETs require JSON200.
+Redirects and retries remain disabled. The financial writer origin policy is
+unchanged. Public commands never select a test
 origin, executable, alternate journal namespace or financial write mode.
 Existing broker uncertainty and financial activation gates remain in force.
 

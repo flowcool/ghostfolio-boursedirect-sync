@@ -30,7 +30,8 @@ The community entrypoint is the ENV-configured native `bitwarden` service in
 `docker compose run --rm bitwarden inspect` verifies access and closes its session.
 `docker compose run --rm bitwarden connect` joins native vault, guarded browser,
 selected-account notice acquisition and the saved-input dry run on AMD64. It uses
-only configured HTTPS Ghostfolio access, with no financial writes. Missing accounts
+configured HTTPS Ghostfolio access or the exact approved private Docker origin
+`http://ghostfolio:3333`, with no financial writes. Missing accounts
 are chosen once in the terminal; explicit or retained conflicting bindings refuse.
 The public path does not use the private lab inventory or SSH helpers below.
 Keep all retained journals and receipts; uncertainty remains an explicit recovery

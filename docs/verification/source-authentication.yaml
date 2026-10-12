@@ -1383,3 +1383,31 @@ community_compose_connection:
     production_financial_writes: 0
     full_public_real_acquisition_proved: false
     final_ci: recorded_in_owning_issue_after_publication
+
+community_private_ghostfolio_transport:
+  owner: infra-4g8u.114
+  operator_approval: 2026-10-12 Oui, comme DEGIRO
+  inputs:
+    Dockerfile: e4159121dfa05bdbc73c4b82da879258a9af9cdafc147683d54326910e444636
+    compose.yaml: 0ea9f0c92857a51c644865395ac6204a1c457866b3e3638799f434b7d0812faf
+    scripts/community_connect.py: 3005904a3acefb51f8a14533c33287378c1be7e2e35af740af0f069bca1c2128
+    tests/test_community_connect.py: b90394e199942326544b1ede7a9fcf2e744509553cc76aa3cd375c12209410fc
+  boundary:
+    normal_transport: HTTPS
+    private_exception: http://ghostfolio:3333
+    connected_peer_before_token: RFC1918
+    token_exchange: single JSON2xx POST
+    snapshot: fixed JSON200 GETs
+    redirects: false
+    retries: false
+    financial_writer_origin_policy: unchanged
+  offline_community_regressions: 32
+  native:
+    evidence_root: private_ignored_tmp/community114-http-9c4cded86a63420398c847e56a333afc
+    network: disposable_internal_Docker
+    synthetic_only: true
+    actual_socket_exchange_created201_and_two_GETs: passed
+    owned_resources_absent: true
+    broker_requests: 0
+  deployment: Infra-owned UGreen overlay joins existing backend_ghost; exact daemon/network/service
+    identity checked before start. No production service or route change.
