@@ -38,13 +38,30 @@ def source_url(base, relative):
     return url
 
 
-def planner(statement_periods=None, notice_as_of=None):
+def source_account_binding(account):
+    replay.require(isinstance(account, dict) and set(account) == {'source_account_ref', 'account_key', 'target_account_id'})
+    replay.require(type(account['source_account_ref']) is str
+        and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63} (?:PEA|PEA-PME)', account['source_account_ref']))
+    replay.require(type(account['account_key']) is str
+        and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', account['account_key']))
+    replay.require(type(account['target_account_id']) is str and account['target_account_id'].strip()
+        and len(account['target_account_id']) <= 256
+        and not any(ord(c) < 32 or ord(c) == 127 for c in account['target_account_id']))
+    return dict(account)
+
+
+def planner(statement_periods=None, notice_as_of=None, account=None):
     periods = {} if statement_periods is None else statement_periods
     replay.require(isinstance(periods, dict) and set(periods) <= {'PEA', 'PEA-PME'})
     replay.require(all(type(value) is str and re.fullmatch(r'[1-9][0-9]{3}(?:0[1-9]|1[0-2])', value)
         for value in periods.values()))
     state = {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
-        'documents': {}, 'current': None, 'captures': 0, 'statement_periods': dict(periods)}
+        'documents': {}, 'current': None, 'captures': 0, 'statement_periods': dict(periods),
+        'required_accounts': {'PEA', 'PEA-PME'}}
+    if account is not None:
+        replay.require(notice_as_of is not None)
+        state['account_binding'] = source_account_binding(account)
+        state['required_accounts'] = {account['source_account_ref'].split(' ', 1)[1]}
     if notice_as_of is not None:
         replay.require(not periods and type(notice_as_of) is str and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', notice_as_of))
         try:
@@ -138,14 +155,23 @@ def discover(state, url, raw, role):
         for option in options:
             label = ' '.join(option.get_text(' ', strip=True).upper().split())
             kind = 'PEA-PME' if 'PEA-PME' in label or 'PEA PME' in label else 'PEA' if 'PEA' in label else None
+            if 'account_binding' in state:
+                identity = option.get_text(' ', strip=True).split()[0] if option.get_text(' ', strip=True) else ''
+                expected_id, expected_wrapper = state['account_binding']['source_account_ref'].split(' ', 1)
+                if identity != expected_id:
+                    continue
+                replay.require(kind == expected_wrapper)
             if kind:
                 replay.require(kind not in rows and option.get('value'))
                 rows[kind] = option['value']
                 identity = option.get_text(' ', strip=True).split()[0]
                 replay.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63}', identity))
                 identities[kind] = identity
-        replay.require(set(rows) == {'PEA', 'PEA-PME'} and len(set(rows.values())) == 2)
-        replay.require(len(set(identities.values())) == 2)
+        replay.require(set(rows) == state['required_accounts'] and len(set(rows.values())) == len(rows))
+        replay.require(len(set(identities.values())) == len(rows))
+        if 'account_binding' in state:
+            replay.require(all(sum(option.get('value') == value for option in options) == 1
+                for value in rows.values()))
         if state['accounts']:
             replay.require(rows == state['accounts'] and identities == state['account_ids'])
         else:
@@ -292,9 +318,11 @@ def next_document(state):
             continue
         state['seen'].add(key)
         state['current'] = row
-        return {'accounts_verified': state['verified'] == {'PEA', 'PEA-PME'},
+        return {'accounts_verified': state['verified'] == state['required_accounts'],
+            **({'configured_account_verified': state['verified'] == state['required_accounts']}
+                if 'account_binding' in state else {}),
             'document': {key: row[key] for key in ('url', 'role', 'sourceSha256', 'method', 'fields') if key in row}}
-    replay.require(state['verified'] == {'PEA', 'PEA-PME'})
+    replay.require(state['verified'] == state['required_accounts'])
     if 'notice_window' in state:
         first = datetime.strptime(state['notice_window']['first'][:7], '%Y-%m')
         last = state['notice_window']['last'][:7]
@@ -304,7 +332,9 @@ def next_document(state):
             first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
         complete = (not state['notice_pending_calendars'] and
             all((account, period) in state['notice_calendars'] for account in state['verified'] for period in periods))
-        return {'done': True, 'accounts_verified': True, 'documents': {'complete': complete,
+        return {'done': True, 'accounts_verified': True,
+            **({'configured_account_verified': True} if 'account_binding' in state else {}),
+            'documents': {'complete': complete,
             'monthly_statements': 0, 'contract_notes': len(state['notice_documents'])}}
     complete = all(set(state['documents'].get(kind, {})) == {'monthly_statement', 'contract_note'}
         and state['documents'][kind]['monthly_statement'].get('period') is not None
@@ -344,14 +374,24 @@ def source_pins(root, inventory):
     return {'app_sha256': inventory['evidence']['auth_app_body']['sha256'], 'assets': assets}
 
 
-def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
+def qualify(root, lab, inventory, public_only=False, notice_as_of=None, account_config=None):
     replay.require(type(public_only) is bool)
+    account = None
+    account_config_sha256 = None
+    if account_config is not None:
+        replay.require(not public_only and notice_as_of is not None)
+        raw = replay.private._read_bytes(replay.contained(root, account_config))
+        config = replay.private._decode(raw)
+        replay.require(isinstance(config, dict) and type(config.get('schema_version')) is int
+            and config['schema_version'] == 1 and config.get('source_mode') == 'notices')
+        account = source_account_binding(config.get('account'))
+        account_config_sha256 = digest(raw)
     preference_path = root / 'inputs/source-observations/statement-preference.yaml'
     preference = replay.private._read(preference_path) if notice_as_of is None and preference_path.exists() else {
         'schema_version': 1, 'statement_periods': {}}
     replay.require(isinstance(preference, dict) and set(preference) == {'schema_version', 'statement_periods'}
         and type(preference['schema_version']) is int and preference['schema_version'] == 1)
-    state = planner(preference['statement_periods'], notice_as_of=notice_as_of)
+    state = planner(preference['statement_periods'], notice_as_of=notice_as_of, account=account)
     verified = inventory['_verified_helpers']
     q = replay.helper(lab, 'qualify', verified)
     vault = replay.helper(lab, 'attest', verified).attest()
@@ -373,7 +413,9 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
     intent = {'schema_version': 1, 'owner': 'infra-4g8u.70', 'source_commit': head,
         'state': 'reserved', 'public_only': public_only,
         'statement_periods': state['statement_periods'],
-        'source_contract_sha256': configuration['binding']['accountConfig']['sha256']}
+        'source_contract_sha256': configuration['binding']['accountConfig']['sha256'],
+        **({'account_binding': account, 'import_account_config_sha256': account_config_sha256}
+            if account is not None else {})}
     replay.private._publish(output / 'attempt.yaml', intent, exclusive=True)
     lease = lab / 'vault-operation.lock'
     lease.mkdir(mode=0o700)
@@ -486,7 +528,7 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
                         finish = output / 'finish-acquisition.yaml'
                         if finish.exists():
                             replay.require(replay.private._read(finish) == {'stop_after_retained_absence': True}
-                                and state['verified'] == {'PEA', 'PEA-PME'})
+                                and state['verified'] == state['required_accounts'])
                             write_frame(process, {'result': next_document(state)})
                             continue
                         selection = output / 'selection.yaml'
@@ -495,7 +537,8 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
                             time.sleep(0.25)
                         replay.require(time.monotonic() < deadline)
                         if not selection.exists():
-                            write_frame(process, {'result': {'accounts_verified': True, 'needs_selection': True}})
+                            write_frame(process, {'result': {'accounts_verified': True, 'needs_selection': True,
+                                **({'configured_account_verified': True} if 'account_binding' in state else {})}})
                             continue
                         choice = validate_selection(state, captured, replay.private._read(selection))
                         selection.rename(output / ('selection-used-' + uuid.uuid4().hex + '.yaml'))
@@ -509,9 +552,10 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
                             'verified_wrappers': sorted(state['verified']),
                             'documents': state['documents'], 'captured_sources': captured,
                             'current_account': state['current'].get('account')}, exclusive=False)
-                        print(json.dumps({'code': 'SOURCE_READ_SELECTION_REQUIRED', 'accounts': 2,
+                        print(json.dumps({'code': 'SOURCE_READ_SELECTION_REQUIRED', 'accounts': len(state['required_accounts']),
                             **result['documents']}), flush=True)
-                        result = {'accounts_verified': True, 'needs_selection': True}
+                        result = {'accounts_verified': True, 'needs_selection': True,
+                            **({'configured_account_verified': True} if 'account_binding' in state else {})}
                         awaiting_selection = True
                 elif action == 'complete':
                     replay.require(row['accounts_verified'] is True and row['session_logged_out'] is True
@@ -526,7 +570,7 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
                         **({'notice_window': state['notice_window']} if 'notice_window' in state else {})}, exclusive=True)
                     passed = True
                     return {'code': 'SOURCE_QUALIFICATION_COMPLETED' if row['documents']['complete'] else
-                        'SOURCE_DOCUMENT_ACQUISITION_INCOMPLETE', 'accounts': 2, **row['documents']}
+                        'SOURCE_DOCUMENT_ACQUISITION_INCOMPLETE', 'accounts': len(state['required_accounts']), **row['documents']}
                 write_frame(process, {'result': result})
             raise RuntimeError('SOURCE_REPLAY_REFUSED')
         finally:

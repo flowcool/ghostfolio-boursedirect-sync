@@ -125,6 +125,16 @@ def test_connect_refuses_exactly_without_loading_live_adapter(saved, monkeypatch
     assert yaml.safe_load(capsys.readouterr().out)['code'] == 'SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED'
 
 
+@pytest.mark.parametrize('args', [['connect'], ['qualify-connection']])
+def test_account_configuration_requires_explicit_notice_qualification(saved, monkeypatch, capsys, args):
+    root, _ = saved
+    monkeypatch.setattr(replay, '__file__', str(root / 'scripts/source_connection.py'))
+    monkeypatch.setattr(replay.sys, 'argv', ['source_connection.py', *args, '--account-config', 'private.yaml'])
+    monkeypatch.setattr(replay, 'helper', lambda *args: pytest.fail('Invalid account option loaded a live adapter'))
+    assert replay.main() == 1
+    assert yaml.safe_load(capsys.readouterr().out)['code'] == 'SOURCE_REPLAY_REFUSED'
+
+
 def test_hash_and_yaml_use_the_same_bytes_when_file_is_replaced(saved, monkeypatch):
     root, lab = saved
     target = lab / 'historical_authentication_journal.yaml'

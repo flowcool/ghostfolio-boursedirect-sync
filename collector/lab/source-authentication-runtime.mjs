@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 const origin = 'http://127.0.0.1:48123';
 let raw = ''; for await (const chunk of process.stdin) {raw += chunk; if (raw.length > 4096) throw new Error();}
 const input = JSON.parse(raw);
-if (!['success', 'wrong-body', 'fsync', 'pilot', 'pilot-reuse', 'pilot-no-completion', 'pilot-no-logout', 'pilot-close-retention-failure', 'pilot-bad-source', 'pilot-late-unknown', 'pilot-late-font-query'].includes(input.scenario)) throw new Error('SYNTHETIC_RUNTIME_REFUSED');
+if (!['success', 'wrong-body', 'fsync', 'pilot', 'pilot-reuse', 'pilot-single-account', 'pilot-unverified-account', 'pilot-no-completion', 'pilot-no-logout', 'pilot-close-retention-failure', 'pilot-bad-source', 'pilot-late-unknown', 'pilot-late-font-query'].includes(input.scenario)) throw new Error('SYNTHETIC_RUNTIME_REFUSED');
 const now = () => Math.floor(Date.now()/1000);
 const policy = syntheticPolicy(origin, input.allocation);
 const authority = sourceAuthenticationComposition(policy);
@@ -87,7 +87,10 @@ try {
       onDocument:document=>{if(!((document.url===origin+'/fr/page/mes-comptes'&&document.body.includes('Captured account page'))||(document.url===origin+'/priv/new/releves.php'&&document.body.includes('Captured historical month'))))throw new Error();documents++;return true;}});
     await result.captureDocument({url:result.document_url,role:'frame_document',sourceSha256:actualSha});
     await result.captureDocument({url:origin+'/priv/new/releves.php',role:'frame_document',sourceSha256:actualSha,method:'POST',fields:{nc:'2',RlvCombo:'3'}});
-    await result.confirmAuthenticated({two_distinct_account_wrappers_verified:true});
+    stage='account_confirmation';
+    await result.confirmAuthenticated(input.scenario==='pilot-single-account'
+      ? {configured_account_verified:true} : input.scenario==='pilot-unverified-account'
+        ? {configured_account_verified:false} : {two_distinct_account_wrappers_verified:true});
     if(input.scenario==='pilot-no-completion')await result.close();
     else if(input.scenario==='pilot-no-logout') {
       let refused=false;

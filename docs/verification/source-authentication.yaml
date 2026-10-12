@@ -1322,6 +1322,18 @@ verified_session_completion:
     all_owned_browser_resources_absent: true
     broker_requests: 0
     real_vault_sessions: 0
+  integration_after_account_selection:
+    source_qualification_and_account_pytest: 73
+    core_finalization_authentication_gate_tests: 79
+    publication_before_and_after_rename_failure: fenced
+    release_guard_persisted_before_lock_removal: true
+    release_sync_close_and_guard_removal_failure: fenced
+    overlapping_release_guard_rechecked_after_acquire: true
+    native_sequential_evidence_root: private_ignored_tmp/source70-native-proof-097e85b3e0d44436bd078a365261f2c4/pilot-reuse
+    successful_native_acquisitions: 2
+    first_complete_attempt_unchanged: true
+    both_attempt_states: closed_success
+    owned_browser_resource_absent: true
   limits:
     production_financial_writes: 0
     community_compose_acquisition_not_enabled: true
