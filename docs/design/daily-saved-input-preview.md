@@ -105,6 +105,15 @@ the exact retained note hash; destination and application gates remain separate.
 
 ### Standalone custody-fee boundary
 
+Daily preview recognizes only the observed standalone three-slot custody-note
+shape: one booking day, `DROITS DE GARDE`, an empty security slot, a
+`CONSERV ETG YYYYTn` reference (year and quarter), and a strictly
+positive debit with empty credit and blank surrounding slots. Exact ledger
+headers establish EUR. The report retains `custody_fee_observation` with no ISIN,
+no financial conversion and nearby account-bound FEE candidates marked uncertain.
+The original parser refusal remains unresolved; recognition does not enable
+financial preparation or clear monthly controls.
+
 Standalone custody debits remain unsupported importer inputs. An owned disposable
 Ghostfolio 3.83.0 qualification establishes a native representation for a separately
 reviewed fee: `type: FEE`, `dataSource: MANUAL`, a stable category UUID as `symbol`,

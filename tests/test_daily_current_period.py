@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 import boursedirect_to_ghostfolio as bd
-from test_contract_notes import note_source, coupon_source, field, paired_statement
+from test_contract_notes import note_source, coupon_source, field, paired_statement, vectors
 from test_daily_preview import isolated, setup, write, run, paths
 
 
@@ -59,6 +59,80 @@ def refresh(config, day=None):
     path = Path('inputs', doc['metadata']); meta = yaml.safe_load(path.read_text())
     meta['sha256'] = hashlib.sha256(Path('inputs', doc['document']).read_bytes()).hexdigest()
     path.write_text(yaml.safe_dump(meta))
+
+
+def custody_setup():
+    config = current_setup()
+    path = Path('inputs/current-1.html')
+    soup = BeautifulSoup(path.read_text(), 'html.parser')
+    field(soup, 1, 0).string = 'DROITS DE GARDE'
+    field(soup, 1, 1).string = ''
+    field(soup, 1, 2).string = 'CONSERV ETG 2026T3'
+    for vector in vectors(soup):
+        for row in vector[3:]:
+            row.decompose()
+    bd.cells(vectors(soup)[2][1])[0].string = '0,97'
+    bd.cells(vectors(soup)[3][1])[0].string = ''
+    path.write_text(str(soup))
+    refresh(config, '2026-10-01')
+    return config
+
+
+def test_exact_custody_debit_is_retained_without_converting_or_clearing_refusal():
+    config = custody_setup()
+    run()
+    report = saved(config)
+    note = report['current_period_observations']['notes']['2026-10-01']
+    assert note['code'] == 'INVALID_NOTE_SECURITY' and note['notes'] == []
+    fee = note['custody_fee_observation']
+    assert fee == {'kind': 'FEE', 'source_kind': 'DROITS DE GARDE',
+                   'source_reference': 'CONSERV ETG 2026T3', 'date': '2026-10-01',
+                   'isin': None, 'debit': '0.97', 'cash_currency': 'EUR',
+                   'financial_conversion': False, 'destination_candidates': []}
+    assert report['import_ready'] is False
+    assert any(v['code'] == 'INVALID_NOTE_SECURITY' and v['status'] == 'unresolved'
+               for v in report['exceptions'].values())
+
+
+def test_custody_candidates_are_account_bound_and_never_certain():
+    from test_coupon_reconciliation import row
+    config = custody_setup()
+    candidates = []
+    for identifier, account, day in [('same', config['account']['target_account_id'], '2026-10-01'),
+                                     ('other', 'OTHER', '2026-10-01'),
+                                     ('old', config['account']['target_account_id'], '2026-09-17')]:
+        candidate = row(identifier)
+        candidate.update(accountId=account, account={'id': account, 'tags': []}, type='FEE',
+                         date=day + 'T00:00:00.000Z', fee=0.97, unitPrice=0)
+        candidates.append(candidate)
+    Path('inputs/snapshot.json').write_text(json.dumps({'count': len(candidates), 'activities': candidates}))
+    run()
+    fee = saved(config)['current_period_observations']['notes']['2026-10-01']['custody_fee_observation']
+    assert fee['destination_candidates'] == [{'remote_id': 'same', 'original_timestamp': '2026-10-01T00:00:00.000Z',
+                                              'remote_currency': 'EUR', 'remote_fee': '0.97', 'certain_match': False}]
+
+
+@pytest.mark.parametrize('change', ['label', 'security', 'reference', 'blank', 'credit', 'zero', 'negative', 'extra'])
+def test_nonexact_custody_shapes_keep_original_refusal(change):
+    config = custody_setup()
+    path = Path('inputs/current-1.html')
+    soup = BeautifulSoup(path.read_text(), 'html.parser')
+    if change in ('label', 'security', 'reference'):
+        field(soup, 1, {'label': 0, 'security': 1, 'reference': 2}[change]).string = 'UNVERIFIED'
+    elif change == 'blank':
+        bd.cells(vectors(soup)[2][0])[0].string = '0,01'
+    elif change in ('credit', 'zero', 'negative'):
+        column = 3 if change == 'credit' else 2
+        bd.cells(vectors(soup)[column][1])[0].string = {'credit': '0,97', 'zero': '0', 'negative': '-0,97'}[change]
+    else:
+        for vector in vectors(soup):
+            vector[0].parent.append(BeautifulSoup('<tr><td></td></tr>', 'html.parser').tr)
+    path.write_text(str(soup))
+    refresh(config, '2026-10-01')
+    run()
+    note = saved(config)['current_period_observations']['notes']['2026-10-01']
+    assert 'custody_fee_observation' not in note
+    assert note['code'] == ('NOTE_BLANK_SLOT_CONFLICT' if change == 'blank' else 'INVALID_NOTE_SECURITY')
 
 
 def test_actual_failure_and_success_notes_are_retained_without_monthly_readiness():

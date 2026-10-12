@@ -1583,6 +1583,52 @@ def daily_current_metadata(raw, body, account, role):
     return metadata
 
 
+def inspect_custody_note(soup, day):
+    """Recognize the observed standalone debit without enabling conversion."""
+    rows = direct_rows(contract_note_ledger(soup))
+    if len(rows) != 2 or len(cells(rows[1])) != 4:
+        return None
+    vectors = []
+    for column in cells(rows[1]):
+        tables = column.find_all("table", recursive=False)
+        if len(tables) != 1 or any(getattr(c, "name", None) not in (None, "table") for c in column.children):
+            return None
+        reject_direct_text(column, "UNSUPPORTED_COLUMN_STRUCTURE")
+        vector = direct_rows(tables[0])
+        if len(vector) != 3 or any(len(cells(row)) != 1 for row in vector):
+            return None
+        vectors.append(vector)
+    for column, vector in enumerate(vectors):
+        for slot, row in enumerate(vector):
+            cell = cells(row)[0]
+            if slot != 1 and (text(cell) or cell.find("table")):
+                return None
+            if slot == 1 and column != 1 and cell.find("table"):
+                return None
+    descriptor = cells(vectors[1][1])[0]
+    tables = descriptor.find_all("table", recursive=False)
+    if len(tables) != 1 or any(getattr(c, "name", None) not in (None, "table") for c in descriptor.children):
+        return None
+    reject_direct_text(descriptor, "UNSUPPORTED_NOTE_STRUCTURE")
+    detail = direct_rows(tables[0])
+    if len(detail) != 1 or len(cells(detail[0])) != 3 or any(c.find("table") for c in cells(detail[0])):
+        return None
+    label, security, reference = map(text, cells(detail[0]))
+    if label != "DROITS DE GARDE" or security or not re.fullmatch(r"CONSERV ETG [1-9][0-9]{3}T[1-4]", reference):
+        return None
+    if parse_date(text(cells(vectors[0][1])[0])).isoformat() != day or text(cells(vectors[3][1])[0]):
+        return None
+    debit_text = text(cells(vectors[2][1])[0])
+    if not debit_text:
+        return None
+    debit = parse_decimal(debit_text, cash=True)
+    if debit <= 0:
+        return None
+    return {"kind": "FEE", "source_kind": "DROITS DE GARDE", "source_reference": reference,
+            "date": day, "isin": None, "debit": canonical_decimal(debit), "cash_currency": "EUR",
+            "financial_conversion": False, "destination_candidates": []}
+
+
 def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_depth):
     """Account-bound inventory and note observations, never financial preparation."""
     entry, account = config["current_period"], config["account"]
@@ -1697,6 +1743,18 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
                 if not source_days or any(value != day for value in source_days):
                     fail("CURRENT_NOTE_DAY_CONFLICT")
                 observation["operation_date_verified"] = True
+                custody = inspect_custody_note(note_soup, day)
+                if custody is not None:
+                    comparisons += len(remote)
+                    if comparisons > 1000000:
+                        fail("DAILY_CURRENT_COMPARISON_LIMIT_EXCEEDED")
+                    for row in remote:
+                        if (row["target_account_id"] == account["target_account_id"] and row["kind"] == "FEE"
+                                and abs((datetime.fromisoformat(row["operation_date"]).date() - daily_preview_day(day)).days) <= 1):
+                            custody["destination_candidates"].append({"remote_id": row["remote_id"],
+                                "original_timestamp": timestamps[row["remote_id"]], "remote_currency": row["price_currency"],
+                                "remote_fee": canonical_decimal(row["fee"]), "certain_match": False})
+                    observation["custody_fee_observation"] = custody
         else:
             if any(note["date"].isoformat() != day for note in parsed["notes"]):
                 fail("CURRENT_NOTE_DAY_CONFLICT")
