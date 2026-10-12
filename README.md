@@ -354,10 +354,11 @@ separate stages; this command does not activate them.
 
 ## Application Compose
 
-The native [Compose](compose.yaml) builds the community Bitwarden CLI connector
-from the [Dockerfile](Dockerfile). It uses the official CLI release2026.9.1,
-verified by architecture-specific SHA256, with a pinned Node base image. Both
-amd64 and arm64 builds are checked in CI, including the image vulnerability gate.
+The [Compose](compose.yaml) runs the community acquisition and dry run on AMD64
+(Intel/AMD). It packages the pinned Bitwarden CLI, qualified Chrome155 browser
+and existing notice importer; no lab host, Docker socket or published port is needed.
+The standalone vault inspection image can still build on ARM, but full `connect`
+is not qualified there.
 
 Copy [.env.example](.env.example) to a private `.env` and supply:
 
@@ -368,39 +369,55 @@ Copy [.env.example](.env.example) to a private `.env` and supply:
 | `BW_CLIENTSECRET` | Your Bitwarden personal API client secret |
 | `BW_PASSWORD` | Your vault master password |
 | `BW_ITEM_NAME` | Exact login-item name; defaults to `boursedirect.fr` |
-
-Use the CLI connector directly through Compose:
+| `GHOSTFOLIO_ORIGIN` | Canonical HTTPS origin; exact `http://ghostfolio:3333` on a trusted private Docker network |
+| `GHOSTFOLIO_SECURITY_TOKEN` | Long-lived Ghostfolio Security Token, supplied privately by your deployment |
+| `BD_SOURCE_ACCOUNT_REF` | Optional exact source reference including `PEA` or `PEA-PME` |
+| `GHOSTFOLIO_ACCOUNT_ID` | Optional existing destination account ID |
 
 ```bash
 docker compose build bitwarden
-docker compose run --rm bitwarden inspect
 docker compose run --rm bitwarden connect
 ```
 
-`inspect` opens an independent vault session, synchronizes, resolves exactly one
-live login item, verifies its broker URI and credential/TOTP profile, and logs out.
-Public output contains fixed codes and counts. The item UUID, principal, selected
-URI and complete ordered URI metadata are bound automatically in the private
-`bitwarden-binding` volume. A later identity change refuses; there is no automatic
-replacement or reset. Credentials, raw item and TOTP seed never enter that volume.
-The session appdata lives only in each execution's private tmpfs.
+At first launch, missing account choices are shown in the terminal. Choose one
+supported Bourse Direct account and one Ghostfolio destination. The route is
+retained in the private persistent `bitwarden-binding` volume. Explicit Compose
+settings are respected; an unavailable account or a setting conflicting with
+retained routing stops instead of silently selecting another account.
 
-`connect` uses the same native connector and binding. Broker submission still
-returns `SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED` (exit2): the current collector's
-actual authentication and account/resource driver remains under qualification.
-A verified vault inspection does not mean Bourse Direct is authenticated. The
-trusted collector integration can consume the pinned credentials internally and
-request one delayed TOTP for the same UUID; it always closes the vault session,
-including on consumer failure. No credential-export command is supplied.
+`connect` authenticates once, saves the offered operation notices in the rolling
+90-day window, closes vault and browser, and produces the existing notice-only
+dry run. Ghostfolio access exchanges the long-lived token once, then GETs accounts
+and activities; it never writes financial records. No monthly statement is used.
+HTTPS is the normal transport. The exact `http://ghostfolio:3333` origin is also
+supported for an explicitly trusted private Docker deployment, as in the DEGIRO
+connector. Its connected peer must be an RFC1918 address before the token is sent.
+The deployment owns the matching network/service identity; the default Compose
+does not attach a production network. Other HTTP origins and redirects refuse.
+Source differences and unsupported operations stay visible in the report.
 
-Compose injects vault credentials only into the Bitwarden worker's initial ENV.
-The CLI subprocess receives only the fields required for each command. Docker
-administrators can inspect container ENV; use an appropriately trusted daemon.
-No secret is needed at image-build time, and private `.env` files are ignored by
-Git and excluded from the image build context. There are no published ports or
-Docker socket mounts. The default native connector uses normal container HTTPS
-connectivity; it does not claim the qualified lab's proxy-only isolation. Deploy
-with your own network controls where that property is required.
+The terminal prints counts and the private report path. The volume retains
+original documents, acquisition receipts, account identity, authentication
+journals and `outputs/daily-notices-<account-key>.yaml`. An unfinished or uncertain
+authentication attempt remains fenced; do not delete its journal to retry.
+Verified successful closure permits a later deliberate launch, not an automatic
+retry or a scheduled production import.
+
+Optional verified security mappings go in ignored `config/mappings.yaml`, mounted
+read-only. Use the existing per-ISIN mapping format described in the
+[daily contract](docs/design/daily-saved-input-preview.md). Missing mappings are
+reported; no symbol or execution currency is inferred. Operations without ISIN
+are skipped. Exit0 means the dry run completed without unresolved source
+exceptions, exit2 means its diagnostic report contains exceptions, and exit1
+means the run failed. Every result remains preview-only.
+
+`docker compose run --rm bitwarden inspect` remains a vault-only inspection.
+It resolves one exact item, retains its immutable identity and verifies logout
+without submitting broker credentials. A changed item identity or aliases refuse.
+Vault appdata and the browser profile live in separate per-execution tmpfs.
+The renderer receives no vault ENV; its sandbox and owned exit are verified.
+Compose secrets remain inspectable by trusted Docker administrators. Keep `.env`
+private; it is excluded from Git and the image build context.
 
 The existing dedicated acquisition lab is retained in
 [compose.lab.yaml](compose.lab.yaml), with the

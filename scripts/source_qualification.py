@@ -50,7 +50,7 @@ def source_account_binding(account):
     return dict(account)
 
 
-def planner(statement_periods=None, notice_as_of=None, account=None):
+def planner(statement_periods=None, notice_as_of=None, account=None, choose_account=None):
     periods = {} if statement_periods is None else statement_periods
     replay.require(isinstance(periods, dict) and set(periods) <= {'PEA', 'PEA-PME'})
     replay.require(all(type(value) is str and re.fullmatch(r'[1-9][0-9]{3}(?:0[1-9]|1[0-2])', value)
@@ -58,6 +58,9 @@ def planner(statement_periods=None, notice_as_of=None, account=None):
     state = {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
         'documents': {}, 'current': None, 'captures': 0, 'statement_periods': dict(periods),
         'required_accounts': {'PEA', 'PEA-PME'}}
+    if choose_account is not None:
+        replay.require(callable(choose_account) and account is None and notice_as_of is not None)
+        state['choose_account'] = choose_account
     if account is not None:
         replay.require(notice_as_of is not None)
         state['account_binding'] = source_account_binding(account)
@@ -150,6 +153,25 @@ def discover(state, url, raw, role):
         replay.require(len(selectors) == 1)
         select = selectors[0]
         options = select.find_all('option', recursive=False)
+        if 'choose_account' in state and 'account_binding' not in state:
+            available = []
+            for option in options:
+                label = ' '.join(option.get_text(' ', strip=True).upper().split())
+                kind = 'PEA-PME' if 'PEA-PME' in label or 'PEA PME' in label else 'PEA' if 'PEA' in label else None
+                if kind:
+                    identity = option.get_text(' ', strip=True).split()[0]
+                    replay.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63}', identity))
+                    available.append(identity + ' ' + kind)
+            replay.require(available and len(set(available)) == len(available))
+            chosen = state['choose_account'](available)
+            if chosen is None:
+                state['selection_source'] = (url, raw, role)
+                return
+            binding = source_account_binding(chosen)
+            replay.require(binding['source_account_ref'] in available)
+            state['account_binding'] = binding
+            state['required_accounts'] = {binding['source_account_ref'].split(' ', 1)[1]}
+            state.pop('selection_source', None)
         rows = {}
         identities = {}
         for option in options:
@@ -309,6 +331,10 @@ def discover(state, url, raw, role):
 
 
 def next_document(state):
+    if 'selection_source' in state:
+        discover(state, *state['selection_source'])
+        if 'selection_source' in state:
+            return {'needs_selection': True, 'accounts_verified': False}
     while state['queue']:
         row = state['queue'].pop(0)
         key = (row['account'], row['url'], json.dumps(row.get('fields', ''), sort_keys=True) if row.get('fields') else '')

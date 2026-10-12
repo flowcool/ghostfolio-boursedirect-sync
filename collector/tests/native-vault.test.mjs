@@ -141,3 +141,31 @@ test('concurrent initialization fences the first pending attempt before CLI deli
   release(true); await first; await worker.close();
   assert.equal(f.calls.length, 0);
 });
+
+test('first native acquisition binds metadata before delivering credentials in one vault session',async()=>{
+ const f=fixture(),nonce={runNonce:'00000000-0000-4000-8000-000000000002',stageNonce:'00000000-0000-4000-8000-000000000003'};
+ let bound=false;
+ const result=await nativeVaultExecution({...f.options,accountConfig:{path:'/synthetic/policy.yaml',sha256:'b'.repeat(64)},
+  bindIdentity:metadata=>{assert.equal(metadata.password,undefined);assert.equal(metadata.login,undefined);bound=true;return {vaultOrigin:env.BW_SERVER,name:env.BW_ITEM_NAME,...metadata};},
+  consume:async(selected,code,close)=>{
+   assert.equal(bound,true);assert.equal(selected.password,item.login.password);
+   assert.equal(f.calls.filter(x=>x.args[0]==='logout').length,0);
+   assert.equal((await code(nonce,nonce)).code,'123456');
+   await close();assert.deepEqual(f.calls.slice(-2).map(x=>x.args[0]),['logout','status']);
+   return {completed:true};
+  }});
+ assert.deepEqual(result,{completed:true});
+ assert.equal(f.calls.filter(x=>x.args[0]==='login').length,1);
+ assert.equal(f.calls.filter(x=>x.args[0]==='list').length,1);
+ assert.equal(f.calls.filter(x=>x.args[0]==='logout').length,1);
+ assert.equal(f.calls.filter(x=>x.args[1]==='totp').length,1);
+});
+for(const failure of ['publication','principal','aliases'])test('first acquisition binding '+failure+' refuses credentials and OTP',async()=>{
+ const f=fixture();let delivered=false;
+ await assert.rejects(nativeVaultExecution({...f.options,accountConfig:{path:'/synthetic/policy.yaml',sha256:'b'.repeat(64)},
+  bindIdentity:metadata=>{if(failure==='publication')throw new Error();return {vaultOrigin:env.BW_SERVER,name:env.BW_ITEM_NAME,...metadata,
+   ...(failure==='principal'?{principalHash:'d'.repeat(64)}:{uriAliasesSha256:'d'.repeat(64)})};},
+  consume:()=>{delivered=true;}}),/VAULT_WORKER_FAILED/);
+ assert.equal(delivered,false);assert.equal(f.calls.filter(x=>x.args[1]==='totp').length,0);
+ assert.equal(f.calls.filter(x=>x.args[0]==='logout').length,1);
+});

@@ -121,7 +121,7 @@ async def accept(reader, writer, active, policy='vault'):
         active.discard(task)
 
 
-async def run(policy='vault'):
+async def run(policy='vault', ready=False):
     if policy not in POLICIES:
         raise RuntimeError('VAULT_PROXY_POLICY_REJECTED')
     active = set()
@@ -131,10 +131,12 @@ async def run(policy='vault'):
 
     server = await asyncio.start_server(on_accept, '0.0.0.0', 8080, limit=HEADER_LIMIT)
     async with server:
+        if ready:
+            print('SOURCE_PROXY_READY', flush=True)
         await server.serve_forever()
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] not in ([], ['--broker-inspection']):
+    if sys.argv[1:] not in ([], ['--broker-inspection'], ['--broker-inspection', '--ready']):
         raise SystemExit('VAULT_PROXY_POLICY_REJECTED')
-    asyncio.run(run('broker-inspection' if sys.argv[1:] else 'vault'))
+    asyncio.run(run('broker-inspection' if sys.argv[1:] else 'vault', '--ready' in sys.argv[1:]))

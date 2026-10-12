@@ -42,11 +42,12 @@ export function providerConfiguration(value) {
   } catch {throw new Error('VAULT_CONFIG_INVALID');}
 }
 
-export function vaultWorker({configuration, execute, verifyExecutable, now, appdata}) {
+export function vaultWorker({configuration, execute, verifyExecutable, now, appdata, bindAcquisition}) {
   const config = providerConfiguration(configuration);
   if ([execute, verifyExecutable, now].some(x => typeof x !== 'function')
-      || typeof appdata !== 'string' || !appdata.startsWith('/')) throw new Error('VAULT_CONFIG_INVALID');
-  let initialized = false, used = false, failed = false, session, selected, clock;
+      || typeof appdata !== 'string' || !appdata.startsWith('/')
+      || bindAcquisition!==undefined&&(config.schema_version!==5||typeof bindAcquisition!=='function')) throw new Error('VAULT_CONFIG_INVALID');
+  let initialized = false, used = false, failed = false, session, selected, clock, acquisitionBound = false;
   let closing = false, closed = false, cleanupAttempted = false, cleanupVerified = false;
   let operationPending = false, loginReserved = false;
   const base = {PATH: '/usr/bin:/bin', HOME: appdata, BITWARDENCLI_APPDATA_DIR: appdata};
@@ -81,10 +82,19 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
       const raw = await command([1, 4].includes(config.schema_version) ? ['get', 'item', config.binding.itemId]
         : ['list', 'items', '--search', config.binding.name], {...base, BW_SESSION: session});
       // Full item/seed is scoped to worker memory and is never sent through IPC.
+      const items=JSON.parse(raw);
+      if(bindAcquisition!==undefined) {
+        const metadata=inspectConfiguredVaultItem(items,config.binding,config.cli.defaultsVerified);
+        const binding=await bindAcquisition(structuredClone(metadata));
+        const checked=providerConfiguration({...config,schema_version:4,binding});
+        selected=selectAliasedWorkerItem(items.find(item=>item?.id===metadata.itemId),checked.binding,config.cli.defaultsVerified);
+        acquisitionBound=true;
+      } else {
       selected = (config.schema_version === 4 ? selectAliasedWorkerItem : config.schema_version === 1 ? selectWorkerItem
         : config.schema_version === 2 ? selectNamedWorkerItem : config.schema_version === 5 ? inspectConfiguredVaultItem : inspectNamedVaultItem)(
-        JSON.parse(raw), config.binding, config.cli.defaultsVerified);
-      if ([3, 5].includes(config.schema_version)) {
+        items, config.binding, config.cli.defaultsVerified);
+      }
+      if ([3, 5].includes(config.schema_version)&&!acquisitionBound) {
         cleanupAttempted = true;
         await command(['logout'], base);
         session = undefined;
@@ -98,7 +108,7 @@ export function vaultWorker({configuration, execute, verifyExecutable, now, appd
     finally {operationPending = false;}
   }
   async function code(request, expected) {
-    if ([3, 5].includes(config.schema_version) || !initialized || !selected || used || failed || closing || closed) {
+    if ([3, 5].includes(config.schema_version)&&!acquisitionBound || !initialized || !selected || used || failed || closing || closed) {
       failed = true; selected = session = undefined; throw new Error('VAULT_WORKER_FAILED');
     }
     used = true;
