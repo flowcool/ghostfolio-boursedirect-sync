@@ -5,9 +5,10 @@
 Every pull request runs the versioned offline Python and Node.js suites, the
 documentation catalogue and local-link check, and a whitespace check. The
 container workflow builds and scans the connector image for AMD64 and ARM64
-without publishing either image. The ARM64 check only detects build regressions:
-the browser-qualified release and supported connection path are AMD64-only. A
-separate build and scan covers the saved-input preview image. CodeQL analyzes
+without publishing either image. The ARM64 build-and-scan check detects build
+and image-vulnerability regressions; it does not qualify the browser-dependent
+product path, which remains AMD64-only. A separate build and scan covers the
+saved-input preview image. CodeQL analyzes
 Python and JavaScript, and Dependency Review blocks new moderate-or-higher
 dependency findings, including development dependencies.
 All workflows use read-only repository access unless a specific job needs a
