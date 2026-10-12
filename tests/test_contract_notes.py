@@ -92,6 +92,22 @@ def test_mixed_coupon_and_trade_groups_preserve_direct_child_slots():
     assert doc['notes'][1]['gross'] == document()['notes'][0]['gross']
 
 
+def test_mixed_coupon_and_trade_cli_keeps_both_acceptance_blockers(tmp_path, capsys):
+    soup = BeautifulSoup(coupon_source(), 'html.parser')
+    trade = BeautifulSoup(note_source(), 'html.parser')
+    for coupons, trades in zip(vectors(soup), vectors(trade)):
+        for row in trades:
+            coupons[0].parent.append(copy.copy(row))
+    path = tmp_path / 'mixed.html'
+    path.write_text(str(soup))
+    assert bd.main(['inspect-note', str(path), '--input-root', str(tmp_path),
+                   '--max-bytes', '100000', '--max-depth', '32', '--include-coupons']) == 2
+    summary = json.loads(capsys.readouterr().out)
+    assert summary == {'notes': 2, 'coupons': 1, 'trades': 1, 'unknown': 0,
+                       'import_ready': False, 'blockers': ['COUPON_STATEMENT_REVIEW_REQUIRED',
+                                                          'REAL_SOURCE_ACCEPTANCE_PENDING']}
+
+
 @pytest.mark.parametrize('slot,cell,value,error', [
     (1, 1, 'FR0000000000', 'INVALID_NOTE_SECURITY'),
     (3, 0, 'QUANTITE : +3', 'NOTE_DIRECTION_CONFLICT'),

@@ -297,6 +297,20 @@ def valid_isin(value):
     return total % 10 == 0
 
 
+def contract_note_ledger(soup):
+    candidates = []
+    for table in soup.find_all("table"):
+        first = table.find("tr", recursive=False)
+        if first is None:
+            body = table.find("tbody", recursive=False)
+            first = body.find("tr", recursive=False) if body else None
+        if first and tuple(text(c) for c in cells(first)) == HEADERS:
+            candidates.append(table)
+    if len(candidates) != 1:
+        fail("LEDGER_MISSING_OR_AMBIGUOUS")
+    return candidates[0]
+
+
 def parse_contract_note(html, max_depth, include_coupons=False):
     if type(include_coupons) is not bool:
         fail("INVALID_NOTE_INSPECTION_MODE")
@@ -315,17 +329,7 @@ def parse_contract_note(html, max_depth, include_coupons=False):
                 if len(cells(r)) == 2 and text(cells(r)[0]) == "COMPTE N°"]
     if len(accounts) != 1 or not accounts[0]:
         fail("ACCOUNT_HEADER_MISSING_OR_AMBIGUOUS")
-    candidates = []
-    for table in soup.find_all("table"):
-        first = table.find("tr", recursive=False)
-        if first is None:
-            body = table.find("tbody", recursive=False)
-            first = body.find("tr", recursive=False) if body else None
-        if first and tuple(text(c) for c in cells(first)) == HEADERS:
-            candidates.append(table)
-    if len(candidates) != 1:
-        fail("LEDGER_MISSING_OR_AMBIGUOUS")
-    rows = direct_rows(candidates[0])
+    rows = direct_rows(contract_note_ledger(soup))
     if len(rows) != 2 or len(cells(rows[1])) != 4:
         fail("UNSUPPORTED_NOTE_STRUCTURE")
     vectors = []
@@ -1680,11 +1684,10 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
             code = str(error)
             observation["operation_date_verified"] = False
             if code == "INVALID_NOTE_SECURITY":
-                ledgers = [table for table in note_soup.find_all("table") if direct_rows(table)
-                           and tuple(text(cell) for cell in cells(direct_rows(table)[0])) == HEADERS]
-                if len(ledgers) != 1 or len(direct_rows(ledgers[0])) != 2 or len(cells(direct_rows(ledgers[0])[1])) != 4:
+                rows = direct_rows(contract_note_ledger(note_soup))
+                if len(rows) != 2 or len(cells(rows[1])) != 4:
                     fail("CURRENT_NOTE_DAY_UNVERIFIED")
-                dates = cells(direct_rows(ledgers[0])[1])[0].find_all("table", recursive=False)
+                dates = cells(rows[1])[0].find_all("table", recursive=False)
                 if len(dates) != 1:
                     fail("CURRENT_NOTE_DAY_UNVERIFIED")
                 date_rows = direct_rows(dates[0])
@@ -3781,11 +3784,14 @@ def main(argv=None):
             document = parse_contract_note(html, args.max_depth, include_coupons=args.include_coupons)
             coupons = sum(n["kind"] == "COUPON" for n in document["notes"])
             unknown = sum(n["kind"] == "UNKNOWN" for n in document["notes"])
-            blockers = (["COUPON_STATEMENT_REVIEW_REQUIRED"] if coupons else ["REAL_SOURCE_ACCEPTANCE_PENDING"])
+            trades = len(document["notes"]) - coupons - unknown
+            blockers = ["COUPON_STATEMENT_REVIEW_REQUIRED"] if coupons else []
+            if trades or not coupons:
+                blockers.append("REAL_SOURCE_ACCEPTANCE_PENDING")
             if unknown:
                 blockers.append("UNKNOWN_OPERATIONS")
             print(json.dumps({"notes": len(document["notes"]), "coupons": coupons,
-                "trades": len(document["notes"]) - coupons - unknown, "unknown": unknown,
+                "trades": trades, "unknown": unknown,
                 "import_ready": False, "blockers": blockers}, sort_keys=True))
             return 2
         if args.command == "qualify-captures":

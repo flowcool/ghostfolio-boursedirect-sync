@@ -104,7 +104,7 @@ def discover(state, url, raw, role):
             cells = row.find_all('td', recursive=False)
             if len(cells) == 2 and cells[0].get_text(' ', strip=True) == 'COMPTE N°':
                 headers.append(cells[1].get_text(' ', strip=True))
-        replay.require(len(headers) == 1 and re.search(r'(?<![A-Za-z0-9_-])' + re.escape(state['account_ids'][account]) + r'(?![A-Za-z0-9_-])', headers[0]))
+        replay.require(len(headers) == 1 and headers[0].split()[:1] == [state['account_ids'][account]])
         params = dict(parse_qsl(urlsplit(url).query))
         period = None
         if role == 'monthly_statement' and re.fullmatch(r'[0-9]{8}', params.get('dt', '')):

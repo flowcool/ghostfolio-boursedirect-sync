@@ -142,7 +142,7 @@ To inspect saved coupon-note fields without converting or importing them:
   --include-coupons --input-root inputs --max-bytes 1048576 --max-depth 64
 ```
 
-This reports counts only and preserves unknown tax/corporate-action semantics.
+This reports operation counts, import readiness and fixed blocker codes, and preserves unknown tax/corporate-action semantics.
 See the [source inspection contract](docs/design/offline-probe.md#coupon-operation-note-inspection).
 
 For an initial [offline diagnosis](docs/design/offline-diagnosis.md) without

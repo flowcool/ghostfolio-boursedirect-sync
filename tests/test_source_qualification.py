@@ -52,7 +52,8 @@ def test_wrong_selected_account_cannot_prove_navigation():
 
 
 @pytest.mark.parametrize('header,title', [('ACCOUNT_B PEA', "Avis d'Opération"),
-    ('PREFIXACCOUNT_A PEA', "Avis d'Opération"), ('ACCOUNT_A PEA', 'Login')])
+    ('PREFIXACCOUNT_A PEA', "Avis d'Opération"), ('ACCOUNT_B ACCOUNT_A', "Avis d'Opération"),
+    ('Account ACCOUNT_A PEA', "Avis d'Opération"), ('ACCOUNT_A PEA', 'Login')])
 def test_document_requires_known_title_and_exact_account_token(header, title):
     state = qualification.planner()
     state.update(accounts={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, account_ids={'PEA': 'ACCOUNT_A', 'PEA-PME': 'ACCOUNT_B'}, verified={'PEA'}, current={'account': 'PEA'})

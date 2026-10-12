@@ -81,6 +81,25 @@ def test_actual_failure_and_success_notes_are_retained_without_monthly_readiness
     assert state.stat().st_mode & 0o777 == output.stat().st_mode & 0o777 == 0o600
 
 
+@pytest.mark.parametrize('layout', [
+    '<table><thead><tr><td>Layout</td></tr></thead></table>',
+    '<table><caption>Layout</caption><tr><td>Layout</td></tr></table>',
+    '<table><colgroup><col></colgroup><tr><td>Layout</td></tr></table>',
+    '<table>Layout<tr><td>Layout</td></tr></table>',
+])
+def test_unrelated_layout_does_not_abort_quarantined_current_note(layout):
+    config = current_setup()
+    path = Path('inputs/current-1.html')
+    path.write_text(layout + path.read_text())
+    refresh(config, '2026-10-01')
+    run()
+    notes = saved(config)['current_period_observations']['notes']
+    assert notes['2026-10-01']['code'] == 'INVALID_NOTE_SECURITY'
+    assert notes['2026-10-01']['operation_date_verified'] is True
+    assert notes['2026-10-01']['notes'] == []
+    assert notes['2026-10-02']['notes'][0]['kind'] == 'BUY'
+
+
 def test_declared_utf8_profile_does_not_accept_the_misdeclared_calendar():
     config = current_setup(); config['current_period']['index_encoding'] = 'declared'; write(config)
     with pytest.raises(RuntimeError, match='^INVALID_DOCUMENT_ENCODING$'): run()
