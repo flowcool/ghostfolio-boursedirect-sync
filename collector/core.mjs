@@ -149,9 +149,15 @@ function validateJournal(state,id) {
 }
 function acquirePrincipal(login) {
   const directory=privateDirectory(location(login));const lock=path.join(directory,'lock');
+  const requireReleased=()=>{
+    try {fs.lstatSync(path.join(directory,'release-pending'));fail('AUTH_PRINCIPAL_FENCED');}
+    catch(error) {if(error.code!=='ENOENT')throw error;}
+  };
+  requireReleased();
   try{fs.mkdirSync(lock,{mode:0o700});}catch{fail('AUTH_PRINCIPAL_LOCKED');}
   const parent=fs.openSync(directory,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
   try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
+  requireReleased(); // Recheck after acquiring: an older release may have overlapped.
   const data={directory,lock,principal:identity(login),attempt:null,released:false};
   const handle=Object.freeze(Object.defineProperties({},Object.fromEntries(Object.keys(data).map(k=>[k,{enumerable:true,get:()=>data[k]}]))));
   handles.set(handle,data);
@@ -168,9 +174,17 @@ function releasePrincipal(handle) {
   if(handle.released)return;
   // Revoke authority before any release operation can fail or ownership can move.
   data.released=true;
-  fs.rmdirSync(handle.lock);
+  if(data.publicationFailed)return; // Keep the owned lock until explicit recovery.
+  const pending=path.join(handle.directory,'release-pending');
+  fs.mkdirSync(pending,{mode:0o700});
   const parent=fs.openSync(handle.directory,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY);
-  try{fs.fsyncSync(parent);}finally{fs.closeSync(parent);}
+  try {
+    fs.fsyncSync(parent); // Make the refusal guard durable before removing the lock.
+    fs.rmdirSync(handle.lock);
+    fs.fsyncSync(parent);
+  } finally {fs.closeSync(parent);}
+  // No fallible operation after removal: crash-resurrected guards safely refuse.
+  fs.rmdirSync(pending);
 }
 function startAttempt(handle,now,protocol='legacy') {
   if(!['legacy','post-2fa-finalization'].includes(protocol))fail('AUTH_STATE_INVALID');
@@ -195,7 +209,9 @@ function transition(handle,next,now) {
   integer(now,a.updated_at,Number.MAX_SAFE_INTEGER);
   if(['password_accepted','otp_accepted','authenticated'].includes(next)&&(!a.permit||!a.permit.consumed))fail('AUTH_SUCCESS_WITHOUT_REQUEST');
   a.state=next;a.updated_at=now;a.permit=null;
-  atomicPrivate(path.join(handle.directory,'journal.yaml'),state);return next;
+  try {atomicPrivate(path.join(handle.directory,'journal.yaml'),state);}
+  catch(error) {if(next==='closed_success')owned(handle).publicationFailed=true;throw error;}
+  return next;
 }
 function validateLocalSelection(value) {
   exact(value,['source_sha256','page_epoch','frame_epoch','session_id','frame_id','method','trusted_device','native_dom_checked']);

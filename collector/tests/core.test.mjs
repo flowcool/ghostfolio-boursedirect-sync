@@ -37,6 +37,14 @@ test('same-principal separate process cannot acquire lock or bypass portfolio/ro
  assert.throws(()=>{const h2=c.acquirePrincipal('synthetic');try{c.startAttempt(h2,110);}finally{c.releasePrincipal(h2);}},/AUTH_PRINCIPAL_FENCED/);
  c.enroll('OTHER');const other=c.acquirePrincipal('OTHER');c.startAttempt(other,110);c.releasePrincipal(other);
 }));
+test('overlapping old release cannot bypass guard checked after lock acquisition',()=>isolated(()=>{
+ c.enroll('SYNTHETIC');const root=path.join(process.env.HOME,'.local/state/ghostfolio-boursedirect-sync/auth',c.principal('synthetic'));
+ const real=fs.mkdirSync;
+ fs.mkdirSync=(location,options)=>{if(location===path.join(root,'lock'))real(path.join(root,'release-pending'),{mode:0o700});return real(location,options);};
+ try {assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_FENCED/);} finally {fs.mkdirSync=real;}
+ assert.equal(fs.existsSync(path.join(root,'lock')),true);
+ assert.equal(fs.existsSync(path.join(root,'release-pending')),true);
+}));
 test('extra request/redirect/frame changes and expiry never consume permit',()=>isolated(()=>{
  const h=prepare(),p=contract(h),nonce=c.armPermit(h,p,100,source);
  for(const changed of [{redirect:true},{nonce:randomUUID()},{frame_epoch:randomUUID()},{page_epoch:randomUUID()},{phase:'otp_uncertain'},{method:'GET'},{url:c.ORIGIN+'/other'},{resource_type:'XHR'}])assert.throws(()=>c.consumePermit(h,{...request(p,nonce),...changed},101),/AUTH_REQUEST_REJECTED/);
@@ -52,6 +60,35 @@ test('full success closes only after both durable consumed requests',()=>isolate
 test('unconsumed/unknown/blocked transitions cannot declare success',()=>isolated(()=>{
  const h=prepare();assert.throws(()=>c.transition(h,'password_accepted',101),/AUTH_SUCCESS_WITHOUT_REQUEST/);assert.throws(()=>c.transition(h,'closed_success',101),/AUTH_TRANSITION_INVALID/);
  c.transition(h,'blocked',101);assert.throws(()=>c.transition(h,'password_uncertain',102));c.releasePrincipal(h);
+}));
+for(const afterRename of [false,true])test(`failed successful-close publication fences even after rename=${afterRename}`,()=>isolated(()=>{
+ const h=prepare(),p=contract(h),n=c.armPermit(h,p,100,source);
+ c.consumePermit(h,request(p,n),101);c.transition(h,'password_accepted',102);c.transition(h,'otp_uncertain',103);
+ const otp={...p,phase:'otp_uncertain',url:source.roles.otp.url,resource_type:'XHR'};
+ const otpNonce=c.armPermit(h,otp,103,source);c.consumePermit(h,request(otp,otpNonce),104);c.transition(h,'authenticated',105);
+ const filename=path.join(h.directory,'journal.yaml'),original=fs.readFileSync(filename),sync=fs.fsyncSync;
+ fs.fsyncSync=fd=>{if(!afterRename||fs.fstatSync(fd).isDirectory())throw new Error('synthetic close persistence failure');return sync(fd);};
+ try {assert.throws(()=>c.transition(h,'closed_success',106));} finally {fs.fsyncSync=sync;}
+ if(afterRename)assert.equal(parse(fs.readFileSync(filename,'utf8')).attempts[h.attempt].state,'closed_success');
+ else assert.deepEqual(fs.readFileSync(filename),original);
+ c.releasePrincipal(h);assert.equal(fs.existsSync(h.lock),true);
+ assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_LOCKED/);
+}));
+for(const operation of ['fsyncSync','closeSync','rmdirSync'])test(`successful journal still fences after lock removal and ${operation} failure`,()=>isolated(()=>{
+ const h=prepare(),p=contract(h),n=c.armPermit(h,p,100,source);
+ c.consumePermit(h,request(p,n),101);c.transition(h,'password_accepted',102);c.transition(h,'otp_uncertain',103);
+ const otp={...p,phase:'otp_uncertain',url:source.roles.otp.url,resource_type:'XHR'};
+ const otpNonce=c.armPermit(h,otp,103,source);c.consumePermit(h,request(otp,otpNonce),104);c.transition(h,'authenticated',105);c.transition(h,'closed_success',106);
+ const real=fs[operation],failure=new Error('synthetic post-removal failure');
+ fs[operation]=(...args)=>{
+  if(!fs.existsSync(h.lock)) {if(operation==='closeSync')real(...args);throw failure;}
+  return real(...args);
+ };
+ try {assert.throws(()=>c.releasePrincipal(h),error=>error===failure);} finally {fs[operation]=real;}
+ assert.equal(fs.existsSync(h.lock),false);assert.equal(fs.existsSync(path.join(h.directory,'release-pending')),true);
+ assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_FENCED/);
+ assert.throws(()=>c.startAttempt(h,107),/AUTH_HANDLE_CLOSED/);
+ c.releasePrincipal(h);assert.equal(fs.existsSync(path.join(h.directory,'release-pending')),true);
 }));
 test('absent source role and arbitrary action denied before permit persistence',()=>isolated(()=>{
  const h=prepare(),p=contract(h);assert.throws(()=>c.armPermit(h,{...p,url:c.ORIGIN+'/orders'},100,source),/AUTH_SOURCE_ROLE_DISABLED/);
@@ -101,17 +138,10 @@ for(const operation of ['rmdirSync','openSync','fsyncSync','closeSync']){
   assert.throws(()=>c.consumePermit(h,request(p,nonce),102),/AUTH_HANDLE_CLOSED/);
   assert.throws(()=>c.armPermit(h,p,102,source),/AUTH_HANDLE_CLOSED/);
   assert.deepEqual(fs.readFileSync(filename),before);
-  if(operation==='rmdirSync'){
-   assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_LOCKED/);
-   c.releasePrincipal(h);
-   assert.equal(fs.existsSync(h.lock),true);
-  }else{
-   const next=c.acquirePrincipal('synthetic');
-   c.releasePrincipal(h);
-   assert.equal(fs.existsSync(next.lock),true);
-   assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_LOCKED/);
-   c.releasePrincipal(next);
-  }
+  assert.throws(()=>c.acquirePrincipal('synthetic'),/AUTH_PRINCIPAL_FENCED/);
+  c.releasePrincipal(h);
+  assert.equal(fs.existsSync(h.lock),operation!=='closeSync');
+  assert.equal(fs.existsSync(path.join(h.directory,'release-pending')),true);
  }));
 }
 test('unused permit is bounded, schema exact and clock cannot reverse',()=>isolated(()=>{

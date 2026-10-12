@@ -48,6 +48,13 @@ that handle unusable for journal reads or mutations. Repeating release with the
 closed handle cannot remove a subsequent owner's lock. If removal itself fails,
 the retained lock remains a manual-recovery condition; the helper never retries
 with stale authority or clears an uncertain journal to regain access.
+A failed `closed_success` publication retains the owned lock even when rename
+already exposed the success journal. Release first durably creates a private
+`release-pending` guard, then removes the lock and synchronizes the directory.
+Only verified release removes the guard; any release failure leaves it fenced.
+Guard removal has no subsequent fallible persistence step: crash resurrection
+can only conservatively refuse. Existing guards require explicit recovery;
+ordinary acquisition never clears them.
 
 `otpFromEnvironment` consumes explicit provisioned TOTP or a timestamped static
 OTP, never both. It enforces integer clock, same 30-second step, age at most 20s,

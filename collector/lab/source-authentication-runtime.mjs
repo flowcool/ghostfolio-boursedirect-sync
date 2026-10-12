@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 const origin = 'http://127.0.0.1:48123';
 let raw = ''; for await (const chunk of process.stdin) {raw += chunk; if (raw.length > 4096) throw new Error();}
 const input = JSON.parse(raw);
-if (!['success', 'wrong-body', 'fsync', 'pilot', 'pilot-single-account', 'pilot-unverified-account', 'pilot-bad-source', 'pilot-late-unknown', 'pilot-late-font-query'].includes(input.scenario)) throw new Error('SYNTHETIC_RUNTIME_REFUSED');
+if (!['success', 'wrong-body', 'fsync', 'pilot', 'pilot-reuse', 'pilot-single-account', 'pilot-unverified-account', 'pilot-no-completion', 'pilot-no-logout', 'pilot-close-retention-failure', 'pilot-bad-source', 'pilot-late-unknown', 'pilot-late-font-query'].includes(input.scenario)) throw new Error('SYNTHETIC_RUNTIME_REFUSED');
 const now = () => Math.floor(Date.now()/1000);
 const policy = syntheticPolicy(origin, input.allocation);
 const authority = sourceAuthenticationComposition(policy);
@@ -79,10 +79,10 @@ try {
       transport:{write:bytes=>new Promise((ok,no)=>child.stdin.write(bytes,error=>error?no(error):ok())),
         installReceive:value=>{receive=value;},stopOwned:async()=>{child.stdin.end();const [code]=await exit;return code===0&&pipeClosed;},closePipe:()=>child.stdout.destroy()},
       credentials:async()=>{delivered++;return {login:'SYNTHETIC',password:'SYNTHETIC_PASSWORD',profile:{algorithm:'SHA1',period:30,digits:6}};},
-      enrollBound:async current=>{current.enroll();return true;},
+      enrollBound:async current=>{if(input.scenario!=='pilot-reuse')current.enroll();return true;},
       lateCode:async(request,expected)=>{codes++;return {...expected,code:'123456',startedAt:now(),completedAt:now(),profile:{algorithm:'SHA1',period:30,digits:6}};},
-      retain:value=>{if(value.role==='auth_public_image_blocked')blockedAuthImages++;if(value.role==='auth_public_font_blocked')blockedAuthFonts++;atomicPrivate('/home/fixture/pilot-retained-'+(++retained)+'.yaml',value,{exclusive:true});return true;},
-      consumeRead:grant=>{if(used.has(grant.grant))throw new Error();used.add(grant.grant);atomicPrivate('/home/fixture/pilot-grant-'+used.size+'.yaml',grant,{exclusive:true});return true;},
+      retain:value=>{if(value.authentication_session_closed&&input.scenario==='pilot-close-retention-failure')throw new Error();if(value.role==='auth_public_image_blocked')blockedAuthImages++;if(value.role==='auth_public_font_blocked')blockedAuthFonts++;atomicPrivate('/home/fixture/'+input.scenario+'-retained-'+(++retained)+'.yaml',value,{exclusive:true});return true;},
+      consumeRead:grant=>{if(used.has(grant.grant))throw new Error();used.add(grant.grant);atomicPrivate('/home/fixture/'+input.scenario+'-grant-'+used.size+'.yaml',grant,{exclusive:true});return true;},
       verifyBrowser:async()=>{const until=Date.now()+10000;while(!sandbox){if(Date.now()>until)throw new Error();await new Promise(ok=>setTimeout(ok,50));}return true;},
       onDocument:document=>{if(!((document.url===origin+'/fr/page/mes-comptes'&&document.body.includes('Captured account page'))||(document.url===origin+'/priv/new/releves.php'&&document.body.includes('Captured historical month'))))throw new Error();documents++;return true;}});
     await result.captureDocument({url:result.document_url,role:'frame_document',sourceSha256:actualSha});
@@ -91,7 +91,12 @@ try {
     await result.confirmAuthenticated(input.scenario==='pilot-single-account'
       ? {configured_account_verified:true} : input.scenario==='pilot-unverified-account'
         ? {configured_account_verified:false} : {two_distinct_account_wrappers_verified:true});
-    await result.close();
+    if(input.scenario==='pilot-no-completion')await result.close();
+    else if(input.scenario==='pilot-no-logout') {
+      let refused=false;
+      try {await result.close({session_logged_out:false});} catch {refused=true;}
+      if(!refused)throw new Error();
+    } else await result.close({session_logged_out:true});
     outcome={...outcome,passed:delivered===1&&codes===1&&documents===2&&monthRequests===1&&childRequests===0&&fontRequests===0&&blockedAuthImages===1&&blockedAuthFonts===1,blocked_auth_images:blockedAuthImages,blocked_auth_fonts:blockedAuthFonts,font_requests:fontRequests,month_requests:monthRequests,child_requests:childRequests,code:'SYNTHETIC_PILOT_QUALIFIED',delivered,codes,documents,retained};
   } else {
   stage = 'native_bootstrap';
@@ -171,7 +176,9 @@ finally {
   if(server)await new Promise(resolve=>server.close(resolve));
   const directory=handle?.directory??'/home/fixture/.local/state/ghostfolio-boursedirect-sync/synthetic-cdp/auth/'+createHash('sha256').update('BD-SYNTHETIC-CDP-v1\nSYNTHETIC-NATIVE-CDP').digest('hex');
   const journal=fs.existsSync(directory+'/journal.yaml')?(await import('yaml')).parse(fs.readFileSync(directory+'/journal.yaml','utf8')):{attempts:{}};
-  outcome={...outcome,counts,retained_state:(handle?journal.attempts[handle.attempt]?.state:Object.values(journal.attempts)[0]?.state)??null,browser_exit_verified:pipeClosed,renderer_sandbox_verified:sandbox};
+  outcome={...outcome,counts,retained_state:(handle?journal.attempts[handle.attempt]?.state:Object.values(journal.attempts)[0]?.state)??null,
+    retained_attempts:Object.fromEntries(Object.entries(journal.attempts).map(([key,value])=>[key,value.state])),
+    browser_exit_verified:pipeClosed,renderer_sandbox_verified:sandbox};
   if(handle)authority.releasePrincipal(handle);
   console.log(JSON.stringify(outcome));
 }

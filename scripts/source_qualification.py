@@ -481,10 +481,10 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None, account_
                     replay.require(row['principal'] == selected['principalHash']
                         and digest(contract_path.read_bytes()) == configuration['binding']['accountConfig']['sha256'])
                     location = Path.home() / '.local/state/ghostfolio-boursedirect-sync/auth' / row['principal']
-                    replay.require(not location.exists())
+                    result = {'enroll': not location.exists()}
                     replay.private._publish(output / 'enrollment-intent.yaml', {
                         'principal_sha256': row['principal'], 'binding_sha256': digest(json.dumps(configuration, sort_keys=True).encode()),
-                        'canonical_namespace': True}, exclusive=True)
+                        'canonical_namespace': True, 'new_enrollment': result['enroll']}, exclusive=True)
                 elif action == 'retain':
                     sequence += 1
                     replay.private._publish(output / ('request-' + str(sequence) + '.yaml'), row['observation'], exclusive=True)
