@@ -42,6 +42,47 @@ Missing monthly statements and unrelated historical monthly discrepancies are
 not prerequisites for that result. Credential confinement, one-attempt broker
 protection, private provenance and uncertain-write journals remain in force.
 
+## Community account routing
+
+The community product must use an explicit user-configured binding between one
+chosen Bourse Direct account and one Ghostfolio destination account. Florent's
+private account inventory is qualification evidence, not a deployment default.
+
+- `source_account_ref` identifies the chosen broker account, including its
+  wrapper. Select it from the observed broker account selector by stable account
+  reference, then verify the selected account and each notice's account identity.
+  Never choose the first option, an option position, or a wrapper label alone.
+- `target_account_id` identifies the existing Ghostfolio destination. Every
+  candidate and any separately authorized import use this explicit ID; do not
+  select a destination by name or fall back to another account.
+- `account_key` is the persistent UUID namespace for this source portfolio.
+  Keep it across runs; a changed destination must not silently reuse retained
+  target-bound state or redirect already reviewed activities.
+- Missing, ambiguous or mismatched source/destination bindings refuse the
+  affected account before import. The dry run identifies the source and target
+  privately so the operator can check the configured route.
+- Keep user bindings in a private configuration file mounted by Compose.
+  Public examples contain placeholders; credentials use the approved secret
+  delivery path. Do not embed account references, destination IDs or a private
+  host in the community image or Compose defaults.
+
+The offline importer already consumes this three-field account binding. The
+current acquisition qualifier instead requires the specific PEA/PEA-PME pair
+used for real-source qualification. A community acquisition entrypoint must
+accept the configured source selection without requiring that pair. This
+selection interface is not implemented yet; the current two-account qualifier
+does not establish community deployment acceptance.
+
+## Source window acquisition
+
+The existing source [connection entrypoint](../operations/source-connection.md#notice-only-window-acquisition-planning)
+accepts `qualify-connection --notice-window-as-of YYYY-MM-DD` to plan observed
+operation calendars and notices for both verified accounts across the approved
+window. No monthly documents are selected. This plan requires the known source
+previous-month function and retained explicit empty calendars, and preserves
+existing broker-attempt controls. It has offline saved-source qualification;
+actual acquisition with this option and recurring activation remain unverified.
+
 ## Notice-only daily preview
 
 Select `source_mode: notices` on `daily-preview` with the existing account,

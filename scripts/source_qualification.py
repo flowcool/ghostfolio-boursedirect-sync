@@ -10,6 +10,7 @@ import signal
 import subprocess
 import time
 import uuid
+from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
@@ -37,13 +38,74 @@ def source_url(base, relative):
     return url
 
 
-def planner(statement_periods=None):
+def planner(statement_periods=None, notice_as_of=None):
     periods = {} if statement_periods is None else statement_periods
     replay.require(isinstance(periods, dict) and set(periods) <= {'PEA', 'PEA-PME'})
     replay.require(all(type(value) is str and re.fullmatch(r'[1-9][0-9]{3}(?:0[1-9]|1[0-2])', value)
         for value in periods.values()))
-    return {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
+    state = {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
         'documents': {}, 'current': None, 'captures': 0, 'statement_periods': dict(periods)}
+    if notice_as_of is not None:
+        replay.require(not periods and type(notice_as_of) is str and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', notice_as_of))
+        try:
+            last = datetime.strptime(notice_as_of, '%Y-%m-%d').date()
+            first = last - timedelta(days=89)
+        except (ValueError, OverflowError):
+            raise RuntimeError('SOURCE_REPLAY_REFUSED') from None
+        state['notice_window'] = {'first': first.isoformat(), 'last': last.isoformat()}
+        state['notice_calendars'] = set()
+        state['notice_documents'] = set()
+        state['notice_pending_calendars'] = {}
+        state['notice_navigation_verified'] = False
+    return state
+
+
+def notice_calendar_previous(state, url, raw, account, parent):
+    """Interpret only the exact previously observed source navigation function."""
+    if account not in state['verified'] or urlsplit(url).path != '/priv/new/avis-operes.php':
+        return None
+    soup = BeautifulSoup(raw, 'html.parser')
+    calls = set()
+    for link in soup.select('a[href]'):
+        match = re.fullmatch(r"javascript:MoisPrecedent\('RO',([1-9][0-9]*),([0-9]{1,2}),([0-9]{4})\)", link['href'])
+        if match:
+            calls.add(match.groups())
+    replay.require(len(calls) == 1)
+    nc, month, year = next(iter(calls))
+    replay.require(nc == state['accounts'][account] and 1 <= int(month) <= 12)
+    try:
+        html = raw.decode('utf-8', errors='strict')
+    except UnicodeDecodeError:
+        html = raw.decode('cp1252', errors='strict')
+    calendar = BeautifulSoup(html, 'html.parser')
+    headings = [[' '.join(span.get_text(' ', strip=True).split()) for span in cell.find_all('span', recursive=False)
+                 if not span.get('class')] for cell in calendar.select('td.topdatas')]
+    months = ('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre')
+    replay.require(headings == [[year], [months[int(month) - 1]]])
+    period = year + '-' + month.zfill(2)
+    window = state['notice_window']
+    replay.require(window['first'][:7] <= period <= window['last'][:7])
+    offered = [node for node in soup.select('a[href]') if 'releveOpe.php' in node['href']]
+    empty = [' '.join(node.get_text(' ', strip=True).split()) for node in soup.select('div.msg.texte1T7A')]
+    replay.require(bool(offered) and not empty or not offered and empty == ["Vous n'avez pas effectué d'opération ce mois-ci."])
+    state['notice_calendars'].add((account, period))
+    if period == window['first'][:7]:
+        return None
+    functions = re.findall(r'function\s+MoisPrecedent\(tr,nc,month,year\)\s*\{([\s\S]*?)\n\}', raw.decode('cp1252'))
+    expected = "if(month == 1) { --year; month=13; } document.location.href = 'avis-operes.php?tr='+tr+'&nc='+nc+'&month='+(month-1)+'&year='+year;"
+    if not functions and not state['notice_navigation_verified']:
+        # The real calendar references an external inert script. Retain this
+        # calendar until that source-declared script has been captured.
+        scripts = {source_url(url, node['src']) for node in soup.select('script[src]')
+            if urljoin(url, node['src']) == ORIGIN + '/priv/scripts/avis-operes.js'}
+        replay.require(len(scripts) == 1)
+        state['notice_pending_calendars'][(account, period)] = (url, raw, parent)
+        return None
+    replay.require(not functions and state['notice_navigation_verified']
+        or len(functions) == 1 and ''.join(functions[0].split()) == ''.join(expected.split()))
+    previous = (datetime(int(year), int(month), 1) - timedelta(days=1))
+    target = source_url(url, 'avis-operes.php?' + urlencode({'tr': 'RO', 'nc': nc, 'month': previous.month, 'year': previous.year}))
+    return {'url': target, 'role': 'frame_document', 'sourceSha256': parent, 'account': account}
 
 
 def discover(state, url, raw, role):
@@ -53,6 +115,19 @@ def discover(state, url, raw, role):
     current = state['current']
     account = current.get('account') if current else None
     wanted = state['statement_periods'].get(account)
+    notice_only = 'notice_window' in state
+    if notice_only and url == ORIGIN + '/priv/scripts/avis-operes.js':
+        functions = re.findall(r'function\s+MoisPrecedent\(tr,nc,month,year\)\s*\{([\s\S]*?)\n\}', raw.decode('cp1252'))
+        expected = "if(month == 1) { --year; month=13; } document.location.href = 'avis-operes.php?tr='+tr+'&nc='+nc+'&month='+(month-1)+'&year='+year;"
+        replay.require(len(functions) == 1 and ''.join(functions[0].split()) == ''.join(expected.split()))
+        state['notice_navigation_verified'] = True
+        for (pending_account, period), (calendar_url, body, sha) in list(state['notice_pending_calendars'].items()):
+            replay.require(pending_account == account)
+            previous = notice_calendar_previous(state, calendar_url, body, pending_account, sha)
+            if previous is not None:
+                state['queue'].insert(0, previous)
+            del state['notice_pending_calendars'][(pending_account, period)]
+        return
     selectors = soup.select('select#nc[name=nc]')
     if selectors:
         replay.require(len(selectors) == 1)
@@ -96,6 +171,7 @@ def discover(state, url, raw, role):
             replay.require(len(chosen) == 1 and chosen[0].get('value') == rows[account])
             state['verified'].add(account)
     if role in ('monthly_statement', 'contract_note'):
+        replay.require(not notice_only or role == 'contract_note')
         replay.require(account in state['verified'])
         title = 'RELEVE DE COMPTE' if role == 'monthly_statement' else "Avis d'Opération"
         replay.require(sum(node.get_text(' ', strip=True) == title for node in soup.select('strong')) == 1)
@@ -113,6 +189,8 @@ def discover(state, url, raw, role):
             period = params['year'] + params['month'].zfill(2)
         replay.require(role != 'monthly_statement' or wanted is None or period == wanted)
         state['documents'].setdefault(account, {})[role] = {'sha256': parent, 'url': url, 'period': period}
+        if notice_only:
+            state['notice_documents'].add((account, url))
         return
     # Before selecting each wrapper, traverse only source-declared account frames.
     candidates = []
@@ -130,7 +208,25 @@ def discover(state, url, raw, role):
         except RuntimeError:
             continue
         path = urlsplit(target).path
+        if notice_only and path in {'/fr/page/releves', '/priv/new/releves.php', '/priv/new/releveCompte.php'}:
+            continue
         document_role = 'monthly_statement' if path.endswith('/releveCompte.php') else 'contract_note' if path.endswith('/releveOpe.php') else 'frame_document'
+        if notice_only and document_role == 'contract_note':
+            if account is None:
+                continue
+            pairs = parse_qsl(urlsplit(target).query, keep_blank_values=True)
+            query = dict(pairs)
+            replay.require(account in state['verified'] and set(query) == {'nc', 'type', 'year', 'month', 'day', 'trash'}
+                and len(pairs) == len(query)
+                and query['nc'] == state['accounts'][account] and query['type'] == 'RO' and query['trash'] == '/avis.pdf'
+                and re.fullmatch(r'[0-9]{4}', query['year'])
+                and all(re.fullmatch(r'[0-9]{1,2}', query[k]) for k in ('month', 'day')))
+            try:
+                note_day = datetime(int(query['year']), int(query['month']), int(query['day'])).date().isoformat()
+            except ValueError:
+                raise RuntimeError('SOURCE_REPLAY_REFUSED') from None
+            if note_day > state['notice_window']['last'] or note_day[:7] < state['notice_window']['first'][:7]:
+                continue
         if document_role == 'monthly_statement' and wanted is not None:
             date = dict(parse_qsl(urlsplit(target).query)).get('dt', '')
             if not re.fullmatch(r'[0-9]{8}', date) or date[:6] != wanted:
@@ -144,7 +240,11 @@ def discover(state, url, raw, role):
             continue
         candidates.append({'url': target, 'role': document_role, 'sourceSha256': parent, 'account': account})
     # Finish the selected wrapper before switching the broker's account context.
-    if account in state['verified'] and urlsplit(url).path == '/priv/new/releves.php':
+    if notice_only:
+        previous = notice_calendar_previous(state, url, raw, account, parent)
+        if previous is not None:
+            candidates.append(previous)
+    elif account in state['verified'] and urlsplit(url).path == '/priv/new/releves.php':
         month_selects = soup.select('select[name=RlvCombo]')
         replay.require(len(month_selects) == 1)
         month_select = month_selects[0]
@@ -195,6 +295,17 @@ def next_document(state):
         return {'accounts_verified': state['verified'] == {'PEA', 'PEA-PME'},
             'document': {key: row[key] for key in ('url', 'role', 'sourceSha256', 'method', 'fields') if key in row}}
     replay.require(state['verified'] == {'PEA', 'PEA-PME'})
+    if 'notice_window' in state:
+        first = datetime.strptime(state['notice_window']['first'][:7], '%Y-%m')
+        last = state['notice_window']['last'][:7]
+        periods = []
+        while first.strftime('%Y-%m') <= last:
+            periods.append(first.strftime('%Y-%m'))
+            first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+        complete = (not state['notice_pending_calendars'] and
+            all((account, period) in state['notice_calendars'] for account in state['verified'] for period in periods))
+        return {'done': True, 'accounts_verified': True, 'documents': {'complete': complete,
+            'monthly_statements': 0, 'contract_notes': len(state['notice_documents'])}}
     complete = all(set(state['documents'].get(kind, {})) == {'monthly_statement', 'contract_note'}
         and state['documents'][kind]['monthly_statement'].get('period') is not None
         and state['documents'][kind]['monthly_statement'].get('period') == state['documents'][kind]['contract_note'].get('period')
@@ -233,14 +344,14 @@ def source_pins(root, inventory):
     return {'app_sha256': inventory['evidence']['auth_app_body']['sha256'], 'assets': assets}
 
 
-def qualify(root, lab, inventory, public_only=False):
+def qualify(root, lab, inventory, public_only=False, notice_as_of=None):
     replay.require(type(public_only) is bool)
     preference_path = root / 'inputs/source-observations/statement-preference.yaml'
-    preference = replay.private._read(preference_path) if preference_path.exists() else {
+    preference = replay.private._read(preference_path) if notice_as_of is None and preference_path.exists() else {
         'schema_version': 1, 'statement_periods': {}}
     replay.require(isinstance(preference, dict) and set(preference) == {'schema_version', 'statement_periods'}
         and type(preference['schema_version']) is int and preference['schema_version'] == 1)
-    state = planner(preference['statement_periods'])
+    state = planner(preference['statement_periods'], notice_as_of=notice_as_of)
     verified = inventory['_verified_helpers']
     q = replay.helper(lab, 'qualify', verified)
     vault = replay.helper(lab, 'attest', verified).attest()
@@ -411,7 +522,8 @@ def qualify(root, lab, inventory, public_only=False):
                     replay.private._publish(output / 'qualification.yaml', {**intent, **row,
                         'state': 'owned_session_closed', 'captures': state['captures'],
                         'accounts': state['accounts'], 'account_ids': state['account_ids'],
-                        'verified_wrappers': sorted(state['verified'])}, exclusive=True)
+                        'verified_wrappers': sorted(state['verified']),
+                        **({'notice_window': state['notice_window']} if 'notice_window' in state else {})}, exclusive=True)
                     passed = True
                     return {'code': 'SOURCE_QUALIFICATION_COMPLETED' if row['documents']['complete'] else
                         'SOURCE_DOCUMENT_ACQUISITION_INCOMPLETE', 'accounts': 2, **row['documents']}
