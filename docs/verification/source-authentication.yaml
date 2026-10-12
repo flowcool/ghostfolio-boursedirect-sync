@@ -1311,6 +1311,14 @@ verified_session_completion:
     pilot_no_logout: authenticated_fenced
     pilot_close_retention_failure: authenticated_fenced
     pilot_late_unknown: password_accepted_fenced
+    sequential_reuse:
+      evidence_root: private_ignored_tmp/source70-native-proof-1d28887863214ca0bad7da80c2b7839c/pilot-reuse
+      successful_native_acquisitions: 2
+      distinct_retained_attempts: 2
+      both_attempt_states: closed_success
+      first_complete_attempt_unchanged: true
+      enrollment_or_journal_reset: false
+      owned_browser_resource_absent: true
     all_owned_browser_resources_absent: true
     broker_requests: 0
     real_vault_sessions: 0
