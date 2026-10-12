@@ -14,6 +14,14 @@ external SHA256 binds bytes; it proves neither reviewer identity nor the truth o
 freshness of security, recovery, version, rendered dates or exclusive access.
 Those facts require real independent evidence before an operator runs it.
 
+The existing controller also consumes schema3 frozen reviews with an explicit
+90-day booking window. It recomputes complete preparation and global adoption,
+but emits and checks holdings for selected new activities only. Older unimported
+source buys do not supply positions for selected sales. Raw-source replay still
+checks excluded documents, and the complete review/configuration clock remains
+bound by the external pins. No recurring broker or production-write authority is
+granted by selecting a window.
+
 The controller fully recomputes the frozen review and current preparation from
 bounded local HTML/configuration bytes. It refuses unresolved adoption, holdings
 shortfalls, unsupported operations, changed raw documents and financially different

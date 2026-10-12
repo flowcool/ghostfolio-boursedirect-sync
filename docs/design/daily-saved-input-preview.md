@@ -272,3 +272,9 @@ replay/frozen-review/exact-wire application boundary remains mandatory.
 Filtering cannot hide old malformed sources or clear prior uncertainty. A repeat
 against identical captures/snapshot/day is byte-identical. This saved-input stage
 still performs no broker request, Ghostfolio GET/POST or financial mutation.
+
+For the separately qualified application path, schema3 [frozen review](offline-review-cli.md)
+binds the same explicit 90-day clock and recomputes complete source/adoption evidence.
+Its holdings projection includes selected new activities only: an excluded, unimported
+old buy cannot cover a selected sale. Daily candidate bytes do not replace that report
+or its history, current-source and external application gates.

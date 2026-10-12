@@ -2833,7 +2833,7 @@ def _dispatch_single_intent(state_root, binding, reviewed, baseline_raw, max_byt
             os.close(descriptor)
 
 
-def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence, automatic=False):
+def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence, automatic=False, as_of=None):
     """Pure conservative coverage proof; never invent opening acquisitions."""
     build_wire_payload(prepared)
     remote = parse_remote_activity_snapshot(raw_snapshot)
@@ -2848,6 +2848,11 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
         fail("COMPLETE_ACQUISITION_HISTORY_EVIDENCE_REQUIRED")
     if adoption["candidates"]:
         fail("HOLDINGS_ADOPTION_UNRESOLVED")
+    selected_new = adoption["new"]
+    if as_of is not None:
+        first_day = (daily_preview_day(as_of) - timedelta(days=89)).isoformat()
+        selected_new = [marker for marker in selected_new
+                        if first_day <= str(prepared[marker]["operation_date"]) <= as_of]
     symbols = {a["symbol"] for a in prepared.values() if a["kind"] in ("BUY", "SELL")}
     events = []
     for row in remote:
@@ -2862,7 +2867,7 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
         if not row["date_context_verified"] or not row["financial_context_verified"] or row["data_source"] != "YAHOO" or row["price_currency"] != "EUR":
             fail("HOLDINGS_SECURITY_OR_DATE_CONTEXT_UNVERIFIED")
         events.append(row)
-    for marker in adoption["new"]:
+    for marker in selected_new:
         activity = prepared[marker]
         if activity["kind"] == "DIVIDEND":
             continue
@@ -2888,10 +2893,14 @@ def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_e
                 shortages.append({"date": day, "symbol": symbol, "available_before_day": canonical_decimal(before),
                                   "sales": canonical_decimal(sells), "same_day_buys": canonical_decimal(buys)})
             balances[symbol] = before + buys - sells
-    return {"snapshot_sha256": snapshot_digest, "coverage_verified": not shortages,
+    result = {"snapshot_sha256": snapshot_digest, "coverage_verified": not shortages,
             "shortages": shortages, "ending_quantities": {k: canonical_decimal(v) for k, v in sorted(balances.items())},
             "adoption": adoption, "import_ready": False,
             "blockers": ["DESTINATION_VALIDATION_REQUIRED", "SECURITY_REVIEW_REQUIRED"] + (["CHRONOLOGICAL_HOLDINGS_SHORTFALL"] if shortages else [])}
+    if as_of is not None:
+        result["booking_window"] = {"first_day": first_day, "last_day": as_of, "days": 90}
+        result["selected_new"] = selected_new
+    return result
 
 
 def validated_prepared_review(raw):
@@ -3037,11 +3046,15 @@ def review_capture_configuration(config_raw):
     config = parse_keyed_yaml(config_raw)
     roles = ("prepared", "snapshot", "resolutions", "history_evidence")
     version = config.get("schema_version")
-    keys = {"schema_version", *roles} | ({"adoption_mode"} if version == 2 else set())
-    if (set(config) != keys or type(version) is not int or version not in (1, 2)
-            or version == 2 and config.get("adoption_mode") != "certain_unique"
+    keys = {"schema_version", *roles} | ({"adoption_mode"} if version in (2, 3) else set())
+    if version == 3:
+        keys.add("as_of")
+    if (set(config) != keys or type(version) is not int or version not in (1, 2, 3)
+            or version in (2, 3) and config.get("adoption_mode") != "certain_unique"
             or any(not isinstance(config[k], str) or not config[k].strip() for k in roles)):
         fail("INVALID_REVIEW_CONFIGURATION")
+    if version == 3:
+        daily_preview_day(config["as_of"])
     return config
 
 
@@ -3071,9 +3084,10 @@ def compute_offline_review(config_raw, captures, max_bytes):
     if precision > min(FROZEN_REVIEW_PRECISION_LIMIT, max_bytes):
         fail("FROZEN_REVIEW_PRECISION_LIMIT_EXCEEDED")
     coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history,
-                                             automatic=config.get("adoption_mode") == "certain_unique")
+                                             automatic=config.get("adoption_mode") == "certain_unique",
+                                             as_of=config.get("as_of"))
     adoption = coverage["adoption"]
-    new = {marker: activities[marker] for marker in adoption["new"]}
+    new = {marker: activities[marker] for marker in coverage.get("selected_new", adoption["new"])}
     wire = build_wire_payload(new) if new else None
     blockers = set(coverage["blockers"])
     blockers.update({"PRODUCTION_WRITES_NOT_AUTHORIZED", "DESTINATION_VERSION_AND_DISPLAY_UNVERIFIED"})
@@ -3167,7 +3181,7 @@ def capture_local_frozen_review(config_path, review_path, review_sha256, input_r
 
 
 def frozen_review_summary(artifact):
-    return {"review_verified": True, "new_activities": len(artifact["adoption"]["new"]),
+    return {"review_verified": True, "new_activities": len(artifact["holdings"].get("selected_new", artifact["adoption"]["new"])),
             "owned_activities": len(artifact["adoption"]["owned"]),
             "adopted_activities": len(artifact["adoption"]["adopted"]),
             "holdings_shortfalls": len(artifact["holdings"]["shortages"]),
@@ -3465,7 +3479,7 @@ def review_local_snapshot(config_path, input_root, max_bytes):
         atomic_private_yaml(output, artifact)
     finally:
         os.close(lock)
-    return {"new_activities": len(artifact["adoption"]["new"]), "owned_activities": len(artifact["adoption"]["owned"]),
+    return {"new_activities": len(artifact["holdings"].get("selected_new", artifact["adoption"]["new"])), "owned_activities": len(artifact["adoption"]["owned"]),
             "adopted_activities": len(artifact["adoption"]["adopted"]), "holdings_shortfalls": len(artifact["holdings"]["shortages"]),
             "import_ready": False, "blockers": artifact["blockers"]}
 
