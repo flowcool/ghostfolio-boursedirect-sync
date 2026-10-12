@@ -16,7 +16,7 @@ import stat
 import ssl
 import sys
 import uuid
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Comment
 import yaml
@@ -1533,7 +1533,202 @@ def daily_months(first, last):
     return [f"{n // 12:04d}-{n % 12 + 1:02d}" for n in range(start, stop + 1)]
 
 
-def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth):
+def daily_current_configuration(entry, as_of):
+    if (not isinstance(entry, dict)
+            or set(entry) != {"period", "index", "index_metadata", "index_encoding", "notes"}
+            or entry["period"] != as_of[:7]
+            or entry["index_encoding"] not in ("declared", "observed_cp1252_declared_utf8")
+            or not isinstance(entry["notes"], dict) or len(entry["notes"]) > 31):
+        fail("INVALID_CURRENT_PERIOD_CONFIGURATION")
+    references = {"index": entry["index"], "index_metadata": entry["index_metadata"]}
+    for day, note in entry["notes"].items():
+        capture_period("note", day)
+        if day[:7] != as_of[:7] or day > as_of:
+            fail("CURRENT_NOTE_DAY_CONFLICT")
+        if not isinstance(note, dict) or set(note) != {"document", "metadata"}:
+            fail("INVALID_CURRENT_PERIOD_CONFIGURATION")
+        references.update({day + ":" + key: value for key, value in note.items()})
+    if any(not isinstance(path, str) or not path.strip() for path in references.values()):
+        fail("INVALID_CURRENT_PERIOD_CONFIGURATION")
+    return references
+
+
+def daily_current_metadata(raw, body, account, role):
+    metadata = parse_keyed_yaml(raw)
+    if (not isinstance(metadata, dict) or metadata.get("role") != role
+            or metadata.get("account_wrapper") not in ("PEA", "PEA-PME")
+            or not isinstance(metadata.get("broker_account_id"), str)
+            or not metadata["broker_account_id"]
+            or metadata["broker_account_id"] + " " + metadata["account_wrapper"] != account["source_account_ref"]
+            or metadata.get("sha256") != hashlib.sha256(body).hexdigest()
+            or not isinstance(metadata.get("url"), str)):
+        fail("CURRENT_CAPTURE_BINDING_CONFLICT")
+    if any(ord(character) <= 32 or ord(character) == 127 for character in metadata["url"]):
+        fail("CURRENT_CAPTURE_ORIGIN_CONFLICT")
+    try:
+        parts = urlsplit(metadata["url"])
+    except ValueError:
+        fail("CURRENT_CAPTURE_ORIGIN_CONFLICT")
+    if parts.scheme != "https" or parts.netloc != "www.boursedirect.fr" or parts.fragment:
+        fail("CURRENT_CAPTURE_ORIGIN_CONFLICT")
+    return metadata
+
+
+def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_depth):
+    """Account-bound inventory and note observations, never financial preparation."""
+    entry, account = config["current_period"], config["account"]
+    raw = capture["index"]
+    meta = daily_current_metadata(capture["index_metadata"], raw, account, "frame_document")
+    index_url = urlsplit(meta["url"])
+    try:
+        query = parse_qs(index_url.query, strict_parsing=True)
+    except ValueError:
+        fail("CURRENT_INDEX_URL_CONFLICT")
+    if index_url.path != "/priv/new/avis-operes.php" or set(query) != {"ong", "nc"} or query["ong"] != ["5"] or len(query["nc"]) != 1 or not re.fullmatch(r"[1-9][0-9]*", query["nc"][0]):
+        fail("CURRENT_INDEX_URL_CONFLICT")
+    if entry["index_encoding"] == "observed_cp1252_declared_utf8":
+        declarations = re.findall(rb"<meta\b[^>]*\bcharset\s*=\s*[\"']?\s*([a-zA-Z0-9_-]+)", raw, re.I)
+        if not declarations or {v.lower() for v in declarations} != {b"utf-8"} or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            fail("CURRENT_INDEX_ENCODING_PROFILE_CONFLICT")
+        try:
+            html = raw.decode("cp1252", errors="strict")
+        except UnicodeDecodeError:
+            fail("CURRENT_INDEX_ENCODING_PROFILE_CONFLICT")
+        try:
+            raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            pass
+        else:
+            fail("CURRENT_INDEX_ENCODING_PROFILE_CONFLICT")
+    else:
+        html = decode_document(raw)
+    soup = BeautifulSoup(html, "html.parser")
+    pending = [(soup, 0)]
+    while pending:
+        node, depth = pending.pop()
+        if depth > max_depth:
+            fail("INPUT_TOO_DEEP")
+        pending.extend((child, depth + 1) for child in node.children if getattr(child, "name", None))
+    navigation, offered = {}, {}
+    months = ("Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre")
+    headings = [[text(span) for span in cell.find_all("span", recursive=False) if not span.get("class")]
+                for cell in soup.find_all("td", class_="topdatas")]
+    if headings != [[entry["period"][:4]], [months[int(entry["period"][5:]) - 1]]]:
+        fail("CURRENT_INDEX_PERIOD_CONFLICT")
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        nav = re.fullmatch(r"javascript:(AnneePrecedente|AnneeSuivante|MoisPrecedent|MoisSuivant)\('RO',([1-9][0-9]*),([0-9]{1,2}),([0-9]{4})\)", href)
+        if nav:
+            if nav[1] in navigation or nav[2] != query["nc"][0] or f"{nav[4]}-{int(nav[3]):02d}" != entry["period"]:
+                fail("CURRENT_INDEX_PERIOD_CONFLICT")
+            navigation[nav[1]] = True
+        if "releveOpe.php" not in href:
+            continue
+        match = re.fullmatch(r"javascript:ouvrePopup\('([^']+)','encours'\);", href)
+        if not match:
+            fail("CURRENT_INDEX_LINK_UNSUPPORTED")
+        if any(ord(character) <= 32 or ord(character) == 127 for character in match[1]):
+            fail("CURRENT_INDEX_LINK_CONFLICT")
+        url = urljoin(meta["url"], match[1])
+        try:
+            parts = urlsplit(url)
+            values = parse_qs(parts.query, strict_parsing=True)
+        except ValueError:
+            fail("CURRENT_INDEX_LINK_CONFLICT")
+        if (parts.scheme != "https" or parts.netloc != "www.boursedirect.fr" or parts.fragment
+                or parts.path != "/priv/new/releveOpe.php" or set(values) != {"nc", "type", "year", "month", "day", "trash"}
+                or any(len(v) != 1 for v in values.values()) or values["nc"] != query["nc"]
+                or values["type"] != ["RO"] or values["trash"] != ["/avis.pdf"]
+                or not re.fullmatch(r"[0-9]{1,2}", values["day"][0])
+                or values["year"][0] != entry["period"][:4] or values["month"][0] != str(int(entry["period"][5:]))):
+            fail("CURRENT_INDEX_LINK_CONFLICT")
+        day = entry["period"] + "-" + values["day"][0].zfill(2)
+        capture_period("note", day)
+        if day > as_of or day in offered or text(link) != day[-2:]:
+            fail("CURRENT_INDEX_DAY_CONFLICT")
+        offered[day] = url
+    if set(navigation) != {"AnneePrecedente", "AnneeSuivante", "MoisPrecedent", "MoisSuivant"}:
+        fail("CURRENT_INDEX_PERIOD_UNVERIFIED")
+    empty = [text(n) for n in soup.select("div.msg.texte1T7A")]
+    if (not offered and empty != ["Vous n'avez pas effectué d'opération ce mois-ci."]
+            or offered and empty or set(offered) != set(entry["notes"])):
+        fail("CURRENT_INDEX_NOTE_INVENTORY_CONFLICT")
+    originals = json.loads(snapshot_raw, object_pairs_hook=unique_json_object)
+    timestamps = {row["id"]: row["date"] for row in originals["activities"]}
+    observations, exceptions, comparisons = {}, {}, 0
+    for day in sorted(offered):
+        body = capture[day + ":document"]
+        note_meta = daily_current_metadata(capture[day + ":metadata"], body, account, "contract_note")
+        if note_meta["url"] != offered[day] or note_meta["broker_account_id"] != meta["broker_account_id"]:
+            fail("CURRENT_NOTE_URL_CONFLICT")
+        html = decode_document(body)
+        note_soup = BeautifulSoup(html, "html.parser")
+        refs = [text(cells(row)[1]) for row in note_soup.find_all("tr") if len(cells(row)) == 2 and text(cells(row)[0]) == "COMPTE N°"]
+        if refs != [account["source_account_ref"]]:
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        key = "current_note:" + note_meta["sha256"]
+        observation = {"note_sha256": note_meta["sha256"], "metadata_sha256": hashlib.sha256(capture[day + ":metadata"]).hexdigest(), "operation_date": day, "notes": []}
+        code = "CURRENT_NOTE_REQUIRES_CLOSED_STATEMENT"
+        try:
+            parsed = parse_contract_note(html, max_depth, include_coupons=True)
+        except RuntimeError as error:
+            code = str(error)
+            observation["operation_date_verified"] = False
+            if code == "INVALID_NOTE_SECURITY":
+                ledgers = [table for table in note_soup.find_all("table") if direct_rows(table)
+                           and tuple(text(cell) for cell in cells(direct_rows(table)[0])) == HEADERS]
+                if len(ledgers) != 1 or len(direct_rows(ledgers[0])) != 2 or len(cells(direct_rows(ledgers[0])[1])) != 4:
+                    fail("CURRENT_NOTE_DAY_UNVERIFIED")
+                dates = cells(direct_rows(ledgers[0])[1])[0].find_all("table", recursive=False)
+                if len(dates) != 1:
+                    fail("CURRENT_NOTE_DAY_UNVERIFIED")
+                date_rows = direct_rows(dates[0])
+                if any(len(cells(row)) != 1 or cells(row)[0].find("table") for row in date_rows):
+                    fail("CURRENT_NOTE_DAY_UNVERIFIED")
+                source_days = [parse_date(text(cells(row)[0])).isoformat() for row in date_rows if text(cells(row)[0])]
+                if not source_days or any(value != day for value in source_days):
+                    fail("CURRENT_NOTE_DAY_CONFLICT")
+                observation["operation_date_verified"] = True
+        else:
+            if any(note["date"].isoformat() != day for note in parsed["notes"]):
+                fail("CURRENT_NOTE_DAY_CONFLICT")
+            observation["operation_date_verified"] = True
+            comparisons += len(parsed["notes"]) * len(remote)
+            if comparisons > 1000000:
+                fail("DAILY_CURRENT_COMPARISON_LIMIT_EXCEEDED")
+            for note in parsed["notes"]:
+                record = {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v for k, v in note.items()}
+                mapping = config["mappings"].get(note["isin"])
+                record["destination_candidates"] = []
+                if note["kind"] in ("BUY", "SELL") and isinstance(mapping, dict):
+                    symbol = mapping.get("symbol")
+                    if (isinstance(symbol, str) and re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", symbol)
+                            and mapping.get("data_source") == "YAHOO" and mapping.get("target_currency") == "EUR"
+                            and isinstance(mapping.get("target_security_evidence"), str) and mapping["target_security_evidence"].strip()):
+                        record["target_symbol"] = symbol
+                        for row in remote:
+                            if (row["target_account_id"] == account["target_account_id"] and row["symbol"] == symbol
+                                    and row["data_source"] == "YAHOO" and row["kind"] == note["kind"]
+                                    and row["quantity"] == note["quantity"].copy_abs() and row["unit_price"] == note["unit_price"]
+                                    and abs((datetime.fromisoformat(row["operation_date"]).date() - note["date"]).days) <= 1):
+                                with localcontext() as context:
+                                    context.prec = max(28, sum(len(v.as_tuple().digits) + abs(v.as_tuple().exponent) for v in (row["fee"], note["brokerage"], note["vat"])) + 4)
+                                    fee_delta = canonical_decimal(row["fee"] - note["brokerage"] - note["vat"])
+                                record["destination_candidates"].append({"remote_id": row["remote_id"], "original_timestamp": timestamps[row["remote_id"]],
+                                    "date_context_verified": row["date_context_verified"], "financial_context_verified": row["financial_context_verified"],
+                                    "remote_currency": row["price_currency"], "remote_fee": canonical_decimal(row["fee"]),
+                                    "fee_delta_remote_minus_source": fee_delta,
+                                    "certain_match": False})
+                observation["notes"].append(record)
+        observation["code"] = code
+        observations[day] = observation
+        exceptions[key] = {"period": entry["period"], "operation_date": day, "status": "unresolved", "code": code, "note_sha256": note_meta["sha256"]}
+    return {"period": entry["period"], "index_sha256": hashlib.sha256(raw).hexdigest(), "index_metadata_sha256": hashlib.sha256(capture["index_metadata"]).hexdigest(),
+            "index_encoding": entry["index_encoding"], "offered_note_days": sorted(offered), "every_offered_note_retained": True,
+            "notes": observations, "through_day_verified": False, "monthly_cash_controls_verified": False, "import_ready": False}, exceptions
+
+
+def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth, current_capture=None):
     """Saved-source continuity only; no acquisition clock, wire or remote write."""
     day = daily_preview_day(as_of)
     window_start = (day - timedelta(days=89)).isoformat()
@@ -1608,7 +1803,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
         if notes is None:
             pass
         elif all(event["kind"] in ("BUY", "SELL") for event in statement["events"]):
-            one = {k: v for k, v in config.items() if k != "snapshot"}
+            one = {k: v for k, v in config.items() if k not in ("snapshot", "current_period")}
             one["documents"] = {alias: config["documents"][alias]}
             try:
                 prepared = compute_prepared_sources(yaml.safe_dump(one).encode(), {alias: capture}, max_bytes, max_depth)["artifact"]["activities"]
@@ -1654,6 +1849,18 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
             journal["exceptions"][key] = {"period": coupon["operation_date"][:7], "operation_date": coupon["operation_date"],
                 "status": "resolved_by_saved_evidence" if observation["status"] == "CERTAIN_UNIQUE_NET_REPRESENTATION_OBSERVED" else "unresolved",
                 "code": observation["status"], "evidence": json.loads(json.dumps(observation))}
+    current = None
+    if "current_period" in config:
+        daily_current_configuration(config["current_period"], as_of)
+        if current_capture is None:
+            fail("CURRENT_PERIOD_CAPTURE_MISSING")
+        current, exceptions = inspect_daily_current(config, current_capture, snapshot_raw, remote, as_of, max_depth)
+        journal["exceptions"].update(exceptions)
+    for key, exception in journal["exceptions"].items():
+        if key.startswith("current_note:") and exception.get("code") == "CURRENT_NOTE_REQUIRES_CLOSED_STATEMENT":
+            closed = journal["periods"].get(exception["period"], {})
+            if closed.get("complete_source_matching") and exception.get("note_sha256") in closed.get("note_sha256", []):
+                exception["status"] = "resolved_by_saved_evidence"
     gaps = [period for period in required[:-1] if not journal["periods"].get(period, {}).get("complete_source_matching")]
     stale = [period for period in gaps if period < window_start[:7]]
     completed = [p for p, evidence in journal["periods"].items() if evidence.get("complete_source_matching")]
@@ -1674,6 +1881,8 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
               "blockers": ["CURRENT_PERIOD_CUTOFF_UNVERIFIED", "FINANCIAL_APPLICATION_NOT_ACTIVATED"]}
     if gaps:
         report["blockers"].append("ACQUISITION_COVERAGE_GAP")
+    if current is not None:
+        report["current_period_observations"] = current
     if stale:
         report["blockers"].append("DAILY_RESUME_CATCHUP_REQUIRED")
     return journal, report
@@ -1685,16 +1894,32 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
     daily_preview_day(as_of)
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
     config = parse_keyed_yaml(config_raw)
-    if set(config) != {"schema_version", "account", "mappings", "documents", "snapshot"} or type(config["snapshot"]) is not str:
+    if (not isinstance(config, dict) or set(config) not in ({"schema_version", "account", "mappings", "documents", "snapshot"},
+            {"schema_version", "account", "mappings", "documents", "snapshot", "current_period"}) or type(config["snapshot"]) is not str):
         fail("INVALID_DAILY_PREVIEW_CONFIGURATION")
-    prep_raw = yaml.safe_dump({k: v for k, v in config.items() if k != "snapshot"}).encode()
+    prep_raw = yaml.safe_dump({k: v for k, v in config.items() if k not in ("snapshot", "current_period")}).encode()
     preparation_configuration(prep_raw, max_bytes, max_depth)
     if sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
         fail("DAILY_INPUT_LIMIT_EXCEEDED")
     documents, paths = capture_preparation_sources(prep_raw, input_root, min(max_bytes, 4 * 1024 * 1024), max_depth)
+    current_capture = None
+    if "current_period" in config:
+        references = daily_current_configuration(config["current_period"], as_of)
+        if len(references) + sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        current_capture = {}
+        captured_bytes = len(config_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values())
+        for key, reference in references.items():
+            path = Path(input_root) / reference
+            body = read_local_bytes(path, input_root, min(max_bytes, 4 * 1024 * 1024))
+            captured_bytes += len(body)
+            if captured_bytes > 64 * 1024 * 1024:
+                fail("DAILY_INPUT_LIMIT_EXCEEDED")
+            current_capture[key] = body
+            paths.append(path)
     snapshot_path = Path(input_root) / config["snapshot"]
     snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
-    if len(config_raw) + len(snapshot_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values()) > 64 * 1024 * 1024:
+    if len(config_raw) + len(snapshot_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values()) + sum(map(len, (current_capture or {}).values())) > 64 * 1024 * 1024:
         fail("DAILY_INPUT_LIMIT_EXCEEDED")
     inputs = [Path(config_path), snapshot_path, *paths]
     account = config["account"]
@@ -1728,7 +1953,7 @@ def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
             if read_keyed_yaml(ledger, state, max_bytes).get("binding") != account:
                 fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
         previous = read_keyed_yaml(journal_path, state, max_bytes) if journal_path.exists() or journal_path.is_symlink() else None
-        journal, report = compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth)
+        journal, report = compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth, current_capture)
         if any(len(yaml.safe_dump(value).encode()) > max_bytes for value in (journal, report)):
             fail("DAILY_REPORT_LIMIT_EXCEEDED")
         atomic_private_yaml(binding, account)

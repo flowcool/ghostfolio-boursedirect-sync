@@ -26,17 +26,47 @@ report exposes `window_source_events` separately from whole-period reconciliatio
 Unknown financial operations still block their period; coupon matching does not
 qualify mixed trade/coupon/corporate-action periods.
 
-Current-month operation indices and standalone daily notes are a separate source
-boundary; this command currently consumes neither without a closed statement.
-The acquired calendar's offered links can be matched to account-bound saved notes,
-but that inventory does not prove a through-day cutoff or monthly cash controls.
-The observed calendar bytes declare UTF-8 yet fail strict UTF-8 decoding. Retain
-the original bytes and that discrepancy; a separate manual inspection projection
-does not qualify the index for the strict financial-document reader.
-A future current-month observation path must verify the captured account, month,
-offered-link inventory and note hashes, preserve refused notes as exceptions, and
-keep closed-period coverage unchanged. A matching destination trade with an
-unverified timestamp or execution-price currency cannot become a certain match.
+An optional `current_period` adds saved current-month inventory and note
+observations alongside the closed statements:
+
+```yaml
+current_period:
+  period: '2026-10'
+  index: saved/index.html
+  index_metadata: saved/index.yaml
+  index_encoding: observed_cp1252_declared_utf8
+  notes:
+    '2026-10-02':
+      document: saved/note.html
+      metadata: saved/note.yaml
+```
+
+The metadata references the collector's original per-document receipts. Each
+receipt must bind the exact file hash, role, broker account ID, wrapper and saved
+URL. The calendar's four navigation calls, displayed month/year and selected
+account slot must agree. Every offered daily link must have exactly one retained
+note, with the same captured URL/account and source day. Extra or missing notes,
+duplicate days, foreign origins and future days refuse without replacing state.
+An explicit no-operation calendar may have an empty `notes` mapping; that is an
+inventory observation, not proof of empty history or a through-day cutoff.
+
+The calendar uses `index_encoding: declared` for normal strict decoding. The
+separately characterized `observed_cp1252_declared_utf8` profile requires a UTF-8
+declaration, bytes that fail strict UTF-8, no BOM/NUL and strict cp1252 decoding.
+It applies only to this nonfinancial index. Financial notes still use the unchanged
+strict declared-encoding reader; original index and note bytes remain untouched.
+
+`current_period_observations` exposes the inventory, byte hashes, parsed source
+fields and conservative nearby destination candidates. A missing-ISIN note retains
+its refusal and is not converted. Source execution-price currency remains unknown;
+target-profile currency never fills it. Candidates retain original timestamps,
+fee differences and context flags; none is classified as certain, new or adopted.
+This path does not manufacture a monthly ledger, cash controls, holding movements,
+executable payload or through-day verification and never advances closed coverage.
+Each note's refusal or closed-statement dependency remains in the existing private
+exception journal when inputs disappear or age out. A parsed note's closed-source
+dependency can resolve only when a later fully matched closed statement includes
+the exact retained note hash; destination and application gates remain separate.
 
 An unsupported or malformed daily note records its fixed refusal code as an
 unresolved source exception for that period, with the original source digests
