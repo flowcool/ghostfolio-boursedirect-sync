@@ -1212,3 +1212,26 @@ coupon_net_cash_review:
   - Actual source-to-Yahoo mapping and historical reconciliation remain separate.
   - Unknown July operations still block financial period import.
   - No broker authentication or remote request occurs during this review.
+  actual_disposable_dividend_cash_check:
+    version: '3.83.0'
+    result: passed
+    source_cash_amounts_and_booking_days_exact: 7
+    representation_quantity: 1
+    representation_unit_price: net_cash_received
+    representation_fee: 0
+    artificial_fixture_profile: AIR.PA
+    actual_source_to_yahoo_mapping_verified: false
+    identical_repeat_new_rows: 0
+    owned_rollback_rows: 7
+    rollback_remaining_rows: 0
+    owned_containers_and_network_absent: true
+    unsupported_July_period_gate_retained: true
+    production_writes: 0
+  final_runtime_CI:
+    runtime_commit: 80c736a210cb189c89837bf11529bc17788b0fb5
+    offline_tests: 38199828318
+    dependency_review: 38199828312
+    CodeQL: 38199828315
+    native_connector_amd64_and_arm64: 38199828359
+    result: success
+    reuse_basis: final_runtime_bytes_unchanged_by_subsequent_documentary_evidence

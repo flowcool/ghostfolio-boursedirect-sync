@@ -43,9 +43,16 @@ and symlinks refuse before publication. Successful output uses existing private
 atomic YAML publication, mode 0600. Stdout contains only counts and gate codes.
 No acquisition coverage journal or destination state is changed.
 
-Destination symbol identity, dividend representation, exact API acceptance,
-legacy reconciliation and independent-operation dependency proof remain separate
-boundaries. An isolated amount/date check with artificial lab symbols establishes
-only API cash/date behavior, not real source-to-Yahoo identity or import readiness.
+Destination symbol identity, legacy reconciliation and independent-operation
+dependency proof remain separate boundaries. An actual Ghostfolio 3.83.0 check
+imported seven source cash amounts on their exact source days, representing each
+as DIVIDEND with quantity 1, unit price equal to net cash and fee 0. This amount
+carrier avoids dividing cash by source quantities and deducting commission twice;
+the signed source quantities and costs stay in the private review.
+An unchanged repeat created zero new rows; all seven owned rows were removed and
+the disposable containers/network were absent after cleanup. This check uses the
+previously qualified artificial AIR.PA fixture profile for all seven payments.
+It establishes exact API cash/date behavior, not real source-to-Yahoo identity,
+complete period conversion, historical reconciliation or import readiness.
 Rollback: revert this scoped implementation commit and retain private captures
 and reports; no broker or production rollback is needed.
