@@ -53,6 +53,19 @@ test('unconsumed/unknown/blocked transitions cannot declare success',()=>isolate
  const h=prepare();assert.throws(()=>c.transition(h,'password_accepted',101),/AUTH_SUCCESS_WITHOUT_REQUEST/);assert.throws(()=>c.transition(h,'closed_success',101),/AUTH_TRANSITION_INVALID/);
  c.transition(h,'blocked',101);assert.throws(()=>c.transition(h,'password_uncertain',102));c.releasePrincipal(h);
 }));
+test('failed successful-close publication preserves authenticated fence and original enrollment',()=>isolated(()=>{
+ const h=prepare(),p=contract(h),n=c.armPermit(h,p,100,source);
+ c.consumePermit(h,request(p,n),101);c.transition(h,'password_accepted',102);c.transition(h,'otp_uncertain',103);
+ const otp={...p,phase:'otp_uncertain',url:source.roles.otp.url,resource_type:'XHR'};
+ const otpNonce=c.armPermit(h,otp,103,source);c.consumePermit(h,request(otp,otpNonce),104);c.transition(h,'authenticated',105);
+ const filename=path.join(h.directory,'journal.yaml'),original=fs.readFileSync(filename),sync=fs.fsyncSync;
+ fs.fsyncSync=()=>{throw new Error('synthetic close persistence failure');};
+ try {assert.throws(()=>c.transition(h,'closed_success',106));} finally {fs.fsyncSync=sync;}
+ assert.deepEqual(fs.readFileSync(filename),original);c.releasePrincipal(h);
+ const next=c.acquirePrincipal('synthetic');
+ try {assert.throws(()=>c.startAttempt(next,107),/AUTH_PRINCIPAL_FENCED/);} finally {c.releasePrincipal(next);}
+ assert.deepEqual(fs.readFileSync(filename),original);
+}));
 test('absent source role and arbitrary action denied before permit persistence',()=>isolated(()=>{
  const h=prepare(),p=contract(h);assert.throws(()=>c.armPermit(h,{...p,url:c.ORIGIN+'/orders'},100,source),/AUTH_SOURCE_ROLE_DISABLED/);
  assert.throws(()=>c.armPermit(h,p,100,{...source,roles:{...source.roles,password:null}}),/AUTH_SOURCE_ROLE_DISABLED/);c.releasePrincipal(h);

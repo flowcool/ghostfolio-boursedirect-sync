@@ -253,7 +253,17 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
           &&session.documentReady()!==null&&session.documentReady()>before);return true;
       },
       confirmAuthenticated:async evidence=>{if(phase!=='finalized'||fatal||evidence?.two_distinct_account_wrappers_verified!==true)throw new Error();authority.transition(handle,'authenticated',now());phase='authenticated';await retainSafe({authentication_verified:true});},
-      close:async()=>{await session.close();authority.releasePrincipal(handle);selected=code=undefined;},
+      close:async evidence=>{
+        try {
+          await session.close();
+          if(evidence!==undefined) {
+            if(evidence?.session_logged_out!==true||Object.keys(evidence).join(',')!=='session_logged_out'
+                ||phase!=='authenticated'||fatal||session.failure()!==undefined)throw new Error('SOURCE_SESSION_COMPLETION_REFUSED');
+            await retainSafe({authentication_session_closed:true});
+            authority.transition(handle,'closed_success',now());phase='closed_success';
+          }
+        } finally {authority.releasePrincipal(handle);selected=code=undefined;}
+      },
       online_ready:false});
   } catch(error) {
     await retainSafe({role:'qualification_refusal',phase,native_failure:session?.failure()??null,code:/^[A-Z_]+$/.test(error?.message??'')?error.message:'SOURCE_QUALIFICATION_PILOT_REFUSED',

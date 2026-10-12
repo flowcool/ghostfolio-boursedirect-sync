@@ -280,8 +280,19 @@ reconciliation only; it never restarts the CLI or retries authentication.
 `connect`. Run it only under the scoped one-attempt authority, after offline
 verification, isolated Chromium qualification and external review of the exact
 committed head. It reuses the dedicated lab, independently pinned vault identity
-and app source, and existing SSH/provisioning. Explicit enrollment reserves the
-canonical principal namespace; existing or uncertain state refuses.
+and app source, and existing SSH/provisioning. First enrollment reserves the
+canonical principal namespace. A later deliberate invocation reuses the immutable
+enrollment and retained journal only when every earlier attempt is `closed_success`.
+The core still refuses unfinished, malformed, changed-principal or locked state;
+there is no reset or automatic retry.
+
+After account authentication and completed navigation, the worker verifies vault
+logout before closing the native browser. Only verified browser exit, no retained
+native failure, and successful private completion publication permit the durable
+`closed_success` transition. Ordinary error cleanup leaves the attempt fenced.
+Historical `authenticated` journals are not retroactively closed: they retain their
+existing explicit recovery requirement. Successful closure does not authorize a
+new broker attempt or activate recurring execution.
 
 The worker keeps full vault items, seeds, session material, credentials and
 authentication responses in private memory. It inspects and retains each native

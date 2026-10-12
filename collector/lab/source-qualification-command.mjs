@@ -67,9 +67,10 @@ try {
     enrollBound:async(authority,selected)=>{
       if(principal(selected.login)!==input.vault.configuration.binding.principalHash
           ||JSON.stringify(selected.accountConfig)!==JSON.stringify(input.vault.configuration.binding.accountConfig))throw new Error();
-      if(await request({action:'reserve_enrollment',principal: selected.principalHash})!==true)throw new Error();
+      const enrollment=await request({action:'reserve_enrollment',principal: selected.principalHash});
+      if(!enrollment||Object.keys(enrollment).join(',')!=='enroll'||typeof enrollment.enroll!=='boolean')throw new Error();
       // Explicit qualification enrollment, never an ordinary connect fallback.
-      authority.enroll(selected.login);return true;
+      if(enrollment.enroll)authority.enroll(selected.login);return true;
     },lateCode:(request,expected)=>worker.code(request,expected),
     retain:observation=>request({action:'retain',observation}),
     consumeRead:grant=>request({action:'consume_read',grant}),
@@ -92,7 +93,8 @@ try {
     if(next.needs_selection===true)continue;
     if(next.done===true) {
       if(!confirmed)throw new Error();
-      await pilot.close();pilot=undefined;await worker.close();const totpRequests=Number(worker.status().used);worker=undefined;
+      await worker.close();const totpRequests=Number(worker.status().used);worker=undefined;
+      await pilot.close({session_logged_out:true});pilot=undefined;
       await channel.send({action:'complete',accounts_verified:true,documents:next.documents,
         session_logged_out:true,browser_exit_verified:browserClosed||browserStoppedOwned,
         browser_pipe_exit_verified:browserClosed,browser_stopped_owned:browserStoppedOwned,totp_requests:totpRequests});break;
