@@ -3,6 +3,7 @@ services:
   bitwarden:
     build: .
     image: ${BOURSEDIRECT_IMAGE:-ghostfolio-boursedirect-sync:local}
+    platform: linux/amd64
     init: true
     restart: "no"
     read_only: true
@@ -13,18 +14,31 @@ services:
       BW_CLIENTID: ${BW_CLIENTID:?Supply your Bitwarden personal API client ID}
       BW_CLIENTSECRET: ${BW_CLIENTSECRET:?Supply your Bitwarden personal API client secret}
       BW_PASSWORD: ${BW_PASSWORD:?Supply your Bitwarden master password}
+      # Infra supplies the HTTPS origin and long-lived Ghostfolio Security Token.
+      GHOSTFOLIO_ORIGIN: ${GHOSTFOLIO_ORIGIN:-}
+      GHOSTFOLIO_SECURITY_TOKEN: ${GHOSTFOLIO_SECURITY_TOKEN:-}
+      # Optional explicit routing. Missing fields are selected once in the terminal.
+      # Configured values are never overridden; conflicting retained routing refuses.
+      BD_SOURCE_ACCOUNT_REF: ${BD_SOURCE_ACCOUNT_REF:-}
+      GHOSTFOLIO_ACCOUNT_ID: ${GHOSTFOLIO_ACCOUNT_ID:-}
     tmpfs:
       - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
       - /tmp:rw,nosuid,nodev,mode=1777
+      - /home/fixture:rw,nosuid,nodev,mode=0700,uid=1000,gid=1000
     volumes:
       - bitwarden-binding:/state
+      - ./config:/config:ro
     cap_drop: [ALL]
-    security_opt: [no-new-privileges]
+    # Required by Chromium to create its sandbox chroot.
+    cap_add: [SYS_CHROOT]
+    security_opt: [no-new-privileges, "seccomp=./collector/browser-seccomp.json"]
+    ipc: private
+    shm_size: 128m
     ulimits:
       core: {soft: 0, hard: 0}
-    mem_limit: 512m
+    mem_limit: 1536m
     cpus: 1
-    pids_limit: 64
+    pids_limit: 256
     logging: {driver: none}
 volumes:
   bitwarden-binding:

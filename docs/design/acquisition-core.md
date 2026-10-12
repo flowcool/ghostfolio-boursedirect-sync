@@ -340,12 +340,18 @@ binary during cleanup. Uncertain logout refuses without retry; owned one-shot
 container exit discards private tmpfs. Closing while an operation is pending
 refuses instead of issuing overlapping CLI commands.
 
-The public `connect` command currently runs native vault inspection and retains
-the identity binding, then refuses broker authentication with exit2. Its future
-guarded source driver must consume this same connector; no vault success is
-converted into source permission or a claim of authenticated acquisition.
-Existing broker journal, actual request-role/account/resource qualification,
-external security review and financial activation gates remain separate.
+The public `connect` command uses the source-pinned guarded pilot in a local
+owned browser pipe. First acquisition resolves metadata in one vault session,
+retains its immutable identity before credential delivery, and validates that
+same item and alias binding before supplying the credential projection. The
+trusted `nativeVaultSession` acquisition path alone enables one delayed TOTP;
+metadata-only inspection still logs out and supplies no credentials. Publication
+or binding failures refuse delivery and perform the existing one-time cleanup.
+The worker verifies vault logout before successful browser/journal completion.
+The supervisor saves source-derived notices and a GET-only destination snapshot,
+then runs the existing offline preview. Public commands never select a test
+origin, executable, alternate journal namespace or financial write mode.
+Existing broker uncertainty and financial activation gates remain in force.
 
 Rollback reverts the native source/Compose commit, retaining the private binding
 and all historical broker journals. Native ENV configuration contains no

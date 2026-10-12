@@ -83,9 +83,12 @@ qualified application keeps its exact account/source and frozen-review gates.
 This selection supports the existing PEA and PEA-PME document profiles, including
 multiple broker accounts of one type. Other account types are not qualified.
 Without `--account-config`, the original two-account qualification remains
-available for historical evidence. The owned-lab qualification entrypoint is
-not yet a standalone community acquisition Compose service; configurable
-selection alone does not establish community deployment acceptance.
+available for historical evidence. The native community `connect` command composes this selection with the same
+notice planner and offline preview. Public configuration names both account ENV
+fields; otherwise first-run choices are retained privately and never overwritten
+by conflicting settings. The full path targets AMD64 and retains source documents
+and diagnostics in its state volume. Runtime evidence belongs to the owning issue;
+configuration alone does not establish acquisition acceptance.
 
 ## Source window acquisition
 

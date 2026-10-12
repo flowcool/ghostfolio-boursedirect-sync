@@ -21,26 +21,40 @@ export function nativeVaultEnvironment(env, pin) {
 
 // A trusted in-process collector supplies consume only after its source/journal gates.
 // No executable, command, socket or credential-export option is accepted from ENV.
-export async function nativeVaultExecution({env, pin, appdata, binding, accountConfig, consume,
+export async function nativeVaultSession({env, pin, appdata, binding, accountConfig, acquisition = false, bindIdentity,
   execute = executePrivate, verify = verifyExecutable, now = () => Math.floor(Date.now() / 1000)}) {
   const input = nativeVaultEnvironment(env, pin);
-  if (consume !== undefined) {
-    if (typeof consume !== 'function' || !binding || binding.name !== env.BW_ITEM_NAME
-      || binding.vaultOrigin !== env.BW_SERVER) throw new Error('NATIVE_VAULT_BINDING_REFUSED');
-    input.configuration = {...input.configuration, schema_version: 4, binding: {
+  if (acquisition) {
+    if (binding===undefined&&typeof bindIdentity!=='function'
+        ||binding!==undefined&&(binding.name!==env.BW_ITEM_NAME||binding.vaultOrigin!==env.BW_SERVER||bindIdentity!==undefined))
+      throw new Error('NATIVE_VAULT_BINDING_REFUSED');
+    if(binding!==undefined)input.configuration = {...input.configuration, schema_version: 4, binding: {
       itemId: binding.itemId, name: binding.name, uri: binding.uri,
       principalHash: binding.principalHash, uriAliasesSha256: binding.uriAliasesSha256, accountConfig}};
   }
   const worker = vaultWorker({configuration: input.configuration, appdata, execute,
-    verifyExecutable: verify, now});
+    verifyExecutable: verify, now,
+    ...(acquisition&&binding===undefined?{bindAcquisition:async metadata=>{
+      const retained=await bindIdentity(metadata);
+      if(!retained||retained.name!==env.BW_ITEM_NAME||retained.vaultOrigin!==env.BW_SERVER)
+        throw new Error('NATIVE_VAULT_BINDING_REFUSED');
+      return {itemId:retained.itemId,name:retained.name,uri:retained.uri,principalHash:retained.principalHash,
+        uriAliasesSha256:retained.uriAliasesSha256,accountConfig};
+    }}:{})});
   try {
     const selected = await worker.initialize(input.credentials);
     input.credentials = undefined;
-    return consume ? await consume(selected, worker.code) : selected;
-  } finally {
-    input.credentials = undefined;
-    await worker.close();
-  }
+    return Object.freeze({selected,code:worker.code,close:worker.close,status:worker.status});
+  } catch(error) {
+    await worker.close();throw error;
+  } finally {input.credentials=undefined;}
+}
+
+export async function nativeVaultExecution(options) {
+  if(options.consume!==undefined&&typeof options.consume!=='function')throw new Error('NATIVE_VAULT_BINDING_REFUSED');
+  const session=await nativeVaultSession({...options,acquisition:options.consume!==undefined});
+  try {return options.consume?await options.consume(session.selected,session.code,session.close):session.selected;}
+  finally {await session.close();}
 }
 
 export function retainNativeBinding(directory, env, selected) {

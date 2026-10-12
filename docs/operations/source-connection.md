@@ -28,7 +28,13 @@ runbook contains procedure, not a second work queue.
 The community entrypoint is the ENV-configured native `bitwarden` service in
 `compose.yaml`; see the [application Compose instructions](../../README.md#application-compose).
 `docker compose run --rm bitwarden inspect` verifies access and closes its session.
-`connect` uses the same connector but still refuses unqualified broker dispatch.
+`docker compose run --rm bitwarden connect` joins native vault, guarded browser,
+selected-account notice acquisition and the saved-input dry run on AMD64. It uses
+only configured HTTPS Ghostfolio access, with no financial writes. Missing accounts
+are chosen once in the terminal; explicit or retained conflicting bindings refuse.
+The public path does not use the private lab inventory or SSH helpers below.
+Keep all retained journals and receipts; uncertainty remains an explicit recovery
+condition. The volume holds `runs/`, `outputs/` and the immutable route.
 The existing dedicated lab retains `compose.lab.yaml` plus its broker overlay,
 private receipts and exact-owned SSH adapter. Its historical inspection is reused
 as evidence, while native image/runtime qualification is recorded separately.

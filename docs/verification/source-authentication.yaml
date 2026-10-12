@@ -1338,3 +1338,48 @@ verified_session_completion:
     production_financial_writes: 0
     community_compose_acquisition_not_enabled: true
     final_head_ci_and_review: recorded_in_owning_issue
+
+community_compose_connection:
+  owner: infra-4g8u.114
+  inputs:
+    Dockerfile: 10c0a2d36236b1d639e37bb41cbb0f7906abbf6802bc3dba1764da489febd801
+    compose.yaml: 849aef925094fec67a34f4d6c4b2c068bd9cf0b507b70c165955a7ec35b44c3a
+    collector/native-source-command.mjs: 6c4efe19cc8e0b9b79fe0152c8fe162f2a5c23cc088454d3e237d17a5d37ebe6
+    collector/native-vault.mjs: 791c4e32c74cf309e542f435ab051a2886819067c0ee36d365bfe039d59a7e84
+    collector/vault-worker.mjs: c78d22e45bacff164c18f171db6d45aeb9b4f21b2d50ccdd917f465681cd046a
+    collector/source-pin.json: ed890694fc6041526b5bdeee11443147d364b4b15a1210bc9ed07b8141094b0c
+    collector/lab/source-browser-pipe.mjs: 3be23d6dc7570d055ac045c401f25f45b3fd85a2723bc50d1dd986ecc81ab928
+    collector/lab/browser-sandbox-proof.mjs: b47b16d8a6ccb66b666c536fd208fbc8408647e7b5bcd8bfeca0c12ad80e8709
+    collector/browser-seccomp.json: cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849
+    scripts/community_connect.py: e314defa136cdd11672d90af47930bd6af164b3c0c337c2ab96d1c4a2f6d74d0
+    scripts/source_qualification.py: b1813b953da136c98a7f33d09d06d8c113e64bebffeadd30c2d38212b2d37116
+    boursedirect_to_ghostfolio.py: f84f3655cb2f2161714d097e945ffacd0a32b2843d1a6057aac1d6d9ccb469ad
+  affected_offline:
+    source_and_community_pytest: 96
+    native_vault_and_worker_tests: 45
+    supervisor_receipts_consumed_by_existing_importer: true
+    missing_logout_never_publishes_success_receipt: true
+    check_docs: passed
+  native_browser_package:
+    evidence_root: private_ignored_tmp/community114-native-843d4719-87a5-4b7c-ba4b-97a18989837d
+    qualified_image: sha256:df29d8e8908b5f57ee7324e0cbef97b6e7ced72fe3b7c9706718d7971ee48a7f
+    chrome_version: 155.0.8059.39
+    renderer_sandbox_verified: true
+    browser_exit_verified: true
+    retained_state: closed_success
+    owned_resource_absence_verified: true
+    network: none
+    synthetic_password_otp_finalize_counts:
+    - 1
+    - 1
+    - 1
+    required_capability: SYS_CHROOT
+    reuse_basis: Final image changes only collector glue; Chrome, installed libraries,
+      browser pipe, sandbox proof and seccomp unchanged.
+  final_local_image: sha256:b3e32d3a267c1d476ffa963d5f75f40a06d5286767005ba42255e655f04c7478
+  limits:
+    real_broker_attempts: 0
+    real_vault_sessions: 0
+    production_financial_writes: 0
+    full_public_real_acquisition_proved: false
+    final_ci: recorded_in_owning_issue_after_publication
