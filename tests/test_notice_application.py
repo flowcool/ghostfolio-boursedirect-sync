@@ -135,6 +135,9 @@ def test_prepare_lock_cannot_alias_an_original_notice():
     account = yaml.safe_load(bundle['prepare_config'])['account']
     Path('state').mkdir(exist_ok=True)
     lock = Path('state', 'prepare-' + sha(account['target_account_id'].encode()) + '.lock')
+    # fixture() already prepares synthetic statement inputs in this isolated
+    # test directory; replace that inactive fixture lock with the collision.
+    lock.unlink(missing_ok=True)
     lock.hardlink_to(Path('inputs/notice.html'))
     before = Path('inputs/notice.html').read_bytes()
     with pytest.raises(RuntimeError, match='^OUTPUT_INPUT_COLLISION$'):
