@@ -8,7 +8,8 @@ conditions for the amended [daily product contract](daily-saved-input-preview.md
 Daily dividends come directly from operation notices, using received net cash
 and the Bourse Direct booking date. Differences with Ghostfolio are highlighted
 in the dry run without correcting existing rows or requiring a resolution list.
-Notice-only daily conversion is not yet implemented by these commands.
+Notice-only daily conversion is provided by `daily-preview` with
+`source_mode: notices`; the statement-based commands below stay unchanged.
 
 `review-coupons` converts verified monthly coupon credits into a private source
 cash review, retaining unsupported-period gates and never producing an API payload.
