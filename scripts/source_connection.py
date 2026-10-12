@@ -143,12 +143,15 @@ def main():
     parser.add_argument('action', choices=('check', 'status', 'restart-browser', 'stop-browser', 'connect', 'observe-public-form', 'characterize-password-request', 'inspect-vault-aliases', 'qualify-connection'))
     parser.add_argument('--lab-root', default='inputs/lab')
     parser.add_argument('--notice-window-as-of', help='Explicit notice-only90day broker calendar clock for qualify-connection')
+    parser.add_argument('--account-config', help='Private notice configuration containing the explicit source and destination account binding')
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     try:
         lab = contained(root, arguments.lab_root)
         inventory, report = inspect_saved(root, lab)
         require(arguments.notice_window_as_of is None or arguments.action == 'qualify-connection')
+        require(arguments.account_config is None or
+            arguments.action == 'qualify-connection' and arguments.notice_window_as_of is not None)
         verified = inventory['_verified_helpers']
         if arguments.action == 'connect':
             report['code'] = 'SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED'
@@ -156,7 +159,8 @@ def main():
             return 2
         if arguments.action == 'qualify-connection':
             import source_qualification
-            report['live'] = source_qualification.qualify(root, lab, inventory, notice_as_of=arguments.notice_window_as_of)
+            report['live'] = source_qualification.qualify(root, lab, inventory,
+                notice_as_of=arguments.notice_window_as_of, account_config=arguments.account_config)
         elif arguments.action == 'status':
             report['live'] = live_status(lab, verified)
         elif arguments.action == 'inspect-vault-aliases':

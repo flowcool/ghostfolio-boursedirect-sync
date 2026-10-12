@@ -87,7 +87,8 @@ try {
   for(let n=0;n<96;n++) {
     const next=await request({action:'next_document'});
     if(next.accounts_verified===true&&!confirmed) {
-      await pilot.confirmAuthenticated({two_distinct_account_wrappers_verified:true});confirmed=true;
+      await pilot.confirmAuthenticated(next.configured_account_verified===true
+        ? {configured_account_verified:true} : {two_distinct_account_wrappers_verified:true});confirmed=true;
     }
     if(next.needs_selection===true)continue;
     if(next.done===true) {

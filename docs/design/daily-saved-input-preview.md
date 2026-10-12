@@ -66,22 +66,38 @@ private account inventory is qualification evidence, not a deployment default.
   delivery path. Do not embed account references, destination IDs or a private
   host in the community image or Compose defaults.
 
-The offline importer already consumes this three-field account binding. The
-current acquisition qualifier instead requires the specific PEA/PEA-PME pair
-used for real-source qualification. A community acquisition entrypoint must
-accept the configured source selection without requiring that pair. This
-selection interface is not implemented yet; the current two-account qualifier
-does not establish community deployment acceptance.
+The offline importer and notice acquisition qualifier consume this same
+three-field binding. Pass `--account-config` with a private schema-1 notice
+configuration to select its single source reference. The qualifier retains the
+binding in its private receipt; the importer refuses a different source,
+namespace or destination binding. Selected-reference verification supplies the
+post-login account evidence without requiring a second account.
+
+A configured receipt that retains its configuration hash but lacks the account
+binding refuses; it cannot fall back to historical receipt handling. Historical
+source-only receipts remain usable for diagnostic previews with an explicit
+importer binding. They do not attest a destination chosen during acquisition,
+and their candidate exports never authorize financial application. The separate
+qualified application keeps its exact account/source and frozen-review gates.
+
+This selection supports the existing PEA and PEA-PME document profiles, including
+multiple broker accounts of one type. Other account types are not qualified.
+Without `--account-config`, the original two-account qualification remains
+available for historical evidence. The owned-lab qualification entrypoint is
+not yet a standalone community acquisition Compose service; configurable
+selection alone does not establish community deployment acceptance.
 
 ## Source window acquisition
 
 The existing source [connection entrypoint](../operations/source-connection.md#notice-only-window-acquisition-planning)
 accepts `qualify-connection --notice-window-as-of YYYY-MM-DD` to plan observed
-operation calendars and notices for both verified accounts across the approved
+operation calendars and notices for the configured account, or the original
+two-account qualification pair when no account configuration is supplied, across the approved
 window. No monthly documents are selected. This plan requires the known source
 previous-month function and retained explicit empty calendars, and preserves
-existing broker-attempt controls. It has offline saved-source qualification;
-actual acquisition with this option and recurring activation remain unverified.
+existing broker-attempt controls. Consult the owning issue and private receipts
+for qualification evidence: saved-source replay and a completed fresh owned
+session are distinct proofs. Recurring activation retains its separate gate.
 
 ## Notice-only daily preview
 
