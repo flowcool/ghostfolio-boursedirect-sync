@@ -1364,6 +1364,154 @@ def activity_financial_fingerprint(activity):
     return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def compare_coupon_snapshot(source_reviews, account, mappings, snapshot_raw):
+    """Exact representation observations and retained legacy uncertainty; no writes."""
+    if not isinstance(account, dict) or set(account) != {"account_key", "source_account_ref", "target_account_id"}:
+        fail("INVALID_ACCOUNT_CONFIGURATION")
+    validate_account_key(account["account_key"])
+    if any(type(account[k]) is not str or not account[k].strip() for k in ("source_account_ref", "target_account_id")):
+        fail("ACCOUNT_CONFIGURATION_MISSING")
+    if not isinstance(mappings, dict) or not isinstance(source_reviews, dict) or not source_reviews:
+        fail("INVALID_COUPON_RECONCILIATION")
+    remote = parse_remote_activity_snapshot(snapshot_raw)
+    original = json.loads(snapshot_raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+    originals = {r["id"]: r for r in original["activities"]}
+    coupons, periods = {}, set()
+    for review in source_reviews.values():
+        if (review.get("artifact_kind") != "source_coupon_cash_review_not_api_payload"
+                or review.get("import_ready") is not False or review.get("source_account_ref") != account["source_account_ref"]
+                or review.get("policy") != {"amount": "net_received", "date": "broker_booking_day", "historic_rewrite": False}):
+            fail("INVALID_COUPON_RECONCILIATION_SOURCE")
+        period = review["statement_period"]
+        if period in periods:
+            fail("MULTIPLE_STATEMENT_VERSIONS")
+        periods.add(period)
+        for slot, coupon in review["coupons"].items():
+            coupons[period + "/" + slot] = coupon
+    if len(coupons) * len(remote) > 1000000:
+        fail("DIAGNOSIS_COMPARISON_LIMIT_EXCEEDED")
+    source_keys, mapped_isins = {}, {}
+    observations, remote_evidence, exact = {}, {}, {}
+    for key, coupon in coupons.items():
+        mapping = mappings.get(coupon["isin"])
+        if mapping is None:
+            observations[key] = {"isin": coupon["isin"], "status": "SECURITY_MAPPING_MISSING", "candidates": {}}
+            continue
+        if (not isinstance(mapping, dict) or mapping.get("data_source") != "YAHOO"
+                or mapping.get("target_currency") != "EUR"
+                or type(mapping.get("target_security_evidence")) is not str or not mapping["target_security_evidence"].strip()
+                or type(mapping.get("symbol")) is not str
+                or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", mapping["symbol"])):
+            fail("SECURITY_MAPPING_UNVERIFIED")
+        if mapping["symbol"] in mapped_isins and mapped_isins[mapping["symbol"]] != coupon["isin"]:
+            fail("SECURITY_MAPPING_AMBIGUOUS")
+        mapped_isins[mapping["symbol"]] = coupon["isin"]
+        amount = Decimal(coupon["amount"])
+        signature = (coupon["operation_date"], mapping["symbol"], canonical_decimal(amount))
+        source_keys[key] = signature
+        candidates, exact[key] = {}, []
+        for row in remote:
+            if row["kind"] != "DIVIDEND" or row["target_account_id"] != account["target_account_id"]:
+                continue
+            raw = originals[row["remote_id"]]
+            profile = raw["assetProfile"] if "assetProfile" in raw else raw.get("SymbolProfile")
+            if not isinstance(profile, dict):
+                fail("REMOTE_ASSET_PROFILE_INVALID")
+            if profile.get("symbol") != mapping["symbol"]:
+                continue
+            if any(type(profile.get(k)) is not str or not profile[k].strip() for k in ("symbol", "dataSource", "currency")):
+                fail("REMOTE_ASSET_PROFILE_INVALID")
+            with localcontext() as context:
+                context.prec = max(28, sum(len(v.as_tuple().digits) for v in (row["quantity"], row["unit_price"], row["fee"], amount)) + 8)
+                product = row["quantity"] * row["unit_price"]
+                delta = product - amount
+            same = (row["operation_date"] == coupon["operation_date"] and row["quantity"] == 1
+                    and row["unit_price"] == amount and row["fee"] == 0
+                    and row["price_currency"] == profile["currency"] == "EUR" and profile["dataSource"] == "YAHOO")
+            financial = (row["quantity"] > 0 and row["unit_price"] > 0 and row["fee"] >= 0
+                         and row["price_currency"] == profile["currency"] == "EUR" and profile["dataSource"] == "YAHOO")
+            eligible = financial and row["active"] and row["date_context_verified"]
+            foreign = isinstance(row["comment"], str) and row["comment"].startswith("BD#")
+            if same:
+                exact[key].append(row["remote_id"])
+            candidates[row["remote_id"]] = {"exact_net_representation": same, "eligible": eligible,
+                "foreign_BD_ownership": foreign, "same_quantity_price_product": product == amount,
+                "product_minus_source_cash": canonical_decimal(delta),
+                "utc_day_minus_source_day": (datetime.fromisoformat(row["operation_date"]).date()
+                    - datetime.fromisoformat(coupon["operation_date"]).date()).days}
+            remote_evidence[row["remote_id"]] = {"original_timestamp": raw["date"], "utc_day": row["operation_date"],
+                "symbol": profile["symbol"], "data_source": profile["dataSource"],
+                "price_currency": row["price_currency"], "profile_currency": profile["currency"],
+                "quantity": canonical_decimal(row["quantity"]), "unit_price": canonical_decimal(row["unit_price"]),
+                "quantity_price_product": canonical_decimal(product), "fee": canonical_decimal(row["fee"]),
+                "active_at_evaluation": row["active"], "date_context_verified": row["date_context_verified"]}
+        observations[key] = {"isin": coupon["isin"], "symbol": mapping["symbol"],
+            "source_booking_day": coupon["operation_date"], "net_received": coupon["amount"],
+            "candidates": candidates, "status": "LEGACY_CANDIDATES_REQUIRE_REVIEW" if candidates else "NO_CANDIDATE_IN_SAVED_SNAPSHOT"}
+    # Assignment is global across all supplied source periods, not greedy per row.
+    for key, ids in exact.items():
+        if not ids:
+            continue
+        unique_source = sum(value == source_keys[key] for value in source_keys.values()) == 1
+        unique_remote = len(ids) == 1 and sum(ids[0] in group for group in exact.values()) == 1
+        candidate = observations[key]["candidates"][ids[0]]
+        certain = unique_source and unique_remote and candidate["eligible"] and not candidate["foreign_BD_ownership"]
+        observations[key]["status"] = "CERTAIN_UNIQUE_NET_REPRESENTATION_OBSERVED" if certain else "DIVIDEND_MATCH_UNCERTAIN"
+        if certain:
+            observations[key]["certain_remote_id"] = ids[0]
+    blockers = ["COMPLETE_PERIOD_CONVERSION_REQUIRED", "ACQUISITION_HISTORY_UNVERIFIED", "DIVIDEND_APPLICATION_NOT_ACTIVATED"]
+    if any("UNSUPPORTED_OPERATION_PERIOD" in review["blockers"] for review in source_reviews.values()):
+        blockers.append("UNSUPPORTED_OPERATION_PERIOD")
+    return {"schema_version": 1, "artifact_kind": "coupon_reconciliation_preview_not_api_payload",
+        "account_key": account["account_key"], "target_account_id": account["target_account_id"],
+        "observations": observations, "remote_evidence": remote_evidence, "source_reviews": source_reviews,
+        "import_ready": False, "blockers": blockers}
+
+
+def reconcile_local_coupons(config_path, input_root, output, max_bytes, max_depth):
+    if type(max_bytes) is not int or not 0 < max_bytes <= 64 * 1024 * 1024 or type(max_depth) is not int or not 0 < max_depth <= 256:
+        fail("INVALID_COUPON_RECONCILIATION_LIMITS")
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "account", "mappings", "documents", "snapshot"} or type(config.get("snapshot")) is not str:
+        fail("INVALID_COUPON_RECONCILIATION_CONFIGURATION")
+    prep_raw = yaml.safe_dump({k: v for k, v in config.items() if k != "snapshot"}).encode()
+    preparation_configuration(prep_raw, max_bytes, max_depth)
+    if sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    snapshot_path = Path(input_root) / config["snapshot"]
+    snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
+    captured = [config_raw, snapshot_raw]
+    paths = []
+    reviews = {}
+    for alias, entry in config["documents"].items():
+        document = []
+        for path in (entry["statement"], *entry["notes"]):
+            paths.append(Path(input_root) / path)
+            raw = read_local_bytes(paths[-1], input_root, min(max_bytes, 4 * 1024 * 1024))
+            captured.append(raw)
+            if sum(map(len, captured)) > 64 * 1024 * 1024:
+                fail("COUPON_INPUT_LIMIT_EXCEEDED")
+            document.append(raw)
+        statement = parse_statement(decode_document(document[0]), max_depth)
+        notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in document[1:]]
+        reviews[alias] = review_coupon_cash(statement, notes)
+    if sum(map(len, captured)) > 64 * 1024 * 1024:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    artifact = compare_coupon_snapshot(reviews, config["account"], config["mappings"], snapshot_raw)
+    artifact["input_sha256"] = {str(i): hashlib.sha256(raw).hexdigest() for i, raw in enumerate(captured)}
+    encoded = yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True).encode()
+    if len(encoded) > max_bytes:
+        fail("DIAGNOSIS_REPORT_LIMIT_EXCEEDED")
+    validate_proposal_destination(output, [Path(config_path), snapshot_path, *paths])
+    private_directory(Path(output).parent)
+    atomic_private_bytes(output, encoded)
+    counts = {status: sum(o["status"] == status for o in artifact["observations"].values())
+        for status in sorted({o["status"] for o in artifact["observations"].values()})}
+    return {"coupons": len(artifact["observations"]), "status_counts": counts,
+            "import_ready": False, "blockers": artifact["blockers"]}
+
+
 def legacy_duplicate_candidate(activity, row):
     """Bounded similarity for rejection/diagnosis only, never adoption."""
     identity = ("target_account_id", "symbol", "data_source", "kind")
@@ -2918,6 +3066,12 @@ def main(argv=None):
     coupons.add_argument("--output", required=True, help="Private review file under outputs")
     coupons.add_argument("--max-bytes", type=int, required=True)
     coupons.add_argument("--max-depth", type=int, required=True)
+    coupon_reconciliation = subparsers.add_parser("reconcile-coupons", help="Compare original coupon sources with saved history; no writes")
+    coupon_reconciliation.add_argument("--config", required=True)
+    coupon_reconciliation.add_argument("--input-root", required=True)
+    coupon_reconciliation.add_argument("--output", required=True)
+    coupon_reconciliation.add_argument("--max-bytes", type=int, required=True)
+    coupon_reconciliation.add_argument("--max-depth", type=int, required=True)
     prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
     prepare.add_argument("--config", required=True, help="Local keyed YAML inside input root")
     prepare.add_argument("--input-root", required=True)
@@ -2971,6 +3125,10 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "reconcile-coupons":
+            print(json.dumps(reconcile_local_coupons(args.config, args.input_root, args.output,
+                args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
         if args.command == "review-coupons":
             print(json.dumps(review_local_coupons(args.path, args.notes, args.input_root,
                 args.output, args.max_bytes, args.max_depth), sort_keys=True))

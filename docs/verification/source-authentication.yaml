@@ -1235,3 +1235,33 @@ coupon_net_cash_review:
     native_connector_amd64_and_arm64: 38199828359
     result: success
     reuse_basis: final_runtime_bytes_unchanged_by_subsequent_documentary_evidence
+
+coupon_saved_snapshot_reconciliation:
+  runtime_sha256: 956ff296e80abe11f8e762c6b92d79cf1b2d92b3d02d4f949bc7625e301cfc05
+  operator_policy: approved_net_received_and_broker_booking_day_without_historic_rewrite
+  affected_regressions:
+    command: root .venv/bin/python -m pytest -q tests/test_coupon_reconciliation.py tests/test_coupon_cash.py tests/test_diagnosis.py tests/test_adoption.py tests/test_conversion.py tests/test_prepare.py tests/test_preparation_replay.py tests/test_wire.py
+    passed: 300
+  actual_provider_associations:
+    exact_source_ISIN_queries: 7
+    bounded_HTTP200_responses: 7
+    existing_configured_Yahoo_EUR_profiles_verified: 7
+    multiple_venue_results: 2
+    global_search_uniqueness_claimed: false
+    prior_qualified_lookup_method_reused: true
+  actual_original_source_and_saved_destination_comparison:
+    original_coupon_cash_rows: 7
+    entire_saved_destination_rows: 1017
+    legacy_candidates_requiring_review: 5
+    no_candidate_in_saved_snapshot: 2
+    certain_exact_net_representations: 0
+    unknown_source_period_gate_retained: true
+    source_and_snapshot_input_hashes_retained: true
+    repeat_identical: true
+    production_writes: 0
+  limits:
+  - Exact configured provider association does not assert globally unique search results.
+  - Saved-snapshot absence is not a new-import or complete-history classification.
+  - Equal quantity-price product with different representation is not certain adoption.
+  - Nonmidnight timestamps, fees, currencies, multiplicity and foreign ownership retain uncertainty.
+  - No destination mutation, trade preparation state or wire intent is produced.
