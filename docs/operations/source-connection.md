@@ -140,8 +140,10 @@ Private attempt and completion receipts retain the three-field binding and
 configuration hash. The daily importer refuses a changed binding before
 producing candidates, preserving the configured Ghostfolio destination. No
 account references or destination IDs are printed by the connection command.
-This interface has offline and disposable synthetic browser evidence; fresh
-single-account broker acquisition remains unverified.
+Consult the owning issue and private completion receipts for qualification
+evidence. Fresh broker acquisition must retain verified selected-account
+identity, window coverage, logout and browser-exit evidence; offline replay alone
+does not prove a fresh session.
 
 This selects the approved90day notice window and ignores the historical monthly
 statement preference. It navigates the observed operation calendars for both
@@ -315,9 +317,11 @@ request before consuming its one-use permission. It accepts one known challenge,
 one application code and one separately permitted final credential request.
 Unknown responses or requests stop the owned attempt without retry.
 
-Captured account/document GETs are inert and private. Two distinct wrapper IDs
-and selected-account navigation must be observed; statement/note titles and
-account headers must match. When saved lists need further source inspection,
+Captured account/document GETs are inert and private. Configured notice
+qualification must observe the chosen stable reference and selected-account
+navigation; the original qualification requires two distinct wrapper IDs.
+Statement/note titles and account headers must match. When saved lists need
+further source inspection,
 `SOURCE_READ_SELECTION_REQUIRED` retains the current browser while waiting for
 a private `selection.yaml` in the current attempt directory. That record contains
 `url`, `role`, `sourceSha256` and `account`; the source hash must name a captured

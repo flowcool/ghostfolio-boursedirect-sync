@@ -95,8 +95,9 @@ operation calendars and notices for the configured account, or the original
 two-account qualification pair when no account configuration is supplied, across the approved
 window. No monthly documents are selected. This plan requires the known source
 previous-month function and retained explicit empty calendars, and preserves
-existing broker-attempt controls. It has offline saved-source qualification;
-actual acquisition with this option and recurring activation remain unverified.
+existing broker-attempt controls. Consult the owning issue and private receipts
+for qualification evidence: saved-source replay and a completed fresh owned
+session are distinct proofs. Recurring activation retains its separate gate.
 
 ## Notice-only daily preview
 
