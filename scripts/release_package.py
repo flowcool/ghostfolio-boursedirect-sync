@@ -28,7 +28,7 @@ SAFE_EXTRA_FILES = (
     "collector/browser-seccomp.json",
     "collector/licenses/playwright-LICENSE",
 )
-SAFE_DOC_SUFFIXES = {".md", ".json", ".yaml", ".yml"}
+SAFE_DOC_SUFFIXES = {".md", ".json", ".svg", ".yaml", ".yml"}
 RELEASE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 INLINE_LINK = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)]+)\)")
 IMAGE_REFERENCE = re.compile(

@@ -7,5 +7,6 @@ account identifiers, statements or contract notes in public issues or pull
 requests.
 
 Security fixes target the current `main` branch. Older revisions do not receive
-separate backports. Dependency checks run on pull requests and weekly. This
-repository publishes no image and deploys nothing.
+separate backports. Dependency checks run on pull requests and weekly. Tagged
+releases publish a scanned AMD64 connector image to GHCR and a Compose archive;
+they never deploy it to an operator environment.

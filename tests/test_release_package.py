@@ -49,6 +49,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         "collector/browser-seccomp.json": "{}\n",
         "collector/licenses/playwright-LICENSE": "third party\n",
         "docs/README.md": "# Docs\n",
+        "docs/assets/readme-banner.svg": "<svg/>\n",
         "docs/releases/v1.2.3.md": "# Release\n",
         "docs/operations/guide.md": "# Guide\n[Import script](../../scripts/import.py)\n",
         "docs/archive/secret.md": "internal archive\n",
@@ -64,7 +65,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         root,
         "v1.2.3",
         output,
-        ["docs/README.md", "docs/releases/v1.2.3.md", "docs/operations/guide.md"],
+        ["docs/README.md", "docs/assets/readme-banner.svg", "docs/releases/v1.2.3.md", "docs/operations/guide.md"],
     )
     with tarfile.open(archive_path, "r:gz") as archive:
         members = archive.getnames()
@@ -72,6 +73,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
 
     prefix = "ghostfolio-boursedirect-sync-v1.2.3/"
     assert prefix + "collector/browser-seccomp.json" in members
+    assert prefix + "docs/assets/readme-banner.svg" in members
     assert prefix + "docs/releases/v1.2.3.md" in members
     assert prefix + "config/mappings.yaml" not in members
     assert prefix + ".env" not in members
@@ -89,7 +91,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         root,
         "v1.2.3",
         tmp_path / "repeat",
-        ["docs/README.md", "docs/releases/v1.2.3.md", "docs/operations/guide.md"],
+        ["docs/README.md", "docs/assets/readme-banner.svg", "docs/releases/v1.2.3.md", "docs/operations/guide.md"],
     )
     assert duplicate_archive.read_bytes() == archive_path.read_bytes()
     assert duplicate_sums.read_bytes() == sums_path.read_bytes()

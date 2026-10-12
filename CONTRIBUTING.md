@@ -1,10 +1,12 @@
 # Contributing
 
-Changes are welcome through GitHub pull requests. Start with the current
-[README](README.md), [documentation map](docs/README.md), and the relevant
-[design contract](docs/design/index.md). The release is an AMD64-only, one-shot
-acquisition and dry-run preview; a change must preserve the stated account,
-financial, credential and transport boundaries.
+This page is for source contributors. Operators who want to run the released
+connector should start with the [README](README.md). Changes are welcome through
+GitHub pull requests; read the [documentation map](docs/README.md) and the
+relevant [design contract](docs/design/index.md) before changing behavior. The
+release is an AMD64-only, one-shot acquisition and dry-run preview; a change
+must preserve the stated account, financial, credential, and transport
+boundaries.
 
 ## Development setup
 
@@ -26,9 +28,9 @@ npm test --prefix collector
 ```
 
 Checks use synthetic inputs and isolated state. Do not put broker documents,
-credentials, account identifiers or private acquisition receipts in GitHub
-issues, pull requests or fixtures. Never point a test or disposable lab at a
-production Ghostfolio instance or the shared Beads database.
+credentials, account identifiers, or private acquisition receipts in GitHub
+issues, pull requests, or fixtures. Never point a test or disposable lab at a
+production Ghostfolio instance.
 
 To build the container locally, use the source-only override:
 
