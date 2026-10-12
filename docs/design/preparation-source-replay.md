@@ -1,5 +1,13 @@
 # Pure preparation source replay
 
+## Scope after the 2026-10-12 daily amendment
+
+The helper below replays the existing statement-based preparation format.
+The amended [daily product contract](daily-saved-input-preview.md) requires
+notice-only preparation with no monthly source cross-checking. Exact replay of
+original notice bytes remains required; replay must not add a statement dependency.
+The current helper is not evidence that notice-only daily preparation is delivered.
+
 `compute_prepared_sources(config_raw, documents, max_bytes, max_depth)` returns
 `artifact` and ordered ledger `snapshots`, without files, network, locks or state.
 Each configured alias has exactly `statement` bytes and ordered `notes` bytes;

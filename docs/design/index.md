@@ -8,8 +8,8 @@ are generated from each contract's first non-heading line.
 | --- | --- |
 | [Offline acquisition bundle qualification](acquisition-bundles.md) | `qualify-captures` checks one completed saved acquisition bundle and writes a |
 | [Durable acquisition authority core (offline)](acquisition-core.md) | The approved A scope is implemented in `collector/core.mjs`. This is a functional |
-| [Source coupon cash review](coupon-cash-review.md) | `review-coupons` converts verified monthly coupon credits into a private source |
-| [Daily saved-input preview](daily-saved-input-preview.md) | `daily-preview` recomputes an account's approved 90-day window from original saved |
+| [Source coupon cash review](coupon-cash-review.md) | The statement-based commands below retain their existing behavior. Their exact |
+| [Daily saved-input preview](daily-saved-input-preview.md) | The daily importer consumes Bourse Direct operation notices independently, without |
 | [Conservative offline historical sale coverage](chronological-holdings.md) | `verify_chronological_holdings` consumes prepared strict trades, raw complete |
 | [Portable owned disposable acceptance runner](disposable-acceptance.md) | This development-only runner reproduces the supported three-trade fixture chain |
 | [Frozen owned-lab sequence](frozen-lab-sequence.md) | `dispatch_frozen_lab_review(state_root, binding, review_raw, review_sha256, |
@@ -18,19 +18,19 @@ are generated from each contract's first non-heading line.
 | [Pinned isolated Ghostfolio API observations](ghostfolio-api-lab.md) | Verified on 2026-10-08 against Ghostfolio **3.80.2**, official source commit |
 | [Isolated delayed-write recovery evidence](ghostfolio-recovery-lab.md) | Observed2026-10-08 on the same pinned Ghostfolio3.80.2 image/source and isolated |
 | [Bounded Ghostfolio request adapter](https-request-adapter.md) | `make_ghostfolio_request(allowed_origin, max_bytes, timeout)` returns the existing |
-| [Internal trade conversion contract](internal-trade-conversion.md) | Florent accepted the strict BUY/SELL initial scope, existing Ghostfolio opening |
+| [Internal trade conversion contract](internal-trade-conversion.md) | This document describes the existing statement-based conversion helper. |
 | [Ledger identity and revision contract](ledger-identity.md) | The reviewed plan's v1 identity candidate is implemented as pure offline helpers. |
 | [Offline existing-activity adoption contract](offline-adoption.md) | Florent confirms that earlier acquisitions already exist in Ghostfolio. Import |
 | [Offline compensation association candidates](offline-compensation-candidates.md) | `rollback-plan` inspects one retained intent against a saved complete activity |
 | [Saved-input diagnosis contract](offline-diagnosis.md) | `diagnose --config FILE --input-root DIR --max-bytes N` describes uncertainty |
 | [Saved retained-intent observation command](offline-intent-verification.md) | `verify` compares a retained write journal with a saved complete activity snapshot. |
-| [Offline preparation contract](offline-preparation.md) | `prepare --config FILE --input-root DIR --max-bytes N --max-depth N` reads only |
+| [Offline preparation contract](offline-preparation.md) | This contract documents the existing statement-based `prepare` command. |
 | [Offline statement inspection contract](offline-probe.md) | Florent authorized implementation with “Carte blanche” on 2026-10-08 after |
 | [Saved-snapshot review command](offline-review-cli.md) | `review --config FILE --input-root DIR --max-bytes N` is entirely offline. Its |
 | [Offline reviewed wire and acceptance contract](offline-wire.md) | `build_wire_payload(keyed_activities)` produces private deterministic UTF-8 JSON |
-| [Interactive source acquisition amendment](online-source-inspection.md) | On 2026-10-08 Florent replaced manual-only source acquisition with direct online |
+| [Interactive source acquisition amendment](online-source-inspection.md) | Florent explicitly removed cross-checking between operation notices and monthly |
 | [Operator application preview](operator-application.md) | `apply --config FILE --review FILE --review-sha256 HEX --input-root DIR |
-| [Pure preparation source replay](preparation-source-replay.md) | `compute_prepared_sources(config_raw, documents, max_bytes, max_depth)` returns |
+| [Pure preparation source replay](preparation-source-replay.md) | The helper below replays the existing statement-based preparation format. |
 | [Qualified operator application](qualified-application.md) | The `apply` command defaults to offline preview/export. Remote application exists |
 | [GET-only saved activity snapshot acquisition](readonly-snapshot.md) | `snapshot` is a narrowly scoped acquisition command. It sends exactly one |
 | [Saved Ghostfolio schema compatibility](remote-schema-compatibility.md) | The original destination capture used Ghostfolio 3.81.0. A complete capture could not |

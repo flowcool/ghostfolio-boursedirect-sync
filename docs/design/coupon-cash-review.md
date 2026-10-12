@@ -1,5 +1,15 @@
 # Source coupon cash review
 
+## Scope after the 2026-10-12 daily amendment
+
+The statement-based commands below retain their existing behavior. Their exact
+statement/note matching and monthly completeness requirements are not acceptance
+conditions for the amended [daily product contract](daily-saved-input-preview.md).
+Daily dividends come directly from operation notices, using received net cash
+and the Bourse Direct booking date. Differences with Ghostfolio are highlighted
+in the dry run without correcting existing rows or requiring a resolution list.
+Notice-only daily conversion is not yet implemented by these commands.
+
 `review-coupons` converts verified monthly coupon credits into a private source
 cash review, retaining unsupported-period gates and never producing an API payload.
 

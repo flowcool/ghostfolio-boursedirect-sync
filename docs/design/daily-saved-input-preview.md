@@ -1,5 +1,56 @@
 # Daily saved-input preview
 
+## Daily product contract — operator amendment, 2026-10-12
+
+The daily importer consumes Bourse Direct operation notices independently, without
+cross-checking them against monthly statements.
+
+Florent explicitly removed source cross-checking from the product contract.
+This amendment supersedes the older monthly matching, whole-period validation,
+closed-statement dependency and monthly coverage prerequisites below and in the
+linked preparation/conversion contracts for the daily journey.
+
+- Collect operation notices within the approved rolling 90-day window. A notice
+  is usable in the current month without waiting for a monthly statement.
+- Derive each supported operation from its own original notice. Verify its
+  account binding, source identity, explicit financial fields, date, currency
+  and internal arithmetic; preserve exact decimals and original bytes.
+- Do not require, acquire for validation, or match a monthly statement. Do not
+  introduce a later monthly reconciliation pass, monthly cash-control gate,
+  reconstructed monthly ledger or source-to-source resolution workflow.
+- Skip operations without source ISIN, regardless of label. A present invalid
+  ISIN or unsupported financial operation stays visible and is not converted
+  by guessing. Subscription-right conversion remains outside the tool.
+- Dividends use net cash actually received and the Bourse Direct booking date.
+  Their Ghostfolio representation remains quantity 1, unit price equal to net
+  cash, fee 0 and EUR. Explicit verified security mappings remain required.
+- Compare candidates with Ghostfolio in the dry run to highlight possible
+  duplicates and date, amount or fee differences. This destination comparison
+  is the requested diagnostic; it is not source cross-checking. Legacy
+  differences do not prevent producing the diagnostic candidate report.
+- Leave existing Ghostfolio rows unchanged. Do not add automatic corrections,
+  timestamp normalization, manual resolution lists or special-case legacy
+  matching to make the dry run pass. An uncertain duplicate is reported rather
+  than silently imported as new.
+- Keep account-scoped event identity and repeat-import protection. A dry run
+  never authorizes writes. Production application remains separately gated;
+  no recurring activation or production financial write is authorized here.
+
+Acceptance is a daily notice-to-candidate dry run that works before the monthly
+statement exists and shows destination discrepancies without resolving them.
+Missing monthly statements and unrelated historical monthly discrepancies are
+not prerequisites for that result. Credential confinement, one-attempt broker
+protection, private provenance and uncertain-write journals remain in force.
+
+## Existing implementation reference — not daily acceptance
+
+The sections below describe the current saved-statement implementation and its
+qualified historical/lab behavior. It still requires statement/note matching
+and can suppress candidate wire on legacy uncertainty; it does not yet implement
+the amended daily product contract. Those checks remain intact in the existing
+standalone statement tooling. They must not be carried forward as daily product
+requirements or described as delivered notice-only support.
+
 `daily-preview` recomputes an account's approved 90-day window from original saved
 statements, notes and a complete saved Ghostfolio snapshot, retaining unresolved
 exceptions and source coverage in private keyed YAML.

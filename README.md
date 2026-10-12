@@ -323,6 +323,12 @@ records implementation hashes and results so unchanged checks can be reused.
 
 ## Daily saved-acquisition Compose preview
 
+The [daily product contract](docs/design/daily-saved-input-preview.md) now requires
+independent operation notices, with no monthly statement cross-checking. The
+Compose preview below still implements the older statement-based path; it does
+not yet satisfy that notice-only contract. Destination date, amount and fee
+differences belong in the dry run and do not require a legacy correction workflow.
+
 The [daily preview service](compose.daily.yaml) packages the Python analysis stage
 with read-only original inputs and a persistent private journal. It discovers
 saved documents from completed acquisition folders; no document list is required.

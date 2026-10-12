@@ -1,5 +1,14 @@
 # Offline preparation contract
 
+## Scope after the 2026-10-12 daily amendment
+
+This contract documents the existing statement-based `prepare` command.
+Monthly statement matching and whole-period validation remain its current
+behavior, not prerequisites for the amended [daily product contract](daily-saved-input-preview.md).
+Daily candidate preparation must consume original operation notices independently.
+This documentation change does not claim that `prepare` already supports that
+path or alter its qualified historical behavior.
+
 `prepare --config FILE --input-root DIR --max-bytes N --max-depth N` reads only
 bounded local files. Config must live inside the declared input root. Safe YAML
 requires string mapping keys, no aliases/anchors, no duplicate keys, and bounded

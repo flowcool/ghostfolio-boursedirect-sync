@@ -1,5 +1,15 @@
 # Internal trade conversion contract
 
+## Scope after the 2026-10-12 daily amendment
+
+This document describes the existing statement-based conversion helper.
+Its statement/note cross-matching, monthly cash controls and complete-period
+requirements do not apply to the amended [daily product contract](daily-saved-input-preview.md).
+The daily path must derive supported operations directly from their notices,
+without a statement dependency. Exact financial fields, explicit currency,
+account/security binding and refusal to infer missing values remain required.
+No runtime behavior changes as part of this documentary amendment.
+
 Florent accepted the strict BUY/SELL initial scope, existing Ghostfolio opening
 history, explicitly configured EUR execution for his selected PEA sample, and
 blocking of unsupported account periods. FINDINGS section 13 and the keyed
