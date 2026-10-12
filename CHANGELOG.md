@@ -3,6 +3,22 @@
 User-visible changes are listed by release. Older statement-based CLI and lab
 history remains available through the [documentation archive](docs/archive/README.md).
 
+## v0.1.1
+
+- Made the public quick start Docker-first with copyable Compose and environment
+  settings; downloading the operator archive is optional.
+- Added clearer configuration, synthetic preview examples, a README banner,
+  safe support reporting and broker-site requalification guidance.
+- Removed build-only curl, unzip and Python venv tooling from the final image,
+  while retaining system Python, application dependencies and pinned CLI/browser.
+- Aligned image builds and CI with the supported AMD64-only connection path.
+- Pinned release archive Compose and README image references to the exact pushed
+  image digest, verified against the image that passed scan and offline smoke.
+- Added a checksummed `IMAGE_DIGEST` release asset and image smoke regressions.
+- Corrected release/security scan documentation and added hostile-title label tests.
+- Acquisition remains one-shot and preview-only; account, credential and financial
+  behavior is unchanged. Existing published v0.1.0 assets remain available.
+
 ## v0.1.0
 
 - Added a one-shot AMD64 Docker Compose flow that unlocks a Bitwarden-compatible

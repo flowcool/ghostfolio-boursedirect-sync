@@ -38,7 +38,7 @@ an existing Ghostfolio account.
 
 ## Preview only
 
-v0.1.0 reads a rolling 90-day window of available operation notices, saves them
+The connector reads a rolling 90-day window of available operation notices, saves them
 with a Ghostfolio snapshot, and creates a dry-run report. It never creates,
 updates, or deletes financial records, and it does not schedule itself. The
 window is not complete account history or a cost-basis reconstruction. Currency
@@ -203,11 +203,11 @@ host and use absolute host paths for `seccomp` and the `/config` bind mount.
 Supply the variables through its environment editor if preferred. Run the
 connection with an attached terminal; this release does not schedule itself.
 
-The image reference above pins the published v0.1.0 content by SHA256 digest. An
+The image reference above pins the published content by SHA256 digest. An
 explicit `BOURSEDIRECT_IMAGE` override replaces that pin. For upgrades, follow the
 new release's image reference and configuration instructions together.
 
-The [release archive](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v0.1.0)
+The [release archive](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/latest)
 is an optional way to obtain the Compose files, sandbox profile, configuration
 templates and documentation as one bundle. It is not needed for the Docker flow
 above. Future archives also contain `IMAGE_DIGEST` alongside the archive and
