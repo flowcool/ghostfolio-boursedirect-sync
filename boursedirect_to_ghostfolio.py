@@ -1228,9 +1228,12 @@ def compute_prepared_sources(config_raw, documents, max_bytes, max_depth):
 def validate_prepared_sources(prepared_raw, config_raw, documents, max_bytes, max_depth):
     if type(max_bytes) is not int or max_bytes <= 0:
         fail("INVALID_SIZE_LIMIT")
-    if type(prepared_raw) is not bytes or len(prepared_raw) > max_bytes:
+    if (type(prepared_raw) is not bytes or len(prepared_raw) > max_bytes
+            or type(config_raw) is not bytes or len(config_raw) > max_bytes):
         fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
-    result = compute_prepared_sources(config_raw, documents, max_bytes, max_depth)
+    config = parse_keyed_yaml(config_raw)
+    result = (compute_prepared_notices(config_raw, documents, max_bytes, max_depth)
+              if config.get("source_mode") == "notices" else compute_prepared_sources(config_raw, documents, max_bytes, max_depth))
     observed = parse_keyed_yaml(prepared_raw)
     expected = result["artifact"]
     if yaml.safe_dump(observed, sort_keys=True, allow_unicode=True) != yaml.safe_dump(expected, sort_keys=True, allow_unicode=True):
@@ -1239,6 +1242,13 @@ def validate_prepared_sources(prepared_raw, config_raw, documents, max_bytes, ma
 
 
 def capture_preparation_sources(config_raw, input_root, max_bytes, max_depth):
+    if type(max_bytes) is not int or max_bytes <= 0 or type(config_raw) is not bytes or len(config_raw) > max_bytes:
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    if parse_keyed_yaml(config_raw).get("source_mode") == "notices":
+        config = notice_preparation_configuration(config_raw, max_bytes, max_depth)
+        paths = [Path(input_root) / entry["document"] for entry in config["notices"].values()]
+        return {alias: {"notice": read_local_bytes(path, input_root, max_bytes)}
+                for (alias, entry), path in zip(config["notices"].items(), paths)}, paths
     config = preparation_configuration(config_raw, max_bytes, max_depth)
     documents = {}
     input_paths = []
@@ -1253,20 +1263,25 @@ def capture_preparation_sources(config_raw, input_root, max_bytes, max_depth):
 
 def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
     config_raw = read_local_bytes(config_path, input_root, max_bytes)
-    config = preparation_configuration(config_raw, max_bytes, max_depth)
+    notice_only = parse_keyed_yaml(config_raw).get("source_mode") == "notices"
+    config = (notice_preparation_configuration(config_raw, max_bytes, max_depth) if notice_only
+              else preparation_configuration(config_raw, max_bytes, max_depth))
     documents, document_paths = capture_preparation_sources(config_raw, input_root, max_bytes, max_depth)
     input_paths = [Path(config_path), *document_paths]
-    computed = compute_prepared_sources(config_raw, documents, max_bytes, max_depth)
+    computed = (compute_prepared_notices(config_raw, documents, max_bytes, max_depth) if notice_only
+                else compute_prepared_sources(config_raw, documents, max_bytes, max_depth))
     artifact = computed["artifact"]
-    snapshots = computed["snapshots"]
+    snapshots = computed.get("snapshots", [])
     account = config["account"]
     state = Path("state")
     output_root = Path("outputs")
     target = hashlib.sha256(account["target_account_id"].encode("utf-8")).hexdigest()
-    journal_path = state / ("ledger-" + target + ".yaml")
+    journal_path = state / (("notice-preparation-" if notice_only else "ledger-") + target + ".yaml")
     binding_path = state / ("binding-" + account["account_key"] + ".yaml")
     artifact_path = output_root / ("prepared-" + account["account_key"] + ".yaml")
-    for destination in (journal_path, binding_path, artifact_path):
+    for destination in (journal_path, binding_path, artifact_path,
+                        state / ("prepare-" + target + ".lock"),
+                        state / ("account-" + account["account_key"] + ".lock")):
         reject_output_input_collision(destination, input_paths)
     private_directory(state)
     private_directory(output_root)
@@ -1297,6 +1312,26 @@ def prepare_local_plan(config_path, input_root, max_bytes, max_depth):
                 fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
         else:
             journal = {"schema_version": 1, "accounts": {}}
+        if notice_only:
+            if journal_path.exists() or journal_path.is_symlink():
+                if (set(journal) != {"schema_version", "binding", "notice_hashes", "as_of"}
+                        or type(journal["schema_version"]) is not int or journal["schema_version"] != 1
+                        or not isinstance(journal["notice_hashes"], dict)
+                        or daily_preview_day(journal["as_of"]) > daily_preview_day(config["as_of"])):
+                    fail("INVALID_NOTICE_JOURNAL")
+                hashes = dict(journal["notice_hashes"])
+            else:
+                hashes = {}
+            for saved_day, digest in hashes.items():
+                capture_period("note", saved_day)
+                if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                    fail("INVALID_NOTICE_JOURNAL")
+            for alias, entry in config["notices"].items():
+                digest = artifact["source_digests"][alias]["notice"]
+                if entry["date"] in hashes and hashes[entry["date"]] != digest:
+                    fail("NOTICE_SOURCE_REVISION")
+                hashes[entry["date"]] = digest
+            journal = {"schema_version": 1, "binding": binding, "notice_hashes": hashes, "as_of": config["as_of"]}
         for snapshot in snapshots:
             journal = register_statement_snapshot(journal, snapshot)
         journal["binding"] = binding
@@ -2229,6 +2264,71 @@ def notice_activity(note, account, mappings):
     else:
         record["execution_time"] = note["execution_time"]
     return record
+
+
+def notice_preparation_configuration(config_raw, max_bytes, max_depth):
+    if (type(max_bytes) is not int or max_bytes <= 0 or type(max_depth) is not int or max_depth <= 0
+            or type(config_raw) is not bytes or len(config_raw) > max_bytes):
+        fail("PREPARATION_INPUT_LIMIT_EXCEEDED")
+    config = parse_keyed_yaml(config_raw)
+    if (set(config) != {"schema_version", "source_mode", "account", "mappings", "notices", "as_of"}
+            or type(config["schema_version"]) is not int or config["schema_version"] != 1
+            or config["source_mode"] != "notices" or not isinstance(config["mappings"], dict)):
+        fail("INVALID_NOTICE_PREPARATION_CONFIGURATION")
+    daily_preview_day(config["as_of"])
+    account = config["account"]
+    if (not isinstance(account, dict) or set(account) != {"source_account_ref", "account_key", "target_account_id"}
+            or any(not isinstance(v, str) or not v.strip() for v in account.values())):
+        fail("INVALID_ACCOUNT_CONFIGURATION")
+    validate_account_key(account["account_key"])
+    if not isinstance(config["notices"], dict) or not 0 < len(config["notices"]) <= 256:
+        fail("INVALID_NOTICE_PREPARATION_CONFIGURATION")
+    days = set()
+    for alias, entry in config["notices"].items():
+        if (not isinstance(alias, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", alias)
+                or not isinstance(entry, dict) or set(entry) != {"date", "document"}
+                or not isinstance(entry["document"], str) or not entry["document"].strip()):
+            fail("INVALID_NOTICE_PREPARATION_CONFIGURATION")
+        capture_period("note", entry["date"])
+        if entry["date"] in days or entry["date"] > config["as_of"]:
+            fail("INVALID_NOTICE_PREPARATION_CONFIGURATION")
+        days.add(entry["date"])
+    return config
+
+
+def compute_prepared_notices(config_raw, documents, max_bytes, max_depth):
+    """Replay original independent notices for the existing application boundary."""
+    config = notice_preparation_configuration(config_raw, max_bytes, max_depth)
+    if not isinstance(documents, dict) or set(documents) != set(config["notices"]):
+        fail("INVALID_PREPARATION_CAPTURES")
+    notes, captured, digests = {}, {}, {}
+    total = len(config_raw)
+    for alias, entry in config["notices"].items():
+        capture = documents[alias]
+        if (not isinstance(capture, dict) or set(capture) != {"notice"}
+                or type(capture["notice"]) is not bytes or len(capture["notice"]) > max_bytes):
+            fail("INVALID_PREPARATION_CAPTURES")
+        raw = capture["notice"]
+        total += len(raw)
+        if total > 64 * 1024 * 1024:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        digest = hashlib.sha256(raw).hexdigest()
+        captured[alias] = raw
+        notes[entry["date"]] = {"document": alias, "sha256": digest}
+        digests[alias] = {"notice": digest}
+    _, report = compute_notice_preview(config["account"], config["mappings"], notes, captured,
+                                       b'{"count":0,"activities":[]}', None, config["as_of"], max_depth)
+    # Diagnostic partial candidates remain available in daily-preview. Execution
+    # replay must qualify every supplied original notice before any dispatch.
+    if report["exceptions"]:
+        fail("NOTICE_APPLICATION_SOURCE_UNQUALIFIED")
+    activities = {marker: {**activity, "import_ready": False}
+                  for marker, activity in report["activities"].items()}
+    artifact = {"schema_version": 1, "artifact_kind": "internal_activity_review_not_api_payload",
+                "import_ready": False, "blockers": ["REMOTE_ADOPTION_UNVERIFIED", "ISOLATED_API_CONTRACT_UNVERIFIED"],
+                "account_key": config["account"]["account_key"], "target_account_id": config["account"]["target_account_id"],
+                "source_digests": digests, "activities": activities}
+    return {"artifact": artifact}
 
 
 def compute_notice_preview(account, mappings, notes, captured, snapshot_raw, previous, as_of, max_depth):
@@ -3543,6 +3643,11 @@ def initialize_application_archive(archive_root, archive, bundle, max_bytes, max
              "config": bundle["config"], "prepare_config": bundle["prepare_config"], **bundle["captures"]}
     documents = {}
     for index, (alias, captures) in enumerate(bundle["documents"].items()):
+        if set(captures) == {"notice"}:
+            role = "source-" + str(index) + "-notice"
+            roles[role] = captures["notice"]
+            documents[alias] = {"notice": role}
+            continue
         statement = "source-" + str(index) + "-statement"
         notes = ["source-" + str(index) + "-note-" + str(n) for n in range(len(captures["notes"]))]
         roles[statement] = captures["statement"]

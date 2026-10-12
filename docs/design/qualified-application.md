@@ -37,6 +37,22 @@ complete archive replay and owned rollback. See the keyed
 No server-version detection or universal timezone
 policy is claimed. Per-symbol execution/target currency must be explicit EUR.
 
+## Notice-only application sources
+
+The existing application boundary also accepts notice preparation configuration
+and artifacts from the [source replay contract](preparation-source-replay.md).
+`prepare` and the application capture step read only each independent notice;
+`validate_prepared_sources` recomputes the artifact from original HTML and the
+pinned preparation configuration. There is no statement cross-check or monthly
+coverage gate in this source mode. Notice bytes are archived as their own roles.
+
+Frozen destination review, exact baseline, conservative duplicate/holdings
+checks and external write authorization remain separate from the diagnostic
+preview. A date/fee/amount difference is visible in daily diagnostics without
+blocking that report; it does not grant automatic adoption or permission to
+send a possible duplicate. No legacy correction list is added. The supported
+clean notice path uses the existing application controller and recovery journal.
+
 ## Public workflow
 
 Run from the repository root so `inputs/`, `outputs/` and `state/` remain ignored.

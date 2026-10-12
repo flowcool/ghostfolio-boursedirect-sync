@@ -97,8 +97,10 @@ publication remain in force. An unchanged repeat is byte-identical.
 
 This delivers offline notice preparation and destination diagnosis. Acquisition,
 a fresh snapshot and separately authorized financial application remain distinct
-stages; this mode does not yet provide an unattended daily importer or the
-qualified application's notice-source replay boundary.
+stages; this mode does not yet provide an unattended daily importer.
+The existing qualified application now replays notice preparation artifacts
+through the [notice source boundary](preparation-source-replay.md); its write
+authority and financial uncertainty gates remain separate from this report.
 
 ## Existing statement implementation reference — not daily acceptance
 
