@@ -1,7 +1,7 @@
 name: ghostfolio-boursedirect-sync
 services:
   bitwarden:
-    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:7a810263c0042fba2c163600287acb27bee597542010113e3cf3b151781daa89}
+    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.1@sha256:486cc5ef8b3dde9e65b2b502789b65c9d956acb4ea03e3e2544c316d2bbef231}
     platform: linux/amd64
     init: true
     restart: "no"

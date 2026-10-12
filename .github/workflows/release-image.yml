@@ -35,6 +35,22 @@ jobs:
           python-version: '3.13'
       - name: Validate stable tag, checked-out commit, and release notes
         run: python scripts/release_package.py --tag "$RELEASE_TAG" --check-only
+      - name: Render public release-note links
+        run: |
+          python - <<'PYNOTES'
+          import os
+          from pathlib import Path
+          from scripts.release_package import rewrite_markdown_links
+          root = Path.cwd()
+          tag = os.environ["RELEASE_TAG"]
+          name = "docs/releases/" + tag + ".md"
+          notes = rewrite_markdown_links(name, (root / name).read_bytes(), set(), root, tag)
+          title = notes.decode("utf-8").splitlines()[0].removeprefix("# ").strip()
+          if title != tag and not title.startswith(tag + " — "):
+              raise ValueError("release note heading must start with the release tag")
+          (Path(os.environ["RUNNER_TEMP"]) / "release-notes.md").write_bytes(notes)
+          (Path(os.environ["RUNNER_TEMP"]) / "release-title").write_text(title, encoding="utf-8")
+          PYNOTES
       - name: Install pinned offline test dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Run release packaging regressions
@@ -115,10 +131,12 @@ jobs:
           python scripts/release_package.py --tag "$RELEASE_TAG" --output-dir dist \
             --image-digest "${image_reference#*@}" --image-manifest "$RUNNER_TEMP/image-manifest.json" \
             --checked-image-id "$(cat "$RUNNER_TEMP/checked-image-id")"
-      - name: Create a draft release with the operator bundle
+      - name: Create a draft release with the operator bundle and categorized changelog
         run: >-
-          gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TAG"
-          --notes-file "docs/releases/$RELEASE_TAG.md" dist/*.tar.gz dist/SHA256SUMS dist/IMAGE_DIGEST
+          gh release create "$RELEASE_TAG" --draft --verify-tag
+          --title "$(cat "$RUNNER_TEMP/release-title")"
+          --generate-notes --notes-file "$RUNNER_TEMP/release-notes.md"
+          dist/*.tar.gz dist/SHA256SUMS dist/IMAGE_DIGEST
 
   promote-latest:
     if: github.event_name == 'release' && github.event.release.prerelease == false
