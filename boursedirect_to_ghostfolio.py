@@ -1512,6 +1512,222 @@ def reconcile_local_coupons(config_path, input_root, output, max_bytes, max_dept
             "import_ready": False, "blockers": artifact["blockers"]}
 
 
+def daily_preview_day(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        fail("INVALID_DAILY_PREVIEW_DAY")
+    try:
+        day = datetime.strptime(value, "%Y-%m-%d").date()
+        day - timedelta(days=89)
+    except (ValueError, OverflowError):
+        fail("INVALID_DAILY_PREVIEW_DAY")
+    return day
+
+
+def daily_months(first, last):
+    capture_period("statement", first)
+    capture_period("statement", last)
+    start = int(first[:4]) * 12 + int(first[5:]) - 1
+    stop = int(last[:4]) * 12 + int(last[5:]) - 1
+    if not 0 <= stop - start <= 2400:
+        fail("DAILY_COVERAGE_RANGE_INVALID")
+    return [f"{n // 12:04d}-{n % 12 + 1:02d}" for n in range(start, stop + 1)]
+
+
+def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth):
+    """Saved-source continuity only; no acquisition clock, wire or remote write."""
+    day = daily_preview_day(as_of)
+    window_start = (day - timedelta(days=89)).isoformat()
+    account = config["account"]
+    if previous is None:
+        previous = {"schema_version": 1, "binding": account, "first_required_period": window_start[:7],
+                    "last_preview_day": as_of, "periods": {}, "exceptions": {}}
+    if (set(previous) != {"schema_version", "binding", "first_required_period", "last_preview_day", "periods", "exceptions"}
+            or type(previous["schema_version"]) is not int or previous["schema_version"] != 1
+            or previous["binding"] != account or not isinstance(previous["periods"], dict)
+            or not isinstance(previous["exceptions"], dict)):
+        fail("INVALID_DAILY_JOURNAL_OR_BINDING")
+    daily_preview_day(previous["last_preview_day"])
+    if as_of < previous["last_preview_day"]:
+        fail("DAILY_PREVIEW_CLOCK_REVERSED")
+    required = daily_months(previous["first_required_period"], as_of[:7])
+    for period, evidence in previous["periods"].items():
+        capture_period("statement", period)
+        if (not isinstance(evidence, dict) or set(evidence) != {"financial_sha256", "statement_sha256", "note_sha256", "complete_source_matching"}
+                or type(evidence["complete_source_matching"]) is not bool
+                or not isinstance(evidence["note_sha256"], list)
+                or any(not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v)
+                       for v in [evidence["financial_sha256"], evidence["statement_sha256"], *evidence["note_sha256"]])):
+            fail("INVALID_DAILY_JOURNAL_OR_BINDING")
+    for key, exception in previous["exceptions"].items():
+        if (not isinstance(key, str) or not isinstance(exception, dict)
+                or exception.get("status") not in ("unresolved", "resolved_by_saved_evidence")
+                or not isinstance(exception.get("code"), str)):
+            fail("INVALID_DAILY_JOURNAL_OR_BINDING")
+        capture_period("statement", exception.get("period"))
+    # Detach nested structures; failed recomputation must preserve retained state.
+    journal = parse_keyed_yaml(yaml.safe_dump(previous).encode())
+    remote = parse_remote_activity_snapshot(snapshot_raw)
+    reviews = {}
+    trade_observations = {}
+    window_events = {}
+    seen = set()
+    for alias, capture in documents.items():
+        statement = parse_statement(decode_document(capture["statement"]), max_depth)
+        notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in capture["notes"]]
+        period = statement["period"]
+        if statement["account_ref"] != account["source_account_ref"] or any(n["account_ref"] != account["source_account_ref"] for n in notes):
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        if period in seen:
+            fail("DUPLICATE_STATEMENT_PERIOD")
+        if period >= as_of[:7]:
+            fail("DAILY_STATEMENT_NOT_CLOSED")
+        seen.add(period)
+        # Exclude presentation slots, retain economic multiplicity and all controls.
+        events = [{k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                   for k, v in event.items() if k != "slot"} for event in statement["events"]]
+        window_events[period] = [event for event in events if window_start <= event["date"] <= as_of]
+        semantic = {"period": period, "events": sorted(events, key=lambda e: json.dumps(e, sort_keys=True)),
+                    "controls": [{k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                                  for k, v in control.items() if k != "slot"} for control in statement["controls"]]}
+        fingerprint = hashlib.sha256(json.dumps(semantic, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        retained = journal["periods"].get(period)
+        if retained is not None and retained.get("financial_sha256") != fingerprint:
+            fail("DAILY_SOURCE_REVISION_REVIEW_REQUIRED")
+        source = {"financial_sha256": fingerprint, "statement_sha256": hashlib.sha256(capture["statement"]).hexdigest(),
+                  "note_sha256": sorted(hashlib.sha256(raw).hexdigest() for raw in capture["notes"]),
+                  "complete_source_matching": False}
+        problems = {}
+        if all(event["kind"] in ("BUY", "SELL") for event in statement["events"]):
+            one = {k: v for k, v in config.items() if k != "snapshot"}
+            one["documents"] = {alias: config["documents"][alias]}
+            try:
+                prepared = compute_prepared_sources(yaml.safe_dump(one).encode(), {alias: capture}, max_bytes, max_depth)["artifact"]["activities"]
+            except RuntimeError as error:
+                problems["source"] = str(error)
+            else:
+                source["complete_source_matching"] = True
+                try:
+                    trade_observations[period] = reconcile_existing_activities(prepared, remote, {}, automatic=True)
+                except RuntimeError as error:
+                    problems["destination"] = str(error)
+                else:
+                    problems["destination"] = "TRADE_HOLDINGS_AND_APPLICATION_UNVERIFIED"
+        else:
+            try:
+                reviews[period] = review_coupon_cash(statement, notes)
+            except RuntimeError as error:
+                problems["source"] = str(error)
+            else:
+                # Mixed/unknown periods cannot become complete through coupon-only matching.
+                source["complete_source_matching"] = (bool(statement["events"])
+                    and all(e["label"].startswith("COUPONS ") for e in statement["events"])
+                    and all(n["kind"] == "COUPON" for doc in notes for n in doc["notes"]))
+                if not source["complete_source_matching"]:
+                    problems["source"] = "COMPLETE_PERIOD_CONVERSION_REQUIRED"
+        journal["periods"][period] = source
+        for role in ("source", "destination"):
+            key = period + ":" + role
+            if role in problems:
+                journal["exceptions"][key] = {"period": period, "status": "unresolved", "code": problems[role]}
+            elif key in journal["exceptions"]:
+                journal["exceptions"][key]["status"] = "resolved_by_saved_evidence"
+    coupons = compare_coupon_snapshot(reviews, account, config["mappings"], snapshot_raw) if reviews else None
+    if coupons is not None:
+        occurrences = {}
+        for observation_key, observation in sorted(coupons["observations"].items()):
+            period, slot = observation_key.split("/")
+            coupon = reviews[period]["coupons"][slot]
+            identity = {k: coupon[k] for k in ("operation_date", "isin", "amount", "currency")}
+            digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+            occurrences[digest] = occurrences.get(digest, 0) + 1
+            key = "coupon:" + digest + ":" + str(occurrences[digest])
+            journal["exceptions"][key] = {"period": coupon["operation_date"][:7], "operation_date": coupon["operation_date"],
+                "status": "resolved_by_saved_evidence" if observation["status"] == "CERTAIN_UNIQUE_NET_REPRESENTATION_OBSERVED" else "unresolved",
+                "code": observation["status"], "evidence": json.loads(json.dumps(observation))}
+    gaps = [period for period in required[:-1] if not journal["periods"].get(period, {}).get("complete_source_matching")]
+    stale = [period for period in gaps if period < window_start[:7]]
+    completed = [p for p, evidence in journal["periods"].items() if evidence.get("complete_source_matching")]
+    journal["last_preview_day"] = as_of
+    unresolved = {k: v for k, v in journal["exceptions"].items() if v["status"] == "unresolved"}
+    report = {"schema_version": 1, "artifact_kind": "daily_saved_input_preview_not_api_payload", "binding": account,
+              "window": {"first_day": window_start, "last_day": as_of, "days": 90},
+              "last_completed_acquisition_period": max(completed) if completed else None,
+              "missing_or_unqualified_closed_periods": gaps, "gaps_outside_window": stale,
+              "current_period_through_day_verified": False, "resume_requires_catchup": bool(stale),
+              "exceptions": unresolved, "trade_observations": trade_observations, "coupon_observations": coupons,
+              "window_source_events": window_events,
+              "snapshot_sha256": hashlib.sha256(snapshot_raw).hexdigest(), "import_ready": False,
+              "blockers": ["CURRENT_PERIOD_CUTOFF_UNVERIFIED", "FINANCIAL_APPLICATION_NOT_ACTIVATED"]}
+    if gaps:
+        report["blockers"].append("ACQUISITION_COVERAGE_GAP")
+    if stale:
+        report["blockers"].append("DAILY_RESUME_CATCHUP_REQUIRED")
+    return journal, report
+
+
+def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
+    if type(max_bytes) is not int or not 0 < max_bytes <= 64 * 1024 * 1024 or type(max_depth) is not int or not 0 < max_depth <= 256:
+        fail("INVALID_DAILY_PREVIEW_LIMITS")
+    daily_preview_day(as_of)
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "account", "mappings", "documents", "snapshot"} or type(config["snapshot"]) is not str:
+        fail("INVALID_DAILY_PREVIEW_CONFIGURATION")
+    prep_raw = yaml.safe_dump({k: v for k, v in config.items() if k != "snapshot"}).encode()
+    preparation_configuration(prep_raw, max_bytes, max_depth)
+    if sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    documents, paths = capture_preparation_sources(prep_raw, input_root, min(max_bytes, 4 * 1024 * 1024), max_depth)
+    snapshot_path = Path(input_root) / config["snapshot"]
+    snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
+    if len(config_raw) + len(snapshot_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values()) > 64 * 1024 * 1024:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    inputs = [Path(config_path), snapshot_path, *paths]
+    account = config["account"]
+    target = hashlib.sha256(account["target_account_id"].encode()).hexdigest()
+    state = Path("state")
+    binding = state / ("binding-" + account["account_key"] + ".yaml")
+    ledger = state / ("ledger-" + target + ".yaml")
+    journal_path = state / ("daily-" + target + ".yaml")
+    output = Path("outputs") / ("daily-" + account["account_key"] + ".yaml")
+    locks = [state / ("prepare-" + target + ".lock"), state / ("account-" + account["account_key"] + ".lock")]
+    for destination in (binding, journal_path, output, *locks):
+        reject_output_input_collision(destination, inputs)
+    private_directory(state)
+    private_directory(output.parent)
+    descriptors = []
+    try:
+        for path in locks:
+            descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            descriptors.append(descriptor)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                fail("INVALID_DAILY_LOCK")
+            os.fchmod(descriptor, 0o600)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                fail("DAILY_ACCOUNT_OR_TARGET_LOCKED")
+        if binding.exists() or binding.is_symlink():
+            if read_keyed_yaml(binding, state, max_bytes) != account:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        if ledger.exists() or ledger.is_symlink():
+            if read_keyed_yaml(ledger, state, max_bytes).get("binding") != account:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        previous = read_keyed_yaml(journal_path, state, max_bytes) if journal_path.exists() or journal_path.is_symlink() else None
+        journal, report = compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth)
+        if any(len(yaml.safe_dump(value).encode()) > max_bytes for value in (journal, report)):
+            fail("DAILY_REPORT_LIMIT_EXCEEDED")
+        atomic_private_yaml(binding, account)
+        atomic_private_yaml(journal_path, journal)
+        atomic_private_yaml(output, report)
+        return {"closed_period_gaps": len(report["missing_or_unqualified_closed_periods"]),
+                "unresolved_exceptions": len(report["exceptions"]), "resume_requires_catchup": report["resume_requires_catchup"],
+                "import_ready": False, "blockers": report["blockers"]}
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 def legacy_duplicate_candidate(activity, row):
     """Bounded similarity for rejection/diagnosis only, never adoption."""
     identity = ("target_account_id", "symbol", "data_source", "kind")
@@ -3072,6 +3288,12 @@ def main(argv=None):
     coupon_reconciliation.add_argument("--output", required=True)
     coupon_reconciliation.add_argument("--max-bytes", type=int, required=True)
     coupon_reconciliation.add_argument("--max-depth", type=int, required=True)
+    daily = subparsers.add_parser("daily-preview", help="Recompute private 90-day saved-input coverage and retain exceptions")
+    daily.add_argument("--config", required=True)
+    daily.add_argument("--input-root", required=True)
+    daily.add_argument("--as-of", required=True, help="Explicit broker calendar day, YYYY-MM-DD")
+    daily.add_argument("--max-bytes", type=int, required=True)
+    daily.add_argument("--max-depth", type=int, required=True)
     prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
     prepare.add_argument("--config", required=True, help="Local keyed YAML inside input root")
     prepare.add_argument("--input-root", required=True)
@@ -3125,6 +3347,10 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "daily-preview":
+            print(json.dumps(preview_local_daily(args.config, args.input_root, args.as_of,
+                args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
         if args.command == "reconcile-coupons":
             print(json.dumps(reconcile_local_coupons(args.config, args.input_root, args.output,
                 args.max_bytes, args.max_depth), sort_keys=True))
