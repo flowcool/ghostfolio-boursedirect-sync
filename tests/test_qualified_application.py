@@ -76,6 +76,27 @@ def retained():
             for p in Path(d).rglob('*') if p.is_file()}
 
 
+@pytest.mark.parametrize('version', ['3.81.0', '3.83.0'])
+def test_qualified_destination_versions_preserve_exact_single_event_dispatch(version):
+    bundle, declaration, store = fixture()
+    declaration['destination_version'] = version
+    repin(bundle, declaration)
+    result = dispatch(bundle, store)
+    assert result['accepted_events'] == 3
+    assert len(posts(store)) == 3
+
+
+@pytest.mark.parametrize('version', ['3.82.0', '3.83.1', '4.0.0'])
+def test_unqualified_destination_version_refuses_before_dispatch(version):
+    bundle, declaration, store = fixture()
+    declaration['destination_version'] = version
+    repin(bundle, declaration)
+    before = retained()
+    with pytest.raises(RuntimeError, match='APPLICATION_DESTINATION_SCOPE_UNVERIFIED'):
+        dispatch(bundle, store)
+    assert store['calls'] == [] and retained() == before
+
+
 @pytest.mark.parametrize('change', ['bool_schema', 'extra', 'missing', 'false', 'int_confirmation',
     'extra_confirmation', 'missing_confirmation', 'blank_reference', 'numeric_reviewer', 'bad_pin',
     'stale_report', 'other_account', 'other_target', 'other_snapshot', 'http', 'path_origin',

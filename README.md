@@ -5,6 +5,12 @@ offline preparation/reconciliation, default preview and explicitly qualified
 single-event application. The implemented `inspect` command reads monthly statement
 HTML, preserves aligned ledger slots and checks cash controls with Decimal.
 Optional `--notes` inputs inspect daily contract notes and match trades exactly.
+`review-coupons` creates a private review of source net dividend cash and broker
+booking dates, retaining original note fields and unsupported-period gates. See
+the [coupon cash contract](docs/design/coupon-cash-review.md). It does not import.
+`reconcile-coupons` compares those original sources with a complete saved target
+snapshot and verified symbol mappings, retaining legacy differences and ambiguity
+in a private preview. It never rewrites history or classifies absence as a new import.
 Inspection does not submit activities or contact either service. A pure internal
 [conversion helper](docs/design/internal-trade-conversion.md) validates matched
 EUR trades and explicit mappings; identity, adoption and API delivery are separate
@@ -129,6 +135,16 @@ and the [legacy duplicate quarantine](docs/plans/2026-10-09-legacy-candidate-qua
 
 ## Reconcile against a saved snapshot
 
+To inspect saved coupon-note fields without converting or importing them:
+
+```sh
+.venv/bin/python boursedirect_to_ghostfolio.py inspect-note inputs/operation-note.html \
+  --include-coupons --input-root inputs --max-bytes 1048576 --max-depth 64
+```
+
+This reports operation counts, import readiness and fixed blocker codes, and preserves unknown tax/corporate-action semantics.
+See the [source inspection contract](docs/design/offline-probe.md#coupon-operation-note-inspection).
+
 For an initial [offline diagnosis](docs/design/offline-diagnosis.md) without
 inventing a complete-history assertion or adoption resolutions:
 
@@ -144,7 +160,9 @@ false. The strict review below requires the separately established evidence.
 
 Save a complete Ghostfolio activity-list JSON and reviewed acquisition-history
 evidence privately. The [review command contract](docs/design/offline-review-cli.md)
-describes configuration and explicit manual-adoption resolutions.
+describes default explicit adoption and the schema2 `certain_unique` automatic
+mode. Automatic mode resolves exact globally unique verified matches without
+per-run manual resolutions; legacy date/fee uncertainty remains blocking.
 
 ```sh
 .venv/bin/python boursedirect_to_ghostfolio.py review \
@@ -302,6 +320,25 @@ reviewed capability proof. Source collection remains an operator-run activity.
 The same contract describes the private vault worker and isolated synthetic
 credential/OTP composition. Its retained [qualification evidence](docs/verification/vault-composition.yaml)
 records implementation hashes and results so unchanged checks can be reused.
+
+## Daily saved-acquisition Compose preview
+
+The [daily preview service](compose.daily.yaml) packages the Python analysis stage
+with read-only original inputs and a persistent private journal. It discovers
+saved documents from completed acquisition folders; no document list is required.
+It runs without vault credentials or network access.
+
+```sh
+install -d -m 700 tmp/daily-compose
+docker compose -f compose.daily.yaml build preview
+DAILY_CONFIG=account/daily.yaml docker compose -f compose.daily.yaml run --rm preview
+```
+
+The private work directory must belong to UID/GID 1000. A completed preview exits
+2, including retained financial blockers. The [daily contract](docs/design/daily-saved-input-preview.md#compose-execution)
+explains configuration, persistent state, date replay and scheduling boundaries.
+Acquisition, a fresh destination snapshot and financial application remain
+separate stages; this command does not activate them.
 
 ## Application Compose
 

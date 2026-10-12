@@ -117,6 +117,16 @@ source_acceptance:
   blocking_conditions: []
   full_operation_sync_proven: false
   currency_basis: explicit_user_confirmation_for_selected_PEA_sample_corroborated_by_net_EUR_headers_and_exact_note_arithmetic
+dividend_policy:
+  authority: Florent explicit net-received and Bourse Direct date replies on 2026-10-12
+  amount_basis: actual_net_EUR_cash_credit
+  date_basis: Bourse_Direct_booking_calendar_day
+  source_evidence: retain_signed_quantity_unit_gross_gross_commission_and_optional_tax_credit
+  absent_withholding: unknown_never_infer_from_gross_minus_credit
+  historic_financial_rewrite: false
+  differing_legacy_amounts_or_dates: unresolved_reconciliation_exceptions
+  implementation: offline_source_coupon_cash_review_not_API_payload
+  unsupported_period_gate: retained_until_independence_and_dependency_proof
 target_service:
   authority: Florent confirmed the architecture grilling on 2026-10-10; online-source-inspection.md#automatic-service-target-decision
   implementation_status: design_only_existing_runtime_gates_retained
@@ -164,7 +174,7 @@ target_service:
     ambiguous_or_changed: quarantine_conflict
     automatic_financial_rewrite: false
     automatic_delete: false
-    manual_resolution_for_normal_certain_match: not_required_in_target_not_yet_implemented
+    manual_resolution_for_normal_certain_match: not_required_in_schema2_certain_unique_review_default_schema1_retained
   unknown_operation_policy:
     quarantine: unknown_operation_and_demonstrated_dependents
     continue: independent_qualified_operations

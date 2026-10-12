@@ -48,6 +48,8 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
   if (config.schema_version === 3) {
     steps[6] = [['logout'], 'logout', []];
     steps.push([['status'], 'status', []]); // No TOTP command in inspection mode.
+  } else {
+    steps.push([['logout'], 'logout', []], [['status'], 'status', []]);
   }
   let index = 0, verified = false, busy = false, failed = false, stopping;
   async function refuse() {
@@ -81,6 +83,9 @@ export function bitwardenCli({configuration, containerId, attest, stopOwned, tra
     if (!verified || busy || failed) return refuse();
     busy = true;
     try {
+      // A source refusal after item delivery may close before requesting a code.
+      // Skip the unused code slot permanently; cleanup never grants another OTP.
+      if (config.schema_version !== 3 && index === 6 && JSON.stringify(args) === '["logout"]') index = 7;
       const step = steps[index++]; // Reserve before attestation/transport awaits.
       if (!step || path !== config.cli.path || JSON.stringify(args) !== JSON.stringify(step[0])
           || !env || Object.keys(env).length !== 3 + step[2].length

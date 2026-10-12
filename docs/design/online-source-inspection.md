@@ -229,3 +229,107 @@ Runtime rollback must be verified against the current exact-owned receipts and
 canonical connection procedure before startup or network changes. Authentication
 cannot be rolled back by deleting local files;
 prevent unsafe attempts instead. No financial operation is part of this phase.
+
+## Bounded end-to-end source qualification acceptance
+
+Florent confirmed this acceptance boundary on2026-10-11 through triage and
+grilling. The delivered entrypoint must complete actual broker connection,
+discover and distinctly identify both expected PEA and PEA-PME accounts, then
+verify acquisition of one monthly statement and one contract note for each
+account where available. An older contract note may be used when no recent
+trade exists. If no note exists, retain the acquired evidence and keep that
+criterion unverified; absence does not prove document acquisition.
+
+Exhaustive history acquisition and financial reconciliation retain their own
+acceptance owners. This qualification does not activate recurring execution or
+Ghostfolio writes. Reuse successful unchanged evidence and do not repeat broker
+authentication merely because a document criterion remains unresolved.
+
+Saved authentication application source describes a post-2FA credential-bearing
+finalization distinct from the initial password request. Its source description
+is not actual request observation. Keep it disabled until its own request role,
+bounded one-use dispatch and response evidence are independently qualified;
+never silently treat it as an automatic password retry.
+
+## Agent-owned bounded same-attempt qualification amendment
+
+On2026-10-11 Florent directed the project agent to manage source qualification
+autonomously after receiving the bounded same-attempt proposal. This permits
+qualification of a native paused request during that single deliberate attempt
+only when its exact destination, method, resource type, purpose and payload
+construction were already pinned from retained application source or an actual
+qualified source response/document. The exact owned page/frame/session and
+actual envelope must match those pins before enabling that exact role and
+consuming its separate durable one-use permit before network continuation.
+There is no wildcard same-origin allowance or unlisted endpoint discovery.
+Unlisted requests, redirects, malformed envelopes, principal/account drift and
+unexpected challenges still stop the attempt.
+
+The initial password submit, app-method selection, one delayed same-item TOTP
+and source-described post-2FA credential finalization are distinct protocol
+steps. Finalization may send the same bound credentials once after its separate
+qualification; it is never a retry following failed or uncertain authentication.
+No code refresh, journal reset or manual browser bypass is added. Retain safe
+private request metadata and structural payload evidence, never real credential
+bodies, cookies, headers or authentication DOM. Existing unchanged source and
+historical successes remain evidence.
+
+This narrow qualification profile supersedes the earlier prohibition on live
+contract repair only for already-pinned expected candidates inspected before
+dispatch. It does not enable the ordinary collector or weaken its default
+unknown-request refusal. Exact-head external security review, affected offline
+tests and owned synthetic runtime qualification remain prerequisites to use.
+The dedicated lab ownership, broker settings and financial boundaries remain
+unchanged; no Ghostfolio write or recurring activation is authorized.
+
+The qualification caller's public preflight quarantines bounded child frames
+attached beneath its owned main frame. It denies every intercepted child GET,
+never grants a child request or exposes a child execution realm, and retains
+the main-frame credential binding. Child POSTs, redirects, response ingress,
+foreign sessions and child events after preflight remain fatal. The default
+native transport still refuses child-frame attachment; this denial-only profile
+is selected solely by the qualification caller while it is credential-free.
+
+After a known password acceptance, the caller also denies the two exact TOTP/SMS
+selection image GETs derived from the pinned application source. These are
+same-origin `Image` requests without query/fragment; denial is retained before
+`Fetch.failRequest`. This grants no network dispatch or additional authentication
+attempt. Lazy same-origin `Font` GETs at this phase are also denied locally when
+they carry no query, fragment, userinfo or request body. Font denial grants no
+read permission; foreign fonts and ambiguous requests remain fatal. Other
+requests and child frames after preflight still stop the session.
+
+When the source shows a method list, the caller selects the unique owned local
+TOTP choice before waiting for its six code controls. An already selected TOTP
+form needs no click. Ambiguous choices, foreign DOM ownership and navigation
+links refuse before code retrieval; the existing durable local-method proof
+still checks the actual TOTP form and untrusted-device selection afterwards.
+
+The pinned TOTP mutation advances on HTTP success and does not inspect a
+`success` property. The caller recognizes HTTP 200 with an empty body or a
+valid opaque JSON without an explicit error or contradictory success flag. It retains only
+the outcome and status, never backend data. Other statuses, malformed or
+duplicate-key JSON and explicit errors remain refused;
+credential finalization still needs its independently verified redirect.
+
+Account navigation separates the GET selector value from the stable broker
+identifier at the start of each account option label. Both inventories must
+contain distinct PEA and PEA-PME entries and remain identical across inspected
+pages. A selected option proves its wrapper; each financial document must
+independently match that wrapper's stable identifier in its account header.
+Private receipts retain both values and their document provenance. A selector
+index alone cannot establish the identity of a financial document.
+
+Historical monthly reads use only the source-described `frmRlv` POST to
+`/priv/new/releves.php`, with the selected account index `nc` and an observed
+`RlvCombo` value from 1 through 21. The private grant binds the exact URL,
+owned session/frame, form content type and these two unique fields before
+continuation. Extra fields, credentials, duplicate keys, redirects, another
+account or another route refuse. The caller builds this read-only form in its
+owned inert capture page; it waits for the new page load and native realm
+before another form submission. Captured pages and response data stay inert.
+
+Document acceptance requires matching source-selected note and statement
+periods in addition to account identity. The operator can end a read session
+after retained absence evidence using the private finish receipt; its result
+remains incomplete and does not satisfy the document criterion or close Beads.

@@ -596,3 +596,15 @@ receipts nor relaxes resource ownership. A supervised same-session failed
 publication lock may be retained separately only after verifying the complete
 registry has exclusively terminal absence rows, no new intent or Docker create
 was reached, and no competing owner; never remove locks by age or reset state.
+
+## Agent-owned source qualification exception
+
+The2026-10-11 bounded same-attempt amendment in
+[the owning source contract](../design/online-source-inspection.md#agent-owned-bounded-same-attempt-qualification-amendment)
+permits inspection of already-pinned expected native candidates before dispatch.
+The ordinary collector retains the earlier unexpected-request fatal policy.
+The qualification profile does not grant a wildcard origin or allow unlisted
+endpoint repair; each exact inspected role consumes its own durable permit.
+Post-2FA credential finalization remains distinct from app-method selection and
+must not reuse an initial password or OTP permit. External security review and
+owned runtime proof precede actual use.

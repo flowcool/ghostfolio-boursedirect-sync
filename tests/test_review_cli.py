@@ -84,6 +84,22 @@ def test_all_existing_explicitly_adopted_has_no_new_payload():
     assert artifact['wire'] is None and artifact['import_ready'] is False
 
 
+def test_all_existing_automatic_unique_matches_need_no_manual_resolutions():
+    config = setup(existing=True)
+    config.update(schema_version=2, adoption_mode='certain_unique')
+    write_config(config)
+    Path('inputs/resolutions.yaml').write_text('{}\n')
+    before = {p.name: p.read_bytes() for p in Path('state').glob('*.yaml')}
+    summary = run()
+    first = output().read_bytes()
+    assert summary['new_activities'] == 0 and summary['adopted_activities'] == 3
+    assert yaml.safe_load(first)['wire'] is None and summary['import_ready'] is False
+    run()
+    assert output().read_bytes() == first
+    assert before == {p.name: p.read_bytes() for p in Path('state').glob('*.yaml')}
+    assert not list(Path('state').glob('writes-*.yaml'))
+
+
 def test_shortfalls_are_diagnostic_blockers_not_invented_acquisitions():
     setup(missing=True)
     summary = run()

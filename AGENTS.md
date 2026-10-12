@@ -1,108 +1,99 @@
-# ghostfolio-boursedirect-sync
+# Bourse Direct working agreement
 
-Read [CLAUDE.md](CLAUDE.md), then the scoped Beads issue and the owning contract
-selected through the [design index](docs/design/index.md).
-Global working agreement applies. Beads owns live work state.
+## Working mode: outcome first
 
-For acquisition resumption, SSH/lab operations or connection diagnosis, first run
-the [canonical connection procedure](docs/operations/source-connection.md).
-`scripts/source_connection.py check` loads preserved successes and named gaps;
-`status` verifies the existing lab. Resume the first unqualified stage and reuse
-unchanged evidence. Active private lab control and receipts belong to `inputs/lab/`;
-prior temporary controllers are provenance archives, not alternate entrypoints.
+Beads owns scope, authority, acceptance and live work state, routed with
+`project=ghostfolio-boursedirect-sync`. This agreement owns execution policy.
+It supersedes older process prescriptions in plans, reviews and contracts;
+financial, credential and transport invariants remain in force.
 
-## Architecture and validation
+Start with the owning issue and its latest findings. Identify the next missing
+user-visible result and finish the smallest working path to it. For acquisition,
+that means the delivered entrypoint connects, identifies the correct accounts
+and saves usable documents. Technical primitives and green tests support this
+result; they do not establish actual acquisition or delivery.
 
-- `boursedirect_to_ghostfolio.py` is a functional mono-file document importer
-  with offline inspection, note-matching, internal financial conversion and stable
-  ledger identities
-  and local `prepare`/`review` artifacts, exact wire bytes, uncertainty journals
-  and conservative chronological holdings checks. Qualified `apply` requires
-  separately pinned operator records and source replay; it defaults to preview.
-  No classes or type hints; follow `.claude/rules/python-conventions.md`,
-  `.claude/rules/security.md` and `.claude/rules/delegation.md` (fleet delegation,
-  model right-sizing, infra handoff, convergence discipline).
-- Only local saved HTML is read; scripts, links and assets are never fetched.
-  Optional Ghostfolio `snapshot` uses one exact-allowlisted HTTPS GET only;
-  session credentials come from environment, never an authentication POST.
-  Qualified application adds fixed single-event import POSTs under separate
-  external permission, with complete pre-request private archive and no retries.
-- Decimal controls, direct-child column parsing and blank slots are mandatory.
-  Unknown operations block the affected period. `prepare` remains not import-ready
-  until remote adoption and isolated API/date/number gates are proved.
-- Runtime dependencies: `requirements.txt`; development: `requirements-dev.txt`.
-- Required logic verification: `.venv/bin/python -m pytest -q`. Tests use synthetic
-  inputs and forbid sockets. Never point tests at real Ghostfolio or shared state.
-- Preserve verification results in keyed YAML with command, exit code and hashes
-  of the relevant code/runtime inputs. Reuse matching successful evidence across
-  sessions; run only new or affected checks and checks needed to resolve failures.
-  `bash scripts/verify-local.sh` is the full documentation, Python, collector and
-  whitespace gate when reusable evidence is unavailable. Inspect each required
-  exit code before committing, closing work or making a dependent mutation.
-- Real inputs, configuration, output and journals are ignored; never commit
-  personal account data. Logs contain codes and counts only.
-- Chromium: use the latest available stable Chrome for Testing for new runtime
-  work, resolve it once, and record the exact version, download hash and image ID
-  used by the qualification run. When an old image is unavailable, qualify the
-  current release and continue; historical pins describe historical evidence.
-- This repository owns vault/CLI adapters and acquisition control code. Infra
-  supplies verified access facts and host/secret/network wiring. Reuse existing
-  CLI artifacts and provisioning mechanisms before adding another delivery layer.
+Reuse existing code, runtime and successful evidence. Add a helper, abstraction,
+contract or independent ticket only when a concrete failure or the next acceptance
+criterion needs it. Keep in-scope fixes in the owning ticket. Collect review fixes
+into a coherent batch before the next verification/review cycle. Optional cleanup,
+sibling alignment and general hardening follow working acceptance unless their
+absence demonstrably threatens correctness, credentials or the authorized run.
 
-## Pull request workflow
+## Validation proportional to the change
 
-- Florent's external workflow owns PR review and CodeRabbit triggers; do not
-  trigger the bot or substitute agent review for the required external review.
-  This agent owns merges and releases under Florent's authorization. Preserve
-  merge ancestry, required checks and explicit security/release gates.
-- Do not spawn PR-review subagents. Run local verification and record exact CI
-  evidence; CodeRabbit supplies PR review externally. Historical independent
-  reviews remain valid evidence for the exact heads they inspected.
-- Future design reviews follow the reviewer and authorization policy in
-  `.claude/rules/delegation.md`. Historical Astra verdicts remain valid for their
-  exact reviewed scope; design review is separate from PR review.
-- No Ghostfolio writes are authorized. Public v0 publication is authorized;
-  private documents, runtime evidence and credentials must remain off Git.
+- Guidance, prose, labels and ticket edits: inspect the semantic diff, local links,
+  line endings and whitespace. Run `python3 scripts/check-docs.py` for agent/docs
+  entrypoint edits. Application suites and browser labs are unnecessary here.
+- Local logic changes: run the affected offline regressions, including a case
+  that distinguishes the reported failure from success. Broaden only for changed
+  shared behavior, an unexplained failure or a concrete integration concern.
+- Authentication, credential transport, financial conversion or recovery changes:
+  check the changed boundary and its relevant refusal/uncertainty cases. Use a
+  disposable native integration check when unit tests cannot prove that boundary.
+  Reuse unchanged browser, vault, accounting and cleanup qualification.
+- Before delivering a runtime-changing batch, require one full offline verification
+  on the final runtime inputs and the required final-head CI/external review.
+  Successful CI can supply the full suite; do not duplicate it locally or rerun it
+  for subsequent prose-only edits. Repository-required review coverage still applies.
 
-## Autonomous technical ownership
+Record command, result and relevant input hashes using the existing keyed YAML
+when runtime verification needs reuse. Name the actual dependency that invalidates
+saved evidence; a new commit SHA alone does not invalidate unchanged runtime proof.
+`bash scripts/verify-local.sh` is the full fallback, not a per-edit ritual. Automated
+CI stays enabled. Tests use synthetic inputs and isolated state, never real
+credentials, broker authentication, production or the shared Beads database.
 
-Florent authorizes the agent to complete the agreed project scope autonomously,
-including technical reviews and bounded infrastructure delegation under their
-existing explicit authority. Follow `.claude/rules/delegation.md` for reviewer
-and model selection. Resolve technical choices, review findings and
-recoverable laboratory failures without repeating permission requests. Carry
-existing approvals across sessions through their Beads evidence. Ask Florent
-only for genuinely new authority or indispensable information. Production,
-financial writes, publication/push and destructive-operation gates still apply.
+## Functional and security boundaries
 
-Florent authorized direct project-agent operation of the dedicated acquisition
-lab on 2026-10-11: inspect/log/exec, start/recreate its containers, and manage its
-networks and necessary ports without an infra-agent relay. This project-local
-authorization supersedes the lab handoff requirement in
-`.claude/rules/delegation.md`. Before operating, read the private runtime receipts
-referenced by the scoped Beads issue, verify the daemon and exact resource owner,
-and preserve rollback and private evidence. Reuse the existing SSH/Docker access.
-Infra remains responsible for shared host services and production wiring; broker
-authentication and financial activation retain their separate gates.
+- Functional Python, no custom classes or type hints; follow
+  `.claude/rules/python-conventions.md`. The document importer consumes saved HTML
+  without fetching its assets. Interactive acquisition is a separate approved path.
+- Preserve exact Decimal/date/currency/fee semantics, source-to-note matching,
+  account bindings, direct-child columns/blank slots, idempotency, holdings controls
+  and uncertain-result journals.
+  Unknown financial operations block their affected account/period. A laboratory
+  success does not prove complete production history or authorize financial writes.
+- Credentials stay in the approved vault/environment path; personal inputs,
+  outputs, journals and runtime receipts remain private and off Git. Preserve the
+  existing secret confinement, origin, redirect and one-attempt authentication guards.
+  Ghostfolio origins reject userinfo, query and fragment; preserve preview-by-default
+  application and exact saved-wire/source replay before separately authorized writes.
+- Unexpected credential-bearing requests or uncertain authentication outcomes stop
+  the attempt without retry. Denied unrelated public subresources need not abort a
+  known safe form if the current reviewed policy explicitly permits continuation.
+  This instruction does not itself grant a new request role or change runtime policy.
+- Use the relevant contract through the [design index](docs/design/index.md) when
+  changing behavior. Read `.claude/rules/security.md` for external transport or
+  credentials, and `.claude/rules/delegation.md` for execution boundaries.
 
-## Durable work state
+## Access, authority and delivery
 
-- Root epic: `infra-4g8u`, metadata `project=ghostfolio-boursedirect-sync`.
-- Source-acceptance owner: `infra-4g8u.4`; offline-probe owner: `infra-4g8u.7`.
-- Design: [probe contract](docs/design/offline-probe.md),
-  [source matrix](docs/design/source-contract.yaml),
-  [preparation contract](docs/design/offline-preparation.md).
-- Independent review: [Astra report](docs/reviews/2026-10-08-manual-document-import-astra.md).
+For acquisition resumption or lab operations, read the
+[connection procedure](docs/operations/source-connection.md), then use its existing
+check/status entrypoints and private receipts. Resume the first missing stage.
+Historical success remains evidence; a fresh session needs its actual session state.
+Keep the qualified browser/image unless a demonstrated fault, security requirement
+or unavailable artifact requires replacement; qualify only the affected dependency.
 
-Interactive broker source acquisition is authorized under the
-[acquisition amendment](docs/design/online-source-inspection.md); unattended
-scraping remains outside the design. No production writes or pushes without
-applicable explicit authorization. Later financial/API behavior must pass the gates.
+Florent authorizes direct operation of the dedicated acquisition lab under its
+existing daemon/resource ownership and rollback checks. Shared host services and
+production wiring remain infra-owned. Carry recorded approvals across sessions;
+ask only for genuinely new authority or indispensable input. Broker attempts,
+production deployment, financial writes and destructive cleanup retain their
+separate explicit gates. Existing publication authority governs pushes/releases.
 
-## Agent skills
+Commit authorized changes atomically after proportionate verification. CodeRabbit
+review is triggered externally; required CI and completed review cover the final
+head before guarded merge. Resolve confirmed correctness/security findings; explain
+and defer optional suggestions rather than converting each into a delivery gate.
 
-For engineering-skill workflows, read the shared Beads tracker, triage-label,
-and domain-doc rules in `docs/agents/`:
-[`issue-tracker.md`](docs/agents/issue-tracker.md),
-[`triage-labels.md`](docs/agents/triage-labels.md), and
-[`domain.md`](docs/agents/domain.md).
+Record material decisions, failures, blockers and acceptance milestones in Beads;
+combine routine successful checks into one evidence note per coherent batch.
+Reconcile Beads/Git at terminal close or handoff, not after every edit. Close an
+acceptance owner only with its actual result or an explicitly approved scope change.
+
+For engineering skills, use the existing Beads and domain routing in
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md),
+[triage-labels.md](docs/agents/triage-labels.md) and
+[domain.md](docs/agents/domain.md).

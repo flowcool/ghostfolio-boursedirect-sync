@@ -1,16 +1,22 @@
 # Security rules — ghostfolio-boursedirect-sync
 
-- No Bourse Direct API: importer reads local documents. Explicitly authorized interactive
-  source collection follows docs/design/online-source-inspection.md; no unattended broker scraping.
-  **3 failed logins lock the account** — never loop logins, never retry an OTP blindly; fail loud and stop.
-- Credentials (`BD_LOGIN`, `BD_PASSWORD`, any OTP/TOTP seed, `GHOST_TOKEN`): only from `os.environ`,
-  never hardcoded, never logged. OTP values and cookies must never be logged (picsou's sidecar redacts
-  them — do the same).
-- Secret storage: off-git SOPS store + pointer only (global ops rule). No secret in memory/KB/Beads.
-- SMS 2FA is not automatable; do not design an unattended flow around it.
-- Any new external HTTP/browser automation or credential handling → run `security-review` before merge.
-- Future Ghostfolio transport must validate an exact allowlisted origin and reject redirects,
-  userinfo, query and fragment. The original audited IBKR revision had no
-  `validate_ghost_host` helper; current sibling revisions do. Inspect and pin the
-  actual implementation before selective reuse; historical plan statements are
-  not evidence about current sibling code.
+- The importer reads saved local documents. Explicitly authorized interactive source
+  collection follows `docs/design/online-source-inspection.md`; unattended scraping
+  remains outside the approved design. Three failed logins lock the account: preserve
+  the one-attempt authority and stop on uncertain password or OTP outcomes.
+- Broker credentials, Ghostfolio tokens, OTP values, TOTP seeds, cookies and CLI
+  sessions stay in the approved vault/environment delivery path. Preserve worker seed
+  confinement. Never hardcode, commit or log these values or raw authentication output.
+- Keep personal source captures, output, configuration and journals off Git; logs and
+  public evidence contain structural codes/counts only. Off-git secret storage remains
+  owned by its existing provisioning mechanism; this project stores pointers only.
+- For new external HTTP/browser automation or credential handling, record main-thread
+  checks of the changed security boundary and complete required exact-final-head
+  CodeRabbit review before merge/use under the existing acceptance contract. Follow
+  AGENTS.md for affected regressions and native proof; unchanged boundaries reuse evidence.
+- Preserve exact approved origins, credential exclusivity, redirect refusal and
+  one-attempt/uncertain-result fences. A blocked unrelated public resource grants no
+  dispatch permission; continuation requires the existing reviewed phase-specific policy.
+- Ghostfolio writes require separate explicit authority, exact account/source binding,
+  private pre-request archive, confirmed acceptance and recovery controls. Inspect actual
+  pinned sibling code before helper reuse; historical plan descriptions are not code proof.

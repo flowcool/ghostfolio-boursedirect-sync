@@ -33,6 +33,39 @@ def validate(raw, config, captures, limit=100000):
     return bd.validate_frozen_review(raw, hashlib.sha256(raw).hexdigest(), config, captures, limit)
 
 
+def test_automatic_review_without_manual_resolutions_is_recomputed_and_snapshot_bound():
+    _, config, captures = bundle(existing=True)
+    options = bd.parse_keyed_yaml(config)
+    options.update(schema_version=2, adoption_mode='certain_unique')
+    config = yaml.safe_dump(options).encode()
+    captures['resolutions'] = b'{}\n'
+    report = bd.compute_offline_review(config, captures, 100000)
+    assert len(report['adoption']['adopted']) == 3
+    assert not report['adoption']['new'] and report['wire'] is None
+    assert report['import_ready'] is False
+    raw = yaml.safe_dump(report).encode()
+    assert validate(raw, config, captures) == report
+    explicit = dict(options)
+    explicit.pop('adoption_mode')
+    explicit['schema_version'] = 1
+    with pytest.raises(RuntimeError, match='^HOLDINGS_ADOPTION_UNRESOLVED$'):
+        validate(raw, yaml.safe_dump(explicit).encode(), captures)
+    data = json.loads(captures['snapshot'])
+    data['activities'][-1]['fee'] += 1
+    replace_snapshot(captures, data)
+    with pytest.raises(RuntimeError, match='^REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED$'):
+        validate(raw, config, captures)
+
+
+@pytest.mark.parametrize('version,mode', [(1, 'certain_unique'), (2, 'guess'), (True, 'certain_unique')])
+def test_automatic_configuration_is_an_exact_opt_in(version, mode):
+    _, config, captures = bundle()
+    options = bd.parse_keyed_yaml(config)
+    options.update(schema_version=version, adoption_mode=mode)
+    with pytest.raises(RuntimeError, match='^INVALID_REVIEW_CONFIGURATION$'):
+        bd.compute_offline_review(yaml.safe_dump(options).encode(), captures, 100000)
+
+
 @pytest.mark.parametrize("case", [{}, {"existing": True}, {"missing": True}])
 def test_full_computation_and_validation_have_no_io_or_mutation(monkeypatch, case):
     raw, config, captures = bundle(**case)

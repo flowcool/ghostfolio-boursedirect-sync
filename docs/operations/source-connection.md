@@ -152,6 +152,11 @@ ambiguous inputs before any mutation. The captured metadata requires independent
 source inspection; it never establishes successful login. Real credential delivery
 and authentication retain their separate source, runtime and security gates.
 
+The local check reports preliminary verification and post-2FA password
+finalization as separate required roles. An older six-role inventory cannot
+hide those gaps or establish authentication readiness. Finalization is distinct
+from app-method selection; saved application code cannot qualify its dispatch.
+
 Inspect every denied POST separately. The current form observation produced a
 preliminary verification request and a password-submit request in the same owned
 frame/session. The opt-in dummy observer additionally retains each denied POST's
@@ -162,6 +167,29 @@ actual envelope inspection. Keep these gaps explicit in the private source
 contract and leave authentication roles disabled.
 
 ## Bounded recovery
+
+Missing URI-alias metadata from an older vault inspection can be refreshed
+through the same entrypoint:
+
+```sh
+.venv/bin/python scripts/source_connection.py inspect-vault-aliases
+```
+
+This requires a hash-pinned `vault_cli_binding` evidence reference whose bytes
+match the successful inspection's binding hash. The historical artifact supplies
+data only; no archived controller is executed. The source-owned private IPC
+adapter uses the current full-ID receipt, CLI pin, egress proof and provisioning
+function. SSH CLI output is consumed directly inside the worker; the supervisor's
+private RPC carries only attestation/stop metadata and the final inspected
+projection. Full items, seeds and CLI stdout never cross that RPC boundary.
+It opens one metadata-only session, retrieves no TOTP, verifies logout
+and compares every prior identity/profile field before preserving the new alias
+hash in a fresh private inspection directory. No broker request or source role
+activation is performed. Missing pins, changed metadata, unverified cleanup or
+IPC failure refuse; a failed execution preserves intent and stops only the
+receipted CLI, recording `cli_stopped_owned` for bounded recovery. Public output
+contains fixed codes/counts only. Source code must be committed and pass its
+exact-head external security review before this opt-in command is used.
 
 If an exact owned browser was stopped and the receipt says
 `browser_stopped_owned`:
@@ -198,3 +226,61 @@ evidence; append public structural verification under
 changes, publish under existing authority, and record current acceptance in Beads.
 Successful pinned evidence is reused until its relevant input or runtime property
 changes. Documentation never substitutes for an unobserved request or account.
+
+### Interrupted vault containment
+
+Metadata inspection reserves `inputs/lab/vault-operation.lock` before credential
+provisioning. A concurrent invocation refuses; verified logout or exact owned
+CLI shutdown releases the lease. Uncertain cleanup and process interruption
+retain it for ownership-preserving recovery rather than opening another session.
+`stop_owned_cli` revalidates the full owned ID/configuration and original running
+PID. A retained `cli_stop_intent` can finish the bounded stop, or publish the
+stopped receipt when that exact container is already stopped. Changed ownership,
+PID or unknown receipt states refuse before mutation. This permits cleanup
+reconciliation only; it never restarts the CLI or retries authentication.
+
+## Explicit one-attempt qualification
+
+`scripts/source_connection.py qualify-connection` is separate from ordinary
+`connect`. Run it only under the scoped one-attempt authority, after offline
+verification, isolated Chromium qualification and external review of the exact
+committed head. It reuses the dedicated lab, independently pinned vault identity
+and app source, and existing SSH/provisioning. Explicit enrollment reserves the
+canonical principal namespace; existing or uncertain state refuses.
+
+The worker keeps full vault items, seeds, session material, credentials and
+authentication responses in private memory. It inspects and retains each native
+request before consuming its one-use permission. It accepts one known challenge,
+one application code and one separately permitted final credential request.
+Unknown responses or requests stop the owned attempt without retry.
+
+Captured account/document GETs are inert and private. Two distinct wrapper IDs
+and selected-account navigation must be observed; statement/note titles and
+account headers must match. When saved lists need further source inspection,
+`SOURCE_READ_SELECTION_REQUIRED` retains the current browser while waiting for
+a private `selection.yaml` in the current attempt directory. That record contains
+`url`, `role`, `sourceSha256` and `account`; the source hash must name a captured
+body and the selected account must be verified. Inspect the source before granting
+the exact next read; calendar scripts are retained as inert source documents.
+The original ten-minute browser lifetime and request budgets still apply. No
+password or OTP retry is granted. Cleanup verifies logout or stops the exact
+owned CLI, verifies browser exit or stops its exact container, and preserves
+uncertainty. This qualification does not enable recurring collection.
+
+For a specific historical statement, optionally save a private
+`inputs/source-observations/statement-preference.yaml` before starting the attempt:
+
+```yaml
+schema_version: 1
+statement_periods:
+  PEA: '202607'
+```
+
+Only `PEA` and `PEA-PME` keys and valid `YYYYMM` strings are accepted. Invalid
+configuration refuses before owned runtime access. The collector selects only
+the uniquely matching French month/year label offered by the saved broker form,
+using its exact observed option value and selected account. Missing or ambiguous
+months refuse; no URL or option value is invented. Without this file, navigation
+keeps its existing behavior. The preference narrows document selection and does
+not authorize a new authentication attempt. Verify the retained statement's
+actual period and financial contents separately before reconciliation.

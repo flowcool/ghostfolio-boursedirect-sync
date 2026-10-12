@@ -46,6 +46,123 @@ def change_field(slot, cell, value):
     return str(soup)
 
 
+def coupon_source(tax_credit=None):
+    soup = BeautifulSoup(note_source(), 'html.parser')
+    field(soup, 1, 0).string = 'COUPONS'
+    field(soup, 3, 0).string = 'QUANTITE : -3'
+    field(soup, 4, 0).string = 'PX UN.BRUT : +0,80000'
+    field(soup, 4, 1).string = 'BRUT : +2,40'
+    field(soup, 5, 0).string = 'COMMISSION : +0,10'
+    field(soup, 5, 1).string = '' if tax_credit is None else 'CRED. IMPOT : ' + tax_credit
+    cols = vectors(soup)
+    bd.cells(cols[2][1])[0].string = ''
+    bd.cells(cols[3][1])[0].string = '1,90'
+    for column in cols:
+        for row in column[6:]: row.decompose()
+    return str(soup)
+
+
+@pytest.mark.parametrize('tax_credit', [None, '+0,00', '+0,25'])
+def test_coupon_inspection_preserves_signed_fields_without_inventing_tax(tax_credit):
+    raw = coupon_source(tax_credit)
+    with pytest.raises(RuntimeError, match='^UNSUPPORTED_NOTE_GROUP_LENGTH$'):
+        bd.parse_contract_note(raw, 32)
+    document = bd.parse_contract_note(raw, 32, include_coupons=True)
+    coupon = document['notes'][0]
+    assert coupon['kind'] == 'COUPON' and coupon['quantity'] == Decimal('-3')
+    assert coupon['unit_gross'] == Decimal('0.80000') and coupon['gross'] == Decimal('2.40')
+    assert coupon['credit'] == Decimal('1.90') and coupon['commission'] == Decimal('0.10')
+    assert coupon['withholding'] is None and coupon['gross_semantics_verified'] is False
+    assert coupon['price_currency'] is None and coupon['net_currency'] == 'EUR'
+    assert ('tax_credit' in coupon) == (tax_credit is not None)
+    if tax_credit is not None: assert coupon['tax_credit'] == bd.parse_decimal(tax_credit, cash=True)
+    with pytest.raises(RuntimeError, match='^NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW$'):
+        bd.match_trade_notes(statement_from_notes([document]), [document])
+
+
+def test_mixed_coupon_and_trade_groups_preserve_direct_child_slots():
+    soup = BeautifulSoup(coupon_source(), 'html.parser')
+    trade = BeautifulSoup(note_source(), 'html.parser')
+    for coupons, trades in zip(vectors(soup), vectors(trade)):
+        parent = coupons[0].parent
+        for row in trades: parent.append(copy.copy(row))
+    doc = bd.parse_contract_note(str(soup), 32, include_coupons=True)
+    assert doc['slot_count'] == 15
+    assert [(n['kind'], n['slot']) for n in doc['notes']] == [('COUPON', 1), ('BUY', 7)]
+    assert doc['notes'][1]['gross'] == document()['notes'][0]['gross']
+
+
+def test_mixed_coupon_and_trade_cli_keeps_both_acceptance_blockers(tmp_path, capsys):
+    soup = BeautifulSoup(coupon_source(), 'html.parser')
+    trade = BeautifulSoup(note_source(), 'html.parser')
+    for coupons, trades in zip(vectors(soup), vectors(trade)):
+        for row in trades:
+            coupons[0].parent.append(copy.copy(row))
+    path = tmp_path / 'mixed.html'
+    path.write_text(str(soup))
+    assert bd.main(['inspect-note', str(path), '--input-root', str(tmp_path),
+                   '--max-bytes', '100000', '--max-depth', '32', '--include-coupons']) == 2
+    summary = json.loads(capsys.readouterr().out)
+    assert summary == {'notes': 2, 'coupons': 1, 'trades': 1, 'unknown': 0,
+                       'import_ready': False, 'blockers': ['COUPON_STATEMENT_REVIEW_REQUIRED',
+                                                          'REAL_SOURCE_ACCEPTANCE_PENDING']}
+
+
+@pytest.mark.parametrize('slot,cell,value,error', [
+    (1, 1, 'FR0000000000', 'INVALID_NOTE_SECURITY'),
+    (3, 0, 'QUANTITE : +3', 'NOTE_DIRECTION_CONFLICT'),
+    (4, 0, 'PX UN.BRUT : 0', 'INVALID_NOTE_PRICE_OR_GROSS'),
+    (4, 1, 'BRUT : 2,401', 'INVALID_CASH_PRECISION'),
+    (5, 0, 'TAXE : 0,10', 'NOTE_FIELD_MISSING_OR_REORDERED'),
+    (5, 1, 'RETENUE : 0,40', 'UNSUPPORTED_NOTE_EXTRA_FIELD'),
+    (5, 1, 'CRED. IMPOT : -0,25', 'NEGATIVE_NOTE_AMOUNT'),
+])
+def test_coupon_unknown_fields_signs_security_and_precision_refuse(slot, cell, value, error):
+    soup = BeautifulSoup(coupon_source(), 'html.parser')
+    field(soup, slot, cell).string = value
+    with pytest.raises(RuntimeError, match='^' + error + '$'):
+        bd.parse_contract_note(str(soup), 32, include_coupons=True)
+
+
+def test_coupon_misaligned_amount_cannot_be_associated_with_another_slot():
+    soup = BeautifulSoup(coupon_source(), 'html.parser')
+    bd.cells(vectors(soup)[3][3])[0].string = '1,90'
+    with pytest.raises(RuntimeError, match='^NOTE_FIELD_ALIGNMENT_ERROR$'):
+        bd.parse_contract_note(str(soup), 32, include_coupons=True)
+
+
+def test_coupon_cli_reports_counts_without_personal_or_financial_fields(tmp_path, capsys):
+    path = tmp_path / 'coupon.html'
+    path.write_text(coupon_source())
+    assert bd.main(['inspect-note', str(path), '--input-root', str(tmp_path), '--max-bytes', '100000',
+                   '--max-depth', '32', '--include-coupons']) == 2
+    summary = json.loads(capsys.readouterr().out)
+    assert summary == {'notes': 1, 'coupons': 1, 'trades': 0, 'unknown': 0, 'import_ready': False,
+                       'blockers': ['COUPON_STATEMENT_REVIEW_REQUIRED']}
+
+
+def test_coupon_inspection_keeps_adjacent_split_unknown_without_inventing_conversion():
+    coupon = BeautifulSoup(coupon_source(), 'html.parser')
+    split = BeautifulSoup(coupon_source(), 'html.parser')
+    field(split, 1, 0).string = 'DIVISION'
+    field(split, 4, 0).string = 'SORTIE DE : +3'
+    field(split, 4, 1).string = ''
+    bd.cells(vectors(split)[3][1])[0].string = ''
+    split_columns = vectors(split)
+    for column in split_columns: column[5].decompose()
+    for first, second in zip(vectors(coupon), vectors(split)):
+        for row in second: first[0].parent.append(copy.copy(row))
+    result = bd.parse_contract_note(str(coupon), 32, include_coupons=True)
+    assert result['slot_count'] == 11
+    assert [n['kind'] for n in result['notes']] == ['COUPON', 'UNKNOWN']
+    unknown = result['notes'][1]
+    assert unknown['source_kind'] == 'DIVISION'
+    assert unknown['source_fields'] == [['QUANTITE : -3', '', ''], ['SORTIE DE : +3', '', '']]
+    assert 'quantity' not in unknown and unknown['gross_semantics_verified'] is False
+    with pytest.raises(RuntimeError, match='^NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW$'):
+        bd.match_trade_notes({'account_ref': result['account_ref'], 'events': []}, [result])
+
+
 def statement_from_notes(docs):
     return {'account_ref': docs[0]['account_ref'], 'events': [copy.deepcopy(n) for d in docs for n in d['notes']]}
 

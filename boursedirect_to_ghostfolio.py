@@ -16,7 +16,8 @@ import stat
 import ssl
 import sys
 import uuid
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup, Comment
 import yaml
@@ -296,7 +297,23 @@ def valid_isin(value):
     return total % 10 == 0
 
 
-def parse_contract_note(html, max_depth):
+def contract_note_ledger(soup):
+    candidates = []
+    for table in soup.find_all("table"):
+        first = table.find("tr", recursive=False)
+        if first is None:
+            body = table.find("tbody", recursive=False)
+            first = body.find("tr", recursive=False) if body else None
+        if first and tuple(text(c) for c in cells(first)) == HEADERS:
+            candidates.append(table)
+    if len(candidates) != 1:
+        fail("LEDGER_MISSING_OR_AMBIGUOUS")
+    return candidates[0]
+
+
+def parse_contract_note(html, max_depth, include_coupons=False):
+    if type(include_coupons) is not bool:
+        fail("INVALID_NOTE_INSPECTION_MODE")
     if max_depth <= 0:
         fail("INVALID_DEPTH_LIMIT")
     soup = BeautifulSoup(html, "html.parser")
@@ -312,17 +329,7 @@ def parse_contract_note(html, max_depth):
                 if len(cells(r)) == 2 and text(cells(r)[0]) == "COMPTE N°"]
     if len(accounts) != 1 or not accounts[0]:
         fail("ACCOUNT_HEADER_MISSING_OR_AMBIGUOUS")
-    candidates = []
-    for table in soup.find_all("table"):
-        first = table.find("tr", recursive=False)
-        if first is None:
-            body = table.find("tbody", recursive=False)
-            first = body.find("tr", recursive=False) if body else None
-        if first and tuple(text(c) for c in cells(first)) == HEADERS:
-            candidates.append(table)
-    if len(candidates) != 1:
-        fail("LEDGER_MISSING_OR_AMBIGUOUS")
-    rows = direct_rows(candidates[0])
+    rows = direct_rows(contract_note_ledger(soup))
     if len(rows) != 2 or len(cells(rows[1])) != 4:
         fail("UNSUPPORTED_NOTE_STRUCTURE")
     vectors = []
@@ -336,19 +343,42 @@ def parse_contract_note(html, max_depth):
     if len(lengths) != 1:
         fail("UNEQUAL_COLUMN_LENGTHS")
     count = len(vectors[0])
-    if not count or count % 9:
+    if not count or not include_coupons and count % 9:
         fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
     groups = []
     labels = {"ACHAT COMPTANT": "BUY", "ACHAT ETRANGER": "BUY", "VENTE COMPTANT": "SELL"}
-    for start in range(0, count, 9):
+    start = 0
+    while start < count:
+        if count - start < 2:
+            fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
+        initial = cells(vectors[1][start + 1])
+        if len(initial) != 1:
+            fail("UNSUPPORTED_NOTE_SLOT")
+        coupon = include_coupons and text(initial[0]).startswith("COUPONS ")
+        unknown = include_coupons and not coupon and not any(
+            text(initial[0]).startswith(label + " ") for label in labels)
+        size = 6 if coupon else 9
+        if unknown:
+            next_headers = []
+            for index in range(start + 2, count):
+                date_cells = cells(vectors[0][index])
+                if len(date_cells) != 1:
+                    fail("UNSUPPORTED_NOTE_SLOT")
+                if text(date_cells[0]):
+                    next_headers.append(index)
+            size = (next_headers[0] - 1 if next_headers else count) - start
+            if size < 3:
+                fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
+        if count - start < size:
+            fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
         slots = []
-        for offset in range(9):
+        for offset in range(size):
             parts = [cells(v[start + offset]) for v in vectors]
             if any(len(c) != 1 for c in parts):
                 fail("UNSUPPORTED_NOTE_SLOT")
             if any(c[0].find("table") for i, c in enumerate(parts) if i != 1):
                 fail("UNSUPPORTED_NOTE_SLOT")
-            if offset in (0, 2, 6, 8):
+            if offset in ({0, 2} if unknown else {0, 2, 6, 8}):
                 if any(text(c[0]) or c[0].find("table") for c in parts):
                     fail("NOTE_BLANK_SLOT_CONFLICT")
             elif offset != 1 and any(text(parts[i][0]) for i in (0, 2, 3)):
@@ -370,14 +400,63 @@ def parse_contract_note(html, max_depth):
             return [text(c) for c in field_cells]
 
         header = fields(1)
-        if header[0] not in labels:
+        if header[0] not in labels and not (coupon and header[0] == "COUPONS") and not unknown:
             fail("UNSUPPORTED_NOTE_OPERATION")
         if not valid_isin(header[1]) or not header[2]:
             fail("INVALID_NOTE_SECURITY")
-        kind = labels[header[0]]
+        kind = "UNKNOWN" if unknown else "COUPON" if coupon else labels[header[0]]
         note = {"slot": start + 1, "kind": kind, "isin": header[1], "name": header[2],
                 "date": parse_date(text(slots[1][0][0])), "net_currency": "EUR",
                 "price_currency": None}
+        if unknown:
+            note.update(source_kind=header[0], source_fields=[], gross_semantics_verified=False)
+            for offset in range(3, size):
+                cell = slots[offset][1][0]
+                if text(cell) or cell.find("table"):
+                    note["source_fields"].append(fields(offset))
+            for key, column in (("debit", 2), ("credit", 3)):
+                value = text(slots[1][column][0])
+                note[key] = parse_decimal(value, cash=True) if value else Decimal(0)
+            if min(note["debit"], note["credit"]) < 0 or note["debit"] and note["credit"]:
+                fail("NOTE_DIRECTION_CONFLICT")
+            groups.append(note)
+            start += size
+            continue
+        if coupon:
+            layout = {3: (("QUANTITE", "quantity", False),),
+                      4: (("PX UN.BRUT", "unit_gross", False), ("BRUT", "gross", True)),
+                      5: (("COMMISSION", "commission", True),)}
+            for offset, definitions in layout.items():
+                values = fields(offset)
+                extra = values[len(definitions):]
+                if offset == 5 and extra[0]:
+                    match = re.fullmatch(r"CRED\. IMPOT\s*:\s*(.+)", extra[0])
+                    if not match:
+                        fail("UNSUPPORTED_NOTE_EXTRA_FIELD")
+                    note["tax_credit"] = parse_decimal(match[1], cash=True)
+                    extra = extra[1:]
+                if any(extra):
+                    fail("UNSUPPORTED_NOTE_EXTRA_FIELD")
+                for value, (label, key, cash) in zip(values, definitions):
+                    match = re.fullmatch(re.escape(label) + r"\s*:\s*(.+)", value)
+                    if not match:
+                        fail("NOTE_FIELD_MISSING_OR_REORDERED")
+                    note[key] = parse_decimal(match[1], cash=cash)
+            for key, column in (("debit", 2), ("credit", 3)):
+                value = text(slots[1][column][0])
+                note[key] = parse_decimal(value, cash=True) if value else Decimal(0)
+            if min(note[k] for k in ("gross", "commission", "debit", "credit")) < 0 or note.get("tax_credit", Decimal(0)) < 0:
+                fail("NEGATIVE_NOTE_AMOUNT")
+            if note["quantity"] >= 0 or note["credit"] <= 0 or note["debit"]:
+                fail("NOTE_DIRECTION_CONFLICT")
+            if note["unit_gross"] <= 0 or note["gross"] <= 0:
+                fail("INVALID_NOTE_PRICE_OR_GROSS")
+            # These are observed source fields, not a dividend conversion. In
+            # particular gross minus credit is not an inferred withholding tax.
+            note.update(withholding=None, gross_semantics_verified=False)
+            groups.append(note)
+            start += size
+            continue
         layout = {3: (("QUANTITE", "quantity", False),),
                   4: (("COURS", "unit_price", False), ("BRUT", "gross", True)),
                   5: (("COURTAGE", "brokerage", True), ("TVA", "vat", True))}
@@ -420,6 +499,7 @@ def parse_contract_note(html, max_depth):
             if note["debit"] + note["credit"] != expected:
                 fail("NOTE_NET_MISMATCH")
         groups.append(note)
+        start += size
     if len({n["date"] for n in groups}) != 1:
         fail("NOTE_MULTIPLE_DATES")
     return {"account_ref": accounts[0], "notes": groups, "slot_count": count}
@@ -429,6 +509,8 @@ def match_trade_notes(statement, documents):
     if any(d["account_ref"] != statement["account_ref"] for d in documents):
         fail("NOTE_ACCOUNT_MISMATCH")
     notes = [n for d in documents for n in d["notes"]]
+    if any(n["kind"] not in ("BUY", "SELL") for n in notes):
+        fail("NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW")
     trades = [e for e in statement["events"] if e["kind"] in ("BUY", "SELL")]
     keys = ("date", "kind", "unit_price", "debit", "credit")
     candidates = [[i for i, n in enumerate(notes)
@@ -520,6 +602,86 @@ def convert_matched_trades(statement, documents, account, mappings):
                         "brokerage": note["brokerage"], "vat": note["vat"], "fee": note["brokerage"],
                         "source_slot": event["slot"], "import_ready": False})
     return records
+
+
+def review_coupon_cash(statement, documents):
+    """Source cash conversion only; never an API/adoption/period-coverage artifact."""
+    validate_ledger(statement["controls"], statement["events"])
+    if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
+        fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
+    if any(d["account_ref"] != statement["account_ref"] for d in documents):
+        fail("NOTE_ACCOUNT_MISMATCH")
+    if any(n["date"].strftime("%Y-%m") != statement["period"] for d in documents for n in d["notes"]):
+        fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
+    events = [e for e in statement["events"] if e["label"].startswith("COUPONS ")]
+    notes = [n for d in documents for n in d["notes"] if n["kind"] == "COUPON"]
+    if not events or not notes:
+        fail("COUPON_EVIDENCE_MISSING")
+    candidates = [[i for i, n in enumerate(notes)
+                   if e["label"] == "COUPONS " + n["name"]
+                   and all(e[k] == n[k] for k in ("date", "debit", "credit"))]
+                  for e in events]
+    uses = {i: sum(i in group for group in candidates) for i in range(len(notes))}
+    if any(len(c) != 1 or uses[c[0]] != 1 for c in candidates) or any(v != 1 for v in uses.values()):
+        fail("COUPON_NOTE_MATCHING_NOT_COMPLETE")
+    records = {}
+    for event, indices in zip(events, candidates):
+        note = notes[indices[0]]
+        if not valid_isin(note["isin"]) or note["net_currency"] != "EUR":
+            fail("COUPON_IDENTITY_OR_CURRENCY_UNVERIFIED")
+        amounts = [note[k] for k in ("quantity", "unit_gross", "gross", "commission", "debit", "credit")]
+        if any(not isinstance(v, Decimal) or not v.is_finite() for v in amounts):
+            fail("INVALID_COUPON_AMOUNT")
+        if (note["quantity"] >= 0 or note["unit_gross"] <= 0 or note["gross"] <= 0
+                or note["commission"] < 0 or note["debit"] != 0 or note["credit"] <= 0):
+            fail("COUPON_DIRECTION_CONFLICT")
+        if any(not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", canonical_decimal(v))
+               for v in (note["gross"], note["commission"], note["credit"])):
+            fail("INVALID_CASH_PRECISION")
+        tax_credit = note.get("tax_credit")
+        if tax_credit is not None and (not isinstance(tax_credit, Decimal) or not tax_credit.is_finite()
+                or tax_credit < 0 or not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", canonical_decimal(tax_credit))):
+            fail("INVALID_COUPON_TAX_CREDIT")
+        records[str(event["slot"])] = {
+            "kind": "DIVIDEND", "isin": note["isin"], "source_name": note["name"],
+            "operation_date": event["date"].isoformat(), "date_basis": "broker_booking_day",
+            "amount": canonical_decimal(event["credit"]), "currency": "EUR", "amount_basis": "net_received",
+            "source_label": event["label"], "source_slot": event["slot"], "note_slot": note["slot"],
+            "source_fields": {k: canonical_decimal(note[k]) for k in ("quantity", "unit_gross", "gross", "commission")},
+            "tax_credit": canonical_decimal(tax_credit) if tax_credit is not None else None,
+            "withholding": None, "gross_semantics_verified": False, "import_ready": False}
+    unsupported = sum(e["kind"] not in ("BUY", "SELL") and not e["label"].startswith("COUPONS ")
+                      for e in statement["events"])
+    blockers = ["DIVIDEND_DESTINATION_MAPPING_AND_API_QUALIFICATION_REQUIRED",
+                "COMPLETE_PERIOD_CONVERSION_REQUIRED", "DESTINATION_RECONCILIATION_REQUIRED"]
+    if unsupported or any(n["kind"] == "UNKNOWN" for d in documents for n in d["notes"]):
+        blockers.append("UNSUPPORTED_OPERATION_PERIOD")
+    return {"schema_version": 1, "artifact_kind": "source_coupon_cash_review_not_api_payload",
+            "source_account_ref": statement["account_ref"], "statement_period": statement["period"],
+            "policy": {"amount": "net_received", "date": "broker_booking_day", "historic_rewrite": False},
+            "coupons": records, "unsupported_statement_operations": unsupported,
+            "ledger_reconciled": True, "import_ready": False, "blockers": blockers}
+
+
+def review_local_coupons(statement_path, note_paths, input_root, output, max_bytes, max_depth):
+    paths = [Path(statement_path), *map(Path, note_paths)]
+    if len(paths) > 257:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    captures = [read_local_bytes(p, input_root, max_bytes) for p in paths]
+    if sum(map(len, captures)) > 64 * 1024 * 1024:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    statement = parse_statement(decode_document(captures[0]), max_depth)
+    documents = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True)
+                 for raw in captures[1:]]
+    artifact = review_coupon_cash(statement, documents)
+    artifact["source_sha256"] = {str(i): hashlib.sha256(raw).hexdigest() for i, raw in enumerate(captures)}
+    reject_output_input_collision(output, paths)
+    validate_proposal_destination(output, paths)
+    private_directory(Path(output).parent)
+    atomic_private_yaml(output, artifact)
+    return {"coupons": len(artifact["coupons"]), "ledger_reconciled": True,
+            "unsupported_statement_operations": artifact["unsupported_statement_operations"],
+            "import_ready": False, "blockers": artifact["blockers"]}
 
 
 def canonical_decimal(value):
@@ -1207,6 +1369,785 @@ def activity_financial_fingerprint(activity):
     return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def compare_coupon_snapshot(source_reviews, account, mappings, snapshot_raw):
+    """Exact representation observations and retained legacy uncertainty; no writes."""
+    if not isinstance(account, dict) or set(account) != {"account_key", "source_account_ref", "target_account_id"}:
+        fail("INVALID_ACCOUNT_CONFIGURATION")
+    validate_account_key(account["account_key"])
+    if any(type(account[k]) is not str or not account[k].strip() for k in ("source_account_ref", "target_account_id")):
+        fail("ACCOUNT_CONFIGURATION_MISSING")
+    if not isinstance(mappings, dict) or not isinstance(source_reviews, dict) or not source_reviews:
+        fail("INVALID_COUPON_RECONCILIATION")
+    remote = parse_remote_activity_snapshot(snapshot_raw)
+    original = json.loads(snapshot_raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+    originals = {r["id"]: r for r in original["activities"]}
+    coupons, periods = {}, set()
+    for review in source_reviews.values():
+        if (review.get("artifact_kind") != "source_coupon_cash_review_not_api_payload"
+                or review.get("import_ready") is not False or review.get("source_account_ref") != account["source_account_ref"]
+                or review.get("policy") != {"amount": "net_received", "date": "broker_booking_day", "historic_rewrite": False}):
+            fail("INVALID_COUPON_RECONCILIATION_SOURCE")
+        period = review["statement_period"]
+        if period in periods:
+            fail("MULTIPLE_STATEMENT_VERSIONS")
+        periods.add(period)
+        for slot, coupon in review["coupons"].items():
+            coupons[period + "/" + slot] = coupon
+    if len(coupons) * len(remote) > 1000000:
+        fail("DIAGNOSIS_COMPARISON_LIMIT_EXCEEDED")
+    source_keys, mapped_isins = {}, {}
+    observations, remote_evidence, exact = {}, {}, {}
+    for key, coupon in coupons.items():
+        mapping = mappings.get(coupon["isin"])
+        if mapping is None:
+            observations[key] = {"isin": coupon["isin"], "status": "SECURITY_MAPPING_MISSING", "candidates": {}}
+            continue
+        if (not isinstance(mapping, dict) or mapping.get("data_source") != "YAHOO"
+                or mapping.get("target_currency") != "EUR"
+                or type(mapping.get("target_security_evidence")) is not str or not mapping["target_security_evidence"].strip()
+                or type(mapping.get("symbol")) is not str
+                or not re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", mapping["symbol"])):
+            fail("SECURITY_MAPPING_UNVERIFIED")
+        if mapping["symbol"] in mapped_isins and mapped_isins[mapping["symbol"]] != coupon["isin"]:
+            fail("SECURITY_MAPPING_AMBIGUOUS")
+        mapped_isins[mapping["symbol"]] = coupon["isin"]
+        amount = Decimal(coupon["amount"])
+        signature = (coupon["operation_date"], mapping["symbol"], canonical_decimal(amount))
+        source_keys[key] = signature
+        candidates, exact[key] = {}, []
+        for row in remote:
+            if row["kind"] != "DIVIDEND" or row["target_account_id"] != account["target_account_id"]:
+                continue
+            raw = originals[row["remote_id"]]
+            profile = raw["assetProfile"] if "assetProfile" in raw else raw.get("SymbolProfile")
+            if not isinstance(profile, dict):
+                fail("REMOTE_ASSET_PROFILE_INVALID")
+            if profile.get("symbol") != mapping["symbol"]:
+                continue
+            if any(type(profile.get(k)) is not str or not profile[k].strip() for k in ("symbol", "dataSource", "currency")):
+                fail("REMOTE_ASSET_PROFILE_INVALID")
+            with localcontext() as context:
+                context.prec = max(28, sum(len(v.as_tuple().digits) for v in (row["quantity"], row["unit_price"], row["fee"], amount)) + 8)
+                product = row["quantity"] * row["unit_price"]
+                delta = product - amount
+            same = (row["operation_date"] == coupon["operation_date"] and row["quantity"] == 1
+                    and row["unit_price"] == amount and row["fee"] == 0
+                    and row["price_currency"] == profile["currency"] == "EUR" and profile["dataSource"] == "YAHOO")
+            financial = (row["quantity"] > 0 and row["unit_price"] > 0 and row["fee"] >= 0
+                         and row["price_currency"] == profile["currency"] == "EUR" and profile["dataSource"] == "YAHOO")
+            eligible = financial and row["active"] and row["date_context_verified"]
+            foreign = isinstance(row["comment"], str) and row["comment"].startswith("BD#")
+            if same:
+                exact[key].append(row["remote_id"])
+            candidates[row["remote_id"]] = {"exact_net_representation": same, "eligible": eligible,
+                "foreign_BD_ownership": foreign, "same_quantity_price_product": product == amount,
+                "product_minus_source_cash": canonical_decimal(delta),
+                "utc_day_minus_source_day": (datetime.fromisoformat(row["operation_date"]).date()
+                    - datetime.fromisoformat(coupon["operation_date"]).date()).days}
+            remote_evidence[row["remote_id"]] = {"original_timestamp": raw["date"], "utc_day": row["operation_date"],
+                "symbol": profile["symbol"], "data_source": profile["dataSource"],
+                "price_currency": row["price_currency"], "profile_currency": profile["currency"],
+                "quantity": canonical_decimal(row["quantity"]), "unit_price": canonical_decimal(row["unit_price"]),
+                "quantity_price_product": canonical_decimal(product), "fee": canonical_decimal(row["fee"]),
+                "active_at_evaluation": row["active"], "date_context_verified": row["date_context_verified"]}
+        observations[key] = {"isin": coupon["isin"], "symbol": mapping["symbol"],
+            "source_booking_day": coupon["operation_date"], "net_received": coupon["amount"],
+            "candidates": candidates, "status": "LEGACY_CANDIDATES_REQUIRE_REVIEW" if candidates else "NO_CANDIDATE_IN_SAVED_SNAPSHOT"}
+    # Assignment is global across all supplied source periods, not greedy per row.
+    for key, ids in exact.items():
+        if not ids:
+            continue
+        unique_source = sum(value == source_keys[key] for value in source_keys.values()) == 1
+        unique_remote = len(ids) == 1 and sum(ids[0] in group for group in exact.values()) == 1
+        candidate = observations[key]["candidates"][ids[0]]
+        certain = unique_source and unique_remote and candidate["eligible"] and not candidate["foreign_BD_ownership"]
+        observations[key]["status"] = "CERTAIN_UNIQUE_NET_REPRESENTATION_OBSERVED" if certain else "DIVIDEND_MATCH_UNCERTAIN"
+        if certain:
+            observations[key]["certain_remote_id"] = ids[0]
+    blockers = ["COMPLETE_PERIOD_CONVERSION_REQUIRED", "ACQUISITION_HISTORY_UNVERIFIED", "DIVIDEND_APPLICATION_NOT_ACTIVATED"]
+    if any("UNSUPPORTED_OPERATION_PERIOD" in review["blockers"] for review in source_reviews.values()):
+        blockers.append("UNSUPPORTED_OPERATION_PERIOD")
+    return {"schema_version": 1, "artifact_kind": "coupon_reconciliation_preview_not_api_payload",
+        "account_key": account["account_key"], "target_account_id": account["target_account_id"],
+        "observations": observations, "remote_evidence": remote_evidence, "source_reviews": source_reviews,
+        "import_ready": False, "blockers": blockers}
+
+
+def reconcile_local_coupons(config_path, input_root, output, max_bytes, max_depth):
+    if type(max_bytes) is not int or not 0 < max_bytes <= 64 * 1024 * 1024 or type(max_depth) is not int or not 0 < max_depth <= 256:
+        fail("INVALID_COUPON_RECONCILIATION_LIMITS")
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    if set(config) != {"schema_version", "account", "mappings", "documents", "snapshot"} or type(config.get("snapshot")) is not str:
+        fail("INVALID_COUPON_RECONCILIATION_CONFIGURATION")
+    prep_raw = yaml.safe_dump({k: v for k, v in config.items() if k != "snapshot"}).encode()
+    preparation_configuration(prep_raw, max_bytes, max_depth)
+    if sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    snapshot_path = Path(input_root) / config["snapshot"]
+    snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
+    captured = [config_raw, snapshot_raw]
+    paths = []
+    reviews = {}
+    for alias, entry in config["documents"].items():
+        document = []
+        for path in (entry["statement"], *entry["notes"]):
+            paths.append(Path(input_root) / path)
+            raw = read_local_bytes(paths[-1], input_root, min(max_bytes, 4 * 1024 * 1024))
+            captured.append(raw)
+            if sum(map(len, captured)) > 64 * 1024 * 1024:
+                fail("COUPON_INPUT_LIMIT_EXCEEDED")
+            document.append(raw)
+        statement = parse_statement(decode_document(document[0]), max_depth)
+        notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in document[1:]]
+        reviews[alias] = review_coupon_cash(statement, notes)
+    if sum(map(len, captured)) > 64 * 1024 * 1024:
+        fail("COUPON_INPUT_LIMIT_EXCEEDED")
+    artifact = compare_coupon_snapshot(reviews, config["account"], config["mappings"], snapshot_raw)
+    artifact["input_sha256"] = {str(i): hashlib.sha256(raw).hexdigest() for i, raw in enumerate(captured)}
+    encoded = yaml.safe_dump(artifact, sort_keys=False, allow_unicode=True).encode()
+    if len(encoded) > max_bytes:
+        fail("DIAGNOSIS_REPORT_LIMIT_EXCEEDED")
+    validate_proposal_destination(output, [Path(config_path), snapshot_path, *paths])
+    private_directory(Path(output).parent)
+    atomic_private_bytes(output, encoded)
+    counts = {status: sum(o["status"] == status for o in artifact["observations"].values())
+        for status in sorted({o["status"] for o in artifact["observations"].values()})}
+    return {"coupons": len(artifact["observations"]), "status_counts": counts,
+            "import_ready": False, "blockers": artifact["blockers"]}
+
+
+def daily_preview_today():
+    return datetime.now(ZoneInfo("Europe/Paris")).date().isoformat()
+
+
+def daily_preview_day(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        fail("INVALID_DAILY_PREVIEW_DAY")
+    try:
+        day = datetime.strptime(value, "%Y-%m-%d").date()
+        day - timedelta(days=89)
+    except (ValueError, OverflowError):
+        fail("INVALID_DAILY_PREVIEW_DAY")
+    return day
+
+
+def daily_months(first, last):
+    capture_period("statement", first)
+    capture_period("statement", last)
+    start = int(first[:4]) * 12 + int(first[5:]) - 1
+    stop = int(last[:4]) * 12 + int(last[5:]) - 1
+    if not 0 <= stop - start <= 2400:
+        fail("DAILY_COVERAGE_RANGE_INVALID")
+    return [f"{n // 12:04d}-{n % 12 + 1:02d}" for n in range(start, stop + 1)]
+
+
+def daily_current_configuration(entry, as_of):
+    if (not isinstance(entry, dict)
+            or set(entry) != {"period", "index", "index_metadata", "index_encoding", "notes"}
+            or entry["period"] != as_of[:7]
+            or entry["index_encoding"] not in ("declared", "observed_cp1252_declared_utf8")
+            or not isinstance(entry["notes"], dict) or len(entry["notes"]) > 31):
+        fail("INVALID_CURRENT_PERIOD_CONFIGURATION")
+    references = {"index": entry["index"], "index_metadata": entry["index_metadata"]}
+    for day, note in entry["notes"].items():
+        capture_period("note", day)
+        if day[:7] != as_of[:7] or day > as_of:
+            fail("CURRENT_NOTE_DAY_CONFLICT")
+        if not isinstance(note, dict) or set(note) != {"document", "metadata"}:
+            fail("INVALID_CURRENT_PERIOD_CONFIGURATION")
+        references.update({day + ":" + key: value for key, value in note.items()})
+    if any(not isinstance(path, str) or not path.strip() for path in references.values()):
+        fail("INVALID_CURRENT_PERIOD_CONFIGURATION")
+    return references
+
+
+def daily_current_metadata(raw, body, account, role):
+    metadata = parse_keyed_yaml(raw)
+    if (not isinstance(metadata, dict) or metadata.get("role") != role
+            or metadata.get("account_wrapper") not in ("PEA", "PEA-PME")
+            or not isinstance(metadata.get("broker_account_id"), str)
+            or not metadata["broker_account_id"]
+            or metadata["broker_account_id"] + " " + metadata["account_wrapper"] != account["source_account_ref"]
+            or metadata.get("sha256") != hashlib.sha256(body).hexdigest()
+            or not isinstance(metadata.get("url"), str)):
+        fail("CURRENT_CAPTURE_BINDING_CONFLICT")
+    if any(ord(character) <= 32 or ord(character) == 127 for character in metadata["url"]):
+        fail("CURRENT_CAPTURE_ORIGIN_CONFLICT")
+    try:
+        parts = urlsplit(metadata["url"])
+    except ValueError:
+        fail("CURRENT_CAPTURE_ORIGIN_CONFLICT")
+    if parts.scheme != "https" or parts.netloc != "www.boursedirect.fr" or parts.fragment:
+        fail("CURRENT_CAPTURE_ORIGIN_CONFLICT")
+    return metadata
+
+
+def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_depth):
+    """Account-bound inventory and note observations, never financial preparation."""
+    entry, account = config["current_period"], config["account"]
+    raw = capture["index"]
+    meta = daily_current_metadata(capture["index_metadata"], raw, account, "frame_document")
+    index_url = urlsplit(meta["url"])
+    try:
+        query = parse_qs(index_url.query, strict_parsing=True)
+    except ValueError:
+        fail("CURRENT_INDEX_URL_CONFLICT")
+    if index_url.path != "/priv/new/avis-operes.php" or set(query) != {"ong", "nc"} or query["ong"] != ["5"] or len(query["nc"]) != 1 or not re.fullmatch(r"[1-9][0-9]*", query["nc"][0]):
+        fail("CURRENT_INDEX_URL_CONFLICT")
+    if entry["index_encoding"] == "observed_cp1252_declared_utf8":
+        declarations = re.findall(rb"<meta\b[^>]*\bcharset\s*=\s*[\"']?\s*([a-zA-Z0-9_-]+)", raw, re.I)
+        if not declarations or {v.lower() for v in declarations} != {b"utf-8"} or b"\x00" in raw or raw.startswith(b"\xef\xbb\xbf"):
+            fail("CURRENT_INDEX_ENCODING_PROFILE_CONFLICT")
+        try:
+            html = raw.decode("cp1252", errors="strict")
+        except UnicodeDecodeError:
+            fail("CURRENT_INDEX_ENCODING_PROFILE_CONFLICT")
+        try:
+            raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            pass
+        else:
+            fail("CURRENT_INDEX_ENCODING_PROFILE_CONFLICT")
+    else:
+        html = decode_document(raw)
+    soup = BeautifulSoup(html, "html.parser")
+    pending = [(soup, 0)]
+    while pending:
+        node, depth = pending.pop()
+        if depth > max_depth:
+            fail("INPUT_TOO_DEEP")
+        pending.extend((child, depth + 1) for child in node.children if getattr(child, "name", None))
+    navigation, offered = {}, {}
+    months = ("Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre")
+    headings = [[text(span) for span in cell.find_all("span", recursive=False) if not span.get("class")]
+                for cell in soup.find_all("td", class_="topdatas")]
+    if headings != [[entry["period"][:4]], [months[int(entry["period"][5:]) - 1]]]:
+        fail("CURRENT_INDEX_PERIOD_CONFLICT")
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        nav = re.fullmatch(r"javascript:(AnneePrecedente|AnneeSuivante|MoisPrecedent|MoisSuivant)\('RO',([1-9][0-9]*),([0-9]{1,2}),([0-9]{4})\)", href)
+        if nav:
+            if nav[1] in navigation or nav[2] != query["nc"][0] or f"{nav[4]}-{int(nav[3]):02d}" != entry["period"]:
+                fail("CURRENT_INDEX_PERIOD_CONFLICT")
+            navigation[nav[1]] = True
+        if "releveOpe.php" not in href:
+            continue
+        match = re.fullmatch(r"javascript:ouvrePopup\('([^']+)','encours'\);", href)
+        if not match:
+            fail("CURRENT_INDEX_LINK_UNSUPPORTED")
+        if any(ord(character) <= 32 or ord(character) == 127 for character in match[1]):
+            fail("CURRENT_INDEX_LINK_CONFLICT")
+        url = urljoin(meta["url"], match[1])
+        try:
+            parts = urlsplit(url)
+            values = parse_qs(parts.query, strict_parsing=True)
+        except ValueError:
+            fail("CURRENT_INDEX_LINK_CONFLICT")
+        if (parts.scheme != "https" or parts.netloc != "www.boursedirect.fr" or parts.fragment
+                or parts.path != "/priv/new/releveOpe.php" or set(values) != {"nc", "type", "year", "month", "day", "trash"}
+                or any(len(v) != 1 for v in values.values()) or values["nc"] != query["nc"]
+                or values["type"] != ["RO"] or values["trash"] != ["/avis.pdf"]
+                or not re.fullmatch(r"[0-9]{1,2}", values["day"][0])
+                or values["year"][0] != entry["period"][:4] or values["month"][0] != str(int(entry["period"][5:]))):
+            fail("CURRENT_INDEX_LINK_CONFLICT")
+        day = entry["period"] + "-" + values["day"][0].zfill(2)
+        capture_period("note", day)
+        if day > as_of or day in offered or text(link) != day[-2:]:
+            fail("CURRENT_INDEX_DAY_CONFLICT")
+        offered[day] = url
+    if set(navigation) != {"AnneePrecedente", "AnneeSuivante", "MoisPrecedent", "MoisSuivant"}:
+        fail("CURRENT_INDEX_PERIOD_UNVERIFIED")
+    empty = [text(n) for n in soup.select("div.msg.texte1T7A")]
+    if (not offered and empty != ["Vous n'avez pas effectué d'opération ce mois-ci."]
+            or offered and empty or set(offered) != set(entry["notes"])):
+        fail("CURRENT_INDEX_NOTE_INVENTORY_CONFLICT")
+    originals = json.loads(snapshot_raw, object_pairs_hook=unique_json_object)
+    timestamps = {row["id"]: row["date"] for row in originals["activities"]}
+    observations, exceptions, comparisons = {}, {}, 0
+    for day in sorted(offered):
+        body = capture[day + ":document"]
+        note_meta = daily_current_metadata(capture[day + ":metadata"], body, account, "contract_note")
+        if note_meta["url"] != offered[day] or note_meta["broker_account_id"] != meta["broker_account_id"]:
+            fail("CURRENT_NOTE_URL_CONFLICT")
+        html = decode_document(body)
+        note_soup = BeautifulSoup(html, "html.parser")
+        refs = [text(cells(row)[1]) for row in note_soup.find_all("tr") if len(cells(row)) == 2 and text(cells(row)[0]) == "COMPTE N°"]
+        if refs != [account["source_account_ref"]]:
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        key = "current_note:" + note_meta["sha256"]
+        observation = {"note_sha256": note_meta["sha256"], "metadata_sha256": hashlib.sha256(capture[day + ":metadata"]).hexdigest(), "operation_date": day, "notes": []}
+        code = "CURRENT_NOTE_REQUIRES_CLOSED_STATEMENT"
+        try:
+            parsed = parse_contract_note(html, max_depth, include_coupons=True)
+        except RuntimeError as error:
+            code = str(error)
+            observation["operation_date_verified"] = False
+            if code == "INVALID_NOTE_SECURITY":
+                rows = direct_rows(contract_note_ledger(note_soup))
+                if len(rows) != 2 or len(cells(rows[1])) != 4:
+                    fail("CURRENT_NOTE_DAY_UNVERIFIED")
+                dates = cells(rows[1])[0].find_all("table", recursive=False)
+                if len(dates) != 1:
+                    fail("CURRENT_NOTE_DAY_UNVERIFIED")
+                date_rows = direct_rows(dates[0])
+                if any(len(cells(row)) != 1 or cells(row)[0].find("table") for row in date_rows):
+                    fail("CURRENT_NOTE_DAY_UNVERIFIED")
+                source_days = [parse_date(text(cells(row)[0])).isoformat() for row in date_rows if text(cells(row)[0])]
+                if not source_days or any(value != day for value in source_days):
+                    fail("CURRENT_NOTE_DAY_CONFLICT")
+                observation["operation_date_verified"] = True
+        else:
+            if any(note["date"].isoformat() != day for note in parsed["notes"]):
+                fail("CURRENT_NOTE_DAY_CONFLICT")
+            observation["operation_date_verified"] = True
+            comparisons += len(parsed["notes"]) * len(remote)
+            if comparisons > 1000000:
+                fail("DAILY_CURRENT_COMPARISON_LIMIT_EXCEEDED")
+            for note in parsed["notes"]:
+                record = {k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v for k, v in note.items()}
+                mapping = config["mappings"].get(note["isin"])
+                record["destination_candidates"] = []
+                if note["kind"] in ("BUY", "SELL") and isinstance(mapping, dict):
+                    symbol = mapping.get("symbol")
+                    if (isinstance(symbol, str) and re.fullmatch(r"[A-Z0-9^][A-Z0-9.^=_-]{0,63}", symbol)
+                            and mapping.get("data_source") == "YAHOO" and mapping.get("target_currency") == "EUR"
+                            and isinstance(mapping.get("target_security_evidence"), str) and mapping["target_security_evidence"].strip()):
+                        record["target_symbol"] = symbol
+                        for row in remote:
+                            if (row["target_account_id"] == account["target_account_id"] and row["symbol"] == symbol
+                                    and row["data_source"] == "YAHOO" and row["kind"] == note["kind"]
+                                    and row["quantity"] == note["quantity"].copy_abs() and row["unit_price"] == note["unit_price"]
+                                    and abs((datetime.fromisoformat(row["operation_date"]).date() - note["date"]).days) <= 1):
+                                with localcontext() as context:
+                                    context.prec = max(28, sum(len(v.as_tuple().digits) + abs(v.as_tuple().exponent) for v in (row["fee"], note["brokerage"], note["vat"])) + 4)
+                                    fee_delta = canonical_decimal(row["fee"] - note["brokerage"] - note["vat"])
+                                record["destination_candidates"].append({"remote_id": row["remote_id"], "original_timestamp": timestamps[row["remote_id"]],
+                                    "date_context_verified": row["date_context_verified"], "financial_context_verified": row["financial_context_verified"],
+                                    "remote_currency": row["price_currency"], "remote_fee": canonical_decimal(row["fee"]),
+                                    "fee_delta_remote_minus_source": fee_delta,
+                                    "certain_match": False})
+                observation["notes"].append(record)
+        observation["code"] = code
+        observations[day] = observation
+        exceptions[key] = {"period": entry["period"], "operation_date": day, "status": "unresolved", "code": code, "note_sha256": note_meta["sha256"]}
+    return {"period": entry["period"], "index_sha256": hashlib.sha256(raw).hexdigest(), "index_metadata_sha256": hashlib.sha256(capture["index_metadata"]).hexdigest(),
+            "index_encoding": entry["index_encoding"], "offered_note_days": sorted(offered), "every_offered_note_retained": True,
+            "notes": observations, "through_day_verified": False, "monthly_cash_controls_verified": False, "import_ready": False}, exceptions
+
+
+def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth, current_capture=None):
+    """Saved-source continuity only; no acquisition clock, wire or remote write."""
+    day = daily_preview_day(as_of)
+    window_start = (day - timedelta(days=89)).isoformat()
+    account = config["account"]
+    if previous is None:
+        previous = {"schema_version": 1, "binding": account, "first_required_period": window_start[:7],
+                    "last_preview_day": as_of, "periods": {}, "exceptions": {}}
+    if (set(previous) != {"schema_version", "binding", "first_required_period", "last_preview_day", "periods", "exceptions"}
+            or type(previous["schema_version"]) is not int or previous["schema_version"] != 1
+            or previous["binding"] != account or not isinstance(previous["periods"], dict)
+            or not isinstance(previous["exceptions"], dict)):
+        fail("INVALID_DAILY_JOURNAL_OR_BINDING")
+    daily_preview_day(previous["last_preview_day"])
+    if as_of < previous["last_preview_day"]:
+        fail("DAILY_PREVIEW_CLOCK_REVERSED")
+    required = daily_months(previous["first_required_period"], as_of[:7])
+    for period, evidence in previous["periods"].items():
+        capture_period("statement", period)
+        if (not isinstance(evidence, dict) or set(evidence) != {"financial_sha256", "statement_sha256", "note_sha256", "complete_source_matching"}
+                or type(evidence["complete_source_matching"]) is not bool
+                or not isinstance(evidence["note_sha256"], list)
+                or any(not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v)
+                       for v in [evidence["financial_sha256"], evidence["statement_sha256"], *evidence["note_sha256"]])):
+            fail("INVALID_DAILY_JOURNAL_OR_BINDING")
+    for key, exception in previous["exceptions"].items():
+        if (not isinstance(key, str) or not isinstance(exception, dict)
+                or exception.get("status") not in ("unresolved", "resolved_by_saved_evidence")
+                or not isinstance(exception.get("code"), str)):
+            fail("INVALID_DAILY_JOURNAL_OR_BINDING")
+        capture_period("statement", exception.get("period"))
+    # Detach nested structures; failed recomputation must preserve retained state.
+    journal = parse_keyed_yaml(yaml.safe_dump(previous).encode())
+    remote = parse_remote_activity_snapshot(snapshot_raw)
+    reviews = {}
+    trade_observations = {}
+    window_events = {}
+    seen = set()
+    for alias, capture in documents.items():
+        statement = parse_statement(decode_document(capture["statement"]), max_depth)
+        period = statement["period"]
+        if statement["account_ref"] != account["source_account_ref"]:
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        if period in seen:
+            fail("DUPLICATE_STATEMENT_PERIOD")
+        if period >= as_of[:7]:
+            fail("DAILY_STATEMENT_NOT_CLOSED")
+        seen.add(period)
+        # Exclude presentation slots, retain economic multiplicity and all controls.
+        events = [{k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                   for k, v in event.items() if k != "slot"} for event in statement["events"]]
+        window_events[period] = [event for event in events if window_start <= event["date"] <= as_of]
+        semantic = {"period": period, "events": sorted(events, key=lambda e: json.dumps(e, sort_keys=True)),
+                    "controls": [{k: canonical_decimal(v) if isinstance(v, Decimal) else v.isoformat() if hasattr(v, "isoformat") else v
+                                  for k, v in control.items() if k != "slot"} for control in statement["controls"]]}
+        fingerprint = hashlib.sha256(json.dumps(semantic, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        retained = journal["periods"].get(period)
+        if retained is not None and retained.get("financial_sha256") != fingerprint:
+            fail("DAILY_SOURCE_REVISION_REVIEW_REQUIRED")
+        source = {"financial_sha256": fingerprint, "statement_sha256": hashlib.sha256(capture["statement"]).hexdigest(),
+                  "note_sha256": sorted(hashlib.sha256(raw).hexdigest() for raw in capture["notes"]),
+                  "complete_source_matching": False}
+        problems = {}
+        try:
+            notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in capture["notes"]]
+        except RuntimeError as error:
+            # Retain a refused period; never invent missing security identity or
+            # promote a partially parsed note to source-complete evidence.
+            notes = None
+            problems["source"] = str(error)
+        if notes is not None and any(n["account_ref"] != account["source_account_ref"] for n in notes):
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        if notes is None:
+            pass
+        elif all(event["kind"] in ("BUY", "SELL") for event in statement["events"]):
+            one = {k: v for k, v in config.items() if k not in ("snapshot", "current_period")}
+            one["documents"] = {alias: config["documents"][alias]}
+            try:
+                prepared = compute_prepared_sources(yaml.safe_dump(one).encode(), {alias: capture}, max_bytes, max_depth)["artifact"]["activities"]
+            except RuntimeError as error:
+                problems["source"] = str(error)
+            else:
+                source["complete_source_matching"] = True
+                try:
+                    trade_observations[period] = reconcile_existing_activities(prepared, remote, {}, automatic=True)
+                except RuntimeError as error:
+                    problems["destination"] = str(error)
+                else:
+                    problems["destination"] = "TRADE_HOLDINGS_AND_APPLICATION_UNVERIFIED"
+        else:
+            try:
+                reviews[period] = review_coupon_cash(statement, notes)
+            except RuntimeError as error:
+                problems["source"] = str(error)
+            else:
+                # Mixed/unknown periods cannot become complete through coupon-only matching.
+                source["complete_source_matching"] = (bool(statement["events"])
+                    and all(e["label"].startswith("COUPONS ") for e in statement["events"])
+                    and all(n["kind"] == "COUPON" for doc in notes for n in doc["notes"]))
+                if not source["complete_source_matching"]:
+                    problems["source"] = "COMPLETE_PERIOD_CONVERSION_REQUIRED"
+        journal["periods"][period] = source
+        for role in ("source", "destination"):
+            key = period + ":" + role
+            if role in problems:
+                journal["exceptions"][key] = {"period": period, "status": "unresolved", "code": problems[role]}
+            elif key in journal["exceptions"] and (role == "source" or source["complete_source_matching"]):
+                journal["exceptions"][key]["status"] = "resolved_by_saved_evidence"
+    coupons = compare_coupon_snapshot(reviews, account, config["mappings"], snapshot_raw) if reviews else None
+    if coupons is not None:
+        occurrences = {}
+        for observation_key, observation in sorted(coupons["observations"].items()):
+            period, slot = observation_key.split("/")
+            coupon = reviews[period]["coupons"][slot]
+            identity = {k: coupon[k] for k in ("operation_date", "isin", "amount", "currency")}
+            digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+            occurrences[digest] = occurrences.get(digest, 0) + 1
+            key = "coupon:" + digest + ":" + str(occurrences[digest])
+            journal["exceptions"][key] = {"period": coupon["operation_date"][:7], "operation_date": coupon["operation_date"],
+                "status": "resolved_by_saved_evidence" if observation["status"] == "CERTAIN_UNIQUE_NET_REPRESENTATION_OBSERVED" else "unresolved",
+                "code": observation["status"], "evidence": json.loads(json.dumps(observation))}
+    current = None
+    if "current_period" in config:
+        daily_current_configuration(config["current_period"], as_of)
+        if current_capture is None:
+            fail("CURRENT_PERIOD_CAPTURE_MISSING")
+        current, exceptions = inspect_daily_current(config, current_capture, snapshot_raw, remote, as_of, max_depth)
+        journal["exceptions"].update(exceptions)
+    for key, exception in journal["exceptions"].items():
+        if key.startswith("current_note:") and exception.get("code") == "CURRENT_NOTE_REQUIRES_CLOSED_STATEMENT":
+            closed = journal["periods"].get(exception["period"], {})
+            if closed.get("complete_source_matching") and exception.get("note_sha256") in closed.get("note_sha256", []):
+                exception["status"] = "resolved_by_saved_evidence"
+    gaps = [period for period in required[:-1] if not journal["periods"].get(period, {}).get("complete_source_matching")]
+    stale = [period for period in gaps if period < window_start[:7]]
+    completed = [p for p, evidence in journal["periods"].items() if evidence.get("complete_source_matching")]
+    journal["last_preview_day"] = as_of
+    journal["periods"] = dict(sorted(journal["periods"].items()))
+    journal["exceptions"] = dict(sorted(journal["exceptions"].items()))
+    unresolved = {k: v for k, v in journal["exceptions"].items() if v["status"] == "unresolved"}
+    report = {"schema_version": 1, "artifact_kind": "daily_saved_input_preview_not_api_payload", "binding": account,
+              "window": {"first_day": window_start, "last_day": as_of, "days": 90},
+              "last_completed_acquisition_period": max(completed) if completed else None,
+              "missing_or_unqualified_closed_periods": gaps, "gaps_outside_window": stale,
+              "missing_closed_statement_periods": [p for p in gaps if p not in journal["periods"]],
+              "unqualified_observed_closed_periods": [p for p in gaps if p in journal["periods"]],
+              "current_period_through_day_verified": False, "resume_requires_catchup": bool(stale),
+              "exceptions": unresolved, "trade_observations": trade_observations, "coupon_observations": coupons,
+              "window_source_events": window_events,
+              "snapshot_sha256": hashlib.sha256(snapshot_raw).hexdigest(), "import_ready": False,
+              "blockers": ["CURRENT_PERIOD_CUTOFF_UNVERIFIED", "FINANCIAL_APPLICATION_NOT_ACTIVATED"]}
+    if gaps:
+        report["blockers"].append("ACQUISITION_COVERAGE_GAP")
+    if current is not None:
+        report["current_period_observations"] = current
+    if stale:
+        report["blockers"].append("DAILY_RESUME_CATCHUP_REQUIRED")
+    return journal, report
+
+
+def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth):
+    """Resolve original collector receipts; no fetching or freshness inference."""
+    runs = config.get("acquisition_runs")
+    if (not isinstance(runs, dict) or not 0 < len(runs) <= 16
+            or any(not isinstance(k, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", k)
+                   or not isinstance(v, str) or not v.strip() for k, v in runs.items())
+            or config.get("index_encoding") not in ("declared", "observed_cp1252_declared_utf8")):
+        fail("INVALID_DAILY_ACQUISITION_CONFIGURATION")
+    account = config["account"]
+    if not isinstance(account, dict) or not isinstance(account.get("source_account_ref"), str):
+        fail("INVALID_ACCOUNT_CONFIGURATION")
+    ref = account["source_account_ref"]
+    wrapper = next((w for w in ("PEA-PME", "PEA") if ref.endswith(" " + w)), None)
+    if wrapper is None:
+        fail("DAILY_ACQUISITION_ACCOUNT_UNVERIFIED")
+    broker_id = ref[:-(len(wrapper) + 1)]
+    paths, total, count, selected, captured = [], 0, 0, {}, {}
+    evidence = {}
+
+    def read(reference):
+        nonlocal total
+        path = Path(input_root) / reference
+        try:
+            raw = read_local_bytes(path, input_root, min(max_bytes, 4 * 1024 * 1024))
+        except OSError:
+            fail("DAILY_ACQUISITION_INPUT_UNAVAILABLE")
+        total += len(raw)
+        if total > 64 * 1024 * 1024:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        paths.append(path)
+        captured[str(reference)] = raw
+        return raw
+
+    for alias, directory in sorted(runs.items()):
+        root = Path(directory)
+        raw = read(root / "qualification.yaml")
+        receipt = parse_keyed_yaml(raw)
+        if (receipt.get("schema_version") != 1 or type(receipt.get("schema_version")) is not int
+                or receipt.get("state") != "owned_session_closed"
+                or any(receipt.get(k) is not True for k in ("accounts_verified", "session_logged_out", "browser_exit_verified"))
+                or not isinstance(receipt.get("account_ids"), dict)
+                or receipt["account_ids"].get(wrapper) != broker_id
+                or not isinstance(receipt.get("accounts"), dict)
+                or not isinstance(receipt["accounts"].get(wrapper), str)
+                or not re.fullmatch(r"[1-9][0-9]*", receipt["accounts"][wrapper])
+                or type(receipt.get("captures")) is not int or not 0 < receipt["captures"] <= 256):
+            fail("DAILY_ACQUISITION_RUN_UNVERIFIED")
+        count += receipt["captures"]
+        if count > 256:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        nc = receipt["accounts"][wrapper]
+        evidence[alias] = {"receipt_sha256": hashlib.sha256(raw).hexdigest(), "captures": receipt["captures"]}
+        for n in range(1, receipt["captures"] + 1):
+            metadata_ref = root / f"document-{n}.yaml"
+            metadata_raw = read(metadata_ref)
+            metadata = parse_keyed_yaml(metadata_raw)
+            role = metadata.get("role")
+            if metadata.get("account_wrapper") != wrapper or role not in ("monthly_statement", "contract_note", "frame_document"):
+                continue
+            # Ignore other frame roles without reading their bodies.
+            if role == "frame_document":
+                if not isinstance(metadata.get("url"), str):
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                try:
+                    frame_path = urlsplit(metadata["url"]).path
+                except ValueError:
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                if frame_path != "/priv/new/avis-operes.php":
+                    continue
+            if metadata.get("path") != f"document-{n}.html":
+                fail("DAILY_ACQUISITION_PATH_CONFLICT")
+            body_ref = root / metadata["path"]
+            body = read(body_ref)
+            meta = daily_current_metadata(metadata_raw, body, account, role)
+            url = urlsplit(meta["url"])
+            try:
+                query = parse_qs(url.query, strict_parsing=True)
+            except ValueError:
+                fail("DAILY_ACQUISITION_URL_CONFLICT")
+            if any(len(v) != 1 for v in query.values()) or query.get("nc") != [nc]:
+                fail("DAILY_ACQUISITION_URL_CONFLICT")
+            if role == "monthly_statement":
+                if (url.path != "/priv/new/releveCompte.php" or set(query) != {"nc", "dt", "type"}
+                        or query["type"] != ["RE"] or not re.fullmatch(r"[0-9]{8}", query["dt"][0])):
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                parsed = parse_statement(decode_document(body), max_depth)
+                period = parsed["period"]
+                next_month = (datetime.strptime(period, "%Y-%m").replace(day=28) + timedelta(days=4)).replace(day=1)
+                if (parsed["account_ref"] != ref or query["dt"][0] != (next_month - timedelta(days=1)).strftime("%Y%m%d")
+                        or period >= as_of[:7]):
+                    fail("DAILY_ACQUISITION_STATEMENT_CONFLICT")
+            elif role == "contract_note":
+                if (url.path != "/priv/new/releveOpe.php" or set(query) != {"nc", "type", "year", "month", "day", "trash"}
+                        or query["type"] != ["RO"] or query["trash"] != ["/avis.pdf"]
+                        or not re.fullmatch(r"[0-9]{4}", query["year"][0])
+                        or any(not re.fullmatch(r"[0-9]{1,2}", query[k][0]) for k in ("month", "day"))):
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+                period = query["year"][0] + "-" + query["month"][0].zfill(2) + "-" + query["day"][0].zfill(2)
+                capture_period("note", period)
+                if period > as_of:
+                    fail("CURRENT_NOTE_DAY_CONFLICT")
+                soup = BeautifulSoup(decode_document(body), "html.parser")
+                refs = [text(cells(row)[1]) for row in soup.find_all("tr") if len(cells(row)) == 2 and text(cells(row)[0]) == "COMPTE N°"]
+                if refs != [ref]:
+                    fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+                try:
+                    parsed_note = parse_contract_note(decode_document(body), max_depth, include_coupons=True)
+                except RuntimeError:
+                    # The preview retains the original refusal for this period.
+                    pass
+                else:
+                    financial_days = sorted({note["date"].isoformat() for note in parsed_note["notes"]})
+                    if (any(day[:7] != period[:7] for day in financial_days)
+                            or period[:7] == as_of[:7] and financial_days != [period]):
+                        fail("DAILY_ACQUISITION_NOTE_DAY_CONFLICT")
+                    if financial_days != [period]:
+                        evidence[alias].setdefault("note_date_differences", {})[meta["sha256"]] = {
+                            "calendar_day": period, "financial_days": financial_days}
+            else:
+                periods = set(re.findall(rb"javascript:(?:AnneePrecedente|AnneeSuivante|MoisPrecedent|MoisSuivant)\('RO',[1-9][0-9]*,([0-9]{1,2}),([0-9]{4})\)", body))
+                if len(periods) != 1:
+                    fail("CURRENT_INDEX_PERIOD_UNVERIFIED")
+                month, year = next(iter(periods))
+                period = year.decode("ascii") + "-" + month.decode("ascii").zfill(2)
+                capture_period("statement", period)
+                if period != as_of[:7]:
+                    if (set(query) not in ({"nc", "tr", "month", "year"}, {"nc", "tr", "month", "year", "ong"})
+                            or query.get("tr") != ["RO"] or query.get("year") != [period[:4]]
+                            or query.get("month") != [str(int(period[5:]))]
+                            or "ong" in query and query["ong"] != ["5"]):
+                        fail("DAILY_ACQUISITION_URL_CONFLICT")
+                    continue
+                if set(query) != {"nc", "ong"} or query["ong"] != ["5"]:
+                    fail("DAILY_ACQUISITION_URL_CONFLICT")
+            key = (role, period)
+            existing = selected.get(key)
+            if existing is not None and existing["sha256"] != meta["sha256"]:
+                fail("DAILY_ACQUISITION_CAPTURE_CONFLICT")
+            if existing is None:
+                selected[key] = {"document": str(body_ref), "metadata": str(metadata_ref), "sha256": meta["sha256"], "url": meta["url"]}
+    statements = {period: value for (role, period), value in selected.items() if role == "monthly_statement"}
+    notes = {period: value for (role, period), value in selected.items() if role == "contract_note"}
+    if any(day[:7] != as_of[:7] and day[:7] not in statements for day in notes):
+        fail("DAILY_ACQUISITION_NOTE_WITHOUT_STATEMENT")
+    expanded = {k: v for k, v in config.items() if k not in ("acquisition_runs", "index_encoding")}
+    expanded["documents"] = {"period_" + period.replace("-", "_"): {"statement": value["document"],
+        "notes": [note["document"] for day, note in sorted(notes.items()) if day[:7] == period]}
+        for period, value in sorted(statements.items())}
+    index = selected.get(("frame_document", as_of[:7]))
+    if index is None:
+        fail("DAILY_ACQUISITION_CURRENT_INDEX_MISSING")
+    expanded["current_period"] = {"period": as_of[:7], "index": index["document"], "index_metadata": index["metadata"],
+        "index_encoding": config["index_encoding"], "notes": {day: {k: note[k] for k in ("document", "metadata")}
+            for day, note in sorted(notes.items()) if day[:7] == as_of[:7]}}
+    return expanded, paths, total, evidence, captured
+
+
+def preview_local_daily(config_path, input_root, as_of, max_bytes, max_depth):
+    if type(max_bytes) is not int or not 0 < max_bytes <= 64 * 1024 * 1024 or type(max_depth) is not int or not 0 < max_depth <= 256:
+        fail("INVALID_DAILY_PREVIEW_LIMITS")
+    daily_preview_day(as_of)
+    config_raw = read_local_bytes(config_path, input_root, max_bytes)
+    config = parse_keyed_yaml(config_raw)
+    acquisition_paths, acquisition_bytes, acquisition_evidence, acquisition_capture = [], 0, None, None
+    if isinstance(config, dict) and "acquisition_runs" in config:
+        if set(config) != {"schema_version", "account", "mappings", "snapshot", "acquisition_runs", "index_encoding"}:
+            fail("INVALID_DAILY_ACQUISITION_CONFIGURATION")
+        config, acquisition_paths, acquisition_bytes, acquisition_evidence, acquisition_capture = discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
+    if (not isinstance(config, dict) or set(config) not in ({"schema_version", "account", "mappings", "documents", "snapshot"},
+            {"schema_version", "account", "mappings", "documents", "snapshot", "current_period"}) or type(config["snapshot"]) is not str):
+        fail("INVALID_DAILY_PREVIEW_CONFIGURATION")
+    prep_raw = yaml.safe_dump({k: v for k, v in config.items() if k not in ("snapshot", "current_period")}).encode()
+    preparation_configuration(prep_raw, max_bytes, max_depth)
+    if sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    if acquisition_capture is None:
+        documents, paths = capture_preparation_sources(prep_raw, input_root, min(max_bytes, 4 * 1024 * 1024), max_depth)
+    else:
+        documents = {alias: {"statement": acquisition_capture[entry["statement"]],
+            "notes": [acquisition_capture[path] for path in entry["notes"]]}
+            for alias, entry in config["documents"].items()}
+        paths = []
+    current_capture = None
+    if "current_period" in config:
+        references = daily_current_configuration(config["current_period"], as_of)
+        if len(references) + sum(1 + len(entry["notes"]) for entry in config["documents"].values()) > 256:
+            fail("DAILY_INPUT_LIMIT_EXCEEDED")
+        current_capture = {}
+        captured_bytes = len(config_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values())
+        for key, reference in references.items():
+            path = Path(input_root) / reference
+            body = (read_local_bytes(path, input_root, min(max_bytes, 4 * 1024 * 1024))
+                    if acquisition_capture is None else acquisition_capture[reference])
+            captured_bytes += len(body)
+            if captured_bytes > 64 * 1024 * 1024:
+                fail("DAILY_INPUT_LIMIT_EXCEEDED")
+            current_capture[key] = body
+            paths.append(path)
+    snapshot_path = Path(input_root) / config["snapshot"]
+    snapshot_raw = read_local_bytes(snapshot_path, input_root, max_bytes)
+    if len(config_raw) + len(snapshot_raw) + sum(len(c["statement"]) + sum(map(len, c["notes"])) for c in documents.values()) + sum(map(len, (current_capture or {}).values())) > 64 * 1024 * 1024:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    if acquisition_bytes + len(config_raw) + len(snapshot_raw) > 64 * 1024 * 1024:
+        fail("DAILY_INPUT_LIMIT_EXCEEDED")
+    inputs = [Path(config_path), snapshot_path, *paths, *acquisition_paths]
+    account = config["account"]
+    target = hashlib.sha256(account["target_account_id"].encode()).hexdigest()
+    state = Path("state")
+    binding = state / ("binding-" + account["account_key"] + ".yaml")
+    ledger = state / ("ledger-" + target + ".yaml")
+    journal_path = state / ("daily-" + target + ".yaml")
+    output = Path("outputs") / ("daily-" + account["account_key"] + ".yaml")
+    locks = [state / ("prepare-" + target + ".lock"), state / ("account-" + account["account_key"] + ".lock")]
+    for destination in (binding, journal_path, output, *locks):
+        reject_output_input_collision(destination, inputs)
+    private_directory(state)
+    private_directory(output.parent)
+    descriptors = []
+    try:
+        for path in locks:
+            descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            descriptors.append(descriptor)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                fail("INVALID_DAILY_LOCK")
+            os.fchmod(descriptor, 0o600)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                fail("DAILY_ACCOUNT_OR_TARGET_LOCKED")
+        if binding.exists() or binding.is_symlink():
+            if read_keyed_yaml(binding, state, max_bytes) != account:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        if ledger.exists() or ledger.is_symlink():
+            if read_keyed_yaml(ledger, state, max_bytes).get("binding") != account:
+                fail("ACCOUNT_BINDING_MIGRATION_REQUIRED")
+        previous = read_keyed_yaml(journal_path, state, max_bytes) if journal_path.exists() or journal_path.is_symlink() else None
+        journal, report = compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_bytes, max_depth, current_capture)
+        if acquisition_evidence is not None:
+            report["acquisition_runs"] = acquisition_evidence
+        if any(len(yaml.safe_dump(value).encode()) > max_bytes for value in (journal, report)):
+            fail("DAILY_REPORT_LIMIT_EXCEEDED")
+        atomic_private_yaml(binding, account)
+        atomic_private_yaml(journal_path, journal)
+        atomic_private_yaml(output, report)
+        return {"closed_period_gaps": len(report["missing_or_unqualified_closed_periods"]),
+                "unresolved_exceptions": len(report["exceptions"]), "resume_requires_catchup": report["resume_requires_catchup"],
+                "import_ready": False, "blockers": report["blockers"]}
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 def legacy_duplicate_candidate(activity, row):
     """Bounded similarity for rejection/diagnosis only, never adoption."""
     identity = ("target_account_id", "symbol", "data_source", "kind")
@@ -1219,9 +2160,10 @@ def legacy_duplicate_candidate(activity, row):
             and abs((datetime.fromisoformat(row["operation_date"]).date() - source_day).days) <= 1)
 
 
-def reconcile_existing_activities(prepared, remote, resolutions):
+def reconcile_existing_activities(prepared, remote, resolutions, automatic=False):
     """Private offline adoption proposal; never changes remote records or readiness."""
-    if not isinstance(prepared, dict) or not isinstance(resolutions, dict):
+    if (not isinstance(prepared, dict) or not isinstance(resolutions, dict)
+            or type(automatic) is not bool or automatic and resolutions):
         fail("INVALID_ADOPTION_CONFIGURATION")
     if set(resolutions) - set(prepared):
         fail("STALE_ADOPTION_RESOLUTION")
@@ -1235,6 +2177,13 @@ def reconcile_existing_activities(prepared, remote, resolutions):
             if comment in owned:
                 fail("REMOTE_OWNED_MARKER_DUPLICATE")
             owned[comment] = row
+    owned_remote = {row["remote_id"] for row in owned.values()}
+    unowned_counts = {}
+    if automatic:
+        for event_id, activity in prepared.items():
+            if event_id not in owned:
+                fingerprint = activity_financial_fingerprint(activity)
+                unowned_counts[fingerprint] = unowned_counts.get(fingerprint, 0) + 1
     claimed_remote = set()
     for event_id, activity in prepared.items():
         if activity.get("id") != event_id:
@@ -1263,6 +2212,16 @@ def reconcile_existing_activities(prepared, remote, resolutions):
             result["new"].append(event_id)
             continue
         resolution = resolutions.get(event_id)
+        if automatic:
+            available = [r for r in candidates if r["remote_id"] not in owned_remote]
+            foreign = any(isinstance(r["comment"], str) and r["comment"].startswith("BD#")
+                          for r in available)
+            if unowned_counts[fingerprint] == 1 and len(available) == 1 and not foreign:
+                resolution = {"remote_id": available[0]["remote_id"], "financial_fingerprint": fingerprint}
+            else:
+                result["candidates"][event_id] = sorted(r["remote_id"] for r in candidates)
+                result["blockers"].add("AUTOMATIC_ACTIVITY_ADOPTION_UNCERTAIN")
+                continue
         if resolution is None:
             result["candidates"][event_id] = [r["remote_id"] for r in candidates]
             result["blockers"].add("MANUAL_ACTIVITY_ADOPTION_REQUIRED")
@@ -1728,11 +2687,11 @@ def _dispatch_single_intent(state_root, binding, reviewed, baseline_raw, max_byt
             os.close(descriptor)
 
 
-def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence):
+def verify_chronological_holdings(prepared, raw_snapshot, resolutions, history_evidence, automatic=False):
     """Pure conservative coverage proof; never invent opening acquisitions."""
     build_wire_payload(prepared)
     remote = parse_remote_activity_snapshot(raw_snapshot)
-    adoption = reconcile_existing_activities(prepared, remote, resolutions)
+    adoption = reconcile_existing_activities(prepared, remote, resolutions, automatic=automatic)
     raw = raw_snapshot.encode("utf-8") if isinstance(raw_snapshot, str) else raw_snapshot
     snapshot_digest = hashlib.sha256(raw).hexdigest()
     target = next(iter(prepared.values()))["target_account_id"]
@@ -1923,8 +2882,10 @@ def diagnose_local_snapshot(config_path, input_root, max_bytes):
 def review_capture_configuration(config_raw):
     config = parse_keyed_yaml(config_raw)
     roles = ("prepared", "snapshot", "resolutions", "history_evidence")
-    if (set(config) != {"schema_version", *roles} or type(config["schema_version"]) is not int
-            or config["schema_version"] != 1
+    version = config.get("schema_version")
+    keys = {"schema_version", *roles} | ({"adoption_mode"} if version == 2 else set())
+    if (set(config) != keys or type(version) is not int or version not in (1, 2)
+            or version == 2 and config.get("adoption_mode") != "certain_unique"
             or any(not isinstance(config[k], str) or not config[k].strip() for k in roles)):
         fail("INVALID_REVIEW_CONFIGURATION")
     return config
@@ -1940,7 +2901,7 @@ def compute_offline_review(config_raw, captures, max_bytes):
     for raw in (config_raw, *captures.values()):
         if type(raw) is not bytes or len(raw) > max_bytes:
             fail("FROZEN_REVIEW_INPUT_LIMIT_EXCEEDED")
-    review_capture_configuration(config_raw)
+    config = review_capture_configuration(config_raw)
     prepared = validated_prepared_review(captures["prepared"])
     activities = prepared["activities"]
     resolutions = parse_keyed_yaml(captures["resolutions"])
@@ -1955,7 +2916,8 @@ def compute_offline_review(config_raw, captures, max_bytes):
                             for q in quantities) + 8)
     if precision > min(FROZEN_REVIEW_PRECISION_LIMIT, max_bytes):
         fail("FROZEN_REVIEW_PRECISION_LIMIT_EXCEEDED")
-    coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history)
+    coverage = verify_chronological_holdings(activities, captures["snapshot"], resolutions, history,
+                                             automatic=config.get("adoption_mode") == "certain_unique")
     adoption = coverage["adoption"]
     new = {marker: activities[marker] for marker in adoption["new"]}
     wire = build_wire_payload(new) if new else None
@@ -2143,7 +3105,7 @@ def validate_qualified_application(bundle, max_bytes, max_depth):
     if Path(declaration["prepare_config"]).is_absolute():
         fail("INVALID_APPLICATION_PREPARATION_PATH")
     validated_ghost_origin(declaration["allowed_origin"])
-    if declaration["destination_version"] != "3.81.0" or declaration["display_timezone"] not in ("Europe/Paris", "Europe/Zurich"):
+    if declaration["destination_version"] not in ("3.81.0", "3.83.0") or declaration["display_timezone"] not in ("Europe/Paris", "Europe/Zurich"):
         fail("APPLICATION_DESTINATION_SCOPE_UNVERIFIED")
     confirmations = declaration["confirmations"]
     names = {"source_acceptance", "destination_validation", "security_review",
@@ -2727,6 +3689,31 @@ def main(argv=None):
     inspect.add_argument("--max-bytes", type=int, required=True, help="Explicit local input size budget")
     inspect.add_argument("--max-depth", type=int, required=True, help="Explicit HTML nesting budget")
     inspect.add_argument("--notes", nargs="+", help="Saved daily contract-note HTML files; no URLs")
+    note = subparsers.add_parser("inspect-note", help="Inspect saved operation-note fields without conversion")
+    note.add_argument("path", help="Saved local HTML only")
+    note.add_argument("--input-root", required=True)
+    note.add_argument("--max-bytes", type=int, required=True)
+    note.add_argument("--max-depth", type=int, required=True)
+    note.add_argument("--include-coupons", action="store_true", help="Read coupon fields without tax or import claims")
+    coupons = subparsers.add_parser("review-coupons", help="Review source net dividend cash and booking dates offline")
+    coupons.add_argument("path", help="Saved monthly statement")
+    coupons.add_argument("--notes", nargs="+", required=True)
+    coupons.add_argument("--input-root", required=True)
+    coupons.add_argument("--output", required=True, help="Private review file under outputs")
+    coupons.add_argument("--max-bytes", type=int, required=True)
+    coupons.add_argument("--max-depth", type=int, required=True)
+    coupon_reconciliation = subparsers.add_parser("reconcile-coupons", help="Compare original coupon sources with saved history; no writes")
+    coupon_reconciliation.add_argument("--config", required=True)
+    coupon_reconciliation.add_argument("--input-root", required=True)
+    coupon_reconciliation.add_argument("--output", required=True)
+    coupon_reconciliation.add_argument("--max-bytes", type=int, required=True)
+    coupon_reconciliation.add_argument("--max-depth", type=int, required=True)
+    daily = subparsers.add_parser("daily-preview", help="Recompute private 90-day saved-input coverage and retain exceptions")
+    daily.add_argument("--config", required=True)
+    daily.add_argument("--input-root", required=True)
+    daily.add_argument("--as-of", help="Broker calendar day, YYYY-MM-DD; defaults to today in Europe/Paris")
+    daily.add_argument("--max-bytes", type=int, required=True)
+    daily.add_argument("--max-depth", type=int, required=True)
     prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
     prepare.add_argument("--config", required=True, help="Local keyed YAML inside input root")
     prepare.add_argument("--input-root", required=True)
@@ -2780,6 +3767,33 @@ def main(argv=None):
     snapshot.add_argument("--timeout", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "daily-preview":
+            print(json.dumps(preview_local_daily(args.config, args.input_root, args.as_of if args.as_of is not None else daily_preview_today(),
+                args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
+        if args.command == "reconcile-coupons":
+            print(json.dumps(reconcile_local_coupons(args.config, args.input_root, args.output,
+                args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
+        if args.command == "review-coupons":
+            print(json.dumps(review_local_coupons(args.path, args.notes, args.input_root,
+                args.output, args.max_bytes, args.max_depth), sort_keys=True))
+            return 2
+        if args.command == "inspect-note":
+            html, _ = read_document(args.path, args.input_root, args.max_bytes)
+            document = parse_contract_note(html, args.max_depth, include_coupons=args.include_coupons)
+            coupons = sum(n["kind"] == "COUPON" for n in document["notes"])
+            unknown = sum(n["kind"] == "UNKNOWN" for n in document["notes"])
+            trades = len(document["notes"]) - coupons - unknown
+            blockers = ["COUPON_STATEMENT_REVIEW_REQUIRED"] if coupons else []
+            if trades or not coupons:
+                blockers.append("REAL_SOURCE_ACCEPTANCE_PENDING")
+            if unknown:
+                blockers.append("UNKNOWN_OPERATIONS")
+            print(json.dumps({"notes": len(document["notes"]), "coupons": coupons,
+                "trades": trades, "unknown": unknown,
+                "import_ready": False, "blockers": blockers}, sort_keys=True))
+            return 2
         if args.command == "qualify-captures":
             print(json.dumps(qualify_local_captures(args.manifest, args.config, args.input_root,
                                                    args.output, args.max_bytes, args.max_depth), sort_keys=True))

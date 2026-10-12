@@ -25,6 +25,12 @@ Unknown/null source-contract roles stay disabled. A source-contract evidence
 reference is supplied operator data, not an authenticated proof that it is true.
 No actual authentication endpoint is guessed or enabled by this component.
 
+The request controller accepts the existing `password_accepted` app-method phase
+only with its own characterized role and one-use durable permit. A separately
+constructed controller is required for that action; a prior controller cannot
+be rearmed. It does not reuse the initial password permit or grant an unknown
+intermediate request.
+
 Password challenge and authenticated success transitions require consumed
 requests; the caller still owes actual observed success evidence. Both request
 and observation are trusted helper inputs here, not a browser-origin guarantee.
@@ -337,3 +343,130 @@ external security review and financial activation gates remain separate.
 Rollback reverts the native source/Compose commit, retaining the private binding
 and all historical broker journals. Native ENV configuration contains no
 credential export, alternate executable or arbitrary command interface.
+
+## Native source-request envelope inspection
+
+`inspectSourceRequest` is an offline boundary for the authorized bounded
+qualification profile. The trusted owner supplies an exact source-pinned
+candidate and a native paused request from its owned page/frame/session.
+It verifies exact URL/method/type, unambiguous JSON Content-Type, bounded
+unique-key payload and the current in-memory principal/password or delayed code.
+TOTP requests require `trusted_device=false`; login requests require a null
+redirect. GET roles cannot carry a credential projection. Its private result
+contains structural keys and source/native metadata only, with dispatch and
+readiness false. It returns no body, header, credential-derived hash or secret.
+Source hashes supplied by the caller are provenance references, not proof of
+independent source qualification; the trusted supervisor still verifies them.
+
+This helper never arms a role, consumes a permit, sends a request or launches
+a browser. The guarded runtime must combine inspection with actual source
+observation, durable one-use consumption, independent response/success evidence
+and exact owned cleanup under the online acquisition amendment.
+
+The existing CLI adapter now supports verified logout/status after acquisition
+with or without an OTP request. Closing before the code permanently skips its
+slot; logout failure fences the adapter and stops only its attested container.
+This closes the delivery session rather than retaining it for another attempt.
+
+The source-owned metadata worker uses `sshCliTransport` directly for CLI stdout.
+Its Python supervisor provides private initial provisioning and attestation/stop
+callbacks, then receives the final metadata projection after verified logout.
+The supervisor never relays full items, seeds or CLI response bodies. Synthetic
+IPC coverage stands in for SSH inside the worker process and asserts that the
+supervisor observes only control metadata, while logout failure still fences
+the exact owned CLI.
+
+## Separate post-2FA credential finalization
+
+Source schema2 adds a separately qualified nullable `finalize` role. The owner
+selects `post-2fa-finalization` when starting the attempt, before credentials or
+permits. This protocol is retained in the existing principal journal and cannot
+be downgraded by swapping in a schema1 source. Historical schema1 journals and
+the synthetic two-request protocol remain compatible; no namespace is changed.
+
+For this protocol, a consumed OTP request can advance only to `otp_accepted`.
+The owner then records `finalization_uncertain`, arms a distinct exact finalization
+permit and consumes it durably before the one credential-bearing continuation.
+Only that consumed request plus separately verified broker success may advance
+to `authenticated`. The controller accepts finalization with its usual owned
+frame/epoch binding, duplicate reservation and failure fencing. It does not
+reuse the OTP permit or retrieve a second code.
+
+Interruptions in either new state retain the principal fence. Unconsumed
+requests, failed durable publication, duplicates and failed continuation cannot
+declare success or restart an attempt. Authentication still requires observed
+success; these callable offline helpers neither implement nor activate a browser.
+
+### Method qualification before OTP
+
+The first schema2 password permit durably snapshots whether a network app-method
+role is required, together with the initial page/frame epochs. A required role
+must consume its own permit before entering `otp_uncertain`; later source changes
+cannot replace it with a local selection. With no network role, the observed
+frontend's local TOTP selection instead needs `confirmLocalAppMethod`: a separate
+durable receipt asserting independently checked native DOM, exact initial epochs,
+owned session/frame, pinned source hash, TOTP selection and an untrusted device.
+Missing, duplicate, foreign-frame or failed-publication evidence refuses OTP.
+No synthetic network request or permit is invented for a local DOM action.
+Historical legacy attempts retain their prior behavior. Existing post-2FA records
+are still readable; missing method qualification cannot authorize new progress.
+
+### Paused authentication qualification gate
+
+`brokerAuthenticationComposition` binds one cooperating authority and its handles
+to `source-authentication-gate.mjs`. The bounded gate accepts only the three
+source-described POST/XHR destinations for initial credentials, TOTP and final
+credentials. The trusted owner separately proves current source bytes, runtime
+ownership and actual response outcomes. The gate compares the native body in
+memory, retains structural evidence, arms the exact durable permit and consumes
+it before continuation. It binds credential requests to the journal principal,
+clones inputs before awaiting and reserves each phase at ingress. Duplicate or
+HTTP-auth events fence held actions; HTTP authentication is cancelled without
+credentials. Retention, fsync, timing or continuation failures stop the owner.
+The gate never advances authentication state or declares successful connection.
+
+The bounded qualification profile permits inspecting an already paused expected
+request before arming its exact permit. Ordinary operational controllers keep
+their previously qualified before-fill gate. Synthetic runtime qualification
+uses an internally registered loopback policy and separate synthetic namespace;
+the broker factory exposes no operator-selectable origin or state-root override.
+
+### Native qualification building blocks
+
+`source-native-session.mjs` composes the pinned private CDP pipe with existing
+startup guards and request/response interception. Native default realms are
+bound by their unique context ID; foreign frames, HTTP redirects and new targets
+fence the session. Response interception permits durable protocol publication
+before frontend callbacks issue the next native step. HTTP authentication is
+cancelled. The stop callback verifies owned exit before closing the pipe; final
+close separately drains handlers to avoid a handler waiting for itself.
+
+The dedicated `lab/source-browser-pipe.mjs` launches only the fixed attested
+Chromium with a numeric owned proxy and credential-free environment. It pins
+process start identities, checks renderer sandbox state and bounds the lifetime.
+Renderer command lines can be flattened by Chromium; classification recognizes
+both space and NUL separators. Native bytes remain on private stdio. Only fixed
+process/sandbox/exit codes and counts go to the private control stderr channel.
+
+`source-authentication-dom.mjs` restricts credential fill to the two observed
+blank login controls in one form. Local TOTP requires the observed heading,
+exact six ordered empty numeric inputs and the explicit distrust control. The
+source's multi-character handler receives the code once; no additional button
+click or second fill is performed. Results expose only structural proof.
+`source-authentication-response.mjs` decodes bounded native UTF8/base64 bodies
+internally and projects known challenge, OTP acceptance and one same-origin
+final source-page destination; no response body, token or header is exported.
+
+`source-read-gate.mjs` permits only source-pinned preliminary/state/systems/config
+reads or independently qualified document GETs. Each request's structural evidence
+and distinct consumed grant precede continuation. A trusted owner must prove
+actual candidate provenance and publish grants atomically; a source hash alone
+is not lookup authority. Duplicate grants, failure or fencing refuse.
+
+The network-none `lab/source-authentication-runtime.mjs` exercises these primitives
+with an invented proxy site and fixed synthetic credentials. Its isolated
+synthetic namespace, native IDs, original request URLs, renderer sandbox and
+exact exit proof are retained. It does not select a broker origin, use a real
+vault or enable an operational connection command. The operational caller still
+owes independently bound credentials, current source bytes and both-account
+source evidence.

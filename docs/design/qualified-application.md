@@ -21,8 +21,12 @@ mappings. The current preparation config must match the declaration's own byte
 pin. Older preparation artifacts omit historical config hashes and mapping
 evidence references: replay cannot prove those references never changed. The
 current declaration must qualify them; nonempty strings alone prove nothing.
-Supported destination scope is characterized 3.81.0 with Europe/Paris or
-Europe/Zurich display review. No server-version detection or universal timezone
+Supported destination scope is characterized 3.81.0 and 3.83.0 with Europe/Paris
+or Europe/Zurich display review. The 3.83.0 qualification replays the three actual
+saved PEA trades in an owned disposable instance: exact readback, zero-new repeat,
+complete archive replay and owned rollback. See the keyed
+[verification evidence](../verification/source-authentication.yaml).
+No server-version detection or universal timezone
 policy is claimed. Per-symbol execution/target currency must be explicit EUR.
 
 ## Public workflow

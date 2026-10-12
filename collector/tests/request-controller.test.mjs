@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
+import {parse} from 'yaml';
 import * as core from '../core.mjs';
 import {requestController, REQUEST_LIMITS} from '../request-controller.mjs';
 
@@ -199,6 +200,46 @@ test('configuration rejects wildcard/unbounded/read-auth overlap before any call
   }
   assert.deepEqual(f.actions, []);
 });
+
+for (const failure of ['none', 'fsync']) test(`characterized app-method durable permit: ${failure}`, async () => isolatedAuthority(async () => {
+  const f = fixture();
+  const source = structuredClone(f.source);
+  source.roles.app_method = {...source.roles.password, url: core.ORIGIN + '/invented-app-method'};
+  core.enroll('SYNTHETIC');
+  const handle = core.acquirePrincipal('SYNTHETIC');
+  try {
+    core.startAttempt(handle, 100);
+    core.transition(handle, 'password_uncertain', 100);
+    const password = {phase: 'password_uncertain', page_epoch: f.action.pageEpoch,
+      frame_epoch: f.action.frameEpoch, url: source.roles.password.url, method: 'POST', resource_type: 'XHR'};
+    const nonce = core.armPermit(handle, password, 100, source);
+    core.consumePermit(handle, {...password, nonce, redirect: false}, 100);
+    core.transition(handle, 'password_accepted', 100);
+    const method = {...password, phase: 'password_accepted', url: source.roles.app_method.url};
+    const action = {...f.action, phase: method.phase, url: method.url,
+      nonce: core.armPermit(handle, method, 100, source)};
+    const calls = [];
+    const policy = requestController({...f.options, source,
+      consume: (request, time) => {
+        calls.push(request.phase);
+        return core.consumePermit(handle, request, time);
+      }, continueRequest: id => {calls.push(id);}});
+    policy.arm(action);
+    const event = {...f.event(), request: {url: method.url, method: 'POST'}};
+    const fsync = fs.fsyncSync;
+    try {
+      if (failure === 'fsync') fs.fsyncSync = () => {throw new Error('PRIVATE_SYNTHETIC_SENTINEL');};
+      if (failure === 'none') await policy.paused(event);
+      else await assert.rejects(policy.paused(event), /^Error: REQUEST_REJECTED$/);
+    } finally {fs.fsyncSync = fsync;}
+    assert.deepEqual(calls, failure === 'none' ? ['password_accepted', 'a'] : ['password_accepted']);
+    await assert.rejects(policy.paused({...event, requestId: 'duplicate'}), /REQUEST_REJECTED/);
+    assert.deepEqual(calls, failure === 'none' ? ['password_accepted', 'a'] : ['password_accepted']);
+    assert.equal(core.validateJournal(
+      parse(fs.readFileSync(path.join(handle.directory, 'journal.yaml'), 'utf8')), handle.principal)
+      .attempts[handle.attempt].permit.consumed, failure === 'none');
+  } finally {core.releasePrincipal(handle);}
+}));
 
 function otpFixture(overrides = {}) {
   const source = {schema_version: 1, origin: core.ORIGIN, roles: {password: null, app_method: null,

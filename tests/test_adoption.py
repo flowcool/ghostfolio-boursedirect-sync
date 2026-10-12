@@ -122,6 +122,81 @@ def test_manual_financial_similarity_is_candidate_not_automatic_skip():
     assert first_id not in result['new']
 
 
+def test_automatic_unique_match_needs_no_per_run_resolution_and_preserves_inputs():
+    plan = prepared()
+    marker, activity = next(iter(plan.items()))
+    remote = snapshot([row(activity)])
+    before = copy.deepcopy((plan, remote))
+    result = bd.reconcile_existing_activities(plan, remote, {}, automatic=True)
+    assert result['adopted'] == {marker: resolution(activity)}
+    assert len(result['new']) == 2 and not result['candidates']
+    assert result['import_ready'] is False and before == (plan, remote)
+
+
+@pytest.mark.parametrize('source_count,remote_count', [(1, 2), (2, 1), (2, 2)])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_automatic_assignment_quarantines_every_ambiguous_occurrence(source_count, remote_count, reverse):
+    marker, activity = next(iter(prepared().items()))
+    duplicate_marker = marker[:-1] + ('a' if marker[-1] != 'a' else 'b')
+    plan = {marker: activity}
+    if source_count == 2:
+        plan[duplicate_marker] = {**copy.deepcopy(activity), 'id': duplicate_marker}
+    rows = [row(activity, 'remote-' + str(i)) for i in range(remote_count)]
+    if reverse:
+        plan = dict(reversed(list(plan.items())))
+        rows.reverse()
+    result = bd.reconcile_existing_activities(plan, snapshot(rows), {}, automatic=True)
+    assert not result['adopted'] and not result['new']
+    assert set(result['candidates']) == set(plan)
+    assert all(ids == ['remote-' + str(i) for i in range(remote_count)] for ids in result['candidates'].values())
+    assert 'AUTOMATIC_ACTIVITY_ADOPTION_UNCERTAIN' in result['blockers']
+
+
+def test_automatic_assignment_respects_owned_anchor_before_matching_unowned_occurrence():
+    marker, activity = next(iter(prepared().items()))
+    duplicate_marker = marker[:-1] + ('a' if marker[-1] != 'a' else 'b')
+    duplicate = {**copy.deepcopy(activity), 'id': duplicate_marker}
+    plan = {duplicate_marker: duplicate, marker: activity}
+    remote = snapshot([row(activity, 'owned', owned=True), row(activity, 'legacy')])
+    result = bd.reconcile_existing_activities(plan, remote, {}, automatic=True)
+    assert result['owned'] == [marker]
+    assert result['adopted'] == {duplicate_marker: resolution(duplicate, 'legacy')}
+    assert not result['new'] and not result['candidates']
+
+
+def test_automatic_assignment_cannot_reuse_owned_remote_or_transfer_foreign_marker():
+    marker, activity = next(iter(prepared().items()))
+    other_marker = marker[:-1] + ('a' if marker[-1] != 'a' else 'b')
+    plan = {marker: activity, other_marker: {**copy.deepcopy(activity), 'id': other_marker}}
+    result = bd.reconcile_existing_activities(plan, snapshot([row(activity, owned=True)]), {}, automatic=True)
+    assert result['owned'] == [marker] and not result['adopted'] and not result['new']
+    assert other_marker in result['candidates']
+    foreign = row(activity)
+    foreign['comment'] = 'BD#v1#foreign-owner#foreign-event'
+    result = bd.reconcile_existing_activities({marker: activity}, snapshot([foreign]), {}, automatic=True)
+    assert not result['adopted'] and not result['new'] and marker in result['candidates']
+
+
+@pytest.mark.parametrize('mutation,error', [('date', 'REMOTE_CANDIDATE_CONTEXT_UNVERIFIED'),
+    ('profile', 'REMOTE_CANDIDATE_CONTEXT_UNVERIFIED'), ('fee', 'REMOTE_LEGACY_DUPLICATE_REVIEW_REQUIRED')])
+def test_automatic_mode_preserves_date_currency_and_changed_financial_refusals(mutation, error):
+    plan = prepared()
+    activity = next(iter(plan.values()))
+    raw = row(activity)
+    if mutation == 'date': raw['date'] = raw['date'].replace('T00:00:00', 'T12:00:00')
+    elif mutation == 'profile': raw['assetProfile']['currency'] = 'USD'
+    else: raw['fee'] += 1
+    with pytest.raises(RuntimeError, match='^' + error + '$'):
+        bd.reconcile_existing_activities(plan, snapshot([raw]), {}, automatic=True)
+
+
+def test_automatic_mode_refuses_manual_overrides_even_if_fingerprint_is_valid():
+    plan = prepared()
+    marker, activity = next(iter(plan.items()))
+    with pytest.raises(RuntimeError, match='^INVALID_ADOPTION_CONFIGURATION$'):
+        bd.reconcile_existing_activities(plan, snapshot([row(activity)]), {marker: resolution(activity)}, automatic=True)
+
+
 def test_explicit_fingerprint_resolution_adopts_without_modifying_any_source():
     plan = prepared()
     first_id, item = next(iter(plan.items()))

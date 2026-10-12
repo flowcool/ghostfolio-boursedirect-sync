@@ -1,11 +1,18 @@
 # Saved Ghostfolio schema compatibility
 
-The real destination runs Ghostfolio 3.81.0. A complete GET-only capture could not
+The original destination capture used Ghostfolio 3.81.0. A complete capture could not
 be normalized because legitimate nullable fields were treated as missing evidence.
 The official Order schema permits nullable account assignment and currency. The
 activities service retains original numeric fields and resolves currency using
 `order.currency ?? order.SymbolProfile.currency`. These pinned sources justify
 compatibility handling; they do not authorize exchange-rate or date guesses.
+
+A fresh private capture on 2026-10-11 independently verified deployed version
+3.83.0 and normalized all 1017 returned activities with the unchanged parser.
+The existing approved durable-token provider authenticated once before two GETs;
+it performed no financial write. The target PEA retained 572 activity identities
+and their exact financial fingerprints. This extends observed compatibility;
+it does not establish source-history completeness or authorize legacy adoption.
 
 Sources at commit `920d0787541a8568920fc11f978aa01e5a52c581`:
 
