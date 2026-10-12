@@ -109,7 +109,7 @@ cannot be treated as active commands; no lab-control command depends on `tmp/`.
    Ghostfolio writes and recurring execution remain separate activation gates.
 
 Historical steps4–6 succeeded on2026-10-08: one password and one application TOTP
-reached account navigation. See [observed source evidence](../../FINDINGS.md) and
+reached account navigation. See [observed source evidence](../archive/FINDINGS.md) and
 the private manifest/journal. That exploration used an earlier browser controller;
 its success is preserved, while current collector request-role qualification is
 reported separately by `check`. Source feasibility is not reopened at each resume.

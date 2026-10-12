@@ -1,0 +1,7 @@
+services:
+  bitwarden:
+    networks: [ghostfolio]
+networks:
+  ghostfolio:
+    external: true
+    name: ${GHOSTFOLIO_NETWORK:?Supply the existing private Ghostfolio network name}

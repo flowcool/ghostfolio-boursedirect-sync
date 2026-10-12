@@ -1,41 +1,52 @@
 # Build and release guarantees
 
-This repository ships no container image and no release artifact yet: the
-importer is an offline command-line tool. Every pull request, whatever its base
-branch (work is delivered as stacked PRs) and including documentation-only
-changes, runs the offline test suite on Python 3.13 and a whitespace check
-(`offline-tests.yml`). CodeQL analyzes Python independently. Dependency Review
-rejects newly introduced moderate or worse dependency vulnerabilities, including
-development scope. Required checks must pass before merging.
+## Pull request checks
 
-Runtime requirements pin the complete dependency closure. Dependabot proposes
-weekly Python and Actions updates (a Python release is proposed once 14 days
-old; security updates ignore the cooldown). Never auto-merge dependency changes
-without the required checks. The disposable Docker acceptance lab
-(`scripts/disposable_acceptance.py`) is opt-in and never started by CI.
+Every pull request runs the versioned offline Python and Node.js suites, the
+documentation catalogue and local-link check, and a whitespace check. The
+container workflow builds and scans the native connector image for both AMD64 and
+ARM64 without publishing it; a separate build and scan covers the saved-input
+preview image. CodeQL analyzes Python and JavaScript, and Dependency Review blocks
+new moderate-or-higher dependency findings, including development dependencies.
+All workflows use read-only repository access unless a specific job needs a
+narrower permission grant.
 
-When the `collector/` Node.js tests gain a package manifest, add an `npm`
-ecosystem to `dependabot.yml` and `javascript-typescript` to CodeQL.
+The opt-in disposable acceptance lab is not run by CI. It uses local Docker,
+synthetic data and resources owned by the invocation. CI tests use synthetic
+inputs and isolated state; they must never use broker credentials, production
+Ghostfolio, or the shared Beads database.
 
-## Release notes
+## Tagged release
 
-`release.yml` groups GitHub's generated notes by label. `pr-release-labels.yml`
-adds `feature`, `fix`, `documentation`, `maintenance` and `breaking-change` from a
-conventional PR title; it is advisory and never a required check. It runs on
-`pull_request_target` (base-branch workflow and script, write token, also for fork
-PRs) and must never check out or execute the PR head. A
-`breaking-change` or `compat` PR needs a filled "Release impact" section.
+Pushing a version tag starts `release-image.yml`. The release job builds the
+AMD64 container, scans it, and runs an offline smoke check. Only after those
+checks pass does it publish the versioned image to GHCR and create a
+GitHub draft release with the Compose archive and `SHA256SUMS`. An operator then
+verifies an anonymous pull of the versioned image and publishes the draft;
+the publication event promotes that same version to `latest`. A new GHCR package defaults to private and may need its visibility changed to public in
+package settings before it can be pulled anonymously; see GitHub's
+[container registry visibility guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+The release archive pins the matching image version and includes the required Compose files,
+browser seccomp profile, example environment file, configuration guide,
+third-party license text and tracked documentation. It excludes application
+source and local build inputs.
 
-## CodeRabbit
+See the [release procedure](../docs/operations/releasing.md) for the operator
+checklist and the [v0.1.0 notes](../docs/releases/v0.1.0.md) for the initial
+supported product scope. The normal Compose file uses the published image;
+`compose.build.yaml` is only for a local source checkout.
 
-`.coderabbit.yaml` enables automatic reviews for every base branch and draft
-PRs, so stacked PRs are reviewed. Reviews beyond the plan's included hourly
-allowance use usage-based billing once the trial ends; manage it in the
-CodeRabbit billing settings. A CodeRabbit review is not a substitute for CI.
+## Release notes and automation
+
+`release.yml` groups GitHub-generated notes by label. `pr-release-labels.yml`
+derives advisory labels from conventional PR titles. It runs on
+`pull_request_target` using the base-branch workflow and script; it must not
+check out or execute PR-head code. A breaking-change or compatibility PR should
+fill in the release-impact section of the PR template.
 
 ## Rollback
 
-Revert a maintenance merge through a PR and wait for all required checks.
-Repository administrators can temporarily disable a ruleset if a broken required
-workflow prevents its own repair; restore it after the repair passes. No GitHub
-change deploys anything.
+Correct a released defect with a new versioned release and retain earlier image
+tags and archives so operators can intentionally return to a prior version.
+Revert maintenance changes through a reviewed pull request and required checks.
+No GitHub workflow deploys to or writes financial activity in Ghostfolio.

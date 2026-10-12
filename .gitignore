@@ -58,3 +58,6 @@ import-config.yaml
 
 # Collector dependencies and private browser profile artifacts
 node_modules/
+
+# Private verified security mappings
+config/mappings.yaml
