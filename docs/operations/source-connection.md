@@ -1,8 +1,12 @@
-# Replay the Bourse Direct connection
+# Bourse Direct connection procedures
 
-Resume through `scripts/source_connection.py` and the private `inputs/lab/replay.yaml` inventory before investigating acquisition or changing the lab.
+For the released AMD64 Docker Compose workflow, start with the
+[README quick start](../../README.md#quick-start). This page also documents the
+dedicated private acquisition lab. Before operating that lab, resume through
+`scripts/source_connection.py` and its private `inputs/lab/replay.yaml` inventory;
+those SSH and Docker procedures do not apply to the community Compose path.
 
-## Entry sequence
+## Dedicated private lab entry sequence
 
 Run from the project root:
 
@@ -26,7 +30,7 @@ runbook contains procedure, not a second work queue.
 ## One project owns operational access
 
 The community entrypoint is the ENV-configured native `bitwarden` service in
-`compose.yaml`; see the [application Compose instructions](../../README.md#application-compose).
+`compose.yaml`; see the [README quick start](../../README.md#quick-start).
 `docker compose run --rm bitwarden inspect` verifies access and closes its session.
 `docker compose run --rm bitwarden connect` joins native vault, guarded browser,
 selected-account notice acquisition and the saved-input dry run on AMD64. It uses
@@ -177,20 +181,22 @@ of saved calendars qualifies planning, not a fresh session or actual acquisition
 with this option; its live qualification remains separate from existing historical
 acquisition evidence. Ordinary `connect` remains guarded as described below.
 
-## Current connection command boundary
+## Dedicated lab script: current connect refusal boundary
 
 ```sh
 .venv/bin/python scripts/source_connection.py connect
 ```
 
-This is a deliberate refusal boundary, not an implemented credential-delivery
-command. It currently returns code2 and
+For the private lab source-checkout script, this is a deliberate refusal boundary,
+not an implemented credential-delivery command. It currently returns code2 and
 `SOURCE_AUTHENTICATED_REPLAY_NOT_QUALIFIED`, together with missing roles and
 account-binding counts. It makes no vault/broker request. The command must become
 an authenticated entrypoint only after the existing source/core/provider gates
 are implemented and verified; changing the code or clearing an old journal to
 make it return success is not qualification. A future session resumes from the
 saved app source and named gaps instead of repeating vault/public exploration.
+This refusal describes `scripts/source_connection.py connect`, not the released
+Docker Compose `bitwarden connect` entrypoint documented in the README.
 
 The credential-free form observation is available through the same entrypoint:
 
