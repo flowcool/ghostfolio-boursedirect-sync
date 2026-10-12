@@ -321,6 +321,25 @@ The same contract describes the private vault worker and isolated synthetic
 credential/OTP composition. Its retained [qualification evidence](docs/verification/vault-composition.yaml)
 records implementation hashes and results so unchanged checks can be reused.
 
+## Daily saved-acquisition Compose preview
+
+The [daily preview service](compose.daily.yaml) packages the Python analysis stage
+with read-only original inputs and a persistent private journal. It discovers
+saved documents from completed acquisition folders; no document list is required.
+It runs without vault credentials or network access.
+
+```sh
+install -d -m 700 tmp/daily-compose
+docker compose -f compose.daily.yaml build preview
+DAILY_CONFIG=account/daily.yaml docker compose -f compose.daily.yaml run --rm preview
+```
+
+The private work directory must belong to UID/GID 1000. A completed preview exits
+2, including retained financial blockers. The [daily contract](docs/design/daily-saved-input-preview.md#compose-execution)
+explains configuration, persistent state, date replay and scheduling boundaries.
+Acquisition, a fresh destination snapshot and financial application remain
+separate stages; this command does not activate them.
+
 ## Application Compose
 
 The native [Compose](compose.yaml) builds the community Bitwarden CLI connector

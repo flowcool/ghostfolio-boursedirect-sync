@@ -52,7 +52,9 @@ captures and other accounts' bodies are not read. These private receipts describ
 completed saved sessions; they do not establish today's acquisition cutoff.
 Existing financial refusal, currency and corporate-action boundaries still apply.
 
-The explicit broker calendar day defines an inclusive 90-day window. All supplied
+The broker calendar day defines an inclusive 90-day window. `--as-of` supplies an
+explicit replay day; omitting it selects today in `Europe/Paris`. This local clock
+does not establish source acquisition freshness or financial date semantics. All supplied
 closed periods are validated before window selection; out-of-window sources can
 provide catch-up evidence. Future/current monthly statements are refused. The
 report exposes `window_source_events` separately from whole-period reconciliation.
@@ -151,6 +153,43 @@ so an interrupted report can be regenerated with the same saved inputs. Neither
 file proves a remote write. Input, aggregate, document-count, retained-state and
 report-size limits apply. A malformed journal, reversed calendar day, source
 account mismatch or occupied lock refuses rather than resetting progress.
+
+## Compose execution
+
+`Dockerfile.daily` packages the same Python 3.13 program and pinned runtime
+requirements. `compose.daily.yaml` runs it without a vault session, credentials
+or network access. It does not start broker authentication, fetch a destination
+snapshot or apply activities. Existing collector Compose remains separately
+invoked; this addition delivers the saved-acquisition analysis stage.
+
+Prepare an existing private input tree with an acquisition-directory configuration
+and complete saved snapshot, plus a private persistent work directory owned by
+UID/GID 1000:
+
+```sh
+install -d -m 700 tmp/daily-compose
+docker compose -f compose.daily.yaml build preview
+DAILY_CONFIG=account/daily.yaml docker compose -f compose.daily.yaml run --rm preview
+```
+
+`DAILY_INPUT_DIR` selects the original input tree (default `./inputs`), mounted
+read-only at `/inputs`. `DAILY_WORK_DIR` selects the retained private work tree
+(default `./tmp/daily-compose`), mounted at `/work`. Neither directory is silently
+created by Compose. Its `state/` journals, bindings and locks and `outputs/`
+reports survive container removal and repeated scheduled invocations. Use separate
+work trees for environments; never mount production runtime state into a lab.
+`BOURSEDIRECT_DAILY_IMAGE` optionally selects a built, pinned daily image.
+No host environment or credentials are forwarded to the runtime. The container
+runs without root, Linux capabilities, network or writable image filesystem.
+Do not change the saved document/snapshot inputs while a preview is running.
+
+An infrastructure-owned daily job may invoke the same command; it evaluates
+Europe/Paris's current day without editing the config. No scheduler or production
+service is installed by this repository change. Historical replay overrides the
+command with the same flags plus `--as-of YYYY-MM-DD`. Exit 2 means a completed
+preview, including retained blockers; it is not financial readiness. Exit 1 means
+refusal. Persist private journals and inspect the fixed counts/codes before
+retrying a refused preview; original documents remain read-only.
 
 Rollback: stop local preview writers and revert the scoped runtime change.
 Retain original documents, snapshot, binding and journal. If a newly created

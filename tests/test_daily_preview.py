@@ -288,3 +288,33 @@ def test_cli_exposes_counts_only(capsys):
 def test_invalid_window_day_refuses(day):
     setup()
     with pytest.raises(RuntimeError, match='INVALID_DAILY_PREVIEW_DAY'): run(day)
+
+
+def test_cli_default_day_uses_broker_clock_and_keeps_readiness_false(monkeypatch, capsys):
+    config = setup()
+    monkeypatch.setattr(bd, 'daily_preview_today', lambda: '2026-10-12')
+    assert bd.main(['daily-preview', '--config', 'inputs/config.yaml', '--input-root', 'inputs',
+                    '--max-bytes', '1000000', '--max-depth', '32']) == 2
+    report = yaml.safe_load(paths(config)[1].read_bytes())
+    assert report['window']['last_day'] == '2026-10-12' and report['import_ready'] is False
+    assert 'false' in capsys.readouterr().out.lower()
+
+
+def test_cli_explicit_replay_day_does_not_consume_today(monkeypatch):
+    config = setup()
+    def forbidden(): raise AssertionError('Explicit replay must not use today')
+    monkeypatch.setattr(bd, 'daily_preview_today', forbidden)
+    assert bd.main(['daily-preview', '--config', 'inputs/config.yaml', '--input-root', 'inputs',
+                    '--as-of', '2026-10-13', '--max-bytes', '1000000', '--max-depth', '32']) == 2
+    assert yaml.safe_load(paths(config)[1].read_bytes())['window']['last_day'] == '2026-10-13'
+
+
+@pytest.mark.parametrize('instant', ['2026-07-12T22:30:00+00:00', '2026-01-12T23:30:00+00:00'])
+def test_default_day_crosses_midnight_in_broker_summer_and_winter_time(instant):
+    from datetime import datetime
+    from unittest.mock import patch
+    moment = datetime.fromisoformat(instant)
+    with patch.object(bd, 'datetime') as clock:
+        clock.now.side_effect = lambda zone: moment.astimezone(zone)
+        assert bd.daily_preview_today() == instant[:8] + '13'
+        assert clock.now.call_args.args[0].key == 'Europe/Paris'

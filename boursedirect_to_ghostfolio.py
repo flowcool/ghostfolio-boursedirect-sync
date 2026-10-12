@@ -17,6 +17,7 @@ import ssl
 import sys
 import uuid
 from urllib.parse import parse_qs, urljoin, urlsplit
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup, Comment
 import yaml
@@ -1510,6 +1511,10 @@ def reconcile_local_coupons(config_path, input_root, output, max_bytes, max_dept
         for status in sorted({o["status"] for o in artifact["observations"].values()})}
     return {"coupons": len(artifact["observations"]), "status_counts": counts,
             "import_ready": False, "blockers": artifact["blockers"]}
+
+
+def daily_preview_today():
+    return datetime.now(ZoneInfo("Europe/Paris")).date().isoformat()
 
 
 def daily_preview_day(value):
@@ -3703,7 +3708,7 @@ def main(argv=None):
     daily = subparsers.add_parser("daily-preview", help="Recompute private 90-day saved-input coverage and retain exceptions")
     daily.add_argument("--config", required=True)
     daily.add_argument("--input-root", required=True)
-    daily.add_argument("--as-of", required=True, help="Explicit broker calendar day, YYYY-MM-DD")
+    daily.add_argument("--as-of", help="Broker calendar day, YYYY-MM-DD; defaults to today in Europe/Paris")
     daily.add_argument("--max-bytes", type=int, required=True)
     daily.add_argument("--max-depth", type=int, required=True)
     prepare = subparsers.add_parser("prepare", help="Prepare a private internal review plan, never an API payload")
@@ -3760,7 +3765,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "daily-preview":
-            print(json.dumps(preview_local_daily(args.config, args.input_root, args.as_of,
+            print(json.dumps(preview_local_daily(args.config, args.input_root, args.as_of if args.as_of is not None else daily_preview_today(),
                 args.max_bytes, args.max_depth), sort_keys=True))
             return 2
         if args.command == "reconcile-coupons":
