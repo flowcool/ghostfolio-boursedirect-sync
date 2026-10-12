@@ -31,9 +31,17 @@ def run_notices():
 def test_explicit_acquisition_binding_reaches_configured_destination():
     config = setup_notices()
     mutate(Path('inputs/run-a/qualification.yaml'), 'account_binding', config['account'])
+    mutate(Path('inputs/run-a/qualification.yaml'), 'import_account_config_sha256', 'a' * 64)
     run_notices()
     rows = json.loads(report(config)['candidate_export'])['activities']
     assert rows and all(row['accountId'] == config['account']['target_account_id'] for row in rows)
+
+
+def test_configured_acquisition_receipt_cannot_drop_its_account_binding():
+    setup_notices()
+    mutate(Path('inputs/run-a/qualification.yaml'), 'import_account_config_sha256', 'a' * 64)
+    with pytest.raises(RuntimeError, match='^DAILY_ACQUISITION_RUN_UNVERIFIED$'): run_notices()
+    assert not list(Path('outputs').glob('daily-notices-*.yaml'))
 
 
 @pytest.mark.parametrize('key,value', [('target_account_id', 'another-destination'),

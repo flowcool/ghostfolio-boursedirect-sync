@@ -2109,6 +2109,8 @@ def discover_daily_acquisitions(config, input_root, as_of, max_bytes, max_depth)
         root = Path(directory)
         raw = read(root / "qualification.yaml")
         receipt = parse_keyed_yaml(raw)
+        if "import_account_config_sha256" in receipt and "account_binding" not in receipt:
+            fail("DAILY_ACQUISITION_RUN_UNVERIFIED")
         if "account_binding" in receipt and receipt["account_binding"] != account:
             fail("DAILY_ACQUISITION_RUN_UNVERIFIED")
         if (receipt.get("schema_version") != 1 or type(receipt.get("schema_version")) is not int

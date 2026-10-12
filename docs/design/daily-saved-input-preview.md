@@ -73,6 +73,13 @@ binding in its private receipt; the importer refuses a different source,
 namespace or destination binding. Selected-reference verification supplies the
 post-login account evidence without requiring a second account.
 
+A configured receipt that retains its configuration hash but lacks the account
+binding refuses; it cannot fall back to historical receipt handling. Historical
+source-only receipts remain usable for diagnostic previews with an explicit
+importer binding. They do not attest a destination chosen during acquisition,
+and their candidate exports never authorize financial application. The separate
+qualified application keeps its exact account/source and frozen-review gates.
+
 This selection supports the existing PEA and PEA-PME document profiles, including
 multiple broker accounts of one type. Other account types are not qualified.
 Without `--account-config`, the original two-account qualification remains
