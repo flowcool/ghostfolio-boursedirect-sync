@@ -92,8 +92,8 @@ It applies only to this nonfinancial index. Financial notes still use the unchan
 strict declared-encoding reader; original index and note bytes remain untouched.
 
 `current_period_observations` exposes the inventory, byte hashes, parsed source
-fields and conservative nearby destination candidates. A missing-ISIN note retains
-its refusal and is not converted. Source execution-price currency remains unknown;
+fields and conservative nearby destination candidates. A note without source ISIN
+is explicitly skipped and has no destination candidates or financial conversion. Source execution-price currency remains unknown;
 target-profile currency never fills it. Candidates retain original timestamps,
 fee differences and context flags; none is classified as certain, new or adopted.
 This path does not manufacture a monthly ledger, cash controls, holding movements,
@@ -103,39 +103,27 @@ exception journal when inputs disappear or age out. A parsed note's closed-sourc
 dependency can resolve only when a later fully matched closed statement includes
 the exact retained note hash; destination and application gates remain separate.
 
-### Standalone custody-fee boundary
+### Missing source ISIN policy
 
-Daily preview recognizes only the observed standalone three-slot custody-note
-shape: one booking day, `DROITS DE GARDE`, an empty security slot, a
-`CONSERV ETG YYYYTn` reference (year and quarter), and a strictly
-positive debit with empty credit and blank surrounding slots. Exact ledger
-headers establish EUR. The report retains `custody_fee_observation` with no ISIN,
-no financial conversion and nearby account-bound FEE candidates marked uncertain.
-The original parser refusal remains unresolved; recognition does not enable
-financial preparation or clear monthly controls.
+Operations without source ISIN are excluded from import candidates, regardless of
+label. This includes standalone custody charges and cash coupons without ISIN;
+the importer does not manufacture a security, fee category or corporate-action
+conversion. A present but invalid ISIN still refuses. Unknown operations with a
+valid ISIN retain the existing affected-period refusal.
 
-Standalone custody debits remain unsupported importer inputs. An owned disposable
-Ghostfolio 3.83.0 qualification establishes a native representation for a separately
-reviewed fee: `type: FEE`, `dataSource: MANUAL`, a stable category UUID as `symbol`,
-`quantity: 1`, `unitPrice: 0` and the exact positive source cash debit as `fee`.
-The category UUID identifies the fee category, not a security or an inferred ISIN.
-Currency and booking day need their own source evidence. Midnight UTC is a wire
-representation of a reviewed booking day, not evidence of the source execution time.
+Closed-period exclusion requires one-to-one matching of the saved note and
+statement by account, month, booking day, source label and exact debit/credit.
+Missing, duplicate, conflicting or ambiguous matches refuse. Skipped cash remains
+in the original monthly balance controls and ledger identity. Exclusion changes
+candidate selection, not the source accounting or source-revision protection.
+`skipped_source_operations` exposes each excluded closed-period operation with
+its source slot, date, label, cash and `SOURCE_ISIN_ABSENT` reason.
 
-The qualified native import preserves the explicit account, MANUAL profile, date,
-currency and fee on readback. Replaying identical bytes creates zero new activities;
-account balances remain unchanged and owned activity deletion restores the empty
-lab. A free-text description as an explicit MANUAL symbol is rejected. These
-observations qualify destination behavior, not automatic source conversion,
-current-period completeness or production application.
-
-Native duplicate detection can suppress an otherwise identical activity in another
-account. Future fee preparation must therefore use an account-bound source marker
-and reconcile the exact returned account and stored activity; HTTP success or an
-empty created-activity list cannot establish cross-account acceptance. Reuse the
-[reviewed-wire and acceptance boundary](offline-wire.md) rather than dispatching
-directly from the current-period observation. An unidentified cash debit still
-retains its refusal; it must not be classified as a fee just to remove an exception.
+Current notes without ISIN expose `SKIPPED_NO_ISIN`, the retained source hash and
+cash, and empty destination candidates. Their original exception-journal entry
+remains retained as `resolved_by_saved_evidence`; disappearance of a file cannot
+clear unrelated uncertainty. This observation does not establish monthly
+completeness, import readiness or destination acceptance.
 
 An unsupported or malformed daily note records its fixed refusal code as an
 unresolved source exception for that period, with the original source digests

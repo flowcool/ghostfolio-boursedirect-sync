@@ -99,7 +99,7 @@ def test_missing_note_security_quarantines_only_its_period_and_retains_prior_des
     run()
     report = bd.parse_keyed_yaml(paths(config)[1].read_bytes())
     assert report['last_completed_acquisition_period'] == '2026-09'
-    assert report['exceptions']['2026-08:source']['code'] == 'INVALID_NOTE_SECURITY'
+    assert report['exceptions']['2026-08:source']['code'] == 'SKIPPED_NOTE_CONTEXT_CONFLICT'
     assert report['exceptions']['2026-09:destination']['status'] == 'unresolved'
     assert '2026-08' not in report['missing_closed_statement_periods']
     assert '2026-08' in report['unqualified_observed_closed_periods']
@@ -318,3 +318,12 @@ def test_default_day_crosses_midnight_in_broker_summer_and_winter_time(instant):
         clock.now.side_effect = lambda zone: moment.astimezone(zone)
         assert bd.daily_preview_today() == instant[:8] + '13'
         assert clock.now.call_args.args[0].key == 'Europe/Paris'
+
+
+def test_note_account_mismatch_refuses_command_without_publishing_state():
+    config = setup(coupon=True)
+    note = Path('inputs/note.html')
+    note.write_text(note.read_text().replace(config['account']['source_account_ref'], 'OTHER_SOURCE_ACCOUNT'))
+    with pytest.raises(RuntimeError, match='^DAILY_SOURCE_ACCOUNT_CONFLICT$'):
+        run()
+    assert not any(path.exists() for path in paths(config))

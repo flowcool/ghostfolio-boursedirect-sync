@@ -56,7 +56,13 @@ contains counts, readiness and gate codes.
 The artifact has `artifact_kind: internal_activity_review_not_api_payload`, keyed
 activities, source digests, `import_ready: false`, and explicit remote-adoption/API
 blockers. No prepare run removes these blocks. Unknown operation periods are not
-silently skipped. Production writes, remote existing-activity adoption and isolated
+silently skipped. The explicit operator policy excludes notes without source ISIN
+only after exact account/month/day/label/cash matching to the monthly statement.
+Their cash remains in balance controls and ledger identities; raw-source replay
+rederives the exclusion. Present invalid ISINs and ambiguous matches refuse, and
+unknown operations with valid ISIN still block their period. The daily preview
+lists excluded operations; preparation emits no fee or synthetic security for them.
+Production writes, remote existing-activity adoption and isolated
 API/date/wire-number tests remain separate gates; there is no apply command.
 
 Synthetic end-to-end tests cover reprepare/renaming, financial label revisions,

@@ -311,8 +311,10 @@ def contract_note_ledger(soup):
     return candidates[0]
 
 
-def parse_contract_note(html, max_depth, include_coupons=False):
+def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isin=False):
     if type(include_coupons) is not bool:
+        fail("INVALID_NOTE_INSPECTION_MODE")
+    if type(skip_missing_isin) is not bool:
         fail("INVALID_NOTE_INSPECTION_MODE")
     if max_depth <= 0:
         fail("INVALID_DEPTH_LIMIT")
@@ -343,7 +345,7 @@ def parse_contract_note(html, max_depth, include_coupons=False):
     if len(lengths) != 1:
         fail("UNEQUAL_COLUMN_LENGTHS")
     count = len(vectors[0])
-    if not count or not include_coupons and count % 9:
+    if not count or not (include_coupons or skip_missing_isin) and count % 9:
         fail("UNSUPPORTED_NOTE_GROUP_LENGTH")
     groups = []
     labels = {"ACHAT COMPTANT": "BUY", "ACHAT ETRANGER": "BUY", "VENTE COMPTANT": "SELL"}
@@ -355,7 +357,7 @@ def parse_contract_note(html, max_depth, include_coupons=False):
         if len(initial) != 1:
             fail("UNSUPPORTED_NOTE_SLOT")
         coupon = include_coupons and text(initial[0]).startswith("COUPONS ")
-        unknown = include_coupons and not coupon and not any(
+        unknown = (include_coupons or skip_missing_isin) and not coupon and not any(
             text(initial[0]).startswith(label + " ") for label in labels)
         size = 6 if coupon else 9
         if unknown:
@@ -402,14 +404,17 @@ def parse_contract_note(html, max_depth, include_coupons=False):
         header = fields(1)
         if header[0] not in labels and not (coupon and header[0] == "COUPONS") and not unknown:
             fail("UNSUPPORTED_NOTE_OPERATION")
-        if not valid_isin(header[1]) or not header[2]:
+        skipped = skip_missing_isin and not header[1]
+        if not skipped and (not valid_isin(header[1]) or not header[2]):
             fail("INVALID_NOTE_SECURITY")
-        kind = "UNKNOWN" if unknown else "COUPON" if coupon else labels[header[0]]
-        note = {"slot": start + 1, "kind": kind, "isin": header[1], "name": header[2],
+        kind = "SKIPPED_NO_ISIN" if skipped else "UNKNOWN" if unknown else "COUPON" if coupon else labels[header[0]]
+        note = {"slot": start + 1, "kind": kind, "isin": header[1] or None, "name": header[2],
                 "date": parse_date(text(slots[1][0][0])), "net_currency": "EUR",
                 "price_currency": None}
-        if unknown:
+        if unknown or skipped:
             note.update(source_kind=header[0], source_fields=[], gross_semantics_verified=False)
+            if skipped:
+                note.update(skip_reason="SOURCE_ISIN_ABSENT", financial_conversion=False)
             for offset in range(3, size):
                 cell = slots[offset][1][0]
                 if text(cell) or cell.find("table"):
@@ -505,13 +510,35 @@ def parse_contract_note(html, max_depth, include_coupons=False):
     return {"account_ref": accounts[0], "notes": groups, "slot_count": count}
 
 
+def match_missing_isin_skips(statement, documents):
+    """Bind exclusions to the original cash ledger without removing its rows."""
+    validate_ledger(statement["controls"], statement["events"])
+    if any(doc["account_ref"] != statement["account_ref"] for doc in documents):
+        fail("NOTE_ACCOUNT_MISMATCH")
+    skipped = [n for doc in documents for n in doc["notes"] if n["kind"] == "SKIPPED_NO_ISIN"]
+    aliases = {"ACHAT COMPTANT": "ACH CPT", "ACHAT ETRANGER": "ACH CPT", "VENTE COMPTANT": "VTE CPT"}
+    candidates = []
+    for note in skipped:
+        if note["isin"] is not None or note["date"].strftime("%Y-%m") != statement["period"]:
+            fail("SKIPPED_NOTE_CONTEXT_CONFLICT")
+        label = (aliases.get(note["source_kind"], note["source_kind"]) + " " + note["name"]).strip()
+        candidates.append([i for i, event in enumerate(statement["events"])
+                           if event["label"] == label and all(event[k] == note[k] for k in ("date", "debit", "credit"))])
+    uses = {i: sum(i in group for group in candidates) for i in range(len(statement["events"]))}
+    if any(len(group) != 1 or uses[group[0]] != 1 for group in candidates):
+        fail("SKIPPED_NOTE_MATCHING_NOT_COMPLETE")
+    excluded = {group[0] for group in candidates}
+    return {**statement, "events": [{**event, "skip_reason": "SOURCE_ISIN_ABSENT"} if i in excluded else dict(event)
+                                   for i, event in enumerate(statement["events"])]}
+
+
 def match_trade_notes(statement, documents):
     if any(d["account_ref"] != statement["account_ref"] for d in documents):
         fail("NOTE_ACCOUNT_MISMATCH")
-    notes = [n for d in documents for n in d["notes"]]
+    notes = [n for d in documents for n in d["notes"] if n["kind"] != "SKIPPED_NO_ISIN"]
     if any(n["kind"] not in ("BUY", "SELL") for n in notes):
         fail("NON_TRADE_NOTES_REQUIRE_SEPARATE_REVIEW")
-    trades = [e for e in statement["events"] if e["kind"] in ("BUY", "SELL")]
+    trades = [e for e in statement["events"] if e["kind"] in ("BUY", "SELL") and not e.get("skip_reason")]
     keys = ("date", "kind", "unit_price", "debit", "credit")
     candidates = [[i for i, n in enumerate(notes)
                    if all(e[k] == n[k] for k in keys)
@@ -544,7 +571,8 @@ def convert_matched_trades(statement, documents, account, mappings):
             fail("ACCOUNT_CONFIGURATION_MISSING")
     if statement["account_ref"] != account["source_account_ref"]:
         fail("SOURCE_ACCOUNT_MISMATCH")
-    if any(e["kind"] not in ("BUY", "SELL") for e in statement["events"]):
+    statement = match_missing_isin_skips(statement, documents)
+    if any(e["kind"] not in ("BUY", "SELL") and not e.get("skip_reason") for e in statement["events"]):
         fail("UNSUPPORTED_OPERATION_PERIOD")
     if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
         fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
@@ -613,7 +641,7 @@ def review_coupon_cash(statement, documents):
         fail("NOTE_ACCOUNT_MISMATCH")
     if any(n["date"].strftime("%Y-%m") != statement["period"] for d in documents for n in d["notes"]):
         fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
-    events = [e for e in statement["events"] if e["label"].startswith("COUPONS ")]
+    events = [e for e in statement["events"] if e["label"].startswith("COUPONS ") and not e.get("skip_reason")]
     notes = [n for d in documents for n in d["notes"] if n["kind"] == "COUPON"]
     if not events or not notes:
         fail("COUPON_EVIDENCE_MISSING")
@@ -650,7 +678,7 @@ def review_coupon_cash(statement, documents):
             "source_fields": {k: canonical_decimal(note[k]) for k in ("quantity", "unit_gross", "gross", "commission")},
             "tax_credit": canonical_decimal(tax_credit) if tax_credit is not None else None,
             "withholding": None, "gross_semantics_verified": False, "import_ready": False}
-    unsupported = sum(e["kind"] not in ("BUY", "SELL") and not e["label"].startswith("COUPONS ")
+    unsupported = sum(e["kind"] not in ("BUY", "SELL") and not e["label"].startswith("COUPONS ") and not e.get("skip_reason")
                       for e in statement["events"])
     blockers = ["DIVIDEND_DESTINATION_MAPPING_AND_API_QUALIFICATION_REQUIRED",
                 "COMPLETE_PERIOD_CONVERSION_REQUIRED", "DESTINATION_RECONCILIATION_REQUIRED"]
@@ -705,7 +733,7 @@ def validate_account_key(account_key):
 def ledger_identity(statement, account_key):
     """Private semantic snapshot; preserves identical occurrences without guessing."""
     validate_account_key(account_key)
-    if any(e["kind"] not in ("BUY", "SELL") for e in statement["events"]):
+    if any(e["kind"] not in ("BUY", "SELL") and not e.get("skip_reason") for e in statement["events"]):
         fail("UNSUPPORTED_OPERATION_PERIOD")
     if any(e["date"].strftime("%Y-%m") != statement["period"] for e in statement["events"]):
         fail("OPERATION_OUTSIDE_STATEMENT_MONTH")
@@ -714,9 +742,10 @@ def ledger_identity(statement, account_key):
     events = []
     normalized = []
     for event in statement["events"]:
-        facts = ["v1", statement["period"], event["date"].isoformat(), event["kind"],
+        fields = ("debit", "credit") if event.get("skip_reason") else ("quantity", "unit_price", "debit", "credit")
+        facts = ["v1", statement["period"], event["date"].isoformat(), "SKIPPED_NO_ISIN" if event.get("skip_reason") else event["kind"],
                  event["label"], *[canonical_decimal(event[k]) for k in
-                                   ("quantity", "unit_price", "debit", "credit")]]
+                                   fields]]
         encoded = json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
         occurrences[encoded] = occurrences.get(encoded, 0) + 1
         occurrence = occurrences[encoded]
@@ -1138,7 +1167,8 @@ def compute_prepared_sources(config_raw, documents, max_bytes, max_depth):
         if statement["period"] in seen_periods:
             fail("DUPLICATE_STATEMENT_PERIOD")
         seen_periods.add(statement["period"])
-        notes = [parse_contract_note(decode_document(raw), max_depth) for raw in capture["notes"]]
+        notes = [parse_contract_note(decode_document(raw), max_depth, skip_missing_isin=True) for raw in capture["notes"]]
+        statement = match_missing_isin_skips(statement, notes)
         activities = convert_matched_trades(statement, notes, account, config["mappings"])
         snapshot = ledger_identity(statement, account["account_key"])
         identities = {e["source_slot"]: e["id"] for e in snapshot["events"]}
@@ -1583,52 +1613,6 @@ def daily_current_metadata(raw, body, account, role):
     return metadata
 
 
-def inspect_custody_note(soup, day):
-    """Recognize the observed standalone debit without enabling conversion."""
-    rows = direct_rows(contract_note_ledger(soup))
-    if len(rows) != 2 or len(cells(rows[1])) != 4:
-        return None
-    vectors = []
-    for column in cells(rows[1]):
-        tables = column.find_all("table", recursive=False)
-        if len(tables) != 1 or any(getattr(c, "name", None) not in (None, "table") for c in column.children):
-            return None
-        reject_direct_text(column, "UNSUPPORTED_COLUMN_STRUCTURE")
-        vector = direct_rows(tables[0])
-        if len(vector) != 3 or any(len(cells(row)) != 1 for row in vector):
-            return None
-        vectors.append(vector)
-    for column, vector in enumerate(vectors):
-        for slot, row in enumerate(vector):
-            cell = cells(row)[0]
-            if slot != 1 and (text(cell) or cell.find("table")):
-                return None
-            if slot == 1 and column != 1 and cell.find("table"):
-                return None
-    descriptor = cells(vectors[1][1])[0]
-    tables = descriptor.find_all("table", recursive=False)
-    if len(tables) != 1 or any(getattr(c, "name", None) not in (None, "table") for c in descriptor.children):
-        return None
-    reject_direct_text(descriptor, "UNSUPPORTED_NOTE_STRUCTURE")
-    detail = direct_rows(tables[0])
-    if len(detail) != 1 or len(cells(detail[0])) != 3 or any(c.find("table") for c in cells(detail[0])):
-        return None
-    label, security, reference = map(text, cells(detail[0]))
-    if label != "DROITS DE GARDE" or security or not re.fullmatch(r"CONSERV ETG [1-9][0-9]{3}T[1-4]", reference):
-        return None
-    if parse_date(text(cells(vectors[0][1])[0])).isoformat() != day or text(cells(vectors[3][1])[0]):
-        return None
-    debit_text = text(cells(vectors[2][1])[0])
-    if not debit_text:
-        return None
-    debit = parse_decimal(debit_text, cash=True)
-    if debit <= 0:
-        return None
-    return {"kind": "FEE", "source_kind": "DROITS DE GARDE", "source_reference": reference,
-            "date": day, "isin": None, "debit": canonical_decimal(debit), "cash_currency": "EUR",
-            "financial_conversion": False, "destination_candidates": []}
-
-
 def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_depth):
     """Account-bound inventory and note observations, never financial preparation."""
     entry, account = config["current_period"], config["account"]
@@ -1725,7 +1709,7 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
         observation = {"note_sha256": note_meta["sha256"], "metadata_sha256": hashlib.sha256(capture[day + ":metadata"]).hexdigest(), "operation_date": day, "notes": []}
         code = "CURRENT_NOTE_REQUIRES_CLOSED_STATEMENT"
         try:
-            parsed = parse_contract_note(html, max_depth, include_coupons=True)
+            parsed = parse_contract_note(html, max_depth, include_coupons=True, skip_missing_isin=True)
         except RuntimeError as error:
             code = str(error)
             observation["operation_date_verified"] = False
@@ -1743,18 +1727,6 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
                 if not source_days or any(value != day for value in source_days):
                     fail("CURRENT_NOTE_DAY_CONFLICT")
                 observation["operation_date_verified"] = True
-                custody = inspect_custody_note(note_soup, day)
-                if custody is not None:
-                    comparisons += len(remote)
-                    if comparisons > 1000000:
-                        fail("DAILY_CURRENT_COMPARISON_LIMIT_EXCEEDED")
-                    for row in remote:
-                        if (row["target_account_id"] == account["target_account_id"] and row["kind"] == "FEE"
-                                and abs((datetime.fromisoformat(row["operation_date"]).date() - daily_preview_day(day)).days) <= 1):
-                            custody["destination_candidates"].append({"remote_id": row["remote_id"],
-                                "original_timestamp": timestamps[row["remote_id"]], "remote_currency": row["price_currency"],
-                                "remote_fee": canonical_decimal(row["fee"]), "certain_match": False})
-                    observation["custody_fee_observation"] = custody
         else:
             if any(note["date"].isoformat() != day for note in parsed["notes"]):
                 fail("CURRENT_NOTE_DAY_CONFLICT")
@@ -1786,9 +1758,11 @@ def inspect_daily_current(config, capture, snapshot_raw, remote, as_of, max_dept
                                     "fee_delta_remote_minus_source": fee_delta,
                                     "certain_match": False})
                 observation["notes"].append(record)
+        if observation["notes"] and all(n["kind"] == "SKIPPED_NO_ISIN" for n in observation["notes"]):
+            code = "SKIPPED_NO_ISIN"
         observation["code"] = code
         observations[day] = observation
-        exceptions[key] = {"period": entry["period"], "operation_date": day, "status": "unresolved", "code": code, "note_sha256": note_meta["sha256"]}
+        exceptions[key] = {"period": entry["period"], "operation_date": day, "status": "resolved_by_saved_evidence" if code == "SKIPPED_NO_ISIN" else "unresolved", "code": code, "note_sha256": note_meta["sha256"]}
     return {"period": entry["period"], "index_sha256": hashlib.sha256(raw).hexdigest(), "index_metadata_sha256": hashlib.sha256(capture["index_metadata"]).hexdigest(),
             "index_encoding": entry["index_encoding"], "offered_note_days": sorted(offered), "every_offered_note_retained": True,
             "notes": observations, "through_day_verified": False, "monthly_cash_controls_verified": False, "import_ready": False}, exceptions
@@ -1831,6 +1805,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
     reviews = {}
     trade_observations = {}
     window_events = {}
+    skipped_operations = {}
     seen = set()
     for alias, capture in documents.items():
         statement = parse_statement(decode_document(capture["statement"]), max_depth)
@@ -1858,17 +1833,25 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
                   "complete_source_matching": False}
         problems = {}
         try:
-            notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in capture["notes"]]
+            notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True, skip_missing_isin=True) for raw in capture["notes"]]
+            statement = match_missing_isin_skips(statement, notes)
         except RuntimeError as error:
+            if str(error) == "NOTE_ACCOUNT_MISMATCH":
+                fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
             # Retain a refused period; never invent missing security identity or
             # promote a partially parsed note to source-complete evidence.
             notes = None
             problems["source"] = str(error)
+        if notes is not None:
+            skipped_operations[period] = [{"source_slot": e["slot"], "operation_date": e["date"].isoformat(),
+                "source_label": e["label"], "debit": canonical_decimal(e["debit"]), "credit": canonical_decimal(e["credit"]),
+                "currency": "EUR", "skip_reason": "SOURCE_ISIN_ABSENT", "financial_conversion": False}
+                for e in statement["events"] if e.get("skip_reason")]
         if notes is not None and any(n["account_ref"] != account["source_account_ref"] for n in notes):
             fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
         if notes is None:
             pass
-        elif all(event["kind"] in ("BUY", "SELL") for event in statement["events"]):
+        elif all(event["kind"] in ("BUY", "SELL") or event.get("skip_reason") for event in statement["events"]):
             one = {k: v for k, v in config.items() if k not in ("snapshot", "current_period")}
             one["documents"] = {alias: config["documents"][alias]}
             try:
@@ -1891,8 +1874,8 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
             else:
                 # Mixed/unknown periods cannot become complete through coupon-only matching.
                 source["complete_source_matching"] = (bool(statement["events"])
-                    and all(e["label"].startswith("COUPONS ") for e in statement["events"])
-                    and all(n["kind"] == "COUPON" for doc in notes for n in doc["notes"]))
+                    and all(e["label"].startswith("COUPONS ") or e.get("skip_reason") for e in statement["events"])
+                    and all(n["kind"] in ("COUPON", "SKIPPED_NO_ISIN") for doc in notes for n in doc["notes"]))
                 if not source["complete_source_matching"]:
                     problems["source"] = "COMPLETE_PERIOD_CONVERSION_REQUIRED"
         journal["periods"][period] = source
@@ -1942,7 +1925,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
               "unqualified_observed_closed_periods": [p for p in gaps if p in journal["periods"]],
               "current_period_through_day_verified": False, "resume_requires_catchup": bool(stale),
               "exceptions": unresolved, "trade_observations": trade_observations, "coupon_observations": coupons,
-              "window_source_events": window_events,
+              "window_source_events": window_events, "skipped_source_operations": skipped_operations,
               "snapshot_sha256": hashlib.sha256(snapshot_raw).hexdigest(), "import_ready": False,
               "blockers": ["CURRENT_PERIOD_CUTOFF_UNVERIFIED", "FINANCIAL_APPLICATION_NOT_ACTIVATED"]}
     if gaps:
