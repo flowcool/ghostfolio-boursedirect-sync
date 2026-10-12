@@ -8,11 +8,12 @@ import socket
 
 import pytest
 import yaml
+from bs4 import BeautifulSoup
 
 import boursedirect_to_ghostfolio as bd
 from test_prepare import setup as trade_setup
 from test_coupon_cash import statement_html
-from test_contract_notes import coupon_source
+from test_contract_notes import coupon_source, field
 from test_coupon_reconciliation import source, row
 
 
@@ -80,6 +81,46 @@ def test_failed_source_matching_cannot_advance_coverage():
     saved = yaml.safe_load(paths(config)[1].read_text())
     assert saved['last_completed_acquisition_period'] is None
     assert saved['exceptions']['2026-09:source']['code'] == 'SECURITY_MAPPING_MISSING'
+
+
+def test_missing_note_security_quarantines_only_its_period_and_retains_prior_destination_exception():
+    config = setup()
+    run()
+    # A valid earlier statement plus a coupon note lacking ISIN reproduces the
+    # actual August boundary without using personal documents in the test suite.
+    html = statement_html().replace('SYNTHETIC_ACCOUNT', config['account']['source_account_ref'])
+    html = html.replace('17/09/2026', '17/08/2026').replace('31/08/2026', '31/07/2026').replace('30/09/2026', '31/08/2026')
+    Path('inputs/august.html').write_text(html)
+    note = BeautifulSoup(coupon_source(), 'html.parser')
+    field(note, 1, 1).string = ''
+    Path('inputs/august-note.html').write_text(str(note))
+    config['documents']['august'] = {'statement': 'august.html', 'notes': ['august-note.html']}
+    write(config)
+    run()
+    report = bd.parse_keyed_yaml(paths(config)[1].read_bytes())
+    assert report['last_completed_acquisition_period'] == '2026-09'
+    assert report['exceptions']['2026-08:source']['code'] == 'INVALID_NOTE_SECURITY'
+    assert report['exceptions']['2026-09:destination']['status'] == 'unresolved'
+    assert '2026-08' not in report['missing_closed_statement_periods']
+    assert '2026-08' in report['unqualified_observed_closed_periods']
+    state = bd.parse_keyed_yaml(paths(config)[0].read_bytes())
+    assert state['periods']['2026-08']['complete_source_matching'] is False
+    assert state['periods']['2026-08']['note_sha256']
+    journal, output = paths(config)
+    before = journal.read_bytes(), output.read_bytes()
+    run()
+    assert before == (journal.read_bytes(), output.read_bytes())
+
+
+def test_failed_note_replay_cannot_resolve_previous_destination_uncertainty():
+    config = setup()
+    run()
+    Path('inputs/buy.html').write_text('<html>no financial note</html>')
+    run()
+    report = bd.parse_keyed_yaml(paths(config)[1].read_bytes())
+    assert report['exceptions']['2026-09:destination']['status'] == 'unresolved'
+    assert '2026-09:source' in report['exceptions']
+    assert report['last_completed_acquisition_period'] is None
 
 
 def test_verified_saved_catchup_clears_stale_gap_without_expiring_other_months():

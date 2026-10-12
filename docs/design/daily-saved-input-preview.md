@@ -25,13 +25,21 @@ provide catch-up evidence. Future/current monthly statements are refused. The
 report exposes `window_source_events` separately from whole-period reconciliation.
 Unknown financial operations still block their period; coupon matching does not
 qualify mixed trade/coupon/corporate-action periods.
+An unsupported or malformed daily note records its fixed refusal code as an
+unresolved source exception for that period, with the original source digests
+retained. It cannot mark source matching complete, clear prior destination
+uncertainty, or prevent other valid months from being reviewed. A parsed note
+whose account differs from the configured source still refuses the whole command.
 
 Coverage advances only when a saved closed statement passes exact full-period
 source matching, either strict trade conversion or an exclusively matched coupon
 period. `last_completed_acquisition_period` is the latest such observed period,
 not a contiguous-history assertion or an invocation timestamp. Missing or
 unqualified months are listed separately from the first required window month
-retained by the journal. No current-month index absence proves a through-day
+retained by the journal.
+Report fields distinguish missing statements from observed periods whose exact
+source matching remains unqualified; acquiring a document does not resolve its
+financial interpretation. No current-month index absence proves a through-day
 cutoff: `current_period_through_day_verified` remains false. If a required gap
 falls entirely before the current window month, `resume_requires_catchup` is true
 and `DAILY_RESUME_CATCHUP_REQUIRED` blocks resumption. Saved catch-up evidence can

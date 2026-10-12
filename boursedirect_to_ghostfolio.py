@@ -1573,9 +1573,8 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
     seen = set()
     for alias, capture in documents.items():
         statement = parse_statement(decode_document(capture["statement"]), max_depth)
-        notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in capture["notes"]]
         period = statement["period"]
-        if statement["account_ref"] != account["source_account_ref"] or any(n["account_ref"] != account["source_account_ref"] for n in notes):
+        if statement["account_ref"] != account["source_account_ref"]:
             fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
         if period in seen:
             fail("DUPLICATE_STATEMENT_PERIOD")
@@ -1597,7 +1596,18 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
                   "note_sha256": sorted(hashlib.sha256(raw).hexdigest() for raw in capture["notes"]),
                   "complete_source_matching": False}
         problems = {}
-        if all(event["kind"] in ("BUY", "SELL") for event in statement["events"]):
+        try:
+            notes = [parse_contract_note(decode_document(raw), max_depth, include_coupons=True) for raw in capture["notes"]]
+        except RuntimeError as error:
+            # Retain a refused period; never invent missing security identity or
+            # promote a partially parsed note to source-complete evidence.
+            notes = None
+            problems["source"] = str(error)
+        if notes is not None and any(n["account_ref"] != account["source_account_ref"] for n in notes):
+            fail("DAILY_SOURCE_ACCOUNT_CONFLICT")
+        if notes is None:
+            pass
+        elif all(event["kind"] in ("BUY", "SELL") for event in statement["events"]):
             one = {k: v for k, v in config.items() if k != "snapshot"}
             one["documents"] = {alias: config["documents"][alias]}
             try:
@@ -1629,7 +1639,7 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
             key = period + ":" + role
             if role in problems:
                 journal["exceptions"][key] = {"period": period, "status": "unresolved", "code": problems[role]}
-            elif key in journal["exceptions"]:
+            elif key in journal["exceptions"] and (role == "source" or source["complete_source_matching"]):
                 journal["exceptions"][key]["status"] = "resolved_by_saved_evidence"
     coupons = compare_coupon_snapshot(reviews, account, config["mappings"], snapshot_raw) if reviews else None
     if coupons is not None:
@@ -1648,11 +1658,15 @@ def compute_daily_preview(config, documents, snapshot_raw, previous, as_of, max_
     stale = [period for period in gaps if period < window_start[:7]]
     completed = [p for p, evidence in journal["periods"].items() if evidence.get("complete_source_matching")]
     journal["last_preview_day"] = as_of
+    journal["periods"] = dict(sorted(journal["periods"].items()))
+    journal["exceptions"] = dict(sorted(journal["exceptions"].items()))
     unresolved = {k: v for k, v in journal["exceptions"].items() if v["status"] == "unresolved"}
     report = {"schema_version": 1, "artifact_kind": "daily_saved_input_preview_not_api_payload", "binding": account,
               "window": {"first_day": window_start, "last_day": as_of, "days": 90},
               "last_completed_acquisition_period": max(completed) if completed else None,
               "missing_or_unqualified_closed_periods": gaps, "gaps_outside_window": stale,
+              "missing_closed_statement_periods": [p for p in gaps if p not in journal["periods"]],
+              "unqualified_observed_closed_periods": [p for p in gaps if p in journal["periods"]],
               "current_period_through_day_verified": False, "resume_requires_catchup": bool(stale),
               "exceptions": unresolved, "trade_observations": trade_observations, "coupon_observations": coupons,
               "window_source_events": window_events,
