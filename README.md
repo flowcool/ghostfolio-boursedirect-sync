@@ -88,7 +88,7 @@ installation is needed.
 name: ghostfolio-boursedirect-sync
 services:
   bitwarden:
-    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:7a810263c0042fba2c163600287acb27bee597542010113e3cf3b151781daa89}
+    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.1@sha256:486cc5ef8b3dde9e65b2b502789b65c9d956acb4ea03e3e2544c316d2bbef231}
     platform: linux/amd64
     init: true
     restart: "no"
@@ -210,7 +210,7 @@ new release's image reference and configuration instructions together.
 The [release archive](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/latest)
 is an optional way to obtain the Compose files, sandbox profile, configuration
 templates and documentation as one bundle. It is not needed for the Docker flow
-above. Future archives also contain `IMAGE_DIGEST` alongside the archive and
+above. Releases from v0.1.1 also contain `IMAGE_DIGEST` alongside the archive and
 checksums; previously published assets remain unchanged.
 
 ## Configuration
