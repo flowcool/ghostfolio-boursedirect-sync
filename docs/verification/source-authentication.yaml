@@ -1265,3 +1265,25 @@ coupon_saved_snapshot_reconciliation:
   - Equal quantity-price product with different representation is not certain adoption.
   - Nonmidnight timestamps, fees, currencies, multiplicity and foreign ownership retain uncertainty.
   - No destination mutation, trade preparation state or wire intent is produced.
+  actual_mapped_coupon_API_check:
+    version: '3.83.0'
+    verified_source_to_configured_target_symbols: 7
+    exact_cash_and_booking_date_readback: 7
+    representation_quantity: 1
+    representation_unit_price: source_net_received_cash
+    representation_fee: 0
+    identical_repeat_new_rows: 0
+    exact_readback_certain_unique_reconciliation_matches: 7
+    unsupported_source_period_gate_retained: true
+    owned_rollback_deleted_rows: 7
+    owned_rollback_remaining_rows: 0
+    owned_containers_and_network_absent: true
+    production_writes: 0
+  final_runtime_CI:
+    runtime_commit: 5a146f7de7625abfd0e9c754b14303658f02b413
+    offline_tests: 38201049781
+    dependency_review: 38201049787
+    CodeQL: 38201049780
+    native_connector_amd64_and_arm64: 38201049796
+    result: success
+    reuse_basis: unchanged_runtime_bytes_after_documentary_evidence_update

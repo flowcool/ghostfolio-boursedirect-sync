@@ -107,3 +107,16 @@ uses the same outputs-only collision/symlink and private atomic-write boundary.
 Stdout contains counts and fixed statuses only. Tests forbid sockets and shared
 application/adoption/intent calls; original-source replay and hard-link refusal
 are exercised with isolated synthetic state.
+
+The actual 2026-10-12 check associated all seven source ISINs with the existing
+configured Yahoo/EUR target profiles using seven saved exact-ISIN responses.
+Two responses offered multiple venues; no global lookup uniqueness was asserted.
+Original-source replay against the complete saved 1017-row destination snapshot
+found five sources with legacy candidates, two without a saved candidate, and
+zero certain exact net representations. An owned Ghostfolio3.83.0 lab then
+imported all seven source net credits on their booking days with those verified
+symbols. Exact readback, zero-new identical repeat, seven-row rollback and owned
+resource cleanup passed. The comparison recognized all seven lab readback rows
+as certain unique net representations while retaining the unsupported-period
+gate. This establishes the positive amount/date/mapping boundary and conservative
+legacy behavior; it does not resolve old dates/amounts or authorize July import.
