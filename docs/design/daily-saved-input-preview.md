@@ -25,6 +25,19 @@ provide catch-up evidence. Future/current monthly statements are refused. The
 report exposes `window_source_events` separately from whole-period reconciliation.
 Unknown financial operations still block their period; coupon matching does not
 qualify mixed trade/coupon/corporate-action periods.
+
+Current-month operation indices and standalone daily notes are a separate source
+boundary; this command currently consumes neither without a closed statement.
+The acquired calendar's offered links can be matched to account-bound saved notes,
+but that inventory does not prove a through-day cutoff or monthly cash controls.
+The observed calendar bytes declare UTF-8 yet fail strict UTF-8 decoding. Retain
+the original bytes and that discrepancy; a separate manual inspection projection
+does not qualify the index for the strict financial-document reader.
+A future current-month observation path must verify the captured account, month,
+offered-link inventory and note hashes, preserve refused notes as exceptions, and
+keep closed-period coverage unchanged. A matching destination trade with an
+unverified timestamp or execution-price currency cannot become a certain match.
+
 An unsupported or malformed daily note records its fixed refusal code as an
 unresolved source exception for that period, with the original source digests
 retained. It cannot mark source matching complete, clear prior destination
