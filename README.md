@@ -76,8 +76,7 @@ so it cannot be bypassed by repeatedly trying a login.
 
 The release includes the qualified browser and Bitwarden CLI. No local Python,
 Node.js, browser installation, Docker socket mount, or published port is needed.
-The published release is AMD64-only. CI also performs non-publishing ARM64 build
-checks; that does not make ARM64 a supported connection path.
+The published release and image CI support AMD64 only.
 
 ## Quick start
 
@@ -119,10 +118,13 @@ Bitwarden CLI. It is the whole connector, not a Bitwarden server. Likewise,
 `bitwarden-binding` is the connector's persistent state volume; it stores more
 than the vault binding.
 
-The Compose project pins
-`ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0`. Keep
-`collector/browser-seccomp.json` beside the Compose files: the archive includes
-it and the browser sandbox requires it.
+The source checkout pins the published v0.1.0 image by SHA256 digest in
+`compose.yaml`. Future release archives also pin their matching image digest and
+include an `IMAGE_DIGEST` file alongside the archive and checksums. A digest pins
+the image content even if its registry tag changes; an explicit
+`BOURSEDIRECT_IMAGE` override replaces that pin.
+Keep `collector/browser-seccomp.json` beside the Compose files; it is included in
+the archive and required by the browser sandbox.
 
 ## Configuration
 
@@ -253,6 +255,27 @@ not enable automatic retries or scheduling.
 
 The optional `docker compose run --rm bitwarden inspect` checks vault item
 identity and logout without submitting credentials to Bourse Direct.
+
+### Safe support reports
+
+Docker log retention is disabled (`logging: driver: none`). The attached terminal
+still receives account-selection prompts and fixed JSON result/error codes;
+`docker logs` cannot recover them after the run. Note the final `code` field and
+exit code when a run fails. Do not relaunch a failed authentication just to collect
+output, and do not enable raw browser, vault or HTTP debug logging.
+
+For a public issue, share only the fixed code (for example,
+`SOURCE_CONNECT_REFUSED`), exit code, connector release/image digest, CPU
+architecture, and Docker/Compose versions. Copy the image reference from
+`compose.yaml` or the release's `IMAGE_DIGEST`; use `uname -m`, `docker --version`
+and `docker compose version` for platform details. Never paste `.env`, resolved
+`docker compose config`, container inspection output, terminal account choices,
+raw HTML, URLs, snapshots, reports or acquisition receipts. Those can contain
+credentials or personal account data. Preserve the private state volume for
+diagnosis; reporting an error does not authorize another broker attempt.
+
+If the broker page or authentication flow changes, stop and follow the
+[source requalification procedure](docs/operations/source-connection.md#broker-site-changes-and-requalification).
 
 ## Documentation and development
 

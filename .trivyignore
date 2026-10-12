@@ -1,3 +1,10 @@
-# Scoped Trivy allowlist for blocking scans in `container-check.yml` and
-# `release-image.yml`. It is intentionally empty: add a CVE only with a specific
-# reason, re-review date, and an issue that tracks its removal.
+# Scoped Trivy allowlist for the blocking image scans in container-check.yml
+# and release-image.yml under .github/workflows/.
+#
+# Both scans cover the whole image for fixable HIGH/CRITICAL vulnerabilities.
+# Neither workflow excludes binaries with skip-files. The connector and saved-
+# input preview images do not ship supercronic or an automatic scheduler.
+#
+# Add an entry below only for a genuine, case-by-case suppression in a package we
+# DO control (base image / Python). Each entry needs a reason and a re-review date.
+# (Currently none.)

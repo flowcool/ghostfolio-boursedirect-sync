@@ -5,6 +5,7 @@ import argparse
 import gzip
 import hashlib
 import io
+import json
 from pathlib import Path, PurePosixPath
 import posixpath
 import re
@@ -33,7 +34,9 @@ RELEASE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z"
 INLINE_LINK = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)]+)\)")
 IMAGE_REFERENCE = re.compile(
     r"ghcr\.io/flowcool/ghostfolio-boursedirect-sync:v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"(?:@sha256:[0-9a-f]{64})?"
 )
+IMAGE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 def require_stable_tag(tag):
@@ -72,9 +75,32 @@ def tracked_docs(root):
     return [item.decode("utf-8") for item in result.split(b"\0") if item]
 
 
-def render_compose(data, tag):
+def image_reference(tag, image_digest):
+    require_stable_tag(tag)
+    if not IMAGE_DIGEST.fullmatch(image_digest):
+        raise ValueError("image digest must be sha256 followed by 64 lowercase hexadecimal digits")
+    return IMAGE_PREFIX + tag + "@" + image_digest
+
+
+def verify_pushed_manifest(raw, image_digest, checked_image_id):
+    """Bind the registry manifest bytes to the exact local image scanned/smoked."""
+    if not IMAGE_DIGEST.fullmatch(image_digest) or not IMAGE_DIGEST.fullmatch(checked_image_id):
+        raise ValueError("invalid registry digest or checked image ID")
+    if "sha256:" + hashlib.sha256(raw).hexdigest() != image_digest:
+        raise ValueError("registry manifest bytes do not match the pushed image digest")
+    manifest = json.loads(raw)
+    if (not isinstance(manifest, dict) or manifest.get("schemaVersion") != 2
+            or manifest.get("mediaType") not in (
+                "application/vnd.docker.distribution.manifest.v2+json",
+                "application/vnd.oci.image.manifest.v1+json")
+            or not isinstance(manifest.get("config"), dict)
+            or manifest["config"].get("digest") != checked_image_id):
+        raise ValueError("registry manifest does not identify the scanned image")
+
+
+def render_compose(data, tag, image_digest):
     text = data.decode("utf-8")
-    replacement = IMAGE_PREFIX + tag
+    replacement = image_reference(tag, image_digest)
     rendered, count = IMAGE_REFERENCE.subn(replacement, text)
     if count != 1:
         raise ValueError("compose.yaml must contain exactly one canonical release image")
@@ -113,7 +139,7 @@ def rewrite_markdown_links(name, data, included, root, tag):
     return INLINE_LINK.sub(replace, text).encode("utf-8")
 
 
-def create_bundle(root, tag, output_dir, tracked_paths):
+def bundle_entries(root, tag, tracked_paths):
     require_stable_tag(tag)
     release_note = "docs/releases/" + tag + ".md"
     paths = public_paths(root, tracked_paths)
@@ -124,26 +150,35 @@ def create_bundle(root, tag, output_dir, tracked_paths):
         raise ValueError("required release notes are missing: " + release_note)
 
     included = set(paths)
-    bundle_name = "ghostfolio-boursedirect-sync-" + tag
-    output_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = output_dir / (bundle_name + ".tar.gz")
-    sums_path = output_dir / "SHA256SUMS"
-    if archive_path.exists() or sums_path.exists():
-        raise ValueError("release output already exists; refusing to overwrite artifacts")
     entries = {}
     for name in paths:
         source = root / name
         data = source.read_bytes()
-        if name == "compose.yaml":
-            data = render_compose(data, tag)
         if name.lower().endswith(".md"):
             data = rewrite_markdown_links(name, data, included, root, tag)
         entries[name] = data
+    if len(IMAGE_REFERENCE.findall(entries["compose.yaml"].decode("utf-8"))) != 1:
+        raise ValueError("compose.yaml must contain exactly one canonical release image")
+    return entries
+
+
+def create_bundle(root, tag, output_dir, tracked_paths, image_digest):
+    reference = image_reference(tag, image_digest)
+    entries = bundle_entries(root, tag, tracked_paths)
+    entries["compose.yaml"] = render_compose(entries["compose.yaml"], tag, image_digest)
+    entries["IMAGE_DIGEST"] = (reference + "\n").encode("utf-8")
+    bundle_name = "ghostfolio-boursedirect-sync-" + tag
+    output_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = output_dir / (bundle_name + ".tar.gz")
+    sums_path = output_dir / "SHA256SUMS"
+    image_path = output_dir / "IMAGE_DIGEST"
+    if any(path.exists() or path.is_symlink() for path in (archive_path, sums_path, image_path)):
+        raise ValueError("release output already exists; refusing to overwrite artifacts")
 
     with archive_path.open("wb") as raw:
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=9) as zipped:
             with tarfile.open(fileobj=zipped, mode="w|", format=tarfile.USTAR_FORMAT) as archive:
-                for name in paths:
+                for name in sorted(entries):
                     data = entries[name]
                     info = tarfile.TarInfo(bundle_name + "/" + name)
                     info.size = len(data)
@@ -155,21 +190,37 @@ def create_bundle(root, tag, output_dir, tracked_paths):
                     info.mode = 0o644
                     archive.addfile(info, io.BytesIO(data))
 
-    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    sums_path.write_text(digest + "  " + archive_path.name + "\n", encoding="utf-8")
+    image_path.write_bytes(entries["IMAGE_DIGEST"])
+    sums_path.write_text("".join(hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.name + "\n"
+        for path in (archive_path, image_path)), encoding="utf-8")
     return archive_path, sums_path
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--image-digest", help="digest of the exact pushed, scanned image")
+    parser.add_argument("--image-manifest", type=Path, help="raw digest-addressed registry manifest")
+    parser.add_argument("--checked-image-id", help="local image ID retained before scan/smoke")
+    parser.add_argument("--check-only", action="store_true", help="validate public inputs without creating artifacts")
     args = parser.parse_args()
     try:
         require_stable_tag(args.tag)
         root = Path(__file__).resolve().parent.parent
         verify_tag_checkout(root, args.tag)
-        archive, sums = create_bundle(root, args.tag, args.output_dir, tracked_docs(root))
+        if args.check_only:
+            if any(value is not None for value in (
+                    args.image_digest, args.output_dir, args.image_manifest, args.checked_image_id)):
+                raise ValueError("--check-only cannot be combined with artifact output options")
+            bundle_entries(root, args.tag, tracked_docs(root))
+            print("Release inputs verified; no artifacts created.")
+            return
+        if any(value is None for value in (
+                args.output_dir, args.image_digest, args.image_manifest, args.checked_image_id)):
+            raise ValueError("artifact output requires --output-dir, --image-digest, --image-manifest and --checked-image-id")
+        verify_pushed_manifest(args.image_manifest.read_bytes(), args.image_digest, args.checked_image_id)
+        archive, sums = create_bundle(root, args.tag, args.output_dir, tracked_docs(root), args.image_digest)
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
         parser.error(str(error))
     print(archive)
