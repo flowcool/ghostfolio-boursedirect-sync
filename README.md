@@ -31,7 +31,7 @@ risk and keep your own backups before using it.
 
 ## Who this is for
 
-Use the released Compose bundle if you run Ghostfolio already, have a Bourse
+Use the published Docker image if you run Ghostfolio already, have a Bourse
 Direct PEA or PEA-PME, and want to review recent operation notices privately.
 You need a Bitwarden-compatible vault, a dedicated Bourse Direct login item, and
 an existing Ghostfolio account.
@@ -80,24 +80,103 @@ The published release and image CI support AMD64 only.
 
 ## Quick start
 
-1. Download **`ghostfolio-boursedirect-sync-v0.1.0.tar.gz`** and
-   **`SHA256SUMS`** from [the release](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v0.1.0), then verify and unpack it:
+Save the following as **`compose.yaml`** in a dedicated directory. It runs the
+published image; no archive, repository clone, local build, Python or Node.js
+installation is needed.
+
+```yaml
+name: ghostfolio-boursedirect-sync
+services:
+  bitwarden:
+    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:7a810263c0042fba2c163600287acb27bee597542010113e3cf3b151781daa89}
+    platform: linux/amd64
+    init: true
+    restart: "no"
+    read_only: true
+    user: "1000:1000"
+    environment:
+      BW_SERVER: ${BW_SERVER:-https://vault.bitwarden.com}
+      BW_ITEM_NAME: ${BW_ITEM_NAME:-boursedirect.fr}
+      BW_CLIENTID: ${BW_CLIENTID:?Supply your Bitwarden personal API client ID}
+      BW_CLIENTSECRET: ${BW_CLIENTSECRET:?Supply your Bitwarden personal API client secret}
+      BW_PASSWORD: ${BW_PASSWORD:?Supply your Bitwarden master password}
+      # Your Ghostfolio instance supplies the origin and long-lived Security Token.
+      # HTTPS normally; exact http://ghostfolio:3333 requires a trusted private network.
+      GHOSTFOLIO_ORIGIN: ${GHOSTFOLIO_ORIGIN:-}
+      GHOSTFOLIO_SECURITY_TOKEN: ${GHOSTFOLIO_SECURITY_TOKEN:-}
+      # Optional explicit routing. Missing fields are selected once in the terminal.
+      # Configured values are never overridden; conflicting retained routing refuses.
+      BD_SOURCE_ACCOUNT_REF: ${BD_SOURCE_ACCOUNT_REF:-}
+      GHOSTFOLIO_ACCOUNT_ID: ${GHOSTFOLIO_ACCOUNT_ID:-}
+    tmpfs:
+      - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
+      - /tmp:rw,nosuid,nodev,mode=1777
+      - /home/fixture:rw,nosuid,nodev,mode=0700,uid=1000,gid=1000
+    volumes:
+      - bitwarden-binding:/state
+      - ./config:/config:ro
+    cap_drop: [ALL]
+    # Required by Chromium to create its sandbox chroot.
+    cap_add: [SYS_CHROOT]
+    security_opt: [no-new-privileges, "seccomp=./collector/browser-seccomp.json"]
+    ipc: private
+    shm_size: 128m
+    ulimits:
+      core: {soft: 0, hard: 0}
+    mem_limit: 1536m
+    cpus: 1
+    pids_limit: 256
+    logging: {driver: none}
+volumes:
+  bitwarden-binding:
+```
+
+1. Prepare the configuration directory and the browser sandbox profile on the
+   **Docker host**, beside `compose.yaml`:
 
    ```bash
-   sha256sum -c SHA256SUMS
-   tar -xzf ghostfolio-boursedirect-sync-v0.1.0.tar.gz
-   cd ghostfolio-boursedirect-sync-v0.1.0
+   mkdir -p config collector
+   curl --fail --silent --show-error --location \
+     https://raw.githubusercontent.com/flowcool/ghostfolio-boursedirect-sync/6a4a3e48b688ed2edba40dff2a63c1a329e37447/collector/browser-seccomp.json \
+     -o collector/browser-seccomp.json
+   echo 'cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849  collector/browser-seccomp.json' | sha256sum -c -
    ```
 
-2. Create a private environment file and fill in the required vault and
-   Ghostfolio settings described in [Configuration](#configuration):
+   Docker reads this profile before starting the container; putting it inside
+   the image cannot supply it to the host. Keep the verified profile in place for
+   later runs. The empty `config` directory is enough to start; add your verified
+   `config/mappings.yaml` when ready, using the [mapping format](config/README.md).
 
-   ```bash
-   cp .env.example .env
-   chmod 600 .env
+2. Save this template as **`.env`** beside `compose.yaml`, fill in your vault and
+   Ghostfolio values using [Configuration](#configuration), then run `chmod 600 .env`:
+
+   ```dotenv
+   # Bitwarden personal API credentials and vault master password.
+   # Populate locally; this file contains placeholders only.
+   BW_SERVER=https://vault.bitwarden.com
+   BW_CLIENTID=
+   BW_CLIENTSECRET=
+   BW_PASSWORD=
+   BW_ITEM_NAME=boursedirect.fr
+
+   # Your Ghostfolio instance supplies this access. Use the permanent Security Token, not a JWT.
+   # HTTPS normally; http://ghostfolio:3333 is allowed on a trusted private Docker network.
+   GHOSTFOLIO_ORIGIN=
+   GHOSTFOLIO_SECURITY_TOKEN=
+
+   # Optional explicit accounts. Missing choices are selected once during connect.
+   # Retained routing is never silently overridden by these settings.
+   BD_SOURCE_ACCOUNT_REF=
+   GHOSTFOLIO_ACCOUNT_ID=
+
+   # Only with compose.ghostfolio.yaml: existing private Docker network.
+   GHOSTFOLIO_NETWORK=
+
+   # Optional deliberate image override; blank uses the version pinned in Compose.
+   BOURSEDIRECT_IMAGE=
    ```
 
-3. Pull the exact released image:
+3. Pull the released image:
 
    ```bash
    docker compose pull
@@ -116,15 +195,23 @@ The published release and image CI support AMD64 only.
 `bitwarden` is the retained Compose service name because it includes the
 Bitwarden CLI. It is the whole connector, not a Bitwarden server. Likewise,
 `bitwarden-binding` is the connector's persistent state volume; it stores more
-than the vault binding.
+than the vault binding. Keep the same Compose project name to retain that volume.
+The connection is interactive: `docker compose up -d` does not replace step 4.
 
-The source checkout pins the published v0.1.0 image by SHA256 digest in
-`compose.yaml`. Future release archives also pin their matching image digest and
-include an `IMAGE_DIGEST` file alongside the archive and checksums. A digest pins
-the image content even if its registry tag changes; an explicit
-`BOURSEDIRECT_IMAGE` override replaces that pin.
-Keep `collector/browser-seccomp.json` beside the Compose files; it is included in
-the archive and required by the browser sandbox.
+For a Docker stack manager, prepare the profile and configuration on the Docker
+host and use absolute host paths for `seccomp` and the `/config` bind mount.
+Supply the variables through its environment editor if preferred. Run the
+connection with an attached terminal; this release does not schedule itself.
+
+The image reference above pins the published v0.1.0 content by SHA256 digest. An
+explicit `BOURSEDIRECT_IMAGE` override replaces that pin. For upgrades, follow the
+new release's image reference and configuration instructions together.
+
+The [release archive](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v0.1.0)
+is an optional way to obtain the Compose files, sandbox profile, configuration
+templates and documentation as one bundle. It is not needed for the Docker flow
+above. Future archives also contain `IMAGE_DIGEST` alongside the archive and
+checksums; previously published assets remain unchanged.
 
 ## Configuration
 
@@ -164,7 +251,8 @@ GHOSTFOLIO_ORIGIN=http://ghostfolio:3333
 GHOSTFOLIO_NETWORK=your-existing-private-network
 ```
 
-Use the overlay for both commands:
+Save the [private-network overlay](compose.ghostfolio.yaml) as
+`compose.ghostfolio.yaml` beside your Compose file, then use it for both commands:
 
 ```bash
 docker compose -f compose.yaml -f compose.ghostfolio.yaml pull

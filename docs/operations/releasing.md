@@ -14,7 +14,12 @@ the anonymous-pull check. Only then publish the draft release. The publication e
 version to `latest` after confirming that it is still the latest stable release. See GitHub's
 [container registry visibility guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
-The user archive contains the Compose files and required browser seccomp profile,
+The public README starts from the published image and a copyable Compose definition;
+archive extraction is optional. Keep its Compose example identical to the canonical
+`compose.yaml`, and keep the host seccomp download reference and checksum matched to
+the qualified profile. Update the image pin and operator instructions together.
+
+The optional user archive contains the Compose files and required browser seccomp profile,
 third-party license text, example environment file, mapping guide, README,
 CONTRIBUTING, CHANGELOG, LICENSE, and tracked documentation. It does not contain
 the application source, Docker build context, or local build override. The image
