@@ -497,3 +497,105 @@ def test_manual_calendar_day_distinct_exact_financial_groups(monkeypatch):
     rows.append(dict(rows[0], remote_id='synthetic-second', fee=Decimal('2.15')))
     replay_manual_calendar_day(monkeypatch, 'constructed_distinct_exact_fee_groups', pending + [second],
         rows, day_evidence(rows, pending[0]['date'][:10]), 0, duplicates=2)
+
+
+def test_manual_calendar_day_real_sync_loads_and_forwards_valid_evidence(tmp_path, monkeypatch, capsys):
+    """Real sync pipeline with anonymized retained notices and isolated acquisition."""
+    import builtins
+    import re
+    import socket
+    import subprocess
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    raw = (Path(__file__).parent / 'fixtures/note-sell-anonymized-real.html').read_bytes()
+    document = b.parse_contract_note(b.decode_document(raw), 16, notice_sync=True)
+    pending = proposals(document)
+    stored_date = MANUAL_CASES['sell_equal']['stored_date']
+    rows = [remote(proposal, marker=False, id=f'synthetic-trade-{index}', date=stored_date)
+        for index, proposal in enumerate(pending)]
+    evidence = day_evidence(rows, pending[0]['date'][:10])
+    b.atomic_private_yaml(tmp_path / 'manual-day-context.yaml', evidence)
+    wire_rows = [{'id': row['remote_id'], 'accountId': proposal['accountId'],
+        'account': {'id': proposal['accountId'], 'tags': []}, 'tags': [],
+        'type': proposal['type'], 'date': stored_date, 'currency': 'EUR', 'comment': None,
+        'quantity': row['quantity'], 'unitPrice': row['unit_price'], 'fee': row['fee'],
+        'assetProfile': {'symbol': proposal['symbol'], 'currency': 'EUR', 'dataSource': 'YAHOO'}}
+        for row, proposal in zip(rows, pending)]
+    encoded = json.dumps({'count': len(wire_rows), 'activities': wire_rows},
+        default=lambda number: 'DECIMAL:' + str(number))
+    snapshot = re.sub(r'"DECIMAL:([-0-9.]+)"', r'\1', encoded).encode()
+    original_rows = copy.deepcopy(rows)
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('network access or confirmation requested during isolated sync')
+
+    def acquire(run, as_of, account, *args, **kwargs):
+        calls.append('isolated_acquisition')
+        b.atomic_private_bytes(run / 'notice.html', raw)
+        b.atomic_private_yaml(run / 'document-1.yaml', {'role': 'contract_note',
+            'path': 'notice.html', 'sha256': hashlib.sha256(raw).hexdigest()})
+        coverage = {'complete': True, 'window': {'first_day': '2026-07-16', 'last_day': as_of},
+            'expected_months': ['2026-07', '2026-08', '2026-09', '2026-10'],
+            'observed_months': {'PEA': ['2026-07', '2026-08', '2026-09', '2026-10']},
+            'empty_months': {'PEA': ['2026-07', '2026-08', '2026-10']}}
+        b.atomic_private_yaml(run / 'qualification.yaml', {'notice_coverage': coverage,
+            'account_binding': account, 'session_logged_out': True, 'browser_exit_verified': True})
+        return account, {'complete': True, 'monthly_statements': 0, 'contract_notes': 1}
+
+    acquisition = SimpleNamespace(ROOT=tmp_path, MAX_BYTES=1024 * 1024,
+        broker_lock=lambda root: None, broker_login_ready=lambda root: None,
+        discovery_receipt=lambda root: None, ghostfolio_origin=lambda origin: None,
+        account_binding_path=lambda root, source: root / 'binding.yaml',
+        saved_account_binding=lambda *args: None, reconcile_binding=lambda *args: None,
+        ghostfolio_snapshot=lambda *args, **kwargs: (
+            [{'id': ACCOUNT['target_account_id'], 'name': 'Synthetic account'}], [], snapshot, forbidden),
+        choose=lambda *args: None, acquire=acquire, wait_proxy_ready=lambda proxy: None,
+        close_proxy=lambda proxy: None)
+    monkeypatch.setitem(sys.modules, 'community_connect', acquisition)
+    monkeypatch.setattr(sys, 'path', list(sys.path))
+    monkeypatch.setattr(b, 'buy_simulation_config', lambda: {'source_ref': ACCOUNT['source_account_ref'],
+        'target': ACCOUNT['target_account_id'], 'origin': 'https://synthetic.invalid', 'mappings': MAPPING})
+    monkeypatch.setattr(subprocess, 'Popen', lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr(socket, 'socket', forbidden)
+    monkeypatch.setattr(builtins, 'input', forbidden)
+    for key in list(b.os.environ):
+        if key.startswith('BW_') or key == 'GHOST_ACCESS_TOKEN':
+            monkeypatch.delenv(key)
+    real_path, real_datetime = Path, b.datetime
+    monkeypatch.setattr(b, 'Path', lambda value: tmp_path if value == '/state' else real_path(value))
+    fixed_datetime = Mock(wraps=real_datetime)
+    fixed_datetime.now.return_value = real_datetime.fromisoformat('2026-10-13T12:00:00+00:00')
+    monkeypatch.setattr(b, 'datetime', fixed_datetime)
+    real_reconcile = b.reconcile_notice_duplicates
+
+    def checked_reconcile(actual_proposals, actual_rows, actual_evidence, actual_root):
+        assert actual_evidence == evidence and actual_root == tmp_path
+        assert actual_proposals == pending and actual_rows == original_rows
+        calls.append('reconcile_received_valid_evidence')
+        return real_reconcile(actual_proposals, actual_rows, actual_evidence, actual_root)
+
+    monkeypatch.setattr(b, 'reconcile_notice_duplicates', checked_reconcile)
+    previous_umask = b.os.umask(0o077)
+    try:
+        assert b.main(['--sync']) == 0
+    finally:
+        b.os.umask(previous_umask)
+    output = capsys.readouterr().out
+    print(output, end='')
+    diagnostics = [json.loads(line) for line in output.splitlines()]
+    assert diagnostics[-1] == {'code': 'NOTICE_SIMULATION_COMPLETED', 'proposed': 0,
+        'imported': 0, 'skipped': 0, 'failed_rows': 0, 'duplicates': 2,
+        'contract_notes': 1, 'financial_writes': 0}
+    assert calls == ['isolated_acquisition', 'reconcile_received_valid_evidence']
+    artifacts = list((tmp_path / 'runs').glob('*/simulation.yaml'))
+    assert len(artifacts) == 1
+    saved = b.read_keyed_yaml(artifacts[0], tmp_path, 1024 * 1024)
+    assert saved['duplicates'] == 2 and saved['proposals'] == []
+    assert saved['financial_writes'] == saved['imported'] == 0
+    assert b.read_keyed_yaml(tmp_path / 'manual-day-context.yaml', tmp_path, 1024 * 1024) == evidence
+    assert rows == original_rows
+    print('constructed_real_sync_success: valid_context_loaded_and_forwarded duplicates=2 proposed=0 '
+        'financial_writes=0 confirmation_requests=0 existing_fields_unchanged=true')
