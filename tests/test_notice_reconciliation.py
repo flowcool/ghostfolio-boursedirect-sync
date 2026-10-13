@@ -575,7 +575,10 @@ def test_manual_calendar_day_real_sync_loads_and_forwards_valid_evidence(tmp_pat
         assert actual_evidence == evidence and actual_root == tmp_path
         assert actual_proposals == pending and actual_rows == original_rows
         calls.append('reconcile_received_valid_evidence')
-        return real_reconcile(actual_proposals, actual_rows, actual_evidence, actual_root)
+        before = copy.deepcopy(actual_rows)
+        result = real_reconcile(actual_proposals, actual_rows, actual_evidence, actual_root)
+        assert actual_rows == before
+        return result
 
     monkeypatch.setattr(b, 'reconcile_notice_duplicates', checked_reconcile)
     previous_umask = b.os.umask(0o077)
@@ -596,6 +599,5 @@ def test_manual_calendar_day_real_sync_loads_and_forwards_valid_evidence(tmp_pat
     assert saved['duplicates'] == 2 and saved['proposals'] == []
     assert saved['financial_writes'] == saved['imported'] == 0
     assert b.read_keyed_yaml(tmp_path / 'manual-day-context.yaml', tmp_path, 1024 * 1024) == evidence
-    assert rows == original_rows
     print('constructed_real_sync_success: valid_context_loaded_and_forwarded duplicates=2 proposed=0 '
         'financial_writes=0 confirmation_requests=0 existing_fields_unchanged=true')
