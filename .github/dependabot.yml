@@ -1,8 +1,7 @@
 version: 2
 updates:
   # Renovate owns ordinary updates. Zero disables version PRs only.
-  # Keep security fixes enabled in repository settings until Renovate onboarding
-  # and a successful hosted run are confirmed; retain alerts and dependency graph.
+  # Keep Dependabot security updates enabled in repository settings.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -40,3 +39,9 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0

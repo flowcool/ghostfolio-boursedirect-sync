@@ -22,21 +22,25 @@ GitHub's dependency graph and Dependabot alerts stay enabled. Renovate is the
 ordinary update PR author, configured in [`renovate.json`](../renovate.json).
 Dependabot version PR limits are zero; this does not disable security PRs.
 
-Ordinary updates run weekly on Monday in Europe/Zurich. Python and collector npm
-releases wait 14 days; GitHub Actions wait 3 days. Container base images wait
-14 days. Minor, patch and digest updates are grouped by ecosystem; major updates
-stay separate. Exact Python/npm versions, Action commit SHAs and existing image
-digests stay pinned. Python stays on 3.13, the connector image on Node 22 and CI
-on Node 20. Docker tag suffixes retain the base distribution. Compose references
-are local builds or separately qualified lab pins, so the docker-compose manager
-is excluded; the qualification-only vault Dockerfile is also excluded. Browser
-and Bitwarden downloads remain checksum-qualified manually.
+Ordinary updates run before 9am on Monday in Europe/Zurich. Renovate opens at
+most three concurrent pull requests and two per hour. Python and collector npm
+releases wait 14 days; GitHub Actions wait 3 days.
+Container base image updates wait 3 days. Minor, patch and digest updates are
+grouped by ecosystem; major updates stay separate and require Dependency
+Dashboard approval. Exact Python/npm versions, Action commit SHAs and existing
+image digests stay pinned. Python stays on 3.13, the connector image on Node 22
+and CI on Node 20. Docker tag
+suffixes retain the base distribution. Compose references are local builds or
+separately qualified lab pins, so the docker-compose manager is excluded; the
+qualification-only vault Dockerfile is also excluded. Browser and Bitwarden
+downloads remain checksum-qualified manually.
 
-Renovate reads GitHub vulnerability alerts. Security PRs bypass the ordinary
-schedule and release-age delays, are ungrouped and created immediately when a
-fix is available. All merges remain manual, including security fixes. Existing
-CI and final-head CodeRabbit review requirements still apply; review filters
-include `renovate.json`.
+Dependabot security updates remain enabled in repository settings. Renovate's
+`vulnerabilityAlerts` and `osvVulnerabilityAlerts` are disabled, so Dependabot
+remains the security update PR author while Renovate handles ordinary updates.
+Dependabot version PR limits are zero; this does not disable security PRs. All
+merges remain manual. Existing CI and final-head CodeRabbit review requirements
+still apply; review filters include `renovate.json`.
 
 Validate repository configuration with the official validator (Node 24.11+):
 
