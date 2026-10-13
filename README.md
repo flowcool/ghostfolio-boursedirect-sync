@@ -167,8 +167,22 @@ activities:
     stored_date: '2019-02-06T15:00:00.000Z'
     financial_fingerprint: '<64 lowercase hexadecimal characters>'
     civil_day: '2019-02-06'
-    provenance: 'retained entry-context evidence reference'
+    provenance:
+      path: 'entries/synthetic-activity-id.yaml'
+      sha256: '<SHA-256 of the retained entry-context file>'
 ```
+
+The referenced private YAML must be the retained entry context, not a day
+assertion reconstructed from current runtime settings. Its exact fields are
+`schema_version: 1`, `activity_id`, `account_id`, `stored_date`,
+`financial_fingerprint`, `entered_day` and `entry_timezone` (the historical IANA
+entry timezone). Paths must stay under `/state/`; symlinks are refused. The
+connector checks the retained bytes against SHA-256, binds the context to the
+same activity/account/timestamp/fingerprint, and verifies that the stored instant
+in the retained entry timezone yields the original entered day and `civil_day`.
+A missing file, changed hash, inconsistent context or unsupported timezone leaves
+the day unverified. A free-text reference cannot establish a day. Retain original
+entry evidence; do not fabricate historical context to pass reconciliation.
 
 The fingerprint is `activity_financial_fingerprint` of the normalized captured
 activity. It binds account, UTC day, type, symbol, data source, currency, quantity,

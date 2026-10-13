@@ -4255,7 +4255,7 @@ def notice_signature(activity):
         *(Decimal(activity[key]) for key in ('quantity', 'unitPrice', 'fee')))
 
 
-def notice_manual_day_context(remote, evidence):
+def notice_manual_day_context(remote, evidence, evidence_root=None):
     """Bind retained historical entry evidence to exact current financial rows."""
     if (not isinstance(evidence, dict) or set(evidence) != {'schema_version', 'activities'}
             or type(evidence['schema_version']) is not int or evidence['schema_version'] != 1
@@ -4264,7 +4264,13 @@ def notice_manual_day_context(remote, evidence):
     fields = {'account_id', 'stored_date', 'financial_fingerprint', 'civil_day', 'provenance'}
     for key, entry in evidence['activities'].items():
         if (not isinstance(key, str) or not key or not isinstance(entry, dict) or set(entry) != fields
-                or any(not isinstance(value, str) or not value.strip() for value in entry.values())
+                or any(not isinstance(entry[field], str) or not entry[field].strip() for field in fields - {'provenance'})
+                or not isinstance(entry['provenance'], dict)
+                or set(entry['provenance']) != {'path', 'sha256'}
+                or not isinstance(entry['provenance']['path'], str) or not entry['provenance']['path']
+                or Path(entry['provenance']['path']).is_absolute()
+                or not isinstance(entry['provenance']['sha256'], str)
+                or not re.fullmatch(r'[0-9a-f]{64}', entry['provenance']['sha256'])
                 or not re.fullmatch(r'[0-9a-f]{64}', entry['financial_fingerprint'])
                 or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', entry['civil_day'])):
             fail('NOTICE_DAY_CONTEXT_INVALID')
@@ -4272,10 +4278,36 @@ def notice_manual_day_context(remote, evidence):
             datetime.strptime(entry['civil_day'], '%Y-%m-%d')
         except ValueError:
             fail('NOTICE_DAY_CONTEXT_INVALID')
+    contexts = {}
+    for key, entry in evidence['activities'].items():
+        if evidence_root is None:
+            continue
+        try:
+            raw = read_local_bytes(Path(evidence_root) / entry['provenance']['path'], evidence_root, 1024 * 1024)
+            if hashlib.sha256(raw).hexdigest() != entry['provenance']['sha256']:
+                continue
+            context = parse_keyed_yaml(raw)
+            required = {'schema_version', 'activity_id', 'account_id', 'stored_date',
+                'financial_fingerprint', 'entered_day', 'entry_timezone'}
+            if (set(context) != required or type(context['schema_version']) is not int
+                    or context['schema_version'] != 1 or context['activity_id'] != key
+                    or any(context[field] != entry[field] for field in
+                        ('account_id', 'stored_date', 'financial_fingerprint'))
+                    or context['entered_day'] != entry['civil_day']
+                    or not isinstance(context['entry_timezone'], str)):
+                continue
+            instant = datetime.fromisoformat(context['stored_date'].replace('Z', '+00:00'))
+            if (instant.tzinfo is None or instant.astimezone(ZoneInfo(context['entry_timezone'])).date().isoformat()
+                    != context['entered_day']):
+                continue
+            contexts[key] = context
+        except (OSError, ValueError, KeyError, RuntimeError):
+            # Missing, changed or unusable retained entry context proves no day.
+            continue
     result = []
     for row in remote:
         entry = evidence['activities'].get(row['remote_id'])
-        verified = bool(entry and entry['account_id'] == row['target_account_id']
+        verified = bool(entry and row['remote_id'] in contexts and entry['account_id'] == row['target_account_id']
             and entry['stored_date'] == row.get('stored_date')
             and entry['financial_fingerprint'] == activity_financial_fingerprint(row))
         result.append(dict(row, manual_civil_day=entry['civil_day'] if verified else None,
@@ -4283,7 +4315,7 @@ def notice_manual_day_context(remote, evidence):
     return result
 
 
-def reconcile_notice_duplicates(proposals, remote, day_context=None):
+def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_root=None):
     """Consume exact owned/manual representations; ambiguity aborts the run."""
     if not proposals:
         return [], 0
@@ -4326,7 +4358,7 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None):
             pending.append(proposal)
     manual = notice_manual_day_context(
         [row for row in existing if not (row['comment'] or '').startswith('BD#')],
-        day_context if day_context is not None else {'schema_version': 1, 'activities': {}})
+        day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
 
     def manual_signature(row):
         if row['kind'] == 'DIVIDEND':
@@ -4344,7 +4376,7 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None):
     groups = {}
     for proposal in pending:
         groups.setdefault(notice_signature(proposal), []).append(proposal)
-    matched = set()
+    matched, represented = set(), set()
     result = []
     for expected, group in groups.items():
         matches = [row for row in manual if manual_signature(row) == expected]
@@ -4352,6 +4384,7 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None):
             if len(matches) != len(group):
                 refuse('multiplicity_conflict', source_count=len(group), destination_count=len(matches))
             matched.update(row['remote_id'] for row in matches)
+            represented.update(proposal['comment'] for proposal in group)
             duplicates += len(group)
         else:
             result.extend(group)
@@ -4360,7 +4393,10 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None):
         day = datetime.fromisoformat(proposal['date'].replace('Z', '+00:00')).date()
         for original in existing:
             row = manual_by_id.get(original['remote_id'], original)
-            if row['remote_id'] in matched | matched_owned:
+            # Represented groups are consumed one-to-one, but their rows must
+            # still block an unmatched conflicting source proposal.
+            if row['remote_id'] in matched_owned or (row['remote_id'] in matched
+                    and proposal['comment'] in represented):
                 continue
             if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
                 continue
@@ -4517,7 +4553,7 @@ def sync_buy_simulation():
             day_context = (read_keyed_yaml(context_path, root, acquisition.MAX_BYTES) if context_path.exists()
                 else {'schema_version': 1, 'activities': {}})
             # Reject malformed evidence before attempting broker access.
-            notice_manual_day_context(remote, day_context)
+            notice_manual_day_context(remote, day_context, root)
             rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
             profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
             profiles = [profile for profile in profiles if isinstance(profile, dict)]
@@ -4584,7 +4620,7 @@ def sync_buy_simulation():
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
-        proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context)
+        proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root)
         proposals = reconcile_notice_holdings(proposals, remote)
         atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),

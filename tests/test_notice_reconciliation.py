@@ -1,5 +1,6 @@
 """Exact reconciliation from anonymized real financial notice fields, offline."""
 import copy
+import hashlib
 import json
 from pathlib import Path
 from decimal import Decimal, localcontext
@@ -33,19 +34,39 @@ def remote(proposal, marker=True, **changes):
     return b.parse_remote_activity_snapshot(raw.encode(), retain_stored_date=True)[0]
 
 
+@pytest.fixture(autouse=True)
+def isolated_entry_evidence(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+
 def day_evidence(rows, civil_day=None):
     """Constructed entry provenance, never inferred from runtime/server timezone."""
-    return {'schema_version': 1, 'activities': {row['remote_id']: {
-        'account_id': row['target_account_id'], 'stored_date': row['stored_date'],
-        'financial_fingerprint': b.activity_financial_fingerprint(row),
-        'civil_day': civil_day or row['operation_date'],
-        'provenance': 'constructed retained entry-context fixture'} for row in rows}}
+    activities = {}
+    for row in rows:
+        day = civil_day or row['operation_date']
+        # Explicitly constructed historical entry capture, not a server-TZ inference.
+        context = {'schema_version': 1, 'activity_id': row['remote_id'],
+            'account_id': row['target_account_id'], 'stored_date': row['stored_date'],
+            'financial_fingerprint': b.activity_financial_fingerprint(row),
+            'entered_day': day, 'entry_timezone': 'UTC' if day == row['operation_date'] else 'Europe/Zurich'}
+        path = Path(row['remote_id'] + '-entry.yaml')
+        b.atomic_private_yaml(path, context)
+        activities[row['remote_id']] = {key: context[key] for key in
+            ('account_id', 'stored_date', 'financial_fingerprint')}
+        activities[row['remote_id']].update(civil_day=day,
+            provenance={'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+    return {'schema_version': 1, 'activities': activities}
+
+
+def reconcile(pending, rows, evidence=None):
+    return b.reconcile_notice_duplicates(pending, rows, evidence, Path.cwd())
+
 
 
 def test_owned_exact_repeat_proposes_nothing_and_has_no_side_effect():
     pending = proposals()
     original = copy.deepcopy(pending)
-    assert b.reconcile_notice_duplicates(pending, [remote(pending[0])]) == ([], 1)
+    assert reconcile(pending, [remote(pending[0])]) == ([], 1)
     assert pending == original
 
 
@@ -54,7 +75,7 @@ def test_owned_exact_repeat_proposes_nothing_and_has_no_side_effect():
 def test_changed_owned_identity_fails(field, value):
     pending = proposals()
     with pytest.raises(RuntimeError, match='NOTICE_OWNED_ACTIVITY_CONFLICT'):
-        b.reconcile_notice_duplicates(pending, [remote(pending[0], **{field: value})])
+        reconcile(pending, [remote(pending[0], **{field: value})])
 
 
 def test_owned_wrong_account_or_duplicate_identity_fails():
@@ -63,7 +84,7 @@ def test_owned_wrong_account_or_duplicate_identity_fails():
     other = dict(row, target_account_id='other')
     for rows in ([other], [row, dict(row, remote_id='second')]):
         with pytest.raises(RuntimeError, match='NOTICE_IDENTITY_OWNERSHIP_CONFLICT'):
-            b.reconcile_notice_duplicates(pending, rows)
+            reconcile(pending, rows)
 
 
 def test_identity_ignores_mapping_capture_location_and_preserves_occurrences():
@@ -77,8 +98,8 @@ def test_identity_ignores_mapping_capture_location_and_preserves_occurrences():
     document['notes'].append(copy.deepcopy(document['notes'][0]))
     both = proposals(document)
     assert len({p['comment'] for p in both}) == 2
-    assert b.reconcile_notice_duplicates(both, [remote(both[0])]) == ([both[1]], 1)
-    assert b.reconcile_notice_duplicates(both, [remote(both[0]), remote(both[1], id='second')]) == ([], 2)
+    assert reconcile(both, [remote(both[0])]) == ([both[1]], 1)
+    assert reconcile(both, [remote(both[0]), remote(both[1], id='second')]) == ([], 2)
     different_account = b.simulate_buy_notice(document, dict(ACCOUNT, target_account_id='other'), MAPPING, occurrences={})
     assert {p['comment'] for p in both}.isdisjoint(p['comment'] for p in different_account)
 
@@ -86,13 +107,13 @@ def test_identity_ignores_mapping_capture_location_and_preserves_occurrences():
 def test_pending_duplicate_identity_is_never_silently_collapsed():
     pending = proposals()
     with pytest.raises(RuntimeError, match='NOTICE_PENDING_IDENTITY_CONFLICT'):
-        b.reconcile_notice_duplicates(pending * 2, [])
+        reconcile(pending * 2, [])
 
 
 def test_manual_exact_match_consumes_once_and_never_changes_comment():
     pending = proposals()
     row = remote(pending[0], marker=False)
-    assert b.reconcile_notice_duplicates(pending, [row], day_evidence([row])) == ([], 1)
+    assert reconcile(pending, [row], day_evidence([row])) == ([], 1)
     assert row['comment'] is None
 
 
@@ -101,7 +122,7 @@ def test_manual_exact_match_consumes_once_and_never_changes_comment():
 def test_manual_nearby_difference_is_ambiguous(field, value):
     pending = proposals()
     with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
-        b.reconcile_notice_duplicates(pending, [remote(pending[0], marker=False, **{field: value})])
+        reconcile(pending, [remote(pending[0], marker=False, **{field: value})])
 
 
 def test_manual_multiplicity_requires_exact_group_count():
@@ -110,18 +131,18 @@ def test_manual_multiplicity_requires_exact_group_count():
     pending = proposals(document)
     row = remote(pending[0], marker=False)
     with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
-        b.reconcile_notice_duplicates(pending, [row], day_evidence([row]))
-    assert b.reconcile_notice_duplicates(pending, [row, dict(row, remote_id='second')],
+        reconcile(pending, [row], day_evidence([row]))
+    assert reconcile(pending, [row, dict(row, remote_id='second')],
         day_evidence([row, dict(row, remote_id='second')])) == ([], 2)
     with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
-        b.reconcile_notice_duplicates(pending[:1], [row, dict(row, remote_id='second')],
+        reconcile(pending[:1], [row, dict(row, remote_id='second')],
             day_evidence([row, dict(row, remote_id='second')]))
 
 
 def test_other_account_same_financial_fields_does_not_deduplicate_or_fund_sell():
     pending = proposals()
     row = dict(remote(pending[0], marker=False), target_account_id='other')
-    assert b.reconcile_notice_duplicates(pending, [row]) == (pending, 0)
+    assert reconcile(pending, [row]) == (pending, 0)
     sell = dict(pending[0], type='SELL', quantity='1')
     with pytest.raises(RuntimeError, match='NOTICE_INSUFFICIENT_HOLDINGS'):
         b.reconcile_notice_holdings([sell], [row])
@@ -155,7 +176,7 @@ def test_duplicate_and_skipped_buys_cannot_double_fund_sales():
     buy = dict(proposals()[0], quantity='10')
     sell = dict(buy, type='SELL', quantity='15', comment=buy['comment'] + 'sell')
     row = remote(buy)
-    pending, duplicates = b.reconcile_notice_duplicates([buy, sell], [row])
+    pending, duplicates = reconcile([buy, sell], [row])
     assert duplicates == 1 and pending == [sell]
     with pytest.raises(RuntimeError, match='NOTICE_INSUFFICIENT_HOLDINGS'):
         b.reconcile_notice_holdings(pending, [row])
@@ -238,7 +259,7 @@ def replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, statu
     original = copy.deepcopy((pending, rows, evidence))
 
     def replay():
-        result, count = b.reconcile_notice_duplicates(pending, rows, evidence)
+        result, count = reconcile(pending, rows, evidence)
         assert (len(result), count) == (0, duplicates)
         print(json.dumps({'code': 'NOTICE_MANUAL_DUPLICATES', 'duplicates': count,
             'proposed': len(result), 'financial_writes': 0, 'imported': 0}))
@@ -344,8 +365,8 @@ def test_manual_calendar_day_owned_timestamp_stays_exact_and_source_clock_in_ide
     pending, rows, evidence = retained_manual_case('buy_equal')
     rows[0]['comment'] = pending[0]['comment']
     with pytest.raises(RuntimeError, match='NOTICE_OWNED_ACTIVITY_CONFLICT'):
-        b.reconcile_notice_duplicates(pending, rows, evidence)
-    assert b.reconcile_notice_duplicates(pending, [remote(pending[0])], evidence) == ([], 1)
+        reconcile(pending, rows, evidence)
+    assert reconcile(pending, [remote(pending[0])], evidence) == ([], 1)
     document = real_buy()
     original = proposals(document)[0]
     document['notes'][0]['execution_time'] = '11:22:33'
@@ -391,3 +412,88 @@ def test_manual_calendar_day_conflict_refuses_otherwise_valid_whole_run(monkeypa
         comment=pending[0]['comment'][:-1] + ('0' if pending[0]['comment'][-1] != '0' else '1'))
     replay_manual_calendar_day(monkeypatch, 'constructed_whole_run_fee_refusal',
         [unrelated] + pending, rows, evidence, 1)
+
+
+@pytest.mark.parametrize('order', ['exact_first', 'conflict_first'])
+def test_manual_calendar_day_recognized_row_cannot_hide_conflicting_proposal(monkeypatch, order):
+    pending, rows, evidence = retained_manual_case('buy_equal')
+    conflict = dict(pending[0], fee='2.15', comment=pending[0]['comment'][:-1] +
+        ('0' if pending[0]['comment'][-1] != '0' else '1'))
+    pending = pending + [conflict] if order == 'exact_first' else [conflict] + pending
+    replay_manual_calendar_day(monkeypatch, 'constructed_recognized_row_fee_conflict_' + order,
+        pending, rows, evidence, 1)
+
+
+@pytest.mark.parametrize('variant', ['missing_file', 'hash_mismatch', 'wrong_day', 'wrong_timezone',
+    'wrong_activity', 'wrong_account', 'declaration_only'])
+def test_manual_calendar_day_unverified_retained_context_refuses(monkeypatch, variant):
+    pending, rows, evidence = retained_manual_case('buy_equal')
+    entry = evidence['activities'][rows[0]['remote_id']]
+    path = Path(entry['provenance']['path'])
+    context = b.read_keyed_yaml(path, Path.cwd(), 1024 * 1024)
+    if variant == 'missing_file':
+        entry['provenance']['path'] = 'missing-entry.yaml'
+    elif variant == 'hash_mismatch':
+        entry['provenance']['sha256'] = '0' * 64
+    elif variant == 'declaration_only':
+        entry['provenance'] = 'declared day without retained context'
+    else:
+        key, value = {'wrong_day': ('entered_day', '2019-02-07'), 'wrong_timezone': ('entry_timezone', 'unknown/zone'),
+            'wrong_activity': ('activity_id', 'synthetic-other'), 'wrong_account': ('account_id', 'other')}[variant]
+        context[key] = value
+        b.atomic_private_yaml(path, context)
+        entry['provenance']['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    name = 'constructed_invalid_evidence_declaration_only' if variant == 'declaration_only' else 'constructed_unknown_context_' + variant
+    replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, 1)
+
+
+def test_manual_calendar_day_sync_validates_context_before_broker(tmp_path, monkeypatch):
+    """Exercise the real sync entry point; only external acquisition is substituted."""
+    import sys
+    from types import SimpleNamespace
+
+    pending, rows, evidence = retained_manual_case('buy_equal')
+    evidence['schema_version'] = True
+    b.atomic_private_yaml(tmp_path / 'manual-day-context.yaml', evidence)
+    calls = []
+
+    def broker(*args, **kwargs):
+        calls.append('broker')
+        pytest.fail('broker reached before invalid day-context refusal')
+
+    acquisition = SimpleNamespace(broker_lock=lambda root: None, broker_login_ready=lambda root: None,
+        discovery_receipt=lambda root: None, ghostfolio_origin=lambda origin: None,
+        account_binding_path=lambda root, source: root / 'binding.yaml',
+        saved_account_binding=lambda *args: None, reconcile_binding=lambda *args: None,
+        ghostfolio_snapshot=lambda *args, **kwargs: ([], [], b'{"count":0,"activities":[]}', None),
+        choose=lambda *args: None, acquire=broker, wait_proxy_ready=lambda proxy: None,
+        close_proxy=lambda proxy: None, MAX_BYTES=1024 * 1024)
+    monkeypatch.setitem(sys.modules, 'community_connect', acquisition)
+    monkeypatch.setattr(sys, 'path', list(sys.path))
+    monkeypatch.setattr(b, 'buy_simulation_config', lambda: {'source_ref': ACCOUNT['source_account_ref'],
+        'target': ACCOUNT['target_account_id'], 'origin': 'https://synthetic.invalid', 'mappings': MAPPING})
+    monkeypatch.setattr(b, 'parse_remote_activity_snapshot', lambda *args, **kwargs: rows)
+    import subprocess
+    monkeypatch.setattr(subprocess, 'Popen', lambda *args, **kwargs: SimpleNamespace())
+    for key in list(b.os.environ):
+        if key.startswith('BW_') or key == 'GHOST_ACCESS_TOKEN':
+            monkeypatch.delenv(key)
+    real_path = Path
+    monkeypatch.setattr(b, 'Path', lambda value: tmp_path if value == '/state' else real_path(value))
+    previous_umask = b.os.umask(0o077)
+    try:
+        with pytest.raises(RuntimeError, match='NOTICE_DAY_CONTEXT_INVALID'):
+            b.sync_buy_simulation()
+    finally:
+        b.os.umask(previous_umask)
+    assert not calls
+    print('constructed_real_sync_guard: invalid_context_refused broker_attempts=0 financial_writes=0 confirmation_requests=0')
+
+
+def test_manual_calendar_day_distinct_exact_financial_groups(monkeypatch):
+    pending, rows, _ = retained_manual_case('buy_equal')
+    second = dict(pending[0], fee='2.15', comment=pending[0]['comment'][:-1] +
+        ('0' if pending[0]['comment'][-1] != '0' else '1'))
+    rows.append(dict(rows[0], remote_id='synthetic-second', fee=Decimal('2.15')))
+    replay_manual_calendar_day(monkeypatch, 'constructed_distinct_exact_fee_groups', pending + [second],
+        rows, day_evidence(rows, pending[0]['date'][:10]), 0, duplicates=2)
