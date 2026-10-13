@@ -1400,7 +1400,7 @@ def remote_active_context(activity):
     return not inactive
 
 
-def parse_remote_activity_snapshot(raw):
+def parse_remote_activity_snapshot(raw, retain_stored_date=False):
     try:
         data = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
     except (ValueError, TypeError, RecursionError):
@@ -1473,6 +1473,8 @@ def parse_remote_activity_snapshot(raw):
                            "operation_date": utc.date().isoformat(),
                            "date_context_verified": utc.hour == utc.minute == utc.second == utc.microsecond == 0,
                            "active": active, "comment": row["comment"]})
+        if retain_stored_date:
+            normalized[-1]["stored_date"] = row["date"]
     return normalized
 
 
@@ -4253,7 +4255,67 @@ def notice_signature(activity):
         *(Decimal(activity[key]) for key in ('quantity', 'unitPrice', 'fee')))
 
 
-def reconcile_notice_duplicates(proposals, remote):
+def notice_manual_day_context(remote, evidence, evidence_root=None):
+    """Bind retained historical entry evidence to exact current financial rows."""
+    if (not isinstance(evidence, dict) or set(evidence) != {'schema_version', 'activities'}
+            or type(evidence['schema_version']) is not int or evidence['schema_version'] != 1
+            or not isinstance(evidence['activities'], dict)):
+        fail('NOTICE_DAY_CONTEXT_INVALID')
+    fields = {'account_id', 'stored_date', 'financial_fingerprint', 'civil_day', 'provenance'}
+    for key, entry in evidence['activities'].items():
+        if (not isinstance(key, str) or not key or not isinstance(entry, dict) or set(entry) != fields
+                or any(not isinstance(entry[field], str) or not entry[field].strip() for field in fields - {'provenance'})
+                or not isinstance(entry['provenance'], dict)
+                or set(entry['provenance']) != {'path', 'sha256'}
+                or not isinstance(entry['provenance']['path'], str) or not entry['provenance']['path']
+                or Path(entry['provenance']['path']).is_absolute()
+                or not isinstance(entry['provenance']['sha256'], str)
+                or not re.fullmatch(r'[0-9a-f]{64}', entry['provenance']['sha256'])
+                or not re.fullmatch(r'[0-9a-f]{64}', entry['financial_fingerprint'])
+                or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', entry['civil_day'])):
+            fail('NOTICE_DAY_CONTEXT_INVALID')
+        try:
+            datetime.strptime(entry['civil_day'], '%Y-%m-%d')
+        except ValueError:
+            fail('NOTICE_DAY_CONTEXT_INVALID')
+    contexts = {}
+    for key, entry in evidence['activities'].items():
+        if evidence_root is None:
+            continue
+        try:
+            raw = read_local_bytes(Path(evidence_root) / entry['provenance']['path'], evidence_root, 1024 * 1024)
+            if hashlib.sha256(raw).hexdigest() != entry['provenance']['sha256']:
+                continue
+            context = parse_keyed_yaml(raw)
+            required = {'schema_version', 'activity_id', 'account_id', 'stored_date',
+                'financial_fingerprint', 'entered_day', 'entry_timezone'}
+            if (set(context) != required or type(context['schema_version']) is not int
+                    or context['schema_version'] != 1 or context['activity_id'] != key
+                    or any(context[field] != entry[field] for field in
+                        ('account_id', 'stored_date', 'financial_fingerprint'))
+                    or context['entered_day'] != entry['civil_day']
+                    or not isinstance(context['entry_timezone'], str)):
+                continue
+            instant = datetime.fromisoformat(context['stored_date'].replace('Z', '+00:00'))
+            if (instant.tzinfo is None or instant.astimezone(ZoneInfo(context['entry_timezone'])).date().isoformat()
+                    != context['entered_day']):
+                continue
+            contexts[key] = context
+        except (OSError, ValueError, KeyError, RuntimeError):
+            # Missing, changed or unusable retained entry context proves no day.
+            continue
+    result = []
+    for row in remote:
+        entry = evidence['activities'].get(row['remote_id'])
+        verified = bool(entry and row['remote_id'] in contexts and entry['account_id'] == row['target_account_id']
+            and entry['stored_date'] == row.get('stored_date')
+            and entry['financial_fingerprint'] == activity_financial_fingerprint(row))
+        result.append(dict(row, manual_civil_day=entry['civil_day'] if verified else None,
+            manual_day_provenance='verified' if verified else 'unverified'))
+    return result
+
+
+def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_root=None):
     """Consume exact owned/manual representations; ambiguity aborts the run."""
     if not proposals:
         return [], 0
@@ -4294,31 +4356,59 @@ def reconcile_notice_duplicates(proposals, remote):
             duplicates += 1
         else:
             pending.append(proposal)
-    manual = [row for row in existing if not (row['comment'] or '').startswith('BD#')]
+    manual = notice_manual_day_context(
+        [row for row in existing if not (row['comment'] or '').startswith('BD#')],
+        day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
+
+    def manual_signature(row):
+        if row['kind'] == 'DIVIDEND':
+            return signature(row)
+        if not (row['active'] and row['financial_context_verified'] and row['manual_civil_day']):
+            return None
+        return (row['target_account_id'], row['kind'], row['manual_civil_day'] + 'T00:00:00.000Z',
+            row['symbol'], row['data_source'], row['price_currency'],
+            row['quantity'], row['unit_price'], row['fee'])
+
+    def refuse(reason, **details):
+        print(json.dumps({'code': 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'reason': reason,
+            **details, 'financial_writes': 0, 'imported': 0}), flush=True)
+        fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
     groups = {}
     for proposal in pending:
         groups.setdefault(notice_signature(proposal), []).append(proposal)
-    matched = set()
+    matched, represented = set(), set()
     result = []
     for expected, group in groups.items():
-        matches = [row for row in manual if signature(row) == expected]
+        matches = [row for row in manual if manual_signature(row) == expected]
         if matches:
             if len(matches) != len(group):
-                fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+                refuse('multiplicity_conflict', source_count=len(group), destination_count=len(matches))
             matched.update(row['remote_id'] for row in matches)
+            represented.update(proposal['comment'] for proposal in group)
             duplicates += len(group)
         else:
             result.extend(group)
-    for proposal in result:
+    manual_by_id = {row['remote_id']: row for row in manual}
+    for proposal in pending:
         day = datetime.fromisoformat(proposal['date'].replace('Z', '+00:00')).date()
-        for row in existing:
-            if row['remote_id'] in matched | matched_owned:
+        for original in existing:
+            row = manual_by_id.get(original['remote_id'], original)
+            # Represented groups are consumed one-to-one, but their rows must
+            # still block an unmatched conflicting source proposal.
+            if row['remote_id'] in matched_owned or (row['remote_id'] in matched
+                    and proposal['comment'] in represented):
                 continue
             if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
                 continue
-            gap = abs((datetime.fromisoformat(row['operation_date']).date() - day).days)
+            trade = proposal['type'] in ('BUY', 'SELL')
+            civil_day = row.get('manual_civil_day') if trade and row['remote_id'] in manual_by_id else row['operation_date']
+            if civil_day is None:
+                refuse('unverified_day_provenance')
+            gap = abs((datetime.fromisoformat(civil_day).date() - day).days)
             if gap <= (3 if proposal['type'] == 'DIVIDEND' else 2):
-                fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+                reason = 'fee_difference' if row['fee'] != Decimal(proposal['fee']) else 'financial_or_day_conflict'
+                refuse(reason, day_provenance=row.get('manual_day_provenance', 'owned_exact_required'),
+                    source_fee=proposal['fee'], destination_fee=canonical_decimal(row['fee']))
     return result, duplicates
 
 
@@ -4458,7 +4548,12 @@ def sync_buy_simulation():
                 account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
                            'account_key': str(uuid.uuid4())}
             accounts, _, snapshot, lookup = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True)
-            remote = parse_remote_activity_snapshot(snapshot)
+            remote = parse_remote_activity_snapshot(snapshot, retain_stored_date=True)
+            context_path = root / 'manual-day-context.yaml'
+            day_context = (read_keyed_yaml(context_path, root, acquisition.MAX_BYTES) if context_path.exists()
+                else {'schema_version': 1, 'activities': {}})
+            # Reject malformed evidence before attempting broker access.
+            notice_manual_day_context(remote, day_context, root)
             rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
             profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
             profiles = [profile for profile in profiles if isinstance(profile, dict)]
@@ -4525,7 +4620,7 @@ def sync_buy_simulation():
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
-        proposals, duplicates = reconcile_notice_duplicates(proposals, remote)
+        proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root)
         proposals = reconcile_notice_holdings(proposals, remote)
         atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
@@ -4564,7 +4659,7 @@ def main(argv=None):
                 'GHOSTFOLIO_ACCESS_REFUSED', 'GHOSTFOLIO_RESPONSE_TOO_LARGE', 'GHOSTFOLIO_ACCOUNTS_INVALID',
                 'INVALID_GHOST_ORIGIN'}
             allowed.update({'NOTICE_IDENTITY_OWNERSHIP_CONFLICT', 'NOTICE_PENDING_IDENTITY_CONFLICT',
-                'NOTICE_OWNED_ACTIVITY_CONFLICT', 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS',
+                'NOTICE_OWNED_ACTIVITY_CONFLICT', 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'NOTICE_DAY_CONTEXT_INVALID',
                 'NOTICE_INSUFFICIENT_HOLDINGS', 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
                 'NOTICE_SYMBOL_ISIN_CONFLICT', 'REMOTE_ACTIVITY_COUNT_MISMATCH',
                 'REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED'})
