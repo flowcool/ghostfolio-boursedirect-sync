@@ -245,3 +245,36 @@ def test_public_supervisor_retains_complete_readable_receipts_only_after_logout(
     config = {'source_mode': 'notices', 'account': account, 'acquisition_runs': {'current': 'run'}}
     notes, _, _, evidence, _ = community.importer.discover_daily_acquisitions(config, tmp_path, '2026-10-12', community.MAX_BYTES, 16)
     assert notes == {} and evidence['current']['captures'] == 5
+
+
+def test_optional_isin_lookup_reuses_exchanged_token_and_fixed_get():
+    calls = []
+    def request(method, path, body, headers):
+        calls.append((method, path, headers))
+        if method == 'POST':
+            return b'{"authToken":"SYNTHETIC_SESSION_TOKEN"}'
+        if path == '/api/v1/account':
+            return b'{"accounts":[{"id":"destination-b","name":"Synthetic"}]}'
+        if path == '/api/v1/activities':
+            return b'{"activities":[],"count":0}'
+        return b'{"items":[{"symbol":"VERIFIED.PA","currency":"EUR","dataSource":"YAHOO"}]}'
+    *_, lookup = community.ghostfolio_snapshot('https://ghost.example', 'SYNTHETIC_TOKEN', request, include_lookup=True)
+    assert lookup('FR0000000002')[0]['currency'] == 'EUR'
+    assert calls[-1] == ('GET', '/api/v1/symbol/lookup?query=FR0000000002',
+        {'Authorization': 'Bearer SYNTHETIC_SESSION_TOKEN'})
+    with pytest.raises(RuntimeError, match='INVALID_LOOKUP_ISIN'):
+        lookup('FR0000000002&query=other')
+    assert len(calls) == 4
+
+
+@pytest.mark.parametrize('raw', [b'{}', b'{"items":null}', b'{"items":[],"items":[]}',
+    b'{"items":' + json.dumps([{}] * 1025).encode() + b'}'])
+def test_malformed_lookup_is_refused(raw):
+    def request(method, path, body, headers):
+        if method == 'POST': return b'{"authToken":"SYNTHETIC_SESSION_TOKEN"}'
+        if path == '/api/v1/account': return b'{"accounts":[{"id":"destination-b","name":"Synthetic"}]}'
+        if path == '/api/v1/activities': return b'{"activities":[],"count":0}'
+        return raw
+    *_, lookup = community.ghostfolio_snapshot('https://ghost.example', 'SYNTHETIC_TOKEN', request, include_lookup=True)
+    with pytest.raises((RuntimeError, ValueError)):
+        lookup('FR0000000002')

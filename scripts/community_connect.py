@@ -40,7 +40,7 @@ def ghostfolio_origin(origin):
     return host, port, True
 
 
-def ghostfolio_snapshot(origin, security_token, request=None):
+def ghostfolio_snapshot(origin, security_token, request=None, include_lookup=False):
     """One anonymous token exchange and two fixed GETs; no redirect or retry."""
     host, port, secure = ghostfolio_origin(origin)
     require(isinstance(security_token, str) and 0 < len(security_token) <= 4096
@@ -88,6 +88,15 @@ def ghostfolio_snapshot(origin, security_token, request=None):
         ids.append(row['id'])
     require(len(set(ids)) == len(ids), 'GHOSTFOLIO_ACCOUNTS_INVALID')
     importer.parse_remote_activity_snapshot(activities_raw)
+    if include_lookup:
+        def lookup(isin):
+            require(importer.valid_isin(isin), 'INVALID_LOOKUP_ISIN')
+            raw = send_request('GET', '/api/v1/symbol/lookup?query=' + isin, None, headers)
+            data = json.loads(raw, object_pairs_hook=importer.unique_json_object)
+            require(isinstance(data, dict) and isinstance(data.get('items'), list)
+                    and len(data['items']) <= 1024, 'GHOSTFOLIO_LOOKUP_INVALID')
+            return data['items']
+        return accounts, accounts_raw, activities_raw, lookup
     return accounts, accounts_raw, activities_raw
 
 
