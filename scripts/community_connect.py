@@ -134,7 +134,7 @@ def wait_proxy_ready(proxy, timeout=15):
     raise RuntimeError('SOURCE_PROXY_UNAVAILABLE')
 
 
-def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_source=None):
+def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_source=None, origin=None):
     """Compose a local owned browser worker with the existing inert planner."""
     sequence = 0
     document = None
@@ -212,7 +212,7 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
                 if result.get('accounts_verified') and not binding_saved:
                     require(candidate is not None)
                     source.replay.private._publish(Path('/state/community-binding.yaml'), {
-                        'schema_version': 1, 'ghostfolio_origin': os.environ['GHOSTFOLIO_ORIGIN'], 'account': candidate})
+                        'schema_version': 1, 'ghostfolio_origin': origin or os.environ['GHOSTFOLIO_ORIGIN'], 'account': candidate})
                     binding_saved = True
             elif action == 'complete':
                 require(row.get('accounts_verified') is True and row.get('session_logged_out') is True
