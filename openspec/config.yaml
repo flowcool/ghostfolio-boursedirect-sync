@@ -14,11 +14,13 @@ context: |
   v0.1.1 is a preview-only legacy release; v0.2 rebuilds a small product and reuses only
   the proven login flow and notice parser.
   Readers: the operator (infrastructure expert, not a developer) and community users.
+  A changed decision is applied to proposal, specs, design and tasks before commit.
 
 rules:
   proposal:
     - Max 400 words. Plain English, no internal jargon.
     - Include an in-scope / out-of-scope table that lists every Bourse Direct operation type considered.
+    - Build that table from saved real documents of the chosen source; when the source changes, rebuild it.
     - Include a "Non-goals" section.
   specs:
     - Every requirement has at least one WHEN/THEN scenario that a person can check by running one command and reading its output.
