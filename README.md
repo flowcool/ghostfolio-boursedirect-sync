@@ -147,8 +147,43 @@ accounts. It uses normalized notice fields and preserves identical-row
 multiplicity; ticker, capture URL and capture time do not affect identity.
 An owned activity must match the exact account, date, type, symbol, data source,
 currency, quantity, price and fee. Changed or repeated owned identities refuse.
-An exact manual entry is consumed once. Uncertain dates, nearby differences or
-ambiguous multiplicity stop the entire run with `NOTICE_MANUAL_OVERLAP_AMBIGUOUS`.
+Manual BUY/SELL entries match on an established civil day, even when their stored
+timestamp is not midnight UTC. Account, instrument, type, quantity, unit price,
+currency, data source and fee must match exactly. Each entry is consumed once;
+source and destination multiplicities must be equal. Source execution time stays
+in notice identity and ordering. Owned recognition still requires the exact stored
+midnight UTC date and financial fields.
+
+Retain historical entry-day evidence in private `/state/manual-day-context.yaml`.
+This keyed file is optional; its absence proves no manual trade's civil day.
+Each activity ID maps to its exact account, original stored timestamp, financial
+fingerprint, established day and a reference to retained entry-context evidence:
+
+```yaml
+schema_version: 1
+activities:
+  synthetic-activity-id:
+    account_id: synthetic-destination
+    stored_date: '2019-02-06T15:00:00.000Z'
+    financial_fingerprint: '<64 lowercase hexadecimal characters>'
+    civil_day: '2019-02-06'
+    provenance: 'retained entry-context evidence reference'
+```
+
+The fingerprint is `activity_financial_fingerprint` of the normalized captured
+activity. It binds account, UTC day, type, symbol, data source, currency, quantity,
+unit price and fee. The separate stored timestamp binds the original time exactly.
+A changed row invalidates its evidence. Use only evidence that establishes the
+historical entry day; today's server timezone or matching UTC/local display dates
+do not establish it. This file records provenance, not permission to import or
+correct financial data. Keep it and its supporting evidence off Git, with private
+permissions. Runs never ask for confirmation or create this evidence implicitly.
+
+Unverified day provenance for the same account/instrument/type cannot prove that
+a notice is new, even when its stored UTC date is distant. Uncertain dates,
+financial conflicts and ambiguous multiplicity stop the entire run with
+`NOTICE_MANUAL_OVERLAP_AMBIGUOUS`, zero financial writes and a diagnostic reason.
+Malformed evidence refuses with `NOTICE_DAY_CONTEXT_INVALID` before broker access.
 No existing activity is changed or adopted by writing a comment.
 
 After deduplication, net active Ghostfolio BUY/SELL quantities form the baseline.
@@ -163,9 +198,9 @@ unavailable in this slice. Its holdings guard also supports confirmed balances
 only: a submitted purchase cannot fund a SELL before exact readback confirms it.
 
 The private `boursedirect-state` volume retains source notices, acquisition
-receipts, login journals, `discovery.yaml`, source bindings under `accounts/`
-and `runs/<id>/simulation.yaml`. The previous `community-binding.yaml` is retained
-and reused for its original source account.
+receipts, login journals, `discovery.yaml`, source bindings under `accounts/`,
+`manual-day-context.yaml` and `runs/<id>/simulation.yaml`. The previous
+`community-binding.yaml` is retained and reused for its original source account.
 Simulation does not mark proposals imported. Keep the volume across runs.
 Compose retains bounded logs; they contain the proposed financial fields, so
 restrict access to the Docker host. Credentials, holders and balances are not
