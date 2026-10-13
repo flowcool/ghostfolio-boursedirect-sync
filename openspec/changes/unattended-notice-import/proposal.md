@@ -19,19 +19,19 @@ v0.1.1 needs terminal account selection and never imports. v0.2 imports notices 
 | ACHAT COMPTANT / ACH CPT | BUY from notice |
 | VENTE COMPTANT / VTE CPT | SELL from notice |
 | ACHAT / VENTE ETRANGER | BUY/SELL with established EUR amounts |
-| COUPONS | DIVIDEND: credited EUR amount, notice date and ISIN |
-| DROITS DE GARDE | Out; skip and report |
+| COUPONS | DIVIDEND: credited EUR amount, row date and ISIN |
+| DROITS DE GARDE | Out; error log line, run succeeds |
 | TAXE TRANSACT FINANCIERES | Out as separate fee |
-| DIVISION | Out; manual handling |
-| DET DROIT DE SOUSCRIPTION / RETRAIT TITRES FISCALISE | Out; manual handling |
+| DIVISION | Out; manual Ghostfolio entry |
+| DET DROIT DE SOUSCRIPTION / RETRAIT TITRES FISCALISE | Out; manual Ghostfolio entry |
 | TRANSFERT VALEUR | Out |
 | INVESTISSEMENT ESPECES | Out; no cash updates |
 
-Brokerage stays attached to trades. Unsupported notice rows skip and report; valid rows continue unless reconciliation blocks. Operations absent from notices cannot be reported.
+Brokerage stays attached to trades. Known out-of-scope rows and rows without ISIN log an error; the run succeeds. Unknown operations and unresolved instruments fail it. An unrecorded corporate action stops a later SELL.
 
 ## Non-goals
 
-Full historical reconstruction, balance reconciliation, currency conversion, corporate actions, standalone MANUAL fees, automatic correction/deletion, a new lab, or new internal tooling.
+Full historical reconstruction, balance reconciliation, currency conversion, corporate actions, standalone MANUAL fees, reusing a broker session between runs (GH #67), automatic correction/deletion, a new lab, or new internal tooling.
 
 ## Capabilities
 

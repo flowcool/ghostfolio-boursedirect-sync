@@ -8,7 +8,7 @@ Import supported Bourse Direct operation notices into an explicit Ghostfolio acc
 
 ### Requirement: Explicit operating mode
 
-ENV SHALL configure operation: `DRY_RUN=0` imports; `1` or absent simulates; invalid values refuse. Simulation SHALL never write financial data or mark proposals imported. `GHOST_HOST`, `GHOST_ACCESS_TOKEN`, `GHOST_ACCOUNT_ID`, `MAPPING_FILE` SHALL configure destination and readable YAML, possibly empty. Discovery SHALL need neither Ghostfolio nor mapping.
+ENV SHALL configure operation: `DRY_RUN` `0`/`false`/`no`/`off` imports; `1`/`true`/`yes`/`on` or absent simulates; other values refuse. Simulation SHALL never write financial data or mark proposals imported. `GHOST_HOST`, `GHOST_ACCESS_TOKEN`, `GHOST_ACCOUNT_ID`, `MAPPING_FILE` SHALL configure destination and readable YAML, possibly empty. Discovery SHALL need neither Ghostfolio nor mapping.
 
 #### Scenario: Real BUY simulation
 - **WHEN** `docker compose up --abort-on-container-exit --exit-code-from boursedirect-sync` runs without TTY, with `DRY_RUN=1` and a real BUY
@@ -16,7 +16,7 @@ ENV SHALL configure operation: `DRY_RUN=0` imports; `1` or absent simulates; inv
 
 ### Requirement: Notice acquisition and login safety
 
-Notices SHALL be the sole source for the selected PEA/PEA-PME over today plus 89 days in Europe/Zurich. Bitwarden `BW_*` SHALL supply credentials/TOTP. Login SHALL occur at most once per run. Failed/uncertain login SHALL block restarts until operator resolution. Unexpected pages, incomplete coverage or account mismatch SHALL refuse import.
+Notices SHALL be the sole source for the selected PEA/PEA-PME over today and the previous 89 days in Europe/Zurich. Bitwarden `BW_*` SHALL supply credentials/TOTP. Login SHALL occur at most once per run. Failed/uncertain login SHALL block restarts until operator resolution. Unexpected pages, incomplete coverage or account mismatch SHALL refuse import.
 
 #### Scenario: Login already unresolved
 - **WHEN** the Compose command above runs with a retained unresolved login attempt
@@ -32,23 +32,23 @@ Absent `BD_SOURCE_ACCOUNT_REF` SHALL trigger one discovery, log copyable referen
 
 ### Requirement: Supported financial semantics
 
-BUY/SELL, including foreign operations, SHALL retain Decimal quantities, established EUR prices and brokerage. Unverified nonzero TVA SHALL skip. COUPONS SHALL become DIVIDEND: quantity one, credited EUR amount, zero fee, no inferred withholding. Dates SHALL retain the notice day at explicit midnight UTC. Missing ISIN, unknown operations or unproved currency SHALL skip/report; valid operations continue.
+BUY/SELL, including foreign operations, SHALL retain Decimal quantities, established EUR prices and brokerage. COUPONS SHALL become DIVIDEND: quantity one, credited EUR amount, zero fee, no inferred withholding. Dates SHALL use the row date, not the notice header date, at midnight UTC. Known out-of-scope rows and rows without ISIN SHALL log an error line without failing the run. Unknown operations, unproved currency or nonzero TVA SHALL skip and fail the run. Valid operations continue.
 
 #### Scenario: Mixed notices
-- **WHEN** the Compose command above simulates observed BUY/SELL/coupon forms and unsupported rows
-- **THEN** logs show supported proposals, net dividends, retained dates, skip reasons and zero writes.
+- **WHEN** the Compose command above simulates observed BUY/SELL/coupon forms, a DROITS DE GARDE row and a DIVISION row
+- **THEN** logs show supported proposals, net dividends, row dates, one error line per skipped row, zero writes and exit zero.
 
 ### Requirement: Instrument resolution
 
-Resolution SHALL prioritize YAML, unique existing Ghostfolio ISIN/profile matches, then ISIN lookup. Automatic selection SHALL require one distinct eligible EUR symbol. Ambiguity, absence or failure SHALL skip/report candidate tickers. Venue text SHALL not determine tickers.
+Resolution SHALL prioritize YAML, unique existing Ghostfolio ISIN/profile matches, then ISIN lookup. Automatic selection SHALL require one distinct eligible EUR symbol. Ambiguity, absence or failure SHALL skip, log candidate tickers and fail the run until YAML resolves it. Venue text SHALL not determine tickers.
 
 #### Scenario: Ambiguous lookup
 - **WHEN** the Compose command above runs with empty YAML and several eligible lookup candidates
-- **THEN** logs list candidate tickers, skip the affected ISIN and continue resolved operations.
+- **THEN** logs list candidate tickers, skip the ISIN, continue resolved operations and exit nonzero.
 
-### Requirement: Additive accountable import
+### Requirement: Additive import with readback
 
-Complete unredacted activities SHALL support account-scoped deduplication. Activities/cash SHALL never be updated/deleted. Rejected symbols SHALL not prevent valid imports. Success SHALL require exact account, marker, timestamp, symbol and financial readback. Uncertain writes SHALL block writes across restarts; absent/partial readback SHALL not authorize replay.
+Deduplication SHALL read all destination account activities. Existing activities and cash SHALL never change. A rejected symbol SHALL not block other imports. Success SHALL require readback of the same account, identity comment, date, symbol and amounts. An unconfirmed write SHALL block writes, across restarts, until operator resolution.
 
 #### Scenario: Previously imported notices
 - **WHEN** the Compose command above runs in simulation against matching owned activities
@@ -56,7 +56,7 @@ Complete unredacted activities SHALL support account-scoped deduplication. Activ
 
 ### Requirement: Holdings reconciliation before import
 
-After deduplication, all pending trades SHALL reconcile against active destination holdings, including preceding pending BUYs. Negative projected holdings or ambiguous manual overlap SHALL stop the entire run before financial writes, including simulation. Errors SHALL identify ISIN/symbol, availability and requested sale. Only confirmed accepted BUYs SHALL fund dispatched SELLs.
+After deduplication, all pending trades SHALL reconcile against net Ghostfolio quantities per symbol, including preceding pending BUYs. Pre-window holdings and corporate actions must already exist in Ghostfolio. Negative projected holdings or ambiguous manual overlap SHALL stop the entire run before financial writes, including simulation. Errors SHALL identify ISIN/symbol, availability and requested sale. Only confirmed accepted BUYs SHALL fund dispatched SELLs.
 
 #### Scenario: Insufficient shares
 - **WHEN** the Compose command above proposes selling 50 shares while Ghostfolio holds 10, without preceding new BUYs
@@ -64,7 +64,7 @@ After deduplication, all pending trades SHALL reconcile against active destinati
 
 ### Requirement: Scheduled operation and reporting
 
-Empty `CRON` SHALL run once; valid five-field `CRON` SHALL schedule nonoverlapping runs. Logs SHALL report proposed/imported/duplicate/skipped counts without secrets/pages. Optional `APPRISE_URLS` SHALL send one bounded alert per failed import run. Skips SHALL exit nonzero; confirmed empty windows SHALL succeed.
+Empty `CRON` SHALL run once; valid five-field `CRON` SHALL schedule nonoverlapping runs. Logs SHALL report proposed/imported/duplicate/skipped counts without secrets/pages. Optional `APPRISE_URLS` SHALL send one bounded alert per failed non-simulated run. Confirmed empty windows SHALL succeed.
 
 #### Scenario: Invalid schedule
 - **WHEN** the Compose command above runs with malformed `CRON`
