@@ -4261,7 +4261,7 @@ def simulate_buy_notice(document, account, mappings, resolver=None, failures=Non
             'NOTICE_NO_ISIN' if not note.get('isin') else None)
         if reason:
             failed = reason in ('NOTICE_UNKNOWN_OPERATION', 'NOTICE_CURRENCY_UNPROVED', 'NOTICE_NONZERO_TVA')
-            print(json.dumps({'code': reason, 'level': 'error', 'operation': operation,
+            print(json.dumps({'code': reason, 'level': 'error', 'slot': note['slot'],
                 'date': note['date'].isoformat(), 'isin': note.get('isin'), 'run_failed': failed,
                 'financial_writes': 0}), flush=True)
             skipped.append(reason)

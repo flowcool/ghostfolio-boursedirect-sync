@@ -118,6 +118,21 @@ def test_unknown_without_isin_is_not_hidden_by_parser():
     assert failures == ['NOTICE_UNKNOWN_OPERATION'] * 2
 
 
+def test_unknown_operation_text_never_reaches_container_logs(capsys):
+    private_text = 'PRIVATE SOURCE TEXT: synthetic account/session details'
+    document = notice('note-corporate-anonymized-real.html', lambda html:
+        html.replace('DIVISION', private_text).replace('FR0000000002', ''))
+    failures = []
+    connector.simulate_buy_notice(document, ACCOUNT, MAPPING, failures=failures)
+    output = capsys.readouterr().out
+    assert private_text not in output
+    rows = [json.loads(line) for line in output.splitlines()]
+    assert [row['code'] for row in rows] == ['NOTICE_NO_ISIN', 'NOTICE_UNKNOWN_OPERATION', 'NOTICE_UNKNOWN_OPERATION']
+    assert [row['slot'] for row in rows] == [note['slot'] for note in document['notes']]
+    assert all('operation' not in row for row in rows)
+    assert failures == ['NOTICE_UNKNOWN_OPERATION'] * 2
+
+
 @pytest.mark.parametrize('vat,credits', [('+0,01', {'1041,10': '1041,09', '1762,10': '1762,09'}),
     ('-0,01', {'1041,10': '1041,11', '1762,10': '1762,11'})])
 def test_nonzero_vat_without_isin_is_retained_by_parser(vat, credits):
