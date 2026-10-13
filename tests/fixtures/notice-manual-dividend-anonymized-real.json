@@ -1,0 +1,9 @@
+{
+  "evidence": "Anonymized retained dividend mismatch; IDs/instrument replaced, dates shifted together, amounts scaled. Entry-day provenance is a labelled constructed variant; the retained capture alone does not prove historical entry context.",
+  "source_day": "2019-02-06",
+  "source_net_credit": "20.9198",
+  "stored_date": "2019-02-02T22:00:00.000Z",
+  "destination_quantity": "2",
+  "destination_unit_price": "14.208",
+  "destination_fee": "0.00"
+}

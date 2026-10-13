@@ -4361,13 +4361,21 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
         day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
 
     def manual_signature(row):
-        if row['kind'] == 'DIVIDEND':
-            return signature(row)
         if not (row['active'] and row['financial_context_verified'] and row['manual_civil_day']):
             return None
-        return (row['target_account_id'], row['kind'], row['manual_civil_day'] + 'T00:00:00.000Z',
+        return manual_comparison((row['target_account_id'], row['kind'], row['manual_civil_day'] + 'T00:00:00.000Z',
             row['symbol'], row['data_source'], row['price_currency'],
-            row['quantity'], row['unit_price'], row['fee'])
+            row['quantity'], row['unit_price'], row['fee']))
+
+    def manual_comparison(fields):
+        if fields[1] != 'DIVIDEND':
+            return fields
+        quantity, price, fee = fields[-3:]
+        # Multiplication must stay exact even beyond the ambient Decimal precision.
+        with localcontext() as context:
+            context.prec = max(28, len(quantity.as_tuple().digits) + len(price.as_tuple().digits))
+            total = quantity * price
+        return fields[:-3] + (total, fee)
 
     def refuse(reason, **details):
         print(json.dumps({'code': 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'reason': reason,
@@ -4375,7 +4383,7 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
         fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
     groups = {}
     for proposal in pending:
-        groups.setdefault(notice_signature(proposal), []).append(proposal)
+        groups.setdefault(manual_comparison(notice_signature(proposal)), []).append(proposal)
     matched, represented = set(), set()
     result = []
     for expected, group in groups.items():
@@ -4400,12 +4408,11 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
                 continue
             if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
                 continue
-            trade = proposal['type'] in ('BUY', 'SELL')
-            civil_day = row.get('manual_civil_day') if trade and row['remote_id'] in manual_by_id else row['operation_date']
+            civil_day = row.get('manual_civil_day') if row['remote_id'] in manual_by_id else row['operation_date']
             if civil_day is None:
                 refuse('unverified_day_provenance')
             gap = abs((datetime.fromisoformat(civil_day).date() - day).days)
-            if gap <= (3 if proposal['type'] == 'DIVIDEND' else 2):
+            if gap <= (4 if proposal['type'] == 'DIVIDEND' else 2):
                 reason = 'fee_difference' if row['fee'] != Decimal(proposal['fee']) else 'financial_or_day_conflict'
                 refuse(reason, day_provenance=row.get('manual_day_provenance', 'owned_exact_required'),
                     source_fee=proposal['fee'], destination_fee=canonical_decimal(row['fee']))
