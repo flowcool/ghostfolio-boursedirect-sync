@@ -6,7 +6,7 @@ All Compose checks below use private ENV and state, no TTY, and the service name
 
 ## 1. Real purchase through Compose
 
-- [ ] 1.1 Reuse the existing vault/login, selected-account notice path and BUY parser with sibling configuration/authentication to process one known real BUY with an explicit YAML entry. Touch `Dockerfile`, `compose.yaml`, `entrypoint.sh`, `boursedirect_to_ghostfolio.py`, bounded acquisition files and README. Check `docker compose up --build --abort-on-container-exit --exit-code-from boursedirect-sync` with `DRY_RUN=1`, empty `CRON` and explicit accounts: exact known BUY fields appear, no TTY, zero financial writes. Compare against the saved real notice; simulation must not mark it imported.
+- [x] 1.1 Reuse the existing vault/login, selected-account notice path and BUY parser with sibling configuration/authentication to process one known real BUY with an explicit YAML entry. Touch `Dockerfile`, `compose.yaml`, `entrypoint.sh`, `boursedirect_to_ghostfolio.py`, bounded acquisition files and README. Check `docker compose up --build --abort-on-container-exit --exit-code-from boursedirect-sync` with `DRY_RUN=1`, empty `CRON` and explicit accounts: exact known BUY fields appear, no TTY, zero financial writes. Compare against the saved real notice; simulation must not mark it imported.
 
 ## 2. Safe unattended source selection
 

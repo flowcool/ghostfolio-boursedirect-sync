@@ -38,10 +38,11 @@ COPY collector/lab/source-browser-pipe.mjs collector/lab/browser-sandbox-proof.m
 COPY collector/source-pin.json ./source-pin.json
 COPY collector/vault-egress.py ./collector/
 COPY boursedirect_to_ghostfolio.py ./
+COPY --chmod=755 entrypoint.sh ./
 COPY scripts/community_connect.py scripts/source_qualification.py scripts/source_connection.py scripts/source_vault_inspection.py scripts/native_cdp_allocation.py ./scripts/
 RUN node --input-type=module -e 'import fs from "node:fs"; import {createHash} from "node:crypto"; fs.writeFileSync("cli-pin.json", JSON.stringify({path:"/usr/local/bin/bw",sha256:createHash("sha256").update(fs.readFileSync("/usr/local/bin/bw")).digest("hex"),version:"2026.9.1",defaultsVerified:true}));' \
     && mkdir -m 700 /data /state /home/fixture && chown node:node /data /state /home/fixture
 USER node
 ENV HOME=/state
-ENTRYPOINT ["/opt/venv/bin/python", "/opt/app/scripts/community_connect.py"]
-CMD ["inspect"]
+ENTRYPOINT ["/opt/app/entrypoint.sh"]
+CMD []
