@@ -58,8 +58,10 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
 
 ## Durable work state
 
-- v0.2 spec: Beads `infra-2fji` (OpenSpec change under `openspec/changes/`).
-  The v0.2 epic is created only after Florent approves the change; add it here.
+- v0.2 execution: epic `infra-q0jz`, one child bead per task of
+  `openspec/changes/unattended-notice-import/tasks.md` (`.1` = task 1.1 …
+  `.8` = task 5.1), chained in order. Spec approved and merged (PR #72,
+  bead `infra-2fji`, closed).
 - Audit that set this mode: `infra-uze3` (closed).
 
 ## Code
