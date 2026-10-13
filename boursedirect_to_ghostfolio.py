@@ -4352,7 +4352,7 @@ def notice_candidate_report(proposal, row, status):
         'financial_writes': 0, 'imported': 0}, difference
 
 
-def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_root=None):
+def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_root=None, represented=None):
     """Consume exact owned/manual representations; ambiguity aborts the run."""
     if not proposals:
         return [], 0
@@ -4390,6 +4390,8 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
             if signature(owned[marker]) != expected:
                 fail('NOTICE_OWNED_ACTIVITY_CONFLICT')
             matched_owned.add(owned[marker]['remote_id'])
+            if represented is not None:
+                represented[owned[marker]['remote_id']] = proposal
             duplicates += 1
         else:
             pending.append(proposal)
@@ -4422,7 +4424,7 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
     groups = {}
     for proposal in pending:
         groups.setdefault(manual_comparison(notice_signature(proposal)), []).append(proposal)
-    matched, represented = set(), set()
+    matched, represented_markers = set(), set()
     result = []
     for expected, group in groups.items():
         matches = [row for row in manual if manual_signature(row) == expected]
@@ -4431,8 +4433,13 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
                 refuse('multiplicity_conflict', source_count=len(group), destination_count=len(matches))
                 result.extend(group)
                 continue
+            if represented is not None:
+                # Equal financial rows are interchangeable for stock. Preserve the
+                # source time multiset without attributing manual stored timestamps.
+                for row, proposal in zip(matches, group):
+                    represented[row['remote_id']] = proposal
             matched.update(row['remote_id'] for row in matches)
-            represented.update(proposal['comment'] for proposal in group)
+            represented_markers.update(proposal['comment'] for proposal in group)
             duplicates += len(group)
         else:
             result.extend(group)
@@ -4444,10 +4451,10 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
             if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
                 continue
             exact_owned = row['remote_id'] in matched_owned and row['comment'] == proposal['comment']
-            exact_manual = (row['remote_id'] in matched and proposal['comment'] in represented
+            exact_manual = (row['remote_id'] in matched and proposal['comment'] in represented_markers
                 and manual_signature(row) == manual_comparison(notice_signature(proposal)))
             represented_elsewhere = (row['remote_id'] in matched_owned or (row['remote_id'] in matched
-                and proposal['comment'] in represented))
+                and proposal['comment'] in represented_markers))
             status = ('automatic_duplicate' if exact_owned or exact_manual else
                 'represented_other_notice' if represented_elsewhere else 'review_required')
             report, difference = notice_candidate_report(proposal, row, status)
@@ -4473,45 +4480,88 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
     return result, duplicates
 
 
-def reconcile_notice_holdings(proposals, remote, project_buys=True):
-    """DEGIRO's chronological guard. Dispatch must use confirmed balances only."""
-    balances = {}
-    quantities = [Decimal(p['quantity']) for p in proposals]
-    quantities.extend(row['quantity'] for row in remote)
+def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=None,
+                              day_context=None, evidence_root=None):
+    """Dated account/symbol stock; only source evidence establishes intraday order."""
+    represented = {} if represented is None else represented
+    tracked = {(p['accountId'], p['symbol']) for p in proposals}
+    symbols, events = {}, []
+    for proposal in [*proposals, *represented.values()]:
+        key = (proposal['accountId'], proposal['symbol'])
+        if key in symbols and symbols[key] != proposal['isin']:
+            fail('NOTICE_SYMBOL_ISIN_CONFLICT')
+        symbols[key] = proposal['isin']
+    for proposal in proposals:
+        key = (proposal['accountId'], proposal['symbol'])
+        if proposal['type'] in ('BUY', 'SELL'):
+            events.append({'key': key, 'day': proposal['date'][:10],
+                'time': proposal.get('execution_time'), 'kind': proposal['type'],
+                'quantity': Decimal(proposal['quantity']), 'proposal': proposal})
+    relevant = [row for row in remote if (row['target_account_id'], row['symbol']) in tracked
+        and row['active'] and row['kind'] in ('BUY', 'SELL')]
+    manual = notice_manual_day_context([row for row in relevant if not (row['comment'] or '').startswith('BD#')],
+        day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
+    manual_days = {row['remote_id']: row.get('manual_civil_day') for row in manual}
+    for row in relevant:
+        if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
+            fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
+        source = represented.get(row['remote_id'])
+        day = source['date'][:10] if source else manual_days.get(row['remote_id'])
+        # An exact importer date proves a day, never an execution time.
+        if not day and (row['comment'] or '').startswith('BD#') and row['date_context_verified']:
+            day = row['operation_date']
+        if not day:
+            print(json.dumps({'code': 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
+                'symbol': row['symbol'], 'missing_evidence': 'destination_civil_day',
+                'financial_writes': 0, 'imported': 0}), flush=True)
+            fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
+        events.append({'key': (row['target_account_id'], row['symbol']), 'day': day,
+            'time': source.get('execution_time') if source else None,
+            'kind': row['kind'], 'quantity': row['quantity'], 'proposal': None})
+    quantities = [event['quantity'] for event in events]
     precision = max((q.adjusted() for q in quantities), default=0) - min(
         (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
+    ordered = sorted(proposals, key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
     with localcontext() as context:
         context.prec = max(28, precision)
-        tracked = {(p['accountId'], p['symbol']) for p in proposals}
-        for row in remote:
-            if ((row['target_account_id'], row['symbol']) not in tracked
-                    or not row['active'] or row['kind'] not in ('BUY', 'SELL')):
+        for sale in events:
+            if sale['kind'] != 'SELL' or sale['proposal'] is None:
                 continue
-            if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
-                fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
-            key = (row['target_account_id'], row['symbol'])
-            balances[key] = balances.get(key, Decimal(0)) + (
-                row['quantity'] if row['kind'] == 'BUY' else -row['quantity'])
-        ordered = sorted(proposals, key=lambda p: (p['date'], p['execution_time'], p['comment']))
-        symbols = {}
-        for proposal in ordered:
-            key = (proposal['accountId'], proposal['symbol'])
-            if key in symbols and symbols[key] != proposal['isin']:
-                fail('NOTICE_SYMBOL_ISIN_CONFLICT')
-            symbols[key] = proposal['isin']
-            available = balances.get(key, Decimal(0))
-            quantity = Decimal(proposal['quantity'])
-            if proposal['type'] == 'BUY' and project_buys:
-                balances[key] = available + quantity
-            elif proposal['type'] == 'SELL':
-                if available < quantity:
-                    print(json.dumps({'code': 'NOTICE_INSUFFICIENT_HOLDINGS', 'level': 'error',
-                        'isin': proposal['isin'], 'symbol': proposal['symbol'],
-                        'available': canonical_decimal(available), 'sale': canonical_decimal(quantity),
-                        'financial_writes': 0, 'imported': 0}), flush=True)
-                    fail('NOTICE_INSUFFICIENT_HOLDINGS')
-                balances[key] = available - quantity
-        return ordered
+            preceding, available, dependencies = Decimal(0), Decimal(0), []
+            for event in events:
+                if event is sale or event['key'] != sale['key'] or event['day'] > sale['day']:
+                    continue
+                if event['kind'] == 'BUY' and event['proposal'] is not None and not project_buys:
+                    continue
+                quantity = event['quantity']
+                if event['day'] < sale['day']:
+                    preceding += quantity if event['kind'] == 'BUY' else -quantity
+                    available += quantity if event['kind'] == 'BUY' else -quantity
+                    continue
+                proved_before = bool(event['time'] and sale['time'] and event['time'] < sale['time'])
+                proved_after = bool(event['time'] and sale['time'] and event['time'] > sale['time'])
+                if event['kind'] == 'BUY':
+                    if proved_before:
+                        available += quantity
+                    elif not proved_after:
+                        dependencies.append({'day': event['day'], 'quantity': canonical_decimal(quantity),
+                            'source_execution_time': event['time'], 'missing_evidence': 'strict_source_execution_order'})
+                elif not proved_after:
+                    # Reserve stock for each sale that might precede this sale.
+                    available -= quantity
+            proposal = sale['proposal']
+            possible = available + sum((Decimal(item['quantity']) for item in dependencies), Decimal(0))
+            uncertain = available < sale['quantity'] <= possible
+            diagnostic = {'code': 'NOTICE_HOLDINGS_ORDER_UNPROVED' if uncertain else
+                'NOTICE_INSUFFICIENT_HOLDINGS' if available < sale['quantity'] else 'NOTICE_DATED_HOLDINGS',
+                'isin': proposal['isin'], 'symbol': proposal['symbol'], 'sale_day': sale['day'],
+                'preceding_day_available': canonical_decimal(preceding),
+                'available': canonical_decimal(available), 'sale': canonical_decimal(sale['quantity']),
+                'dependent_purchases': dependencies if uncertain else [], 'financial_writes': 0, 'imported': 0}
+            print(json.dumps(diagnostic), flush=True)
+            if available < sale['quantity']:
+                fail(diagnostic['code'])
+    return ordered
 
 
 def simulate_buy_notice(document, account, mappings, resolver=None, failures=None, skipped=None, occurrences=None):
@@ -4681,8 +4731,10 @@ def sync_buy_simulation():
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
-        proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root)
-        proposals = reconcile_notice_holdings(proposals, remote)
+        represented = {}
+        proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root, represented)
+        proposals = reconcile_notice_holdings(proposals, remote, represented=represented,
+            day_context=day_context, evidence_root=root)
         atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
             'failed_rows': len(failures), 'skipped': len(skipped), 'duplicates': duplicates,
