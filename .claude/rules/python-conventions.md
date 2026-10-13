@@ -8,5 +8,5 @@ globs: ["*.py"]
 - Never log a token or credential
 - Errors: `raise RuntimeError(...)` with explicit message, never silent `return` on failure
 - Mono-file: do not create additional modules without strong justification
-- Verification: follow the proportional validation guidance in [AGENTS.md](../../AGENTS.md).
+- Tests: `pytest` in `tests/` (offline, pure functions, requests mocked; dev-only deps in `requirements-dev.txt`, never in the image). Run `.venv/bin/python -m pytest -q` before commit. A logic change ships with a test
 - No classes — functional style with module-level functions
