@@ -7,7 +7,7 @@ v0.1.1 needs terminal account selection and never imports. v0.2 imports notices 
 ## What Changes
 
 - **BREAKING**: rebuild on siblings, retaining proven Bitwarden/TOTP login and notice parsing.
-- Read notices over 90 days for one explicit PEA/PEA-PME per service; read all Ghostfolio history.
+- Read notices for today and the previous 89 days in Europe/Zurich for one explicit PEA/PEA-PME per service; read all Ghostfolio history.
 - `DRY_RUN=0` imports; `1` or absent simulates. First acceptance uses explicit simulation; no new lab.
 - Missing `BD_SOURCE_ACCOUNT_REF`: discover once, log options, stop; no automatic repeated login.
 - Require YAML, possibly empty; prioritize overrides, existing Ghostfolio profiles, then lookup. Report unresolved candidates.
