@@ -4231,7 +4231,138 @@ def resolve_instrument(isin, overrides, profiles, lookup):
     return None
 
 
-def simulate_buy_notice(document, account, mappings, resolver=None, failures=None, skipped=None):
+def notice_identity(note, account, occurrences):
+    """Account-owned normalized source evidence, independent of ticker/capture."""
+    namespace = hashlib.sha256(json.dumps([account['source_account_ref'],
+        account['target_account_id']], separators=(',', ':')).encode()).hexdigest()
+    fields = ('kind', 'date', 'isin', 'execution_time', 'quantity', 'unit_price',
+        'brokerage', 'vat', 'debit', 'credit')
+    source = {key: canonical_decimal(value) if isinstance(value, Decimal) else
+        value.isoformat() if hasattr(value, 'isoformat') else value
+        for key in fields if (value := note.get(key)) is not None}
+    basis = json.dumps(source, sort_keys=True, separators=(',', ':'))
+    rank = occurrences.get(basis, 0) + 1
+    occurrences[basis] = rank
+    digest = hashlib.sha256((basis + ':' + str(rank)).encode()).hexdigest()
+    return 'BD#v2#' + namespace + '#' + digest
+
+
+def notice_signature(activity):
+    return (activity['accountId'], activity['type'], activity['date'], activity['symbol'],
+        activity['dataSource'], activity['currency'],
+        *(Decimal(activity[key]) for key in ('quantity', 'unitPrice', 'fee')))
+
+
+def reconcile_notice_duplicates(proposals, remote):
+    """Consume exact owned/manual representations; ambiguity aborts the run."""
+    if not proposals:
+        return [], 0
+    target = proposals[0]['accountId']
+    namespace = proposals[0]['comment'].rsplit('#', 1)[0] + '#'
+    existing, owned = [], {}
+    for row in remote:
+        comment = row['comment'] or ''
+        if comment.startswith(namespace):
+            if (row['target_account_id'] != target or comment in owned
+                    or not re.fullmatch(re.escape(namespace) + r'[0-9a-f]{64}', comment)):
+                fail('NOTICE_IDENTITY_OWNERSHIP_CONFLICT')
+            owned[comment] = row
+        if row['target_account_id'] != target or row['kind'] not in ('BUY', 'SELL', 'DIVIDEND'):
+            continue
+        existing.append(row)
+
+    def signature(row):
+        # A legacy timezone shift or inactive row cannot prove an exact match.
+        if not (row['active'] and row['date_context_verified'] and row['financial_context_verified']):
+            return None
+        return (row['target_account_id'], row['kind'], row['operation_date'] + 'T00:00:00.000Z',
+            row['symbol'], row['data_source'], row['price_currency'],
+            row['quantity'], row['unit_price'], row['fee'])
+
+    pending, seen, duplicates, matched_owned = [], {}, 0, set()
+    for proposal in proposals:
+        if proposal['accountId'] != target or not proposal['comment'].startswith(namespace):
+            fail('NOTICE_IDENTITY_OWNERSHIP_CONFLICT')
+        marker, expected = proposal['comment'], notice_signature(proposal)
+        if marker in seen:
+            fail('NOTICE_PENDING_IDENTITY_CONFLICT')
+        seen[marker] = expected
+        if marker in owned:
+            if signature(owned[marker]) != expected:
+                fail('NOTICE_OWNED_ACTIVITY_CONFLICT')
+            matched_owned.add(owned[marker]['remote_id'])
+            duplicates += 1
+        else:
+            pending.append(proposal)
+    manual = [row for row in existing if not (row['comment'] or '').startswith('BD#')]
+    groups = {}
+    for proposal in pending:
+        groups.setdefault(notice_signature(proposal), []).append(proposal)
+    matched = set()
+    result = []
+    for expected, group in groups.items():
+        matches = [row for row in manual if signature(row) == expected]
+        if matches:
+            if len(matches) != len(group):
+                fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+            matched.update(row['remote_id'] for row in matches)
+            duplicates += len(group)
+        else:
+            result.extend(group)
+    for proposal in result:
+        day = datetime.fromisoformat(proposal['date'].replace('Z', '+00:00')).date()
+        for row in existing:
+            if row['remote_id'] in matched | matched_owned:
+                continue
+            if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
+                continue
+            gap = abs((datetime.fromisoformat(row['operation_date']).date() - day).days)
+            if gap <= (3 if proposal['type'] == 'DIVIDEND' else 2):
+                fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+    return result, duplicates
+
+
+def reconcile_notice_holdings(proposals, remote, project_buys=True):
+    """DEGIRO's chronological guard. Dispatch must use confirmed balances only."""
+    balances = {}
+    quantities = [Decimal(p['quantity']) for p in proposals]
+    quantities.extend(row['quantity'] for row in remote)
+    precision = max((q.adjusted() for q in quantities), default=0) - min(
+        (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
+    with localcontext() as context:
+        context.prec = max(28, precision)
+        targets = {p['accountId'] for p in proposals}
+        for row in remote:
+            if row['target_account_id'] not in targets or not row['active'] or row['kind'] not in ('BUY', 'SELL'):
+                continue
+            if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
+                fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
+            key = (row['target_account_id'], row['symbol'])
+            balances[key] = balances.get(key, Decimal(0)) + (
+                row['quantity'] if row['kind'] == 'BUY' else -row['quantity'])
+        ordered = sorted(proposals, key=lambda p: (p['date'], p['execution_time'], p['comment']))
+        symbols = {}
+        for proposal in ordered:
+            key = (proposal['accountId'], proposal['symbol'])
+            if key in symbols and symbols[key] != proposal['isin']:
+                fail('NOTICE_SYMBOL_ISIN_CONFLICT')
+            symbols[key] = proposal['isin']
+            available = balances.get(key, Decimal(0))
+            quantity = Decimal(proposal['quantity'])
+            if proposal['type'] == 'BUY' and project_buys:
+                balances[key] = available + quantity
+            elif proposal['type'] == 'SELL':
+                if available < quantity:
+                    print(json.dumps({'code': 'NOTICE_INSUFFICIENT_HOLDINGS', 'level': 'error',
+                        'isin': proposal['isin'], 'symbol': proposal['symbol'],
+                        'available': canonical_decimal(available), 'sale': canonical_decimal(quantity),
+                        'financial_writes': 0, 'imported': 0}), flush=True)
+                    fail('NOTICE_INSUFFICIENT_HOLDINGS')
+                balances[key] = available - quantity
+        return ordered
+
+
+def simulate_buy_notice(document, account, mappings, resolver=None, failures=None, skipped=None, occurrences=None):
     """Simulate supported notice rows; financial failures do not hide valid rows."""
     if document['account_ref'] != account['source_account_ref']:
         fail('NOTICE_ACCOUNT_MISMATCH')
@@ -4280,12 +4411,16 @@ def simulate_buy_notice(document, account, mappings, resolver=None, failures=Non
         coupon = note['kind'] == 'COUPON'
         # The EUR debit/credit headers and exact gross/net trade arithmetic
         # establish EUR prices and brokerage, including foreign executions.
-        proposals.append({'type': 'DIVIDEND' if coupon else note['kind'],
+        proposal = {'type': 'DIVIDEND' if coupon else note['kind'],
             'date': note['date'].isoformat() + 'T00:00:00.000Z',
             'isin': note['isin'], 'symbol': mapping['symbol'], 'currency': 'EUR',
             'quantity': '1' if coupon else canonical_decimal(note['quantity'].copy_abs()),
             'unitPrice': canonical_decimal(note['credit'] if coupon else note['unit_price']),
-            'fee': '0' if coupon else canonical_decimal(note['brokerage'])})
+            'fee': '0' if coupon else canonical_decimal(note['brokerage'])}
+        if occurrences is not None:
+            proposal.update(accountId=account['target_account_id'], dataSource='YAHOO',
+                comment=notice_identity(note, account, occurrences), execution_time=note.get('execution_time', '00:00:00'))
+        proposals.append(proposal)
     return proposals
 
 
@@ -4322,6 +4457,7 @@ def sync_buy_simulation():
                 account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
                            'account_key': str(uuid.uuid4())}
             accounts, _, snapshot, lookup = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True)
+            remote = parse_remote_activity_snapshot(snapshot)
             rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
             profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
             profiles = [profile for profile in profiles if isinstance(profile, dict)]
@@ -4368,7 +4504,7 @@ def sync_buy_simulation():
             'session_logged_out': receipt['session_logged_out'], 'browser_exit_verified': receipt['browser_exit_verified'],
             'monthly_statements': documents['monthly_statements'], 'contract_notes': documents['contract_notes'],
             'financial_writes': 0}), flush=True)
-        proposals, skipped, failures = [], [], []
+        proposals, skipped, failures, occurrences = [], [], [], {}
         resolved = {}
 
         def resolver(isin):
@@ -4387,15 +4523,17 @@ def sync_buy_simulation():
                 fail('NOTICE_ACCOUNT_MISMATCH')
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
-            proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped))
+            proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
+        proposals, duplicates = reconcile_notice_duplicates(proposals, remote)
+        proposals = reconcile_notice_holdings(proposals, remote)
         atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
-            'failed_rows': len(failures), 'skipped': len(skipped),
+            'failed_rows': len(failures), 'skipped': len(skipped), 'duplicates': duplicates,
             'financial_writes': 0, 'imported': 0})
         for proposal in proposals:
             print(json.dumps({'code': 'DRY_RUN_PROPOSAL', **proposal}), flush=True)
         print(json.dumps({'code': 'NOTICE_SIMULATION_COMPLETED', 'proposed': len(proposals), 'imported': 0,
-            'skipped': len(skipped), 'failed_rows': len(failures),
+            'skipped': len(skipped), 'failed_rows': len(failures), 'duplicates': duplicates,
             'contract_notes': documents['contract_notes'], 'financial_writes': 0}), flush=True)
         return 1 if failures else 0
     finally:
@@ -4424,6 +4562,11 @@ def main(argv=None):
                 'SOURCE_CONNECT_REFUSED', 'SOURCE_PROXY_UNAVAILABLE', 'GHOSTFOLIO_ACCESS_INVALID',
                 'GHOSTFOLIO_ACCESS_REFUSED', 'GHOSTFOLIO_RESPONSE_TOO_LARGE', 'GHOSTFOLIO_ACCOUNTS_INVALID',
                 'INVALID_GHOST_ORIGIN'}
+            allowed.update({'NOTICE_IDENTITY_OWNERSHIP_CONFLICT', 'NOTICE_PENDING_IDENTITY_CONFLICT',
+                'NOTICE_OWNED_ACTIVITY_CONFLICT', 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS',
+                'NOTICE_INSUFFICIENT_HOLDINGS', 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
+                'NOTICE_SYMBOL_ISIN_CONFLICT', 'REMOTE_ACTIVITY_COUNT_MISMATCH',
+                'REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED'})
             refusals = {'BROKER_RUN_LOCKED', 'BROKER_STATE_INVALID', 'BROKER_LOGIN_UNRESOLVED',
                 'BROKER_DISCOVERY_UNRESOLVED', 'BROKER_DISCOVERY_INVALID'}
             allowed.update(refusals)

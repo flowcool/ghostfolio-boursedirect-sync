@@ -4,10 +4,10 @@ The v0.2 rebuild simulates BUY, SELL and net coupon activities through Docker
 Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
 account and a readable YAML mapping file. No financial records are written.
 
-This source checkout implements OpenSpec tasks 1.1, 2.1, 2.2, 3.1 and 3.2.
+This source checkout implements OpenSpec tasks 1.1, 2.1, 2.2, 3.1, 3.2 and 4.1.
 Account discovery runs once without a terminal and needs only Bitwarden
-configuration. Deduplication, holdings checks, actual imports and scheduling
-belong to later slices. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
+configuration. Deduplication and holdings checks run before proposals. Actual
+imports and scheduling belong to later slices. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
 
 ## Quick start
 
@@ -129,7 +129,7 @@ price and fee `0`. The source gross amount and commission do not become an
 inferred withholding tax. Dates use each financial row's date at midnight UTC,
 not the notice header date. Decimal values are serialized as exact strings.
 `NOTICE_SIMULATION_COMPLETED` reports `financial_writes=0`, `imported=0`,
-`proposed`, `skipped` and `failed_rows`.
+`proposed`, `duplicates`, `skipped` and `failed_rows`.
 
 Each excluded row logs one error. DROITS DE GARDE, TAXE TRANSACT FINANCIERES,
 DIVISION, DET DROIT DE SOUSCRIPTION, RETRAIT TITRES FISCALISE, TRANSFERT VALEUR
@@ -138,7 +138,29 @@ without ISIN do not fail the run. Unknown operations, unproved currency and
 nonzero TVA skip the row and make the run exit nonzero, even without an ISIN.
 Other valid rows continue. An unresolved instrument also skips and fails the run.
 Structural or arithmetic inconsistencies refuse the run. Review these errors
-before any later import; this slice does not check SELL holdings.
+before any later import.
+
+The connector reads all destination activities in one request and checks the
+reported count. Missing or redacted financial fields refuse the run. Each
+proposal has a stable identity comment scoped to the source and destination
+accounts. It uses normalized notice fields and preserves identical-row
+multiplicity; ticker, capture URL and capture time do not affect identity.
+An owned activity must match the exact account, date, type, symbol, data source,
+currency, quantity, price and fee. Changed or repeated owned identities refuse.
+An exact manual entry is consumed once. Uncertain dates, nearby differences or
+ambiguous multiplicity stop the entire run with `NOTICE_MANUAL_OVERLAP_AMBIGUOUS`.
+No existing activity is changed or adopted by writing a comment.
+
+After deduplication, net active Ghostfolio BUY/SELL quantities form the baseline.
+All pending trades reconcile in source date/execution-time order before any
+proposal is logged. Pre-window holdings and corporate actions must already be
+represented in Ghostfolio. A SELL exceeding availability stops the entire run,
+including simulation. `NOTICE_INSUFFICIENT_HOLDINGS` reports ISIN, symbol,
+`available`, `sale` and `financial_writes=0`. Preceding pending BUYs contribute
+only to the projected simulation balance. Skipped or duplicate BUYs add nothing;
+represented BUYs already form part of the baseline. Actual dispatch remains
+unavailable in this slice. Its holdings guard also supports confirmed balances
+only: a submitted purchase cannot fund a SELL before exact readback confirms it.
 
 The private `boursedirect-state` volume retains source notices, acquisition
 receipts, login journals, `discovery.yaml`, source bindings under `accounts/`
