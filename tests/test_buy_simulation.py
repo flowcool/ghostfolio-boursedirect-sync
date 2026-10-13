@@ -63,3 +63,94 @@ def test_schedule_refuses_before_broker_or_destination(monkeypatch):
     monkeypatch.setenv('CRON', '0 6 * * *')
     with pytest.raises(RuntimeError, match='SCHEDULING_NOT_IMPLEMENTED'):
         connector.buy_simulation_config()
+
+
+def test_readable_empty_map_is_valid_but_empty_yaml_or_missing_file_refuses(tmp_path, monkeypatch):
+    monkeypatch.setenv('DRY_RUN', '1')
+    monkeypatch.setenv('CRON', '')
+    monkeypatch.setenv('BD_SOURCE_ACCOUNT_REF', ACCOUNT['source_account_ref'])
+    monkeypatch.setenv('GHOST_ACCOUNT_ID', 'synthetic-destination')
+    path = tmp_path / 'mapping.yaml'
+    monkeypatch.setenv('MAPPING_FILE', str(path))
+    with pytest.raises(RuntimeError, match='MAPPING_FILE_UNREADABLE_OR_INVALID'):
+        connector.buy_simulation_config()
+    path.write_text('{}\n')
+    assert connector.buy_simulation_config()['mappings'] == {}
+    for raw, code in (('', 'INVALID_KEYED_YAML'), ('[]', 'INVALID_KEYED_YAML'),
+        ('FR0000000002: {symbol: BAD, currency: USD}', 'INVALID_EXPLICIT_MAPPING'),
+        ('FR0000000002: {symbol: BAD, currency: EUR, venue: Paris}', 'INVALID_EXPLICIT_MAPPING')):
+        path.write_text(raw)
+        with pytest.raises(RuntimeError, match=code):
+            connector.buy_simulation_config()
+
+
+def candidate(symbol='VERIFIED.PA', currency='EUR', source='YAHOO', isin='FR0000000002'):
+    return {'isin': isin, 'symbol': symbol, 'currency': currency, 'dataSource': source}
+
+
+def test_override_and_unique_profile_precede_lookup():
+    lookup = lambda isin: pytest.fail('lookup must not run')
+    assert connector.resolve_instrument('FR0000000002', MAPPING, [candidate('OTHER.PA')], lookup) == MAPPING['FR0000000002']
+    assert connector.resolve_instrument('FR0000000002', {}, [candidate(), candidate()], lookup) == MAPPING['FR0000000002']
+
+
+def test_lookup_uses_isin_and_only_one_distinct_eligible_eur_symbol():
+    calls = []
+    def lookup(isin):
+        calls.append(isin)
+        return [candidate(), candidate(), candidate('US', 'USD'), candidate('CUSTOM', source='MANUAL'),
+                candidate('NO_CURRENCY', currency=None)]
+    assert connector.resolve_instrument('FR0000000002', {}, [candidate(isin='FR0000000010')], lookup) == MAPPING['FR0000000002']
+    assert calls == ['FR0000000002']
+
+
+@pytest.mark.parametrize('items,code', [([], 'INSTRUMENT_UNRESOLVED'),
+    ([candidate('A.PA'), candidate('B.PA')], 'INSTRUMENT_AMBIGUOUS'),
+    ([candidate('US', 'USD'), candidate('NO_CURRENCY', currency=None)], 'INSTRUMENT_UNRESOLVED')])
+def test_unresolved_lookup_reports_candidates(items, code, capsys):
+    import json
+    assert connector.resolve_instrument('FR0000000002', {}, [], lambda isin: items) is None
+    row = json.loads(capsys.readouterr().out)
+    assert row['code'] == code
+    assert row['candidate_tickers'] == sorted(item['symbol'] for item in items)
+
+
+def test_ambiguous_existing_profiles_refuse_without_lookup(capsys):
+    assert connector.resolve_instrument('FR0000000002', {}, [candidate('A.PA'), candidate('B.PA')],
+        lambda isin: pytest.fail('do not replace ambiguous existing profiles')) is None
+    assert 'INSTRUMENT_AMBIGUOUS' in capsys.readouterr().out
+
+
+def test_provider_failure_is_bounded_and_skips_only_affected_buy(capsys):
+    def lookup(isin):
+        raise RuntimeError('sensitive-provider-detail')
+    assert connector.resolve_instrument('FR0000000002', {}, [], lookup) is None
+    output = capsys.readouterr().out
+    assert 'INSTRUMENT_LOOKUP_FAILED' in output and 'sensitive' not in output
+    document = real_buy()
+    failed = dict(document['notes'][0], isin='FR0000000010')
+    document['notes'] = [failed, document['notes'][0]]
+    failures = []
+    result = connector.simulate_buy_notice(document, ACCOUNT, {}, lambda isin: MAPPING.get(isin), failures)
+    assert len(result) == 1 and result[0]['unitPrice'] == '8.125'
+    assert failures == ['FR0000000010']
+
+
+@pytest.mark.parametrize('raw,code', [('', 'INVALID_KEYED_YAML'), ('[]', 'INVALID_KEYED_YAML'),
+    ('{}\n{}', 'INVALID_KEYED_YAML'), ('key: 1\nkey: 2', 'YAML_DUPLICATE_KEY'),
+    ('key: &alias {}', 'YAML_ALIAS_NOT_SUPPORTED'), ('1: {}', 'YAML_STRING_KEYS_REQUIRED'),
+    ('key: ' + '[' * 34 + '0' + ']' * 34, 'YAML_TOO_DEEP')])
+def test_yaml_diagnostics_remain_visible_before_any_network(raw, code, tmp_path, monkeypatch, capsys):
+    import json
+    # The real one-shot entrypoint sets a process-wide private umask. Isolate it
+    # here so these early-refusal checks cannot alter other tests' permissions.
+    monkeypatch.setattr(connector.os, 'umask', lambda mask: 0o022)
+    monkeypatch.setenv('DRY_RUN', '1')
+    monkeypatch.setenv('CRON', '')
+    monkeypatch.setenv('BD_SOURCE_ACCOUNT_REF', ACCOUNT['source_account_ref'])
+    monkeypatch.setenv('GHOST_ACCOUNT_ID', 'synthetic-destination')
+    path = tmp_path / 'mapping.yaml'
+    path.write_text(raw)
+    monkeypatch.setenv('MAPPING_FILE', str(path))
+    assert connector.main(['--sync']) == 1
+    assert json.loads(capsys.readouterr().out) == {'code': code, 'financial_writes': 0, 'imported': 0}

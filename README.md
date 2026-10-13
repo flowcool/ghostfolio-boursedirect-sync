@@ -2,11 +2,11 @@
 
 The v0.2 rebuild starts with a noninteractive BUY simulation through Docker
 Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
-account and verified Yahoo mappings. No financial records are written.
+account and a readable YAML mapping file. No financial records are written.
 
-This source checkout implements OpenSpec tasks 1.1 and 2.1. Account discovery
+This source checkout implements OpenSpec tasks 1.1, 2.1, 2.2 and 3.1. Account discovery
 runs once without a terminal and needs only Bitwarden configuration. Additional
-operation types, automatic symbol resolution, deduplication, actual imports and
+operation types, deduplication, actual imports and
 scheduling belong to later slices. Non-BUY rows are counted as deferred in this
 slice. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
 
@@ -33,8 +33,9 @@ Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
    the same options appear with `broker_attempts=0`.
 3. Copy the exact source option into `.env`. Configure `GHOST_HOST`,
    `GHOST_ACCESS_TOKEN` and `GHOST_ACCOUNT_ID`. Create `config/mappings.yaml` as
-   private YAML (`chmod 600`). Use verified
-   Yahoo symbols with explicit EUR currency:
+   private YAML (`chmod 600`). An empty mapping (`{}`) enables automatic
+   resolution. To select a specific candidate, supply its verified Yahoo symbol
+   and explicit EUR currency:
 
    ```yaml
    FR0000000002:
@@ -43,8 +44,12 @@ Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
    ```
 
    This example ISIN is synthetic. Replace it with your actual instrument.
-   Every BUY in the acquired window needs its explicit entry in this slice.
-   A missing mapping refuses the simulation. Venue text never selects a ticker.
+   YAML overrides take priority, followed by unique existing Ghostfolio profiles
+   with the same ISIN, then Ghostfolio ISIN lookup. Automatic selection requires
+   one distinct Yahoo symbol with explicit EUR currency. Venue text never selects
+   a ticker. Missing, ambiguous or failed lookup logs candidate tickers, skips that
+   ISIN and fails the run; resolved BUYs still produce proposals. Add a verified
+   YAML entry to resolve the failure on a later deliberate run.
 4. Run the same Compose command to simulate the configured account:
 
    ```sh

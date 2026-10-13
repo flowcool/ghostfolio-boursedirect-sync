@@ -20,6 +20,7 @@ services:
       GHOST_ACCESS_TOKEN: ${GHOST_ACCESS_TOKEN:-}
       GHOST_ACCOUNT_ID: ${GHOST_ACCOUNT_ID:-}
       BD_SOURCE_ACCOUNT_REF: ${BD_SOURCE_ACCOUNT_REF:-}
+      # Required readable YAML; {} enables Ghostfolio ISIN resolution.
       MAPPING_FILE: ${MAPPING_FILE:-/config/mappings.yaml}
       DRY_RUN: ${DRY_RUN:-1}
       CRON: ${CRON:-}

@@ -4168,9 +4168,10 @@ def buy_simulation_config():
             or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', target)):
         fail('EXPLICIT_ACCOUNTS_REQUIRED')
     path = Path(os.environ.get('MAPPING_FILE', '/config/mappings.yaml'))
-    document = parse_keyed_yaml(read_local_bytes(path, path.parent, 8 * 1024 * 1024))
-    if not isinstance(document, dict) or not document:
-        fail('EXPLICIT_MAPPING_REQUIRED')
+    try:
+        document = parse_keyed_yaml(read_local_bytes(path, path.parent, 8 * 1024 * 1024))
+    except OSError:
+        fail('MAPPING_FILE_UNREADABLE_OR_INVALID')
     # Adapt DEGIRO's verified_mapping_document contract; this slice supports EUR.
     quotes = {}
     for isin, entry in document.items():
@@ -4183,17 +4184,57 @@ def buy_simulation_config():
             'origin': os.environ.get('GHOST_HOST', ''), 'mappings': quotes}
 
 
-def simulate_buy_notice(document, account, mappings):
+def instrument_candidates(items):
+    """Distinct Yahoo EUR symbols only; never infer currency or venue."""
+    tickers, eligible = set(), set()
+    for item in items:
+        if not isinstance(item, dict):
+            fail('GHOSTFOLIO_LOOKUP_INVALID')
+        symbol = item.get('symbol')
+        if not isinstance(symbol, str) or not re.fullmatch(r'[A-Z0-9^][A-Z0-9.^=_-]{0,63}', symbol):
+            continue
+        tickers.add(symbol)
+        if item.get('currency') == 'EUR' and item.get('dataSource') == 'YAHOO':
+            eligible.add(symbol)
+    return sorted(tickers), sorted(eligible)
+
+
+def resolve_instrument(isin, overrides, profiles, lookup):
+    """An override wins; ambiguity and provider failures remain explicit skips."""
+    if isin in overrides:
+        return overrides[isin]
+    candidates, eligible = instrument_candidates([row for row in profiles if row.get('isin') == isin])
+    source = 'existing_profile'
+    reason = 'INSTRUMENT_AMBIGUOUS'
+    if not eligible:
+        source = 'lookup'
+        try:
+            candidates, eligible = instrument_candidates(lookup(isin))
+            reason = 'INSTRUMENT_AMBIGUOUS' if eligible else 'INSTRUMENT_UNRESOLVED'
+        except Exception:
+            candidates, eligible, reason = [], [], 'INSTRUMENT_LOOKUP_FAILED'
+    if len(eligible) == 1:
+        return {'symbol': eligible[0], 'currency': 'EUR'}
+    print(json.dumps({'code': reason, 'level': 'error', 'isin': isin, 'source': source,
+        'candidate_tickers': candidates, 'eligible_eur_tickers': eligible, 'financial_writes': 0}), flush=True)
+    return None
+
+
+def simulate_buy_notice(document, account, mappings, resolver=None, failures=None):
     """Convert only this slice's mapped domestic purchases, using exact Decimals."""
     if document['account_ref'] != account['source_account_ref']:
         fail('NOTICE_ACCOUNT_MISMATCH')
     proposals = []
+    failures = [] if failures is None else failures
     for note in document['notes']:
         if note['kind'] != 'BUY':
             continue
-        mapping = mappings.get(note['isin'])
+        mapping = resolver(note['isin']) if resolver is not None else mappings.get(note['isin'])
         if mapping is None:
-            fail('EXPLICIT_MAPPING_REQUIRED')
+            if resolver is None:
+                fail('EXPLICIT_MAPPING_REQUIRED')
+            failures.append(note['isin'])
+            continue
         if (note['vat'] != 0 or note['net_currency'] != 'EUR'
                 or note['price_currency'] not in (None, 'EUR') or mapping['currency'] != 'EUR'):
             fail('BUY_CURRENCY_OR_VAT_UNVERIFIED')
@@ -4236,7 +4277,10 @@ def sync_buy_simulation():
             if account is None:
                 account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
                            'account_key': str(uuid.uuid4())}
-            accounts, _, _ = acquisition.ghostfolio_snapshot(config['origin'], token)
+            accounts, _, snapshot, lookup = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True)
+            rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
+            profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
+            profiles = [profile for profile in profiles if isinstance(profile, dict)]
             token = None
             acquisition.choose([{'value': row['id'], 'label': row['name']} for row in accounts],
                                'Destination', config['target'])
@@ -4280,7 +4324,13 @@ def sync_buy_simulation():
             'session_logged_out': receipt['session_logged_out'], 'browser_exit_verified': receipt['browser_exit_verified'],
             'monthly_statements': documents['monthly_statements'], 'contract_notes': documents['contract_notes'],
             'financial_writes': 0}), flush=True)
-        proposals, deferred = [], 0
+        proposals, deferred, failures = [], 0, []
+        resolved = {}
+
+        def resolver(isin):
+            if isin not in resolved:
+                resolved[isin] = resolve_instrument(isin, config['mappings'], profiles, lookup)
+            return resolved[isin]
         for path in sorted(run.glob('document-*.yaml')):
             metadata = read_keyed_yaml(path, root, acquisition.MAX_BYTES)
             if metadata['role'] != 'contract_note':
@@ -4294,14 +4344,16 @@ def sync_buy_simulation():
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             deferred += sum(note['kind'] != 'BUY' for note in document['notes'])
-            proposals.extend(simulate_buy_notice(document, account, config['mappings']))
+            proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures))
         atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
-            'proposals': proposals, 'financial_writes': 0, 'imported': 0})
+            'proposals': proposals, 'unresolved_isins': sorted(set(failures)), 'skipped': len(failures),
+            'financial_writes': 0, 'imported': 0})
         for proposal in proposals:
             print(json.dumps({'code': 'DRY_RUN_PROPOSAL', **proposal}), flush=True)
         print(json.dumps({'code': 'BUY_SIMULATION_COMPLETED', 'proposed': len(proposals), 'imported': 0,
-            'deferred_operations': deferred, 'contract_notes': documents['contract_notes'], 'financial_writes': 0}), flush=True)
-        return 0
+            'deferred_operations': deferred, 'skipped': len(failures),
+            'contract_notes': documents['contract_notes'], 'financial_writes': 0}), flush=True)
+        return 1 if failures else 0
     finally:
         token = None
         vault_env.clear()
@@ -4320,6 +4372,8 @@ def main(argv=None):
         except Exception as error:
             allowed = {'INVALID_DRY_RUN', 'IMPORT_NOT_IMPLEMENTED', 'SCHEDULING_NOT_IMPLEMENTED',
                 'EXPLICIT_ACCOUNTS_REQUIRED', 'EXPLICIT_MAPPING_REQUIRED', 'INVALID_EXPLICIT_MAPPING',
+                'MAPPING_FILE_UNREADABLE_OR_INVALID', 'INVALID_KEYED_YAML', 'YAML_DUPLICATE_KEY',
+                'YAML_ALIAS_NOT_SUPPORTED', 'YAML_STRING_KEYS_REQUIRED', 'YAML_TOO_DEEP',
                 'NOTICE_ACCOUNT_MISMATCH', 'NOTICE_CAPTURE_CHANGED', 'BUY_CURRENCY_OR_VAT_UNVERIFIED',
                 'NOTICE_WINDOW_INCOMPLETE',
                 'CONFIGURED_ACCOUNT_UNAVAILABLE', 'ACCOUNT_BINDING_INVALID', 'ACCOUNT_BINDING_CONFLICT',
