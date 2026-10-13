@@ -4315,6 +4315,43 @@ def notice_manual_day_context(remote, evidence, evidence_root=None):
     return result
 
 
+def notice_candidate_report(proposal, row, status):
+    """Report evidence only; proximity never changes matching or mapping."""
+    source_day = proposal['date'][:10]
+    destination_day = row.get('manual_civil_day') if 'manual_day_provenance' in row else (
+        row['operation_date'] if row['date_context_verified'] else None)
+    gap = ((datetime.fromisoformat(destination_day).date() - datetime.fromisoformat(source_day).date()).days
+        if destination_day else None)
+    source_quantity, source_price, source_fee = (Decimal(proposal[key]) for key in ('quantity', 'unitPrice', 'fee'))
+    quantity, price, fee = (row[key] for key in ('quantity', 'unit_price', 'fee'))
+    numbers = (source_quantity, source_price, source_fee, quantity, price, fee)
+    with localcontext() as context:
+        # Products and subtraction must not inherit a caller's rounded context.
+        context.prec = max(28, sum(len(n.as_tuple().digits) + abs(n.as_tuple().exponent) for n in numbers) + 10)
+        source_total, destination_total = source_quantity * source_price, quantity * price
+        verified = row['financial_context_verified'] and row['price_currency'] == proposal['currency'] == 'EUR'
+        difference = destination_total - source_total if verified else None
+        fee_difference = fee - source_fee if verified else None
+        percentage = difference / source_total * 100 if verified and source_total else None
+    value = lambda number: canonical_decimal(number) if number is not None else 'unverified'
+    return {'code': 'NOTICE_SIMILAR_ACTIVITY', 'status': status,
+        'type': proposal['type'], 'symbol': proposal['symbol'],
+        'source_day': source_day, 'source_day_provenance': 'notice_row',
+        'destination_day': destination_day or 'unverified',
+        'destination_activity_id': row['remote_id'],
+        'destination_stored_date': row.get('stored_date'),
+        'day_provenance': row.get('manual_day_provenance', 'owned_exact_required'),
+        'day_gap': gap if gap is not None else 'unverified',
+        'source_quantity': value(source_quantity), 'destination_quantity': value(quantity),
+        'source_unit_price': value(source_price), 'destination_unit_price': value(price),
+        'source_total': value(source_total), 'destination_total': value(destination_total),
+        'source_fee': value(source_fee), 'destination_fee': value(fee),
+        'total_difference_eur': value(difference), 'total_difference_percent': value(percentage),
+        'fee_difference_eur': value(fee_difference),
+        'financial_context': 'verified' if verified else 'unverified',
+        'financial_writes': 0, 'imported': 0}, difference
+
+
 def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_root=None):
     """Consume exact owned/manual representations; ambiguity aborts the run."""
     if not proposals:
@@ -4377,10 +4414,11 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
             total = quantity * price
         return fields[:-3] + (total, fee)
 
+    uncertainties = []
+
     def refuse(reason, **details):
-        print(json.dumps({'code': 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'reason': reason,
-            **details, 'financial_writes': 0, 'imported': 0}), flush=True)
-        fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+        uncertainties.append({'code': 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'reason': reason,
+            **details, 'financial_writes': 0, 'imported': 0})
     groups = {}
     for proposal in pending:
         groups.setdefault(manual_comparison(notice_signature(proposal)), []).append(proposal)
@@ -4391,31 +4429,47 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
         if matches:
             if len(matches) != len(group):
                 refuse('multiplicity_conflict', source_count=len(group), destination_count=len(matches))
+                result.extend(group)
+                continue
             matched.update(row['remote_id'] for row in matches)
             represented.update(proposal['comment'] for proposal in group)
             duplicates += len(group)
         else:
             result.extend(group)
     manual_by_id = {row['remote_id']: row for row in manual}
-    for proposal in pending:
-        day = datetime.fromisoformat(proposal['date'].replace('Z', '+00:00')).date()
+    for proposal in proposals:
+        reports = []
         for original in existing:
             row = manual_by_id.get(original['remote_id'], original)
-            # Represented groups are consumed one-to-one, but their rows must
-            # still block an unmatched conflicting source proposal.
-            if row['remote_id'] in matched_owned or (row['remote_id'] in matched
-                    and proposal['comment'] in represented):
-                continue
             if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
                 continue
-            civil_day = row.get('manual_civil_day') if row['remote_id'] in manual_by_id else row['operation_date']
-            if civil_day is None:
+            exact_owned = row['remote_id'] in matched_owned and row['comment'] == proposal['comment']
+            exact_manual = (row['remote_id'] in matched and proposal['comment'] in represented
+                and manual_signature(row) == manual_comparison(notice_signature(proposal)))
+            represented_elsewhere = (row['remote_id'] in matched_owned or (row['remote_id'] in matched
+                and proposal['comment'] in represented))
+            status = ('automatic_duplicate' if exact_owned or exact_manual else
+                'represented_other_notice' if represented_elsewhere else 'review_required')
+            report, difference = notice_candidate_report(proposal, row, status)
+            gap = report['day_gap']
+            if gap != 'unverified' and abs(gap) > (4 if proposal['type'] == 'DIVIDEND' else 3):
+                continue
+            reports.append((difference, report))
+            if represented_elsewhere or proposal not in pending:
+                continue
+            if gap == 'unverified':
                 refuse('unverified_day_provenance')
-            gap = abs((datetime.fromisoformat(civil_day).date() - day).days)
-            if gap <= (4 if proposal['type'] == 'DIVIDEND' else 2):
+            else:
                 reason = 'fee_difference' if row['fee'] != Decimal(proposal['fee']) else 'financial_or_day_conflict'
-                refuse(reason, day_provenance=row.get('manual_day_provenance', 'owned_exact_required'),
+                refuse(reason, day_provenance=report['day_provenance'],
                     source_fee=proposal['fee'], destination_fee=canonical_decimal(row['fee']))
+        reports.sort(key=lambda item: (item[0] is None, item[0].copy_abs() if item[0] is not None else Decimal(0)))
+        for _, report in reports:
+            print(json.dumps(report), flush=True)
+    if uncertainties:
+        for diagnostic in uncertainties:
+            print(json.dumps(diagnostic), flush=True)
+        fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
     return result, duplicates
 
 
