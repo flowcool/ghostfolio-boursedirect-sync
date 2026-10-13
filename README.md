@@ -1,14 +1,13 @@
 # Bourse Direct → Ghostfolio
 
-The v0.2 rebuild starts with a noninteractive BUY simulation through Docker
+The v0.2 rebuild simulates BUY, SELL and net coupon activities through Docker
 Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
 account and a readable YAML mapping file. No financial records are written.
 
-This source checkout implements OpenSpec tasks 1.1, 2.1, 2.2 and 3.1. Account discovery
-runs once without a terminal and needs only Bitwarden configuration. Additional
-operation types, deduplication, actual imports and
-scheduling belong to later slices. Non-BUY rows are counted as deferred in this
-slice. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
+This source checkout implements OpenSpec tasks 1.1, 2.1, 2.2, 3.1 and 3.2.
+Account discovery runs once without a terminal and needs only Bitwarden
+configuration. Deduplication, holdings checks, actual imports and scheduling
+belong to later slices. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
 
 ## Quick start
 
@@ -48,7 +47,7 @@ Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
    with the same ISIN, then Ghostfolio ISIN lookup. Automatic selection requires
    one distinct Yahoo symbol with explicit EUR currency. Venue text never selects
    a ticker. Missing, ambiguous or failed lookup logs candidate tickers, skips that
-   ISIN and fails the run; resolved BUYs still produce proposals. Add a verified
+   ISIN and fails the run; resolved supported rows still produce proposals. Add a verified
    YAML entry to resolve the failure on a later deliberate run.
 4. Run the same Compose command to simulate the configured account:
 
@@ -118,10 +117,28 @@ your instance; it does not create a Ghostfolio lab.
 
 ## Review a dry run
 
-Each `DRY_RUN_PROPOSAL` log line shows date, ISIN, symbol, EUR quantity, unit price
-and brokerage fee. Dates use midnight UTC. Decimal values are serialized as exact
-strings. The final line reports `financial_writes=0`, `imported=0`, the number of
-BUY proposals and the number of operations deferred to later slices.
+Each `DRY_RUN_PROPOSAL` log line shows type, row date, ISIN, symbol, quantity,
+EUR unit price and brokerage fee. Domestic and foreign BUY/SELL retain the exact
+source quantities, prices and brokerage; SELL quantities are positive in the
+proposal. The observed euro debit/credit headers and exact gross/net arithmetic
+establish EUR trade amounts. A EUR instrument mapping cannot prove source
+currency on its own. No currency conversion is inferred.
+
+COUPONS become DIVIDEND with quantity `1`, the credited net EUR amount as unit
+price and fee `0`. The source gross amount and commission do not become an
+inferred withholding tax. Dates use each financial row's date at midnight UTC,
+not the notice header date. Decimal values are serialized as exact strings.
+`NOTICE_SIMULATION_COMPLETED` reports `financial_writes=0`, `imported=0`,
+`proposed`, `skipped` and `failed_rows`.
+
+Each excluded row logs one error. DROITS DE GARDE, TAXE TRANSACT FINANCIERES,
+DIVISION, DET DROIT DE SOUSCRIPTION, RETRAIT TITRES FISCALISE, TRANSFERT VALEUR
+and INVESTISSEMENT ESPECES are known exclusions. These and supported rows
+without ISIN do not fail the run. Unknown operations, unproved currency and
+nonzero TVA skip the row and make the run exit nonzero, even without an ISIN.
+Other valid rows continue. An unresolved instrument also skips and fails the run.
+Structural or arithmetic inconsistencies refuse the run. Review these errors
+before any later import; this slice does not check SELL holdings.
 
 The private `boursedirect-state` volume retains source notices, acquisition
 receipts, login journals, `discovery.yaml`, source bindings under `accounts/`

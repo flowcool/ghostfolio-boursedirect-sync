@@ -297,24 +297,27 @@ def valid_isin(value):
     return total % 10 == 0
 
 
-def contract_note_ledger(soup):
+def contract_note_ledger(soup, notice_sync=False):
     candidates = []
     for table in soup.find_all("table"):
         first = table.find("tr", recursive=False)
         if first is None:
             body = table.find("tbody", recursive=False)
             first = body.find("tr", recursive=False) if body else None
-        if first and tuple(text(c) for c in cells(first)) == HEADERS:
+        headers = tuple(text(c) for c in cells(first)) if first else ()
+        if headers == HEADERS or (notice_sync and len(headers) == 4 and headers[:2] == HEADERS[:2]
+                and re.fullmatch(r"Débit(?: \(.*\))?", headers[2])
+                and re.fullmatch(r"Crédit(?: \(.*\))?", headers[3])):
             candidates.append(table)
     if len(candidates) != 1:
         fail("LEDGER_MISSING_OR_AMBIGUOUS")
     return candidates[0]
 
 
-def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isin=False):
+def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isin=False, notice_sync=False):
     if type(include_coupons) is not bool:
         fail("INVALID_NOTE_INSPECTION_MODE")
-    if type(skip_missing_isin) is not bool:
+    if type(skip_missing_isin) is not bool or type(notice_sync) is not bool:
         fail("INVALID_NOTE_INSPECTION_MODE")
     if max_depth <= 0:
         fail("INVALID_DEPTH_LIMIT")
@@ -331,7 +334,10 @@ def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isi
                 if len(cells(r)) == 2 and text(cells(r)[0]) == "COMPTE N°"]
     if len(accounts) != 1 or not accounts[0]:
         fail("ACCOUNT_HEADER_MISSING_OR_AMBIGUOUS")
-    rows = direct_rows(contract_note_ledger(soup))
+    ledger = contract_note_ledger(soup, notice_sync)
+    rows = direct_rows(ledger)
+    headers = tuple(text(c) for c in cells(rows[0]))
+    net_currency = "EUR" if headers == HEADERS else None
     if len(rows) != 2 or len(cells(rows[1])) != 4:
         fail("UNSUPPORTED_NOTE_STRUCTURE")
     vectors = []
@@ -404,13 +410,16 @@ def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isi
         header = fields(1)
         if header[0] not in labels and not (coupon and header[0] == "COUPONS") and not unknown:
             fail("UNSUPPORTED_NOTE_OPERATION")
-        skipped = skip_missing_isin and not header[1]
-        if not skipped and (not valid_isin(header[1]) or not header[2]):
+        missing_isin = skip_missing_isin and not header[1]
+        skipped = missing_isin and not notice_sync
+        if not missing_isin and (not valid_isin(header[1]) or not header[2]):
             fail("INVALID_NOTE_SECURITY")
         kind = "SKIPPED_NO_ISIN" if skipped else "UNKNOWN" if unknown else "COUPON" if coupon else labels[header[0]]
         note = {"slot": start + 1, "kind": kind, "isin": header[1] or None, "name": header[2],
-                "date": parse_date(text(slots[1][0][0])), "net_currency": "EUR",
+                "date": parse_date(text(slots[1][0][0])), "net_currency": net_currency,
                 "price_currency": None}
+        if notice_sync:
+            note['source_kind'] = header[0]
         if unknown or skipped:
             note.update(source_kind=header[0], source_fields=[], gross_semantics_verified=False)
             if skipped:
@@ -487,7 +496,9 @@ def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isi
         for key, column in (("debit", 2), ("credit", 3)):
             value = text(slots[1][column][0])
             note[key] = parse_decimal(value, cash=True) if value else Decimal(0)
-        if min(note[k] for k in ("gross", "brokerage", "vat", "debit", "credit")) < 0:
+        nonnegative = ("gross", "brokerage", "debit", "credit") if notice_sync else (
+            "gross", "brokerage", "vat", "debit", "credit")
+        if min(note[k] for k in nonnegative) < 0:
             fail("NEGATIVE_NOTE_AMOUNT")
         if note["unit_price"] <= 0 or note["gross"] <= 0:
             fail("INVALID_NOTE_PRICE_OR_GROSS")
@@ -505,7 +516,7 @@ def parse_contract_note(html, max_depth, include_coupons=False, skip_missing_isi
                 fail("NOTE_NET_MISMATCH")
         groups.append(note)
         start += size
-    if len({n["date"] for n in groups}) != 1:
+    if not notice_sync and len({n["date"] for n in groups}) != 1:
         fail("NOTE_MULTIPLE_DATES")
     return {"account_ref": accounts[0], "notes": groups, "slot_count": count}
 
@@ -4220,28 +4231,61 @@ def resolve_instrument(isin, overrides, profiles, lookup):
     return None
 
 
-def simulate_buy_notice(document, account, mappings, resolver=None, failures=None):
-    """Convert only this slice's mapped domestic purchases, using exact Decimals."""
+def simulate_buy_notice(document, account, mappings, resolver=None, failures=None, skipped=None):
+    """Simulate supported notice rows; financial failures do not hide valid rows."""
     if document['account_ref'] != account['source_account_ref']:
         fail('NOTICE_ACCOUNT_MISMATCH')
     proposals = []
     failures = [] if failures is None else failures
+    skipped = [] if skipped is None else skipped
+    excluded = {'DROITS DE GARDE', 'TAXE TRANSACT FINANCIERES', 'DIVISION',
+        'DET DROIT DE SOUSCRIPTION', 'RETRAIT TITRES FISCALISE', 'TRANSFERT VALEUR',
+        'INVESTISSEMENT ESPECES'}
     for note in document['notes']:
-        if note['kind'] != 'BUY':
+        operation = note.get('source_kind', note['kind'])
+        supported = note['kind'] in ('BUY', 'SELL', 'COUPON')
+        known = supported or operation in excluded or operation in (
+            'ACHAT COMPTANT', 'ACHAT ETRANGER', 'VENTE COMPTANT', 'VENTE ETRANGER', 'COUPONS')
+        # Generic excluded/no-ISIN rows also retain their observed TVA fields.
+        vat = note.get('vat', Decimal(0))
+        for fields in note.get('source_fields', []):
+            for field in fields:
+                if field.startswith('TVA'):
+                    match = re.fullmatch(r'TVA\s*:\s*(.+)', field)
+                    vat = parse_decimal(match[1], cash=True) if match else None
+        reason = ('NOTICE_UNKNOWN_OPERATION' if not known else
+            'NOTICE_CURRENCY_UNPROVED' if note.get('net_currency') != 'EUR'
+                or note.get('price_currency') not in (None, 'EUR') else
+            'NOTICE_NONZERO_TVA' if vat != 0 else
+            'NOTICE_OUT_OF_SCOPE' if operation in excluded else
+            'NOTICE_NO_ISIN' if not note.get('isin') else None)
+        if reason:
+            failed = reason in ('NOTICE_UNKNOWN_OPERATION', 'NOTICE_CURRENCY_UNPROVED', 'NOTICE_NONZERO_TVA')
+            print(json.dumps({'code': reason, 'level': 'error', 'operation': operation,
+                'date': note['date'].isoformat(), 'isin': note.get('isin'), 'run_failed': failed,
+                'financial_writes': 0}), flush=True)
+            skipped.append(reason)
+            if failed:
+                failures.append(reason)
             continue
         mapping = resolver(note['isin']) if resolver is not None else mappings.get(note['isin'])
         if mapping is None:
             if resolver is None:
                 fail('EXPLICIT_MAPPING_REQUIRED')
             failures.append(note['isin'])
+            skipped.append('INSTRUMENT_UNRESOLVED')
             continue
-        if (note['vat'] != 0 or note['net_currency'] != 'EUR'
-                or note['price_currency'] not in (None, 'EUR') or mapping['currency'] != 'EUR'):
-            fail('BUY_CURRENCY_OR_VAT_UNVERIFIED')
-        proposals.append({'type': 'BUY', 'date': note['date'].isoformat() + 'T00:00:00.000Z',
+        if mapping['currency'] != 'EUR':
+            fail('INVALID_EXPLICIT_MAPPING')
+        coupon = note['kind'] == 'COUPON'
+        # The EUR debit/credit headers and exact gross/net trade arithmetic
+        # establish EUR prices and brokerage, including foreign executions.
+        proposals.append({'type': 'DIVIDEND' if coupon else note['kind'],
+            'date': note['date'].isoformat() + 'T00:00:00.000Z',
             'isin': note['isin'], 'symbol': mapping['symbol'], 'currency': 'EUR',
-            'quantity': canonical_decimal(note['quantity']), 'unitPrice': canonical_decimal(note['unit_price']),
-            'fee': canonical_decimal(note['brokerage'])})
+            'quantity': '1' if coupon else canonical_decimal(note['quantity'].copy_abs()),
+            'unitPrice': canonical_decimal(note['credit'] if coupon else note['unit_price']),
+            'fee': '0' if coupon else canonical_decimal(note['brokerage'])})
     return proposals
 
 
@@ -4324,7 +4368,7 @@ def sync_buy_simulation():
             'session_logged_out': receipt['session_logged_out'], 'browser_exit_verified': receipt['browser_exit_verified'],
             'monthly_statements': documents['monthly_statements'], 'contract_notes': documents['contract_notes'],
             'financial_writes': 0}), flush=True)
-        proposals, deferred, failures = [], 0, []
+        proposals, skipped, failures = [], [], []
         resolved = {}
 
         def resolver(isin):
@@ -4338,20 +4382,20 @@ def sync_buy_simulation():
             raw = read_local_bytes(run / metadata['path'], root, acquisition.MAX_BYTES)
             if hashlib.sha256(raw).hexdigest() != metadata['sha256']:
                 fail('NOTICE_CAPTURE_CHANGED')
-            document = parse_contract_note(decode_document(raw), 16, include_coupons=True, skip_missing_isin=True)
+            document = parse_contract_note(decode_document(raw), 16, include_coupons=True, skip_missing_isin=True, notice_sync=True)
             if document['account_ref'] != account['source_account_ref']:
                 fail('NOTICE_ACCOUNT_MISMATCH')
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
-            deferred += sum(note['kind'] != 'BUY' for note in document['notes'])
-            proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures))
+            proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped))
         atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
-            'proposals': proposals, 'unresolved_isins': sorted(set(failures)), 'skipped': len(failures),
+            'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
+            'failed_rows': len(failures), 'skipped': len(skipped),
             'financial_writes': 0, 'imported': 0})
         for proposal in proposals:
             print(json.dumps({'code': 'DRY_RUN_PROPOSAL', **proposal}), flush=True)
-        print(json.dumps({'code': 'BUY_SIMULATION_COMPLETED', 'proposed': len(proposals), 'imported': 0,
-            'deferred_operations': deferred, 'skipped': len(failures),
+        print(json.dumps({'code': 'NOTICE_SIMULATION_COMPLETED', 'proposed': len(proposals), 'imported': 0,
+            'skipped': len(skipped), 'failed_rows': len(failures),
             'contract_notes': documents['contract_notes'], 'financial_writes': 0}), flush=True)
         return 1 if failures else 0
     finally:
@@ -4374,7 +4418,7 @@ def main(argv=None):
                 'EXPLICIT_ACCOUNTS_REQUIRED', 'EXPLICIT_MAPPING_REQUIRED', 'INVALID_EXPLICIT_MAPPING',
                 'MAPPING_FILE_UNREADABLE_OR_INVALID', 'INVALID_KEYED_YAML', 'YAML_DUPLICATE_KEY',
                 'YAML_ALIAS_NOT_SUPPORTED', 'YAML_STRING_KEYS_REQUIRED', 'YAML_TOO_DEEP',
-                'NOTICE_ACCOUNT_MISMATCH', 'NOTICE_CAPTURE_CHANGED', 'BUY_CURRENCY_OR_VAT_UNVERIFIED',
+                'NOTICE_ACCOUNT_MISMATCH', 'NOTICE_CAPTURE_CHANGED', 'NOTICE_CURRENCY_UNPROVED',
                 'NOTICE_WINDOW_INCOMPLETE',
                 'CONFIGURED_ACCOUNT_UNAVAILABLE', 'ACCOUNT_BINDING_INVALID', 'ACCOUNT_BINDING_CONFLICT',
                 'SOURCE_CONNECT_REFUSED', 'SOURCE_PROXY_UNAVAILABLE', 'GHOSTFOLIO_ACCESS_INVALID',
@@ -4383,7 +4427,7 @@ def main(argv=None):
             refusals = {'BROKER_RUN_LOCKED', 'BROKER_STATE_INVALID', 'BROKER_LOGIN_UNRESOLVED',
                 'BROKER_DISCOVERY_UNRESOLVED', 'BROKER_DISCOVERY_INVALID'}
             allowed.update(refusals)
-            code = str(error) if str(error) in allowed else 'BUY_SIMULATION_REFUSED'
+            code = str(error) if str(error) in allowed else 'NOTICE_SIMULATION_REFUSED'
             print(json.dumps({'code': code, 'financial_writes': 0, 'imported': 0,
                 **({'broker_attempts': 0} if code in refusals else {})}), flush=True)
             return 1

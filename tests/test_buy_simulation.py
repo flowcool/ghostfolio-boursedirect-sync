@@ -28,12 +28,15 @@ def test_other_account_and_missing_mapping_refuse():
         connector.simulate_buy_notice(real_buy(), ACCOUNT, {})
 
 
-def test_vat_and_non_eur_price_refuse():
+def test_vat_and_non_eur_price_skip_and_fail_without_hiding_valid_buy(capsys):
     for field, value in [('vat', connector.Decimal('0.01')), ('price_currency', 'USD')]:
         document = real_buy()
-        document['notes'][0][field] = value
-        with pytest.raises(RuntimeError, match='BUY_CURRENCY_OR_VAT_UNVERIFIED'):
-            connector.simulate_buy_notice(document, ACCOUNT, MAPPING)
+        document['notes'].insert(0, dict(document['notes'][0], **{field: value}))
+        failures, skipped = [], []
+        assert len(connector.simulate_buy_notice(document, ACCOUNT, MAPPING,
+            failures=failures, skipped=skipped)) == 1
+        assert len(failures) == len(skipped) == 1
+        assert '"level": "error"' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('mode,code', [('0', 'IMPORT_NOT_IMPLEMENTED'), ('false', 'IMPORT_NOT_IMPLEMENTED'),
