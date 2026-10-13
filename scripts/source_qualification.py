@@ -85,7 +85,7 @@ def planner(statement_periods=None, notice_as_of=None, account=None, choose_acco
     return state
 
 
-def notice_calendar_previous(state, url, raw, account, parent):
+def notice_calendar_previous(state, url, raw, account, parent, note_periods=()):
     """Interpret only the exact previously observed source navigation function."""
     if account not in state['verified'] or urlsplit(url).path != '/priv/new/avis-operes.php':
         return None
@@ -108,6 +108,7 @@ def notice_calendar_previous(state, url, raw, account, parent):
     months = ('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre')
     replay.require(headings == [[year], [months[int(month) - 1]]])
     period = year + '-' + month.zfill(2)
+    replay.require(all(note_period == period for note_period in note_periods))
     pairs = parse_qsl(urlsplit(url).query, keep_blank_values=True)
     query = dict(pairs)
     replay.require(len(pairs) == len(query) and query.get('nc') == nc
@@ -115,7 +116,8 @@ def notice_calendar_previous(state, url, raw, account, parent):
             or query.get('month') == str(int(month)) and query.get('year') == year))
     window = state['notice_window']
     replay.require(window['first'][:7] <= period <= window['last'][:7])
-    offered = [node for node in soup.select('a[href]') if 'releveOpe.php' in node['href']]
+    offered = [node for node in soup.select('a') if 'linkE' in node.get('class', [])
+        or 'releveOpe.php' in node.get('href', '')]
     empty = [' '.join(node.get_text(' ', strip=True).split()) for node in soup.select('div.msg.texte1T7A')]
     replay.require(bool(offered) and not empty or not offered and empty == ["Vous n'avez pas effectué d'opération ce mois-ci."])
     state['notice_calendars'].add((account, period))
@@ -265,22 +267,27 @@ def discover(state, url, raw, role):
         return
     # Before selecting each wrapper, traverse only source-declared account frames.
     candidates = []
-    for node in soup.select('iframe[src],frame[src],a[href],script[src]'):
+    note_periods = []
+    for node in soup.select('iframe[src],frame[src],a[href],a.linkE,script[src]'):
+        offered_notice = notice_only and account in state['verified'] and node.name == 'a' and (
+            'linkE' in node.get('class', []) or 'releveOpe.php' in node.get('href', ''))
         relative = node.get('src') if node.name in ('iframe', 'frame', 'script') else node.get('href')
         if not relative or relative.startswith('#'):
+            replay.require(not offered_notice)
             continue
         if relative.startswith(('javascript:', 'ouvrePopup(')):
             match = re.fullmatch(r"(?:javascript:)?ouvrePopup\('([^']+)'(?:,[^)]*)?\);?", relative)
             if not match:
-                replay.require(not (notice_only and account is not None and 'releveOpe.php' in relative))
+                replay.require(not offered_notice)
                 continue
             relative = match.group(1)
         try:
             target = source_url(url, relative)
         except RuntimeError:
-            replay.require(not (notice_only and account is not None and 'releveOpe.php' in relative))
+            replay.require(not offered_notice)
             continue
         path = urlsplit(target).path
+        replay.require(not offered_notice or path == '/priv/new/releveOpe.php')
         if notice_only and path in {'/fr/page/releves', '/priv/new/releves.php', '/priv/new/releveCompte.php'}:
             continue
         document_role = 'monthly_statement' if path.endswith('/releveCompte.php') else 'contract_note' if path.endswith('/releveOpe.php') else 'frame_document'
@@ -298,6 +305,7 @@ def discover(state, url, raw, role):
                 note_day = datetime(int(query['year']), int(query['month']), int(query['day'])).date().isoformat()
             except ValueError:
                 raise RuntimeError('SOURCE_REPLAY_REFUSED') from None
+            note_periods.append(note_day[:7])
             if note_day > state['notice_window']['last'] or note_day[:7] < state['notice_window']['first'][:7]:
                 continue
         if document_role == 'monthly_statement' and wanted is not None:
@@ -312,13 +320,13 @@ def discover(state, url, raw, role):
                 or document_role == 'monthly_statement' and document_role in state['documents'].get(account, {})):
             continue
         candidates.append({'url': target, 'role': document_role, 'sourceSha256': parent, 'account': account})
-        if notice_only and document_role == 'contract_note':
-            state['notice_expected_documents'].add((account, target))
     # Finish the selected wrapper before switching the broker's account context.
     if notice_only:
-        previous = notice_calendar_previous(state, url, raw, account, parent)
+        previous = notice_calendar_previous(state, url, raw, account, parent, note_periods)
         if previous is not None:
             candidates.append(previous)
+        state['notice_expected_documents'].update((row['account'], row['url']) for row in candidates
+            if row['role'] == 'contract_note')
     elif account in state['verified'] and urlsplit(url).path == '/priv/new/releves.php':
         month_selects = soup.select('select[name=RlvCombo]')
         replay.require(len(month_selects) == 1)

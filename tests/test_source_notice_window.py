@@ -205,3 +205,19 @@ def test_unqualified_offered_notice_cannot_be_silently_ignored(href):
         b'</table>', ('</table><a href="' + href + '">Notice</a>').encode())
     with pytest.raises(RuntimeError):
         qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', raw, 'frame_document')
+
+
+@pytest.mark.parametrize('change', ['renamed', 'other_known_path', 'missing_href', 'fragment', 'different_month'])
+def test_real_calendar_with_one_valid_and_one_changed_notice_refuses_all(change):
+    result = state('2026-10-13'); result['current'] = {'account': 'PEA'}
+    raw = (Path(__file__).parent / 'fixtures/notice-calendar-anonymized-real.html').read_bytes()
+    soup = qualification.BeautifulSoup(raw, 'html.parser')
+    link = soup.select('a.linkE')[1]
+    if change == 'renamed': link['href'] = link['href'].replace('releveOpe.php', 'newOpe.php')
+    elif change == 'other_known_path': link['href'] = link['href'].replace('releveOpe.php', 'releveCompte.php')
+    elif change == 'missing_href': del link['href']
+    elif change == 'fragment': link['href'] = '#changed'
+    else: link['href'] = link['href'].replace('month=10', 'month=9')
+    with pytest.raises(RuntimeError):
+        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', str(soup).encode(), 'frame_document')
+    assert not result['queue'] and not result['notice_expected_documents']
