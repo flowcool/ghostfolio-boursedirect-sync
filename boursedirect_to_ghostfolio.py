@@ -4167,8 +4167,6 @@ def buy_simulation_config():
     mode = os.environ.get('DRY_RUN', '1').strip().lower()
     if mode not in ('1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'):
         fail('INVALID_DRY_RUN')
-    if mode in ('0', 'false', 'no', 'off'):
-        fail('IMPORT_NOT_IMPLEMENTED')
     if os.environ.get('CRON', ''):
         fail('SCHEDULING_NOT_IMPLEMENTED')
     source_ref = os.environ.get('BD_SOURCE_ACCOUNT_REF', '')
@@ -4191,7 +4189,7 @@ def buy_simulation_config():
                 or not re.fullmatch(r'[A-Z0-9^][A-Z0-9.^=_-]{0,63}', entry['symbol'])):
             fail('INVALID_EXPLICIT_MAPPING')
         quotes[isin] = dict(entry)
-    return {'source_ref': source_ref, 'target': target,
+    return {'dry_run': mode in ('1', 'true', 'yes', 'on'), 'source_ref': source_ref, 'target': target,
             'origin': os.environ.get('GHOST_HOST', ''), 'mappings': quotes}
 
 
@@ -4425,8 +4423,112 @@ def simulate_buy_notice(document, account, mappings, resolver=None, failures=Non
     return proposals
 
 
-def sync_buy_simulation():
-    """One noninteractive real acquisition; no import endpoint or imported journal."""
+def notice_wire(proposal):
+    """Activities only; keep exact Decimal values through the JSON boundary."""
+    row = {key: proposal[key] for key in ('accountId', 'comment', 'currency', 'dataSource',
+        'date', 'symbol', 'type')}
+    for key in ('quantity', 'unitPrice', 'fee'):
+        row[key] = wire_number(Decimal(proposal[key]))
+    return json.dumps({'activities': [row]}, sort_keys=True, separators=(',', ':'),
+        allow_nan=False).encode()
+
+
+def notice_write_journal(root, config, account):
+    """DEGIRO-style intent fencing, under the shared nonblocking broker lock."""
+    owner = {'origin': config['origin'], 'source': account['source_account_ref'],
+        'target': account['target_account_id']}
+    key = hashlib.sha256(json.dumps([owner['origin'], owner['target']], separators=(',', ':')).encode()).hexdigest()
+    path = root / ('notice-writes-' + key + '.yaml')
+    journal = read_keyed_yaml(path, root, 8 * 1024 * 1024) if path.exists() or path.is_symlink() else {
+        'schema_version': 1, 'owner': owner, 'pending': None, 'confirmed': {}}
+    if (set(journal) != {'schema_version', 'owner', 'pending', 'confirmed'}
+            or type(journal['schema_version']) is not int or journal['schema_version'] != 1
+            or journal['owner'] != owner or not isinstance(journal['confirmed'], dict)
+            or any(not isinstance(marker, str) or not isinstance(remote_id, str) or not remote_id.strip()
+                for marker, remote_id in journal['confirmed'].items())
+            or journal['pending'] is not None and not isinstance(journal['pending'], dict)):
+        fail('NOTICE_WRITE_JOURNAL_INVALID')
+    if journal['pending'] is not None:
+        # Even exact positive readback requires explicit operator resolution.
+        fail('NOTICE_WRITE_UNRESOLVED')
+    return path, journal
+
+
+def notice_exact_readback(proposal, raw, expected_id=None):
+    rows = parse_remote_activity_snapshot(raw)
+    matches = [row for row in rows if row['comment'] == proposal['comment']]
+    if len(matches) != 1 or expected_id is not None and matches[0]['remote_id'] != expected_id:
+        fail('NOTICE_IMPORT_UNCONFIRMED')
+    pending, duplicates = reconcile_notice_duplicates([proposal], rows)
+    if pending or duplicates != 1:
+        fail('NOTICE_IMPORT_UNCONFIRMED')
+    return rows, matches[0]['remote_id']
+
+
+def import_notice_proposals(proposals, remote, path, journal, run, request, progress):
+    """Only readback-confirmed BUYs fund SELLs. Never replay uncertain POSTs."""
+    ordered = reconcile_notice_holdings(proposals, remote)
+    # Reject precision loss anywhere before the first POST.
+    wires = {p['comment']: notice_wire(p) for p in ordered}
+    progress.update(financial_writes=0, imported=0)
+    rejected = set()
+    for ordinal, proposal in enumerate(ordered):
+        if proposal['symbol'] in rejected:
+            continue
+        if proposal['type'] == 'SELL':
+            reconcile_notice_holdings([proposal], remote, project_buys=False)
+        body = wires[proposal['comment']]
+        journal['pending'] = {'body': body.decode(), 'run_id': run.name, 'ordinal': ordinal}
+        atomic_private_yaml(path, journal)
+        progress['financial_writes'] += 1  # Dispatched POSTs; outcome can remain uncertain.
+        try:
+            status, response = request('POST', '/api/v1/import', body)
+            atomic_private_bytes(run / ('import-response-' + str(ordinal) + '.json'), response)
+            if status == 400:
+                data = json.loads(response, object_pairs_hook=unique_json_object)
+                messages = data.get('message') if isinstance(data, dict) else None
+                messages = [messages] if isinstance(messages, str) else messages
+                expression = r'activities\.[0-9]+\.symbol \("([^"]+)"\) cannot be resolved by the data source \("YAHOO"\)'
+                if isinstance(messages, list) and len(messages) == 1 and isinstance(messages[0], str):
+                    match = re.fullmatch(expression, messages[0])
+                    if match and match[1] == proposal['symbol']:
+                        # Sibling activities-only validation rejects before creating rows.
+                        rejected.add(proposal['symbol'])
+                        journal['pending'] = None
+                        atomic_private_yaml(path, journal)
+                        print(json.dumps({'code': 'NOTICE_SYMBOL_REJECTED', 'level': 'error',
+                            'symbol': proposal['symbol'], **progress}), flush=True)
+                        continue
+                fail('NOTICE_IMPORT_UNCONFIRMED')
+            if status != 201:
+                fail('NOTICE_IMPORT_UNCONFIRMED')
+            data = json.loads(response, parse_float=Decimal, object_pairs_hook=unique_json_object)
+            if (not isinstance(data, dict) or not isinstance(data.get('activities'), list)
+                    or len(data['activities']) != 1 or data['activities'][0].get('error')):
+                fail('NOTICE_IMPORT_UNCONFIRMED')
+            # Reuse the complete snapshot normalization and exact owned matcher.
+            response_snapshot = json.dumps({'count': 1, 'activities': data['activities']},
+                default=wire_number, allow_nan=False).encode()
+            _, remote_id = notice_exact_readback(proposal, response_snapshot)
+            status, readback = request('GET', '/api/v1/activities', None)
+            if status != 200:
+                fail('NOTICE_IMPORT_UNCONFIRMED')
+            atomic_private_bytes(run / ('import-readback-' + str(ordinal) + '.json'), readback)
+            remote, _ = notice_exact_readback(proposal, readback, remote_id)
+            journal['confirmed'][proposal['comment']] = remote_id
+            journal['pending'] = None
+            atomic_private_yaml(path, journal)
+            progress['imported'] += 1
+            print(json.dumps({'code': 'NOTICE_IMPORT_CONFIRMED', **proposal,
+                'exact_response': True, 'exact_readback': True, **progress}), flush=True)
+        except Exception:
+            fail('NOTICE_IMPORT_UNCONFIRMED')
+    return {**progress, 'rejected': sum(p['symbol'] in rejected for p in ordered)}
+
+
+def sync_buy_simulation(progress=None):
+    """One noninteractive notice acquisition and explicitly selected import mode."""
+    progress = {} if progress is None else progress
     import subprocess
     sys.path.insert(0, str(Path(__file__).resolve().parent / 'scripts'))
     import community_connect as acquisition
@@ -4457,7 +4559,11 @@ def sync_buy_simulation():
             if account is None:
                 account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
                            'account_key': str(uuid.uuid4())}
-            accounts, _, snapshot, lookup = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True)
+            journal_path, journal = notice_write_journal(root, config, account)
+            inputs = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True,
+                **({'include_import': True} if not config['dry_run'] else {}))
+            accounts, _, snapshot, lookup = inputs[:4]
+            import_request = inputs[4] if not config['dry_run'] else None
             remote = parse_remote_activity_snapshot(snapshot)
             rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
             profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
@@ -4525,12 +4631,26 @@ def sync_buy_simulation():
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
+        if not config['dry_run']:
+            status, snapshot = import_request('GET', '/api/v1/activities', None)
+            if status != 200:
+                fail('GHOSTFOLIO_ACCESS_REFUSED')
+            atomic_private_bytes(run / 'import-baseline.json', snapshot)
+            remote = parse_remote_activity_snapshot(snapshot)
         proposals, duplicates = reconcile_notice_duplicates(proposals, remote)
         proposals = reconcile_notice_holdings(proposals, remote)
-        atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
+        atomic_private_yaml(run / ('simulation.yaml' if config['dry_run'] else 'proposals.yaml'),
+            {'schema_version': 1, 'mode': 'DRY_RUN' if config['dry_run'] else 'IMPORT',
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
             'failed_rows': len(failures), 'skipped': len(skipped), 'duplicates': duplicates,
             'financial_writes': 0, 'imported': 0})
+        if not config['dry_run']:
+            result = import_notice_proposals(proposals, remote, journal_path, journal, run, import_request, progress)
+            print(json.dumps({'code': 'NOTICE_IMPORT_COMPLETED', 'proposed': len(proposals),
+                'imported': result['imported'], 'duplicates': duplicates, 'skipped': len(skipped) + result['rejected'],
+                'failed_rows': len(failures) + result['rejected'],
+                'financial_writes': result['financial_writes']}, sort_keys=True), flush=True)
+            return 1 if failures or result['rejected'] else 0
         for proposal in proposals:
             print(json.dumps({'code': 'DRY_RUN_PROPOSAL', **proposal}), flush=True)
         print(json.dumps({'code': 'NOTICE_SIMULATION_COMPLETED', 'proposed': len(proposals), 'imported': 0,
@@ -4550,10 +4670,11 @@ def sync_buy_simulation():
 def main(argv=None):
     arguments = sys.argv[1:] if argv is None else argv
     if arguments == ['--sync']:
+        progress = {'financial_writes': 0, 'imported': 0}
         try:
-            return sync_buy_simulation()
+            return sync_buy_simulation(progress)
         except Exception as error:
-            allowed = {'INVALID_DRY_RUN', 'IMPORT_NOT_IMPLEMENTED', 'SCHEDULING_NOT_IMPLEMENTED',
+            allowed = {'INVALID_DRY_RUN', 'SCHEDULING_NOT_IMPLEMENTED',
                 'EXPLICIT_ACCOUNTS_REQUIRED', 'EXPLICIT_MAPPING_REQUIRED', 'INVALID_EXPLICIT_MAPPING',
                 'MAPPING_FILE_UNREADABLE_OR_INVALID', 'INVALID_KEYED_YAML', 'YAML_DUPLICATE_KEY',
                 'YAML_ALIAS_NOT_SUPPORTED', 'YAML_STRING_KEYS_REQUIRED', 'YAML_TOO_DEEP',
@@ -4569,10 +4690,13 @@ def main(argv=None):
                 'NOTICE_SYMBOL_ISIN_CONFLICT', 'REMOTE_ACTIVITY_COUNT_MISMATCH',
                 'REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED'})
             refusals = {'BROKER_RUN_LOCKED', 'BROKER_STATE_INVALID', 'BROKER_LOGIN_UNRESOLVED',
-                'BROKER_DISCOVERY_UNRESOLVED', 'BROKER_DISCOVERY_INVALID'}
+                'BROKER_DISCOVERY_UNRESOLVED', 'BROKER_DISCOVERY_INVALID', 'NOTICE_WRITE_UNRESOLVED',
+                'NOTICE_WRITE_JOURNAL_INVALID'}
             allowed.update(refusals)
+            allowed.update({'NOTICE_WRITE_UNRESOLVED', 'NOTICE_WRITE_JOURNAL_INVALID',
+                'NOTICE_IMPORT_UNCONFIRMED', 'WIRE_NUMERIC_PRECISION_LOSS'})
             code = str(error) if str(error) in allowed else 'NOTICE_SIMULATION_REFUSED'
-            print(json.dumps({'code': code, 'financial_writes': 0, 'imported': 0,
+            print(json.dumps({'code': code, **progress,
                 **({'broker_attempts': 0} if code in refusals else {})}), flush=True)
             return 1
     parser = argparse.ArgumentParser(description=__doc__)

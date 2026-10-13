@@ -5,5 +5,5 @@ set -eu
 if [ "$#" -gt 0 ]; then
     exec /opt/venv/bin/python /opt/app/scripts/community_connect.py "$@"
 fi
-echo 'Running once'
+echo 'Running once; DRY_RUN defaults to simulation'
 exec /opt/venv/bin/python /opt/app/boursedirect_to_ghostfolio.py --sync

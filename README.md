@@ -1,13 +1,12 @@
 # Bourse Direct → Ghostfolio
 
-The v0.2 rebuild simulates BUY, SELL and net coupon activities through Docker
+The v0.2 rebuild imports BUY, SELL and net coupon activities through Docker
 Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
-account and a readable YAML mapping file. No financial records are written.
+account and a readable YAML mapping file. Simulation is the default.
 
-This source checkout implements OpenSpec tasks 1.1, 2.1, 2.2, 3.1, 3.2 and 4.1.
 Account discovery runs once without a terminal and needs only Bitwarden
-configuration. Deduplication and holdings checks run before proposals. Actual
-imports and scheduling belong to later slices. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
+configuration. Deduplication and holdings checks run before proposals. Set `DRY_RUN=0` explicitly to import. Scheduling belongs to the next slice;
+nonempty `CRON` refuses before broker access.
 
 ## Quick start
 
@@ -73,7 +72,7 @@ never delete a journal or volume to make a restart succeed.
 | `GHOST_ACCESS_TOKEN` | Long-lived Ghostfolio Security Token, exchanged each run |
 | `GHOST_ACCOUNT_ID` | Exact existing destination ID |
 | `MAPPING_FILE` | Readable private YAML inside the container; default `/config/mappings.yaml` |
-| `DRY_RUN` | `1`/`true`/`yes`/`on`, or absent, simulates; other values refuse in this slice |
+| `DRY_RUN` | `1`/`true`/`yes`/`on`, or absent, simulates; `0`/`false`/`no`/`off` imports; other values refuse |
 | `CRON` | Leave empty for one run; scheduling is not implemented yet |
 | `APPRISE_URLS` | Reserved for the later alert slice |
 
@@ -114,6 +113,34 @@ For a trusted existing private Docker network, set `GHOST_HOST` to exactly
 `http://ghostfolio:3333`, set `GHOSTFOLIO_NETWORK`, and include
 `-f compose.yaml -f compose.ghostfolio.yaml` in the Compose command. This reuses
 your instance; it does not create a Ghostfolio lab.
+
+## Import and verify
+
+Review a simulation first. Resolve manual overlaps, missing mappings and
+insufficient holdings before setting `DRY_RUN=0` in your private ENV. Use the
+same Compose command. Every financial payload contains activities only;
+existing activities, account balances and cash are never updated or deleted.
+
+The connector stores a durable pending intent before each POST. Success requires
+exact account, identity comment, UTC date, symbol, data source, EUR currency,
+quantity, price and fee in both the response and a complete activities readback.
+`NOTICE_IMPORT_CONFIRMED` reports both checks. Only confirmed BUYs fund later
+SELLs. A rejected Yahoo symbol is logged and skipped; other imports continue,
+and the run fails. A rejected BUY cannot fund a SELL.
+
+`NOTICE_IMPORT_COMPLETED` reports proposed, imported, duplicate, skipped and
+failed counts. `financial_writes` counts dispatched financial POSTs, including
+rejected or uncertain requests. An absent response, changed field, incomplete
+readback or unexpected HTTP result leaves the pending intent in
+`notice-writes-<destination-hash>.yaml`. Restarts refuse with
+`NOTICE_WRITE_UNRESOLVED` before network access, including simulation. Preserve
+the journal and private `runs/<run-id>/import-response-*.json` and
+`import-readback-*.json` for explicit operator resolution. Never clear an intent
+or repeat a POST to guess its outcome. Automatic recovery is not implemented.
+
+After confirmed import, a deliberate repeat reads the exact owned activities
+and creates zero new activities. Simulation never writes an import journal or
+marks a proposal imported.
 
 ## Review a dry run
 
