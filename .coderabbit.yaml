@@ -30,6 +30,10 @@ reviews:
       enabled: false
     languagetool:
       enabled: false
+  # Keep every existing path reviewed, including root Renovate configuration.
+  path_filters:
+    - "**/*"
+    - "renovate.json"
   path_instructions:
     - path: "collector/**/*.mjs"
       instructions: >-
