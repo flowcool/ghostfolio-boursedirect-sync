@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import uuid
 
 import pytest
@@ -75,6 +76,29 @@ def test_pending_discovery_refuses_without_altering_receipt(tmp_path):
     with pytest.raises(RuntimeError, match='BROKER_DISCOVERY_UNRESOLVED'):
         acquisition.discovery_receipt(tmp_path)
     assert (tmp_path / 'discovery.yaml').read_bytes() == before
+
+
+def test_failed_proxy_cleanup_never_publishes_completed_discovery(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(connector.os, 'umask', lambda mask: 0o022)
+    monkeypatch.setenv('DRY_RUN', '1')
+    monkeypatch.setenv('CRON', '')
+    monkeypatch.delenv('BD_SOURCE_ACCOUNT_REF', raising=False)
+    monkeypatch.setattr(connector, 'Path', lambda value: tmp_path if value == '/state' else Path(value))
+    monkeypatch.setattr(acquisition, 'broker_login_ready', lambda root: None)
+    monkeypatch.setattr(acquisition, 'wait_proxy_ready', lambda proxy: None)
+    monkeypatch.setattr(acquisition, 'acquire', lambda *args, **kwargs: (['SYNTHETIC001 PEA'], {}))
+    def fail_cleanup(**kwargs):
+        raise RuntimeError('offline proxy cleanup failure')
+    proxy = SimpleNamespace(poll=lambda: None, terminate=lambda: None,
+        wait=fail_cleanup, stdout=SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(acquisition.subprocess, 'Popen', lambda *args, **kwargs: proxy)
+    assert connector.main(['--sync']) == 1
+    assert 'SOURCE_ACCOUNT_CONFIGURATION_REQUIRED' not in capsys.readouterr().out
+    assert connector.read_keyed_yaml(tmp_path / 'discovery.yaml', tmp_path, 10000)['state'] == 'started'
+    with pytest.raises(RuntimeError, match='BROKER_DISCOVERY_UNRESOLVED'):
+        acquisition.discovery_receipt(tmp_path)
+    # Cleanup failure still releases this run's broker lock; the receipt fences replay.
+    os.close(acquisition.broker_lock(tmp_path))
 
 
 def test_two_services_cannot_hold_the_broker_lock_and_release_allows_restart(tmp_path):

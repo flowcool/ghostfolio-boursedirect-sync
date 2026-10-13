@@ -4254,6 +4254,9 @@ def sync_buy_simulation():
         acquisition.wait_proxy_ready(proxy)
         if discovery_only:
             references, _ = acquisition.acquire(run, as_of, None, '', '', vault_env, discovery_only=True)
+            vault_env.clear()
+            acquisition.close_proxy(proxy)
+            proxy = None
             discovery = {'schema_version': 1, 'state': 'completed', 'run_id': run.name,
                 'accounts': {ref: ref.split(' ', 1)[1] for ref in references}}
             atomic_private_yaml(root / 'discovery.yaml', discovery)
@@ -4286,13 +4289,11 @@ def sync_buy_simulation():
     finally:
         token = None
         vault_env.clear()
-        if proxy is not None:
-            if proxy.poll() is None:
-                proxy.terminate()
-                proxy.wait(timeout=10)
-            proxy.stdout.close()
-        if lock is not None:
-            os.close(lock)
+        try:
+            acquisition.close_proxy(proxy)
+        finally:
+            if lock is not None:
+                os.close(lock)
 
 
 def main(argv=None):

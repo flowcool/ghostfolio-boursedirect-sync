@@ -152,6 +152,14 @@ def broker_lock(root):
         raise
 
 
+def close_proxy(proxy):
+    if proxy is not None:
+        if proxy.poll() is None:
+            proxy.terminate()
+            proxy.wait(timeout=10)
+        proxy.stdout.close()
+
+
 def broker_login_ready(root):
     result = subprocess.run(['/usr/local/bin/node', str(ROOT / 'native-source-command.mjs'),
         '--check-login-state'], env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': str(root)},

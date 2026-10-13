@@ -12,7 +12,7 @@ slice. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
 
 ## Quick start
 
-Requires Linux AMD64, Docker Engine and Compose v2. The image contains the pinned
+Requires Linux AMD64, Docker Engine and Compose 2.27.0 or later. The image contains the pinned
 Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
 
 1. Clone this repository. Copy `.env.example` to `.env`, restrict it with
@@ -86,6 +86,12 @@ vault/broker access and reports `broker_attempts=0`. Inspect the preserved state
 for operator resolution; never delete receipts to retry.
 
 All services using the same broker credentials must mount the same state volume.
+Use Compose 2.27.0 or later: [that release includes compose-go 2.1.0](https://github.com/docker/compose/blob/v2.27.0/go.mod),
+which contains the project-name interpolation fix. For every invocation with
+`docker compose -p alternate`, including upgrades of the same deployment, set
+`BD_STATE_VOLUME` explicitly to its existing volume name, for example
+`BD_STATE_VOLUME=alternate_boursedirect-state`. Use the actual existing name if
+that deployment already uses a custom volume.
 For separate Compose projects, set the same `BD_STATE_VOLUME` to the existing
 volume name in each `.env`; this preserves the login namespace and shares the
 nonblocking broker lock. Leave it empty for a single service to keep the current
