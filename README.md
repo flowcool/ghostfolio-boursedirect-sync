@@ -232,7 +232,9 @@ conflicts still refuse. These diagnostics never select an instrument mapping or
 change an existing activity. Actual import acceptance remains a separate step.
 
 After deduplication, each pending SELL is checked against stock on its civil
-day. The complete active account/instrument history contributes, including
+day. Existing destination sales from the first pending operation onward are
+also checked, so later sales cannot consume the same stock twice.
+The complete active account/instrument history contributes, including
 purchases older than 90 days and prior sales. Later purchases cannot fund an
 earlier sale. Pre-window stock and corporate actions must already be represented
 in Ghostfolio. Manual history requires retained civil-day entry evidence.

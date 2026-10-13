@@ -1011,8 +1011,11 @@ def test_chronological_holdings_prior_pending_buy_and_future_existing_sale(monke
     sale = dated_trade('SELL', '2026-09-01', 20, index=2)
     future = dated_trade('SELL', '2026-09-10', 30, index=3)
     diagnostics, _ = replay_chronological_holdings(monkeypatch, 'constructed_prior_pending_buy_future_sale',
-        [sale, purchase], [remote(future)])
-    assert diagnostics[-1]['available'] == diagnostics[-1]['preceding_day_available'] == '30'
+        [sale, purchase], [remote(future)], 'NOTICE_INSUFFICIENT_HOLDINGS')
+    assert diagnostics[0]['available'] == diagnostics[0]['preceding_day_available'] == '30'
+    assert diagnostics[-1]['available'] == '10'
+    assert diagnostics[-1]['sale_day'] == '2026-09-10'
+    assert diagnostics[-1]['sale_origin'] == 'destination'
     replay_chronological_holdings(monkeypatch, 'constructed_prior_rejected_buy_future_sale',
         [sale, purchase], [remote(future)], 'NOTICE_INSUFFICIENT_HOLDINGS', project_buys=False)
 

@@ -4485,6 +4485,10 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
     """Dated account/symbol stock; only source evidence establishes intraday order."""
     represented = {} if represented is None else represented
     tracked = {(p['accountId'], p['symbol']) for p in proposals}
+    first_pending_day = {}
+    for proposal in proposals:
+        key = (proposal['accountId'], proposal['symbol'])
+        first_pending_day[key] = min(first_pending_day.get(key, proposal['date'][:10]), proposal['date'][:10])
     symbols, events = {}, []
     for proposal in [*proposals, *represented.values()]:
         key = (proposal['accountId'], proposal['symbol'])
@@ -4525,7 +4529,7 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
     with localcontext() as context:
         context.prec = max(28, precision)
         for sale in events:
-            if sale['kind'] != 'SELL' or sale['proposal'] is None:
+            if sale['kind'] != 'SELL' or sale['day'] < first_pending_day[sale['key']]:
                 continue
             preceding, available, dependencies = Decimal(0), Decimal(0), []
             for event in events:
@@ -4554,7 +4558,9 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
             uncertain = available < sale['quantity'] <= possible
             diagnostic = {'code': 'NOTICE_HOLDINGS_ORDER_UNPROVED' if uncertain else
                 'NOTICE_INSUFFICIENT_HOLDINGS' if available < sale['quantity'] else 'NOTICE_DATED_HOLDINGS',
-                'isin': proposal['isin'], 'symbol': proposal['symbol'], 'sale_day': sale['day'],
+                'isin': proposal['isin'] if proposal else symbols[sale['key']],
+                'symbol': sale['key'][1], 'sale_day': sale['day'],
+                'sale_origin': 'pending' if proposal else 'destination',
                 'preceding_day_available': canonical_decimal(preceding),
                 'available': canonical_decimal(available), 'sale': canonical_decimal(sale['quantity']),
                 'dependent_purchases': dependencies if uncertain else [], 'financial_writes': 0, 'imported': 0}
