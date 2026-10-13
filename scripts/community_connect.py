@@ -295,6 +295,8 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
                         'schema_version': 1, 'ghostfolio_origin': origin or os.environ['GHOSTFOLIO_ORIGIN'], 'account': candidate})
                     binding_saved = True
             elif action == 'complete':
+                if not discovery_only:
+                    require(source.notice_coverage(state)['complete'], 'NOTICE_WINDOW_INCOMPLETE')
                 require(row.get('accounts_verified') is True and row.get('session_logged_out') is True
                         and row.get('browser_exit_verified') is True and row.get('totp_requests') == 1
                         and row.get('documents') == source.next_document(state)['documents']
@@ -305,6 +307,7 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
                     'state': 'owned_session_closed', 'captures': state['captures'], 'accounts': state['accounts'],
                     'account_ids': state['account_ids'], 'verified_wrappers': sorted(state['verified']),
                     'account_binding': candidate, 'notice_window': state['notice_window'],
+                    **({'notice_coverage': source.notice_coverage(state)} if not discovery_only else {}),
                     **({'discovered_accounts': state['discovered_accounts']} if discovery_only else {})}, exclusive=True)
                 return (state['discovered_accounts'] if discovery_only else candidate), row['documents']
             else:

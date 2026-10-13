@@ -1,5 +1,6 @@
 import copy
 import socket
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -76,7 +77,7 @@ def test_ambiguous_or_unqualified_calendar_refuses(change):
     elif change == 'missing_empty': raw = raw.replace(b"Vous n'avez pas effectu", b'Changed')
     else: raw += b'<a href="releveOpe.php?nc=1">Unexpected note</a>'
     with pytest.raises(RuntimeError):
-        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php', raw, 'frame_document')
+        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', raw, 'frame_document')
 
 
 def test_missing_account_month_stays_incomplete_even_with_notes():
@@ -92,7 +93,7 @@ def test_invalid_window_clock_refuses_before_navigation(clock):
 def test_window_never_queues_monthly_or_future_document_links():
     result = state(); result['current'] = {'account': 'PEA'}
     raw = calendar(days=(2, 13)) + b'<a href="releveCompte.php?nc=1&amp;dt=20260930&amp;type=RE">Statement</a>'
-    qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php', raw, 'frame_document')
+    qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', raw, 'frame_document')
     assert len([r for r in result['queue'] if r['role'] == 'contract_note']) == 1
     assert all(r['role'] != 'monthly_statement' for r in result['queue'])
 
@@ -150,7 +151,7 @@ def test_duplicate_note_account_parameter_refuses():
     result = state(); result['current'] = {'account': 'PEA'}
     raw = calendar().replace(b'nc=1&amp;type', b'nc=1&amp;nc=2&amp;type')
     with pytest.raises(RuntimeError):
-        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php', raw, 'frame_document')
+        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', raw, 'frame_document')
 
 
 def test_both_empty_accounts_can_complete_window_without_manufacturing_notes():
@@ -163,3 +164,60 @@ def test_both_empty_accounts_can_complete_window_without_manufacturing_notes():
 
 def test_monthly_period_preferences_cannot_enter_notice_window_mode():
     with pytest.raises(RuntimeError): qualification.planner({'PEA': '202609'}, notice_as_of='2026-10-12')
+
+
+def test_retained_real_calendar_follows_source_script_and_requires_every_offered_notice():
+    result = state('2026-10-13')
+    result['required_accounts'] = {'PEA'}
+    result['verified'] = {'PEA'}
+    result['current'] = {'account': 'PEA'}
+    raw = (Path(__file__).parent / 'fixtures/notice-calendar-anonymized-real.html').read_bytes()
+    qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', raw, 'frame_document')
+    assert len(result['notice_expected_documents']) == 2
+    qualification.discover(result, ORIGIN + '/priv/scripts/avis-operes.js', FUNCTION.encode(), 'frame_document')
+    for month in (9, 8, 7):
+        visit(result, 'PEA', month, days=())
+    result['queue'].clear()
+    assert qualification.next_document(result)['documents']['complete'] is False
+    result['notice_documents'] = result['notice_expected_documents'].copy()
+    coverage = qualification.notice_coverage(result)
+    assert coverage['window'] == {'first_day': '2026-07-16', 'last_day': '2026-10-13', 'days': 90}
+    assert coverage['observed_months'] == {'PEA': ['2026-07', '2026-08', '2026-09', '2026-10']}
+    assert coverage['empty_months'] == {'PEA': ['2026-07', '2026-08', '2026-09']}
+    assert qualification.next_document(result)['documents']['complete'] is True
+
+
+@pytest.mark.parametrize('query', ['nc=2', 'nc=1&nc=2', 'nc=1&month=9&year=2026',
+    'nc=1&month=10', 'nc=1&month=10&year=2025'])
+def test_calendar_response_must_match_requested_account_and_period(query):
+    result = state(); result['current'] = {'account': 'PEA'}
+    with pytest.raises(RuntimeError):
+        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?' + query,
+            calendar(days=()), 'frame_document')
+    assert not result['notice_calendars']
+
+
+@pytest.mark.parametrize('href', ["javascript:changedPopup('releveOpe.php?nc=1')",
+    'https://other.example/releveOpe.php?nc=1'])
+def test_unqualified_offered_notice_cannot_be_silently_ignored(href):
+    result = state(); result['current'] = {'account': 'PEA'}
+    raw = calendar().replace(b'javascript:ouvrePopup(', b'javascript:changedPopup(') if href.startswith('javascript:') else calendar(days=()).replace(
+        b'</table>', ('</table><a href="' + href + '">Notice</a>').encode())
+    with pytest.raises(RuntimeError):
+        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', raw, 'frame_document')
+
+
+@pytest.mark.parametrize('change', ['renamed', 'other_known_path', 'missing_href', 'fragment', 'different_month'])
+def test_real_calendar_with_one_valid_and_one_changed_notice_refuses_all(change):
+    result = state('2026-10-13'); result['current'] = {'account': 'PEA'}
+    raw = (Path(__file__).parent / 'fixtures/notice-calendar-anonymized-real.html').read_bytes()
+    soup = qualification.BeautifulSoup(raw, 'html.parser')
+    link = soup.select('a.linkE')[1]
+    if change == 'renamed': link['href'] = link['href'].replace('releveOpe.php', 'newOpe.php')
+    elif change == 'other_known_path': link['href'] = link['href'].replace('releveOpe.php', 'releveCompte.php')
+    elif change == 'missing_href': del link['href']
+    elif change == 'fragment': link['href'] = '#changed'
+    else: link['href'] = link['href'].replace('month=10', 'month=9')
+    with pytest.raises(RuntimeError):
+        qualification.discover(result, ORIGIN + '/priv/new/avis-operes.php?nc=1', str(soup).encode(), 'frame_document')
+    assert not result['queue'] and not result['notice_expected_documents']
