@@ -32,7 +32,7 @@ Absent `BD_SOURCE_ACCOUNT_REF` SHALL trigger one discovery, log copyable referen
 
 ### Requirement: Supported financial semantics
 
-BUY/SELL, including foreign operations, SHALL retain Decimal quantities, established EUR prices and brokerage. COUPONS SHALL become DIVIDEND: quantity one, credited EUR amount, zero fee, no inferred withholding. Dates SHALL use the row date, not the notice header date, at midnight UTC. Known out-of-scope rows and rows without ISIN SHALL log an error line without failing the run. Unknown operations, unproved currency or nonzero TVA SHALL skip and fail the run. Valid operations continue.
+BUY/SELL, including foreign operations, SHALL retain Decimal quantities, established EUR prices and brokerage. COUPONS SHALL become DIVIDEND: quantity one, credited EUR amount, zero fee, no inferred withholding. Dates SHALL use the row date, not the notice header date, at midnight UTC. Unknown operations, unproved currency or nonzero TVA SHALL skip and fail the run, even without ISIN. Other known out-of-scope rows and rows without ISIN SHALL log an error line without failing the run. Valid operations continue.
 
 #### Scenario: Mixed notices
 - **WHEN** the Compose command above simulates observed BUY/SELL/coupon forms, a DROITS DE GARDE row and a DIVISION row

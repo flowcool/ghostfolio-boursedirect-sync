@@ -20,7 +20,7 @@ Reuse sibling deployment and API mechanisms. Keep a functional Python connector 
 
 - Lookup varies by installed version and Yahoo availability → verify read-only lookup during the mapping slice; use YAML when unresolved.
 - Overlapping notices/manual entries → reuse sibling exact matching; ambiguous multiplicity skips rather than guesses.
-- Missing EUR proof or nonzero TVA → report and skip; never infer conversion/tax semantics.
+- Missing EUR proof or nonzero TVA → report, skip and fail the run; never infer conversion/tax semantics.
 - Dry-run proves proposals, not persistence → creation/readback acceptance waits for separately authorized writes; no new lab.
 
 ## Migration Plan
