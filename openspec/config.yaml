@@ -5,19 +5,22 @@ context: |
   Docker-first, every setting through ENV, unattended run with `docker compose up -d`.
   Python, functional style, no classes, no type hints.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:
-  CRON, DRY_RUN default on, APPRISE_URLS, additive deduplicated import, ENV only.
+  CRON, APPRISE_URLS, additive deduplicated import, ENV only.
+  DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
-  Bourse Direct has no API and no export: data comes from authenticated pages and
-  documents (operation notices "avis d'opere", monthly statements "releve de compte").
+  v0.2 uses operation notices "avis d'opere" only, over a rolling 90-day window.
+  Statements, account history and positions are not financial input sources.
   Login: Bitwarden CLI provides password and TOTP; three failed logins lock the account.
   v0.1.1 is a preview-only legacy release; v0.2 rebuilds a small product and reuses only
   the proven login flow and notice parser.
   Readers: the operator (infrastructure expert, not a developer) and community users.
+  A changed decision is applied to proposal, specs, design and tasks before commit.
 
 rules:
   proposal:
     - Max 400 words. Plain English, no internal jargon.
     - Include an in-scope / out-of-scope table that lists every Bourse Direct operation type considered.
+    - Build that table from saved real documents of the chosen source; when the source changes, rebuild it.
     - Include a "Non-goals" section.
   specs:
     - Every requirement has at least one WHEN/THEN scenario that a person can check by running one command and reading its output.
@@ -26,5 +29,5 @@ rules:
     - Max 400 words. Name the sibling file or mechanism reused for each part.
   tasks:
     - One task = one vertical slice that ends with a runnable check, about one hour of work.
-    - First task = one real BUY imported into a lab Ghostfolio with docker compose up, without TTY.
+    - First task = one real BUY processed in dry-run with docker compose up, without TTY; reuse sibling import mechanisms, do not create a Ghostfolio lab.
     - No task for internal tooling, lab proofs, process automation or docs beyond README.

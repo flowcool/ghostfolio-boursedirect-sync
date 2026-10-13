@@ -1,33 +1,94 @@
-<div align="center">
-
-<img src="docs/assets/readme-banner.svg" alt="Bourse Direct to Ghostfolio — review your recent operation notices before any import decision" width="880">
-
 # Bourse Direct → Ghostfolio
 
-**Collect recent Bourse Direct operation notices and review a Ghostfolio preview.**
+The v0.2 rebuild starts with a noninteractive BUY simulation through Docker
+Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
+account and verified Yahoo mappings. No financial records are written.
 
-This Docker Compose connector keeps the original documents and a private report
-on your machine. It helps you inspect what a later import could contain; it does
-not change your portfolio.
+This source checkout implements OpenSpec task 1.1. Discovery, additional
+operation types, automatic symbol resolution, deduplication, actual imports and
+scheduling belong to later slices. Non-BUY rows are counted as deferred in this
+slice. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
 
-[![Release](https://img.shields.io/github/v/release/flowcool/ghostfolio-boursedirect-sync)](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/latest)
-[![Offline tests](https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/offline-tests.yml/badge.svg)](https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/offline-tests.yml)
-[![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](#quick-start)
-[![AMD64](https://img.shields.io/badge/platform-linux%2Famd64-blue)](#requirements)
-[![Preview only](https://img.shields.io/badge/financial_writes-none-success)](#preview-only)
-[![License](https://img.shields.io/github/license/flowcool/ghostfolio-boursedirect-sync)](LICENSE)
+## Quick start
 
-[Quick start](#quick-start) · [Configuration](#configuration) · [Review a dry run](#review-a-dry-run) · [Troubleshooting](#troubleshooting) · [Contributing](CONTRIBUTING.md)
+Requires Linux AMD64, Docker Engine and Compose v2. The image contains the pinned
+Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
 
-</div>
+1. Clone this repository. Copy `.env.example` to `.env`, restrict it with
+   `chmod 600 .env`, and fill in the required values below.
+2. Create `config/mappings.yaml` as private YAML (`chmod 600`). Use verified
+   Yahoo symbols with explicit EUR currency:
 
-> **Important:** Bourse Direct locks an account after three failed logins. This
-> connector never retries a failed login automatically. Stop and investigate an
-> unsuccessful attempt instead of running it again.
+   ```yaml
+   FR0000000002:
+     symbol: VERIFIED.PA
+     currency: EUR
+   ```
 
-This is an unofficial community project, unaffiliated with Bourse Direct and
-Ghostfolio. Broker websites and policies can change without notice; assess that
-risk and keep your own backups before using it.
+   This example ISIN is synthetic. Replace it with your actual instrument.
+   Every BUY in the acquired window needs its explicit entry in this slice.
+   A missing mapping refuses the simulation. Venue text never selects a ticker.
+3. Run once without a TTY:
+
+   ```sh
+   docker compose up --build --abort-on-container-exit --exit-code-from boursedirect-sync
+   ```
+
+Bourse Direct locks the account after three failed logins. The connector makes
+one attempt, never retries automatically, and preserves the authentication
+journal. On failure or uncertain outcome, stop and inspect the private state;
+never delete a journal or volume to make a restart succeed.
+
+## Configuration
+
+| ENV | Value |
+| --- | --- |
+| `BW_SERVER` | HTTPS Bitwarden-compatible vault origin |
+| `BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD` | Personal API credentials and vault master password |
+| `BW_ITEM_NAME` | Unique broker login item with password and TOTP; default `boursedirect.fr` |
+| `BD_SOURCE_ACCOUNT_REF` | Exact stable broker reference and wrapper, e.g. `SYNTHETIC001 PEA` |
+| `GHOST_HOST` | Final HTTPS Ghostfolio origin; no redirect, path, query or credentials |
+| `GHOST_ACCESS_TOKEN` | Long-lived Ghostfolio Security Token, exchanged each run |
+| `GHOST_ACCOUNT_ID` | Exact existing destination ID |
+| `MAPPING_FILE` | Readable private YAML inside the container; default `/config/mappings.yaml` |
+| `DRY_RUN` | `1`/`true`/`yes`/`on`, or absent, simulates; other values refuse in this slice |
+| `CRON` | Leave empty for one run; scheduling is not implemented yet |
+| `APPRISE_URLS` | Reserved for the later alert slice |
+
+The existing acquisition reads notices for the selected account and closes the
+vault and browser before simulation. The connector authenticates to Ghostfolio
+and reads accounts/activities; the authentication POST is not a financial write.
+The rolling window uses today's date in Europe/Zurich. This slice uses the
+existing acquisition path; the dedicated coverage acceptance is task 2.2.
+
+For a trusted existing private Docker network, set `GHOST_HOST` to exactly
+`http://ghostfolio:3333`, set `GHOSTFOLIO_NETWORK`, and include
+`-f compose.yaml -f compose.ghostfolio.yaml` in the Compose command. This reuses
+your instance; it does not create a Ghostfolio lab.
+
+## Review a dry run
+
+Each `DRY_RUN_PROPOSAL` log line shows date, ISIN, symbol, EUR quantity, unit price
+and brokerage fee. Dates use midnight UTC. Decimal values are serialized as exact
+strings. The final line reports `financial_writes=0`, `imported=0`, the number of
+BUY proposals and the number of operations deferred to later slices.
+
+The private `boursedirect-state` volume retains source notices, acquisition
+receipts, login journals, the account binding and `runs/<id>/simulation.yaml`.
+Simulation does not mark proposals imported. Keep the volume across runs.
+Compose retains bounded logs; they contain the proposed financial fields, so
+restrict access to the Docker host. Credentials, holders and balances are not
+printed. Private state and mappings must stay off Git.
+
+## Rollback
+
+Keep the previous state and image. Revert this task's commit to restore the
+v0.1.1 Compose path. The published v0.1.1 remains the legacy interactive
+preview-only release. See its [release notes](docs/releases/v0.1.1.md) and
+[connection procedure](docs/operations/source-connection.md).
+
+<details>
+<summary>Published v0.1.1 legacy instructions (use the v0.1.1 checkout)</summary>
 
 ## Who this is for
 
@@ -378,3 +439,5 @@ browser includes third-party components; see the
 [Playwright Apache 2.0 license](collector/licenses/playwright-LICENSE) and its
 attribution notices. See the [build and release guarantees](.github/BUILD.md)
 for image scanning and artifact publication.
+
+</details>
