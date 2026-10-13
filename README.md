@@ -4,19 +4,36 @@ The v0.2 rebuild starts with a noninteractive BUY simulation through Docker
 Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
 account and verified Yahoo mappings. No financial records are written.
 
-This source checkout implements OpenSpec task 1.1. Discovery, additional
+This source checkout implements OpenSpec tasks 1.1 and 2.1. Account discovery
+runs once without a terminal and needs only Bitwarden configuration. Additional
 operation types, automatic symbol resolution, deduplication, actual imports and
 scheduling belong to later slices. Non-BUY rows are counted as deferred in this
 slice. `DRY_RUN=0` and nonempty `CRON` refuse before broker access.
 
 ## Quick start
 
-Requires Linux AMD64, Docker Engine and Compose v2. The image contains the pinned
+Requires Linux AMD64, Docker Engine and Compose 2.27.0 or later. The image contains the pinned
 Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
 
 1. Clone this repository. Copy `.env.example` to `.env`, restrict it with
-   `chmod 600 .env`, and fill in the required values below.
-2. Create `config/mappings.yaml` as private YAML (`chmod 600`). Use verified
+   `chmod 600 .env`, and fill in the `BW_*` values. Leave
+   `BD_SOURCE_ACCOUNT_REF` empty to discover accounts first. Ghostfolio and
+   mappings are not required for discovery.
+2. Run without a TTY:
+
+   ```sh
+   docker compose up --build --abort-on-container-exit --exit-code-from boursedirect-sync
+   ```
+
+   The log lists copyable `BD_SOURCE_ACCOUNT_REF='reference PEA'` or
+   `BD_SOURCE_ACCOUNT_REF='reference PEA-PME'` options, without holders or
+   balances. `SOURCE_ACCOUNT_CONFIGURATION_REQUIRED` and exit code 1 are
+   expected. No notices or financial data are imported. The completed discovery
+   receipt prevents another login on restart while the source reference is empty;
+   the same options appear with `broker_attempts=0`.
+3. Copy the exact source option into `.env`. Configure `GHOST_HOST`,
+   `GHOST_ACCESS_TOKEN` and `GHOST_ACCOUNT_ID`. Create `config/mappings.yaml` as
+   private YAML (`chmod 600`). Use verified
    Yahoo symbols with explicit EUR currency:
 
    ```yaml
@@ -28,7 +45,7 @@ Bitwarden CLI and sandboxed Chromium. No TTY or browser port is required.
    This example ISIN is synthetic. Replace it with your actual instrument.
    Every BUY in the acquired window needs its explicit entry in this slice.
    A missing mapping refuses the simulation. Venue text never selects a ticker.
-3. Run once without a TTY:
+4. Run the same Compose command to simulate the configured account:
 
    ```sh
    docker compose up --build --abort-on-container-exit --exit-code-from boursedirect-sync
@@ -46,7 +63,8 @@ never delete a journal or volume to make a restart succeed.
 | `BW_SERVER` | HTTPS Bitwarden-compatible vault origin |
 | `BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD` | Personal API credentials and vault master password |
 | `BW_ITEM_NAME` | Unique broker login item with password and TOTP; default `boursedirect.fr` |
-| `BD_SOURCE_ACCOUNT_REF` | Exact stable broker reference and wrapper, e.g. `SYNTHETIC001 PEA` |
+| `BD_SOURCE_ACCOUNT_REF` | Empty: discover once; otherwise exact reference and wrapper, e.g. `SYNTHETIC001 PEA` |
+| `BD_STATE_VOLUME` | Optional shared Docker state volume name; identical for all services using the same broker credentials |
 | `GHOST_HOST` | Final HTTPS Ghostfolio origin; no redirect, path, query or credentials |
 | `GHOST_ACCESS_TOKEN` | Long-lived Ghostfolio Security Token, exchanged each run |
 | `GHOST_ACCOUNT_ID` | Exact existing destination ID |
@@ -61,6 +79,27 @@ and reads accounts/activities; the authentication POST is not a financial write.
 The rolling window uses today's date in Europe/Zurich. This slice uses the
 existing acquisition path; the dedicated coverage acceptance is task 2.2.
 
+Discovery runs before Ghostfolio and mapping validation. It closes the vault
+and browser before publishing the completed receipt. An unfinished discovery,
+malformed login journal or unresolved authentication attempt refuses before
+vault/broker access and reports `broker_attempts=0`. Inspect the preserved state
+for operator resolution; never delete receipts to retry.
+
+All services using the same broker credentials must mount the same state volume.
+Use Compose 2.27.0 or later: [that release includes compose-go 2.1.0](https://github.com/docker/compose/blob/v2.27.0/go.mod),
+which contains the project-name interpolation fix. For every invocation with
+`docker compose -p alternate`, including upgrades of the same deployment, set
+`BD_STATE_VOLUME` explicitly to its existing volume name, for example
+`BD_STATE_VOLUME=alternate_boursedirect-state`. Use the actual existing name if
+that deployment already uses a custom volume.
+For separate Compose projects, set the same `BD_STATE_VOLUME` to the existing
+volume name in each `.env`; this preserves the login namespace and shares the
+nonblocking broker lock. Leave it empty for a single service to keep the current
+project's default volume. A concurrent run exits with `BROKER_RUN_LOCKED` before
+network access. Account bindings are stored separately per source reference;
+changing an existing destination remains a refusal. Do not create a new empty
+volume to bypass a retained failed attempt.
+
 For a trusted existing private Docker network, set `GHOST_HOST` to exactly
 `http://ghostfolio:3333`, set `GHOSTFOLIO_NETWORK`, and include
 `-f compose.yaml -f compose.ghostfolio.yaml` in the Compose command. This reuses
@@ -74,7 +113,9 @@ strings. The final line reports `financial_writes=0`, `imported=0`, the number o
 BUY proposals and the number of operations deferred to later slices.
 
 The private `boursedirect-state` volume retains source notices, acquisition
-receipts, login journals, the account binding and `runs/<id>/simulation.yaml`.
+receipts, login journals, `discovery.yaml`, source bindings under `accounts/`
+and `runs/<id>/simulation.yaml`. The previous `community-binding.yaml` is retained
+and reused for its original source account.
 Simulation does not mark proposals imported. Keep the volume across runs.
 Compose retains bounded logs; they contain the proposed financial fields, so
 restrict access to the Docker host. Credentials, holders and balances are not
@@ -83,7 +124,8 @@ printed. Private state and mappings must stay off Git.
 ## Rollback
 
 Keep the previous state and image. Revert this task's commit to restore the
-v0.1.1 Compose path. The published v0.1.1 remains the legacy interactive
+previous Compose behavior; retain discovery and authentication journals.
+The published v0.1.1 remains the legacy interactive
 preview-only release. See its [release notes](docs/releases/v0.1.1.md) and
 [connection procedure](docs/operations/source-connection.md).
 

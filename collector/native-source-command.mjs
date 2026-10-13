@@ -7,9 +7,13 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {nativeVaultSession,retainNativeBinding} from './native-vault.mjs';
 import {qualifyBrokerSource} from './source-qualification-pilot.mjs';
-import {principal} from './core.mjs';
+import {principal,checkLoginState} from './core.mjs';
 
 process.umask(0o077);
+if(process.argv.length===3&&process.argv[2]==='--check-login-state') {
+  try {checkLoginState();process.exit(0);}
+  catch {process.exit(1);}
+}
 let fenced=false, child, receive, exit, browserClosed=false, sandbox=false, worker, pilot, failed=false;
 const channel=privateChannel({input:process.stdin,output:process.stdout,fence:()=>{fenced=true;child?.stdin.end();process.exitCode=1;}});
 let serial=Promise.resolve();
@@ -26,6 +30,7 @@ for(const key of Object.keys(vaultEnv))delete process.env[key];
 try {
   const input=await channel.receive();
   if(Object.keys(input).join(',')!=='action'||input.action!=='connect')throw new Error();
+  checkLoginState();
   const sourcePin=JSON.parse(fs.readFileSync('/opt/app/source-pin.json','utf8'));
   const accountConfig={path:'/opt/app/source-pin.json',sha256:createHash('sha256').update(fs.readFileSync('/opt/app/source-pin.json')).digest('hex')};
   const pin=JSON.parse(fs.readFileSync('/opt/app/cli-pin.json','utf8'));
@@ -90,7 +95,8 @@ try {
     const next=await request({action:'next_document'});
     if(next.accounts_verified===true&&!confirmed) {
       await pilot.confirmAuthenticated(next.configured_account_verified===true
-        ? {configured_account_verified:true} : {two_distinct_account_wrappers_verified:true});confirmed=true;
+        ? {configured_account_verified:true} : next.account_discovery_verified===true
+        ? {account_discovery_verified:true} : {two_distinct_account_wrappers_verified:true});confirmed=true;
     }
     if(next.needs_selection===true)continue;
     if(next.done===true) {

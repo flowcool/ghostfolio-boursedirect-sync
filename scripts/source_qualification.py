@@ -50,7 +50,7 @@ def source_account_binding(account):
     return dict(account)
 
 
-def planner(statement_periods=None, notice_as_of=None, account=None, choose_account=None):
+def planner(statement_periods=None, notice_as_of=None, account=None, choose_account=None, discovery_only=False):
     periods = {} if statement_periods is None else statement_periods
     replay.require(isinstance(periods, dict) and set(periods) <= {'PEA', 'PEA-PME'})
     replay.require(all(type(value) is str and re.fullmatch(r'[1-9][0-9]{3}(?:0[1-9]|1[0-2])', value)
@@ -58,6 +58,9 @@ def planner(statement_periods=None, notice_as_of=None, account=None, choose_acco
     state = {'queue': [], 'seen': set(), 'accounts': {}, 'account_ids': {}, 'verified': set(),
         'documents': {}, 'current': None, 'captures': 0, 'statement_periods': dict(periods),
         'required_accounts': {'PEA', 'PEA-PME'}}
+    if discovery_only:
+        replay.require(account is None and choose_account is None and notice_as_of is not None)
+        state['discovery_only'] = True
     if choose_account is not None:
         replay.require(callable(choose_account) and account is None and notice_as_of is not None)
         state['choose_account'] = choose_account
@@ -128,6 +131,21 @@ def notice_calendar_previous(state, url, raw, account, parent):
     return {'url': target, 'role': 'frame_document', 'sourceSha256': parent, 'account': account}
 
 
+def available_source_accounts(options):
+    """Project the observed selector onto references/wrappers only."""
+    available = []
+    for option in options:
+        label = ' '.join(option.get_text(' ', strip=True).upper().split())
+        kind = 'PEA-PME' if 'PEA-PME' in label or 'PEA PME' in label else 'PEA' if 'PEA' in label else None
+        if kind:
+            identity = option.get_text(' ', strip=True).split()[0]
+            replay.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63}', identity) and option.get('value'))
+            available.append(identity + ' ' + kind)
+    replay.require(available and len(set(available)) == len(available)
+        and len({option.get('value') for option in options}) == len(options))
+    return available
+
+
 def discover(state, url, raw, role):
     """Derive exact document requests from inert HTML, preserving account identity."""
     soup = BeautifulSoup(raw, 'html.parser')
@@ -153,16 +171,12 @@ def discover(state, url, raw, role):
         replay.require(len(selectors) == 1)
         select = selectors[0]
         options = select.find_all('option', recursive=False)
+        if state.get('discovery_only'):
+            state['discovered_accounts'] = available_source_accounts(options)
+            state['queue'].clear()
+            return
         if 'choose_account' in state and 'account_binding' not in state:
-            available = []
-            for option in options:
-                label = ' '.join(option.get_text(' ', strip=True).upper().split())
-                kind = 'PEA-PME' if 'PEA-PME' in label or 'PEA PME' in label else 'PEA' if 'PEA' in label else None
-                if kind:
-                    identity = option.get_text(' ', strip=True).split()[0]
-                    replay.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63}', identity))
-                    available.append(identity + ' ' + kind)
-            replay.require(available and len(set(available)) == len(available))
+            available = available_source_accounts(options)
             chosen = state['choose_account'](available)
             if chosen is None:
                 state['selection_source'] = (url, raw, role)
@@ -331,6 +345,9 @@ def discover(state, url, raw, role):
 
 
 def next_document(state):
+    if state.get('discovery_only') and 'discovered_accounts' in state:
+        return {'done': True, 'accounts_verified': True, 'account_discovery_verified': True,
+            'documents': {'complete': True, 'monthly_statements': 0, 'contract_notes': 0}}
     if 'selection_source' in state:
         discover(state, *state['selection_source'])
         if 'selection_source' in state:

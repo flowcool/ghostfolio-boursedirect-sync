@@ -10,6 +10,7 @@ from pathlib import Path
 import select
 import selectors
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -134,7 +135,85 @@ def wait_proxy_ready(proxy, timeout=15):
     raise RuntimeError('SOURCE_PROXY_UNAVAILABLE')
 
 
-def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_source=None, origin=None):
+def broker_lock(root):
+    """One lock on the common state volume, shared by every broker service."""
+    descriptor = os.open(root / 'connect.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        info = os.fstat(descriptor)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                and info.st_nlink == 1 and info.st_mode & 0o077 == 0, 'BROKER_STATE_INVALID')
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError('BROKER_RUN_LOCKED') from None
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def close_proxy(proxy):
+    if proxy is not None:
+        if proxy.poll() is None:
+            proxy.terminate()
+            proxy.wait(timeout=10)
+        proxy.stdout.close()
+
+
+def broker_login_ready(root):
+    result = subprocess.run(['/usr/local/bin/node', str(ROOT / 'native-source-command.mjs'),
+        '--check-login-state'], env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': str(root)},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+    require(result.returncode == 0, 'BROKER_LOGIN_UNRESOLVED')
+
+
+def discovery_receipt(root):
+    path = root / 'discovery.yaml'
+    if not path.exists() and not path.is_symlink():
+        return None
+    saved = source.replay.private._read(path)
+    require(isinstance(saved, dict) and set(saved) == {'schema_version', 'state', 'run_id', 'accounts'}
+        and type(saved['schema_version']) is int and saved['schema_version'] == 1
+        and source.re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', saved['run_id'])
+        and saved['state'] in ('started', 'completed') and isinstance(saved['accounts'], dict),
+        'BROKER_DISCOVERY_INVALID')
+    if saved['state'] == 'started':
+        raise RuntimeError('BROKER_DISCOVERY_UNRESOLVED')
+    require(0 < len(saved['accounts']) <= 256 and all(isinstance(ref, str)
+        and source.re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63} (?:PEA|PEA-PME)', ref)
+        and wrapper == ref.split(' ', 1)[1] for ref, wrapper in saved['accounts'].items()),
+        'BROKER_DISCOVERY_INVALID')
+    return saved
+
+
+def print_discovery(saved, reused):
+    for ref, wrapper in saved['accounts'].items():
+        print(json.dumps({'code': 'BD_SOURCE_ACCOUNT_OPTION', 'BD_SOURCE_ACCOUNT_REF': ref,
+            'wrapper': wrapper, 'configuration': 'BD_SOURCE_ACCOUNT_REF=' + repr(ref)}), flush=True)
+    print(json.dumps({'code': 'SOURCE_ACCOUNT_CONFIGURATION_REQUIRED', 'discovery_reused': reused,
+        'broker_attempts': 0 if reused else 1, 'imported': 0, 'financial_writes': 0}), flush=True)
+
+
+def account_binding_path(root, source_ref):
+    directory = root / 'accounts'
+    importer.private_directory(directory)
+    return directory / (source.digest(source_ref.encode()) + '.yaml')
+
+
+def saved_account_binding(root, path, source_ref):
+    if path.exists() or path.is_symlink():
+        return importer.read_keyed_yaml(path, root, MAX_BYTES)
+    legacy = root / 'community-binding.yaml'
+    if legacy.exists() or legacy.is_symlink():
+        saved = importer.read_keyed_yaml(legacy, root, MAX_BYTES)
+        require(isinstance(saved, dict) and isinstance(saved.get('account'), dict), 'ACCOUNT_BINDING_INVALID')
+        if saved['account'].get('source_account_ref') == source_ref:
+            return saved
+    return None
+
+
+def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_source=None, origin=None,
+            discovery_only=False, binding_path=None):
     """Compose a local owned browser worker with the existing inert planner."""
     sequence = 0
     document = None
@@ -154,7 +233,8 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
         return candidate
 
     state = source.planner(notice_as_of=as_of, account=existing,
-        choose_account=select_account if existing is None else None)
+        choose_account=select_account if existing is None and not discovery_only else None,
+        discovery_only=discovery_only)
     env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/state', **vault_env}
     process = subprocess.Popen(['/usr/local/bin/node', str(ROOT / 'native-source-command.mjs')],
         env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
@@ -209,9 +289,9 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
                 document = None
             elif action == 'next_document':
                 result = source.next_document(state)
-                if result.get('accounts_verified') and not binding_saved:
+                if result.get('accounts_verified') and not binding_saved and not discovery_only:
                     require(candidate is not None)
-                    source.replay.private._publish(Path('/state/community-binding.yaml'), {
+                    source.replay.private._publish(binding_path or Path('/state/community-binding.yaml'), {
                         'schema_version': 1, 'ghostfolio_origin': origin or os.environ['GHOSTFOLIO_ORIGIN'], 'account': candidate})
                     binding_saved = True
             elif action == 'complete':
@@ -219,12 +299,14 @@ def acquire(run, as_of, existing, source_ref, target_id, vault_env, select_sourc
                         and row.get('browser_exit_verified') is True and row.get('totp_requests') == 1
                         and row.get('documents') == source.next_document(state)['documents']
                         and row['documents']['complete'] is True and process.wait(timeout=20) == 0)
-                require(process.stdout.read(1) == b'' and process.stderr.read(1) == b'' and binding_saved)
+                require(process.stdout.read(1) == b'' and process.stderr.read(1) == b''
+                        and (binding_saved or discovery_only))
                 source.replay.private._publish(run / 'qualification.yaml', {**row, 'schema_version': 1,
                     'state': 'owned_session_closed', 'captures': state['captures'], 'accounts': state['accounts'],
                     'account_ids': state['account_ids'], 'verified_wrappers': sorted(state['verified']),
-                    'account_binding': candidate, 'notice_window': state['notice_window']}, exclusive=True)
-                return candidate, row['documents']
+                    'account_binding': candidate, 'notice_window': state['notice_window'],
+                    **({'discovered_accounts': state['discovered_accounts']} if discovery_only else {})}, exclusive=True)
+                return (state['discovered_accounts'] if discovery_only else candidate), row['documents']
             else:
                 raise RuntimeError('SOURCE_CONNECT_REFUSED')
             write_frame(process, {'result': result})
@@ -261,10 +343,10 @@ def connect():
     require(existing is not None or source_ref and target_id or sys.stdin.isatty(), 'ACCOUNT_SELECTION_REQUIRES_TERMINAL')
     vault_env = {key: os.environ.pop(key) for key in list(os.environ) if key.startswith(('BW_', 'BD_'))}
     token = os.environ.pop('GHOSTFOLIO_SECURITY_TOKEN', None)
-    lock = os.open(root / 'connect.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    lock = broker_lock(root)
     proxy = None
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        broker_login_ready(root)
         accounts, accounts_raw, activities_raw = ghostfolio_snapshot(origin, token)
         token = None
         target_id = choose([{'value': row['id'], 'label': row['name']} for row in accounts],

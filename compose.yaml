@@ -45,3 +45,7 @@ services:
     logging: {driver: json-file, options: {max-size: 1m, max-file: "2"}}
 volumes:
   boursedirect-state:
+    # Services sharing broker credentials must share this volume and its lock.
+    # Docker Compose >= 2.27.0 (compose-go >= 2.1.0). With -p, set BD_STATE_VOLUME
+    # explicitly to the existing volume name, including when upgrading.
+    name: ${BD_STATE_VOLUME:-${COMPOSE_PROJECT_NAME:-ghostfolio-boursedirect-sync}_boursedirect-state}
