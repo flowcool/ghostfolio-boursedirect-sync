@@ -56,6 +56,12 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
 - Money: `Decimal`, exact dates, EUR. An unknown operation is skipped and
   reported; the other operations continue.
 
+## Durable work state
+
+- v0.2 spec: Beads `infra-2fji` (OpenSpec change under `openspec/changes/`).
+  The v0.2 epic is created only after Florent approves the change; add it here.
+- Audit that set this mode: `infra-uze3` (closed).
+
 ## Code
 
 Functional Python, no classes, no type hints:
