@@ -277,6 +277,22 @@ function consumePermit(handle,request,now) {
 const brokerAuthority=authorityForPolicy(BROKER_POLICY);
 export function enroll(login) {return brokerAuthority.enroll(login);}
 export function validateJournal(state,id) {return brokerAuthority.validateJournal(state,id);}
+export function checkLoginState() {
+  // Read-only preflight: reuse the exact journal validator before any network.
+  const root=path.join(os.homedir(),'.local','state','ghostfolio-boursedirect-sync','auth');
+  try {fs.lstatSync(root);} catch(error) {if(error.code==='ENOENT')return;throw error;}
+  privateDirectory(root);
+  for(const id of fs.readdirSync(root)) {
+    if(!HASH.test(id))fail('AUTH_STATE_INVALID');
+    const directory=privateDirectory(path.join(root,id));
+    for(const name of ['lock','release-pending']) {
+      try {fs.lstatSync(path.join(directory,name));fail('AUTH_PRINCIPAL_FENCED');}
+      catch(error) {if(error.code!=='ENOENT')throw error;}
+    }
+    const state=validateJournal(privateRead(path.join(directory,'journal.yaml')),id);
+    if(Object.values(state.attempts).some(a=>a.state!=='closed_success'))fail('AUTH_PRINCIPAL_FENCED');
+  }
+}
 export function acquirePrincipal(login) {return brokerAuthority.acquirePrincipal(login);}
 export function releasePrincipal(handle) {return brokerAuthority.releasePrincipal(handle);}
 export function startAttempt(handle,now,protocol) {return brokerAuthority.startAttempt(handle,now,protocol);}

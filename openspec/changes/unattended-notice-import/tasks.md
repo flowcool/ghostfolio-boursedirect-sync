@@ -10,7 +10,7 @@ All Compose checks below use private ENV and state, no TTY, and the service name
 
 ## 2. Safe unattended source selection
 
-- [ ] 2.1 Add one-time account discovery before destination/mapping validation, persistent login/discovery receipts and cross-service broker serialization. Touch acquisition, connector, Compose and README. Check the same Compose command with source reference omitted: copyable PEA/PEA-PME options, no holders/balances, nonzero configuration-required exit. Restart with the same state: zero login attempts. With a retained unresolved attempt, verify refusal without broker access; never clear existing uncertainty to pass acceptance.
+- [x] 2.1 Add one-time account discovery before destination/mapping validation, persistent login/discovery receipts and cross-service broker serialization. Touch acquisition, connector, Compose and README. Check the same Compose command with source reference omitted: copyable PEA/PEA-PME options, no holders/balances, nonzero configuration-required exit. Restart with the same state: zero login attempts. With a retained unresolved attempt, verify refusal without broker access; never clear existing uncertainty to pass acceptance.
 - [ ] 2.2 Extend notice acquisition to the full rolling 90-day window, selected-account checks, logout and cleanup. Touch acquisition, connector and README. Check the Compose command with configured accounts and `DRY_RUN=1`: exact window bounds, observed calendar coverage (a confirmed empty month succeeds; a missing expected period, from retained evidence or offline fixture, exits nonzero before any financial write), zero monthly statements, no fallback account, zero financial writes.
 
 ## 3. Instruments and supported operations

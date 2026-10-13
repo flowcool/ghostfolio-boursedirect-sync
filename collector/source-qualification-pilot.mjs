@@ -253,7 +253,8 @@ async function runPilot(policy, {transport, sourcePin, credentials, enrollBound,
           &&session.documentReady()!==null&&session.documentReady()>before);return true;
       },
       confirmAuthenticated:async evidence=>{if(phase!=='finalized'||fatal
-        ||!(evidence?.two_distinct_account_wrappers_verified===true||evidence?.configured_account_verified===true))throw new Error();authority.transition(handle,'authenticated',now());phase='authenticated';await retainSafe({authentication_verified:true});},
+        ||!(evidence?.two_distinct_account_wrappers_verified===true||evidence?.configured_account_verified===true
+        ||evidence?.account_discovery_verified===true))throw new Error();authority.transition(handle,'authenticated',now());phase='authenticated';await retainSafe({authentication_verified:true});},
       close:async evidence=>{
         try {
           await session.close();

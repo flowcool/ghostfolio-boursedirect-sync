@@ -12,6 +12,22 @@ function isolated(run){const home=fs.mkdtempSync(path.join(os.tmpdir(),'bd-auth-
 function prepare(){c.enroll('SYNTHETIC');const h=c.acquirePrincipal('synthetic');c.startAttempt(h,100);c.transition(h,'password_uncertain',100);return h;}
 function contract(h){return {phase:'password_uncertain',page_epoch:randomUUID(),frame_epoch:randomUUID(),url:source.roles.password.url,method:'POST',resource_type:'Document'};}
 function request(p,nonce){return {...p,nonce,redirect:false};}
+test('read-only login preflight refuses an unresolved retained attempt',()=>isolated(()=>{
+ c.checkLoginState();c.enroll('SYNTHETIC');c.checkLoginState();
+ const h=c.acquirePrincipal('synthetic');c.startAttempt(h,100);c.releasePrincipal(h);
+ const filename=path.join(h.directory,'journal.yaml'),before=fs.readFileSync(filename);
+ assert.throws(()=>c.checkLoginState(),/AUTH_PRINCIPAL_FENCED/);
+ assert.deepEqual(fs.readFileSync(filename),before);
+}));
+test('read-only login preflight validates closed journals and retained release guards',()=>isolated(()=>{
+ c.enroll('SYNTHETIC');const id=c.principal('synthetic');
+ const dir=path.join(os.homedir(),'.local/state/ghostfolio-boursedirect-sync/auth',id);
+ const filename=path.join(dir,'journal.yaml'),state=parse(fs.readFileSync(filename,'utf8'));
+ state.attempts[randomUUID()]={state:'closed_success',started_at:100,updated_at:101,permit:null};
+ fs.writeFileSync(filename,stringify(state));c.checkLoginState();
+ fs.writeFileSync(path.join(dir,'release-pending'),'pending',{mode:0o600});
+ assert.throws(()=>c.checkLoginState(),/AUTH_PRINCIPAL_FENCED/);
+}));
 test('principal case-equivalence rejects whitespace and portfolio identities',()=>{
  assert.equal(c.principal('USER'),c.principal('user'));
  for(const s of [' user','user ','','å','x'.repeat(129)])assert.throws(()=>c.principal(s),/LOGIN_IDENTITY_INVALID/);

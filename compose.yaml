@@ -45,3 +45,5 @@ services:
     logging: {driver: json-file, options: {max-size: 1m, max-file: "2"}}
 volumes:
   boursedirect-state:
+    # Services sharing broker credentials must share this volume and its lock.
+    name: ${BD_STATE_VOLUME:-${COMPOSE_PROJECT_NAME:-ghostfolio-boursedirect-sync}_boursedirect-state}

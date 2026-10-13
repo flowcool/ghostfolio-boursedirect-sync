@@ -4161,6 +4161,8 @@ def buy_simulation_config():
     if os.environ.get('CRON', ''):
         fail('SCHEDULING_NOT_IMPLEMENTED')
     source_ref = os.environ.get('BD_SOURCE_ACCOUNT_REF', '')
+    if not source_ref:
+        return {'source_ref': '', 'discovery_only': True}
     target = os.environ.get('GHOST_ACCOUNT_ID', '')
     if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63} (?:PEA|PEA-PME)', source_ref)
             or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', target)):
@@ -4210,36 +4212,55 @@ def sync_buy_simulation():
 
     os.umask(0o077)
     config = buy_simulation_config()
-    acquisition.ghostfolio_origin(config['origin'])
     root = Path('/state')
     private_directory(root)
-    binding_path = root / 'community-binding.yaml'
-    saved = read_keyed_yaml(binding_path, root, acquisition.MAX_BYTES) if binding_path.exists() else None
-    account = acquisition.reconcile_binding(saved, config['origin'], config['source_ref'], config['target'])
-    if account is None:
-        account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
-                   'account_key': str(uuid.uuid4())}
     vault_env = {key: os.environ.pop(key) for key in list(os.environ) if key.startswith('BW_')}
     token = os.environ.pop('GHOST_ACCESS_TOKEN', None)
-    lock = os.open(root / 'connect.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    lock = None
     proxy = None
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        accounts, _, _ = acquisition.ghostfolio_snapshot(config['origin'], token)
-        token = None
-        acquisition.choose([{'value': row['id'], 'label': row['name']} for row in accounts],
-                           'Destination', config['target'])
+        lock = acquisition.broker_lock(root)
+        acquisition.broker_login_ready(root)
+        discovery = acquisition.discovery_receipt(root)
+        discovery_only = config.get('discovery_only', False)
+        if discovery_only and discovery is not None:
+            acquisition.print_discovery(discovery, reused=True)
+            return 1
+        if not discovery_only:
+            if discovery is not None and config['source_ref'] not in discovery['accounts']:
+                fail('CONFIGURED_ACCOUNT_UNAVAILABLE')
+            acquisition.ghostfolio_origin(config['origin'])
+            binding_path = acquisition.account_binding_path(root, config['source_ref'])
+            saved = acquisition.saved_account_binding(root, binding_path, config['source_ref'])
+            account = acquisition.reconcile_binding(saved, config['origin'], config['source_ref'], config['target'])
+            if account is None:
+                account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
+                           'account_key': str(uuid.uuid4())}
+            accounts, _, _ = acquisition.ghostfolio_snapshot(config['origin'], token)
+            token = None
+            acquisition.choose([{'value': row['id'], 'label': row['name']} for row in accounts],
+                               'Destination', config['target'])
         private_directory(root / 'runs')
         run = root / 'runs' / str(uuid.uuid4())
         private_directory(run)
         as_of = datetime.now(ZoneInfo('Europe/Zurich')).date().isoformat()
         atomic_private_yaml(run / 'attempt.yaml', {'schema_version': 1, 'state': 'started', 'as_of': as_of})
+        if discovery_only:
+            atomic_private_yaml(root / 'discovery.yaml', {'schema_version': 1, 'state': 'started',
+                'run_id': run.name, 'accounts': {}})
         proxy = subprocess.Popen(['/usr/bin/python3', '-I', str(acquisition.ROOT / 'collector/vault-egress.py'),
             '--broker-inspection', '--ready'], env={'PATH': '/usr/bin:/bin'},
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         acquisition.wait_proxy_ready(proxy)
+        if discovery_only:
+            references, _ = acquisition.acquire(run, as_of, None, '', '', vault_env, discovery_only=True)
+            discovery = {'schema_version': 1, 'state': 'completed', 'run_id': run.name,
+                'accounts': {ref: ref.split(' ', 1)[1] for ref in references}}
+            atomic_private_yaml(root / 'discovery.yaml', discovery)
+            acquisition.print_discovery(discovery, reused=False)
+            return 1
         account, documents = acquisition.acquire(run, as_of, account, config['source_ref'], config['target'],
-                                                vault_env, origin=config['origin'])
+                                                vault_env, origin=config['origin'], binding_path=binding_path)
         proposals, deferred = [], 0
         for path in sorted(run.glob('document-*.yaml')):
             metadata = read_keyed_yaml(path, root, acquisition.MAX_BYTES)
@@ -4270,7 +4291,8 @@ def sync_buy_simulation():
                 proxy.terminate()
                 proxy.wait(timeout=10)
             proxy.stdout.close()
-        os.close(lock)
+        if lock is not None:
+            os.close(lock)
 
 
 def main(argv=None):
@@ -4286,8 +4308,12 @@ def main(argv=None):
                 'SOURCE_CONNECT_REFUSED', 'SOURCE_PROXY_UNAVAILABLE', 'GHOSTFOLIO_ACCESS_INVALID',
                 'GHOSTFOLIO_ACCESS_REFUSED', 'GHOSTFOLIO_RESPONSE_TOO_LARGE', 'GHOSTFOLIO_ACCOUNTS_INVALID',
                 'INVALID_GHOST_ORIGIN'}
+            refusals = {'BROKER_RUN_LOCKED', 'BROKER_STATE_INVALID', 'BROKER_LOGIN_UNRESOLVED',
+                'BROKER_DISCOVERY_UNRESOLVED', 'BROKER_DISCOVERY_INVALID'}
+            allowed.update(refusals)
             code = str(error) if str(error) in allowed else 'BUY_SIMULATION_REFUSED'
-            print(json.dumps({'code': code, 'financial_writes': 0, 'imported': 0}), flush=True)
+            print(json.dumps({'code': code, 'financial_writes': 0, 'imported': 0,
+                **({'broker_attempts': 0} if code in refusals else {})}), flush=True)
             return 1
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
