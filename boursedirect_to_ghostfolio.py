@@ -4170,10 +4170,8 @@ def buy_simulation_config():
     path = Path(os.environ.get('MAPPING_FILE', '/config/mappings.yaml'))
     try:
         document = parse_keyed_yaml(read_local_bytes(path, path.parent, 8 * 1024 * 1024))
-    except Exception:
+    except OSError:
         fail('MAPPING_FILE_UNREADABLE_OR_INVALID')
-    if not isinstance(document, dict):
-        fail('INVALID_EXPLICIT_MAPPING')
     # Adapt DEGIRO's verified_mapping_document contract; this slice supports EUR.
     quotes = {}
     for isin, entry in document.items():
@@ -4374,7 +4372,8 @@ def main(argv=None):
         except Exception as error:
             allowed = {'INVALID_DRY_RUN', 'IMPORT_NOT_IMPLEMENTED', 'SCHEDULING_NOT_IMPLEMENTED',
                 'EXPLICIT_ACCOUNTS_REQUIRED', 'EXPLICIT_MAPPING_REQUIRED', 'INVALID_EXPLICIT_MAPPING',
-                'MAPPING_FILE_UNREADABLE_OR_INVALID',
+                'MAPPING_FILE_UNREADABLE_OR_INVALID', 'INVALID_KEYED_YAML', 'YAML_DUPLICATE_KEY',
+                'YAML_ALIAS_NOT_SUPPORTED', 'YAML_STRING_KEYS_REQUIRED', 'YAML_TOO_DEEP',
                 'NOTICE_ACCOUNT_MISMATCH', 'NOTICE_CAPTURE_CHANGED', 'BUY_CURRENCY_OR_VAT_UNVERIFIED',
                 'NOTICE_WINDOW_INCOMPLETE',
                 'CONFIGURED_ACCOUNT_UNAVAILABLE', 'ACCOUNT_BINDING_INVALID', 'ACCOUNT_BINDING_CONFLICT',

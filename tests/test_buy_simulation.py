@@ -76,10 +76,11 @@ def test_readable_empty_map_is_valid_but_empty_yaml_or_missing_file_refuses(tmp_
         connector.buy_simulation_config()
     path.write_text('{}\n')
     assert connector.buy_simulation_config()['mappings'] == {}
-    for raw in ('', '[]', 'FR0000000002: {symbol: BAD, currency: USD}',
-                'FR0000000002: {symbol: BAD, currency: EUR, venue: Paris}'):
+    for raw, code in (('', 'INVALID_KEYED_YAML'), ('[]', 'INVALID_KEYED_YAML'),
+        ('FR0000000002: {symbol: BAD, currency: USD}', 'INVALID_EXPLICIT_MAPPING'),
+        ('FR0000000002: {symbol: BAD, currency: EUR, venue: Paris}', 'INVALID_EXPLICIT_MAPPING')):
         path.write_text(raw)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError, match=code):
             connector.buy_simulation_config()
 
 
@@ -133,3 +134,23 @@ def test_provider_failure_is_bounded_and_skips_only_affected_buy(capsys):
     result = connector.simulate_buy_notice(document, ACCOUNT, {}, lambda isin: MAPPING.get(isin), failures)
     assert len(result) == 1 and result[0]['unitPrice'] == '8.125'
     assert failures == ['FR0000000010']
+
+
+@pytest.mark.parametrize('raw,code', [('', 'INVALID_KEYED_YAML'), ('[]', 'INVALID_KEYED_YAML'),
+    ('{}\n{}', 'INVALID_KEYED_YAML'), ('key: 1\nkey: 2', 'YAML_DUPLICATE_KEY'),
+    ('key: &alias {}', 'YAML_ALIAS_NOT_SUPPORTED'), ('1: {}', 'YAML_STRING_KEYS_REQUIRED'),
+    ('key: ' + '[' * 34 + '0' + ']' * 34, 'YAML_TOO_DEEP')])
+def test_yaml_diagnostics_remain_visible_before_any_network(raw, code, tmp_path, monkeypatch, capsys):
+    import json
+    # The real one-shot entrypoint sets a process-wide private umask. Isolate it
+    # here so these early-refusal checks cannot alter other tests' permissions.
+    monkeypatch.setattr(connector.os, 'umask', lambda mask: 0o022)
+    monkeypatch.setenv('DRY_RUN', '1')
+    monkeypatch.setenv('CRON', '')
+    monkeypatch.setenv('BD_SOURCE_ACCOUNT_REF', ACCOUNT['source_account_ref'])
+    monkeypatch.setenv('GHOST_ACCOUNT_ID', 'synthetic-destination')
+    path = tmp_path / 'mapping.yaml'
+    path.write_text(raw)
+    monkeypatch.setenv('MAPPING_FILE', str(path))
+    assert connector.main(['--sync']) == 1
+    assert json.loads(capsys.readouterr().out) == {'code': code, 'financial_writes': 0, 'imported': 0}
