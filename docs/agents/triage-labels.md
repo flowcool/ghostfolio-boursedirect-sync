@@ -1,15 +1,13 @@
 # Triage Labels
 
-The engineering skills use five canonical triage roles. This file maps each
-role to the unchanged label used in Beads for this repository.
+The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repository's Beads tracker.
 
-| Label in engineering skills | Label in Beads | Meaning |
+| Label in mattpocock/skills | Label in our tracker | Meaning |
 | --- | --- | --- |
-| `needs-triage` | `needs-triage` | Maintainer needs to evaluate this issue. |
-| `needs-info` | `needs-info` | Waiting on the reporter for more information. |
-| `ready-for-agent` | `ready-for-agent` | Fully specified and ready for an agent. |
-| `ready-for-human` | `ready-for-human` | Requires human implementation. |
-| `wontfix` | `wontfix` | Will not be actioned. |
+| `needs-triage` | `needs-triage` | Maintainer needs to evaluate this issue |
+| `needs-info` | `needs-info` | Waiting on reporter for more information |
+| `ready-for-agent` | `ready-for-agent` | Fully specified, ready for an AFK agent |
+| `ready-for-human` | `ready-for-human` | Requires human implementation |
+| `wontfix` | `wontfix` | Will not be actioned |
 
-When a skill mentions a role, apply the corresponding Beads label from this
-table.
+When a skill mentions a role, use the corresponding label string from this table. Each triaged issue must have exactly one state label.

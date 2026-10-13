@@ -1,26 +1,29 @@
 # Domain Docs
 
-How engineering skills consume this repository's domain documentation.
+How engineering skills should consume this repository's domain documentation when exploring the codebase.
 
-## Before exploring
+## Before exploring, read these
 
-- Read root `GLOSSARY.md` if it exists.
-- Read any root `docs/adr/` records that affect the area under investigation.
-- Read the applicable `docs/design/` contract for importer, acquisition, review,
-  or application work.
+- **`GLOSSARY.md`** at the repository root.
+- **`docs/adr/`**: read ADRs that touch the area about to be changed.
 
-If a glossary or ADR directory is absent, proceed silently. Create them only
-when the relevant domain-modeling work resolves a term or a decision.
+If either location does not contain relevant documentation, proceed silently. The `/domain-modeling` skill creates missing vocabulary or decisions lazily when terms or decisions are resolved.
 
-## Layout
+## File structure
 
-This is a single-context repository. Any future glossary is `GLOSSARY.md` at
-the repository root; architecture decisions are under `docs/adr/`. Do not add
-a `GLOSSARY-MAP.md` or per-component glossary unless the repository becomes a
-genuine multi-context monorepo.
+This is a single-context repository:
 
-## Vocabulary and decisions
+```
+/
+├── GLOSSARY.md
+├── docs/adr/
+└── src/
+```
 
-Use glossary terms consistently in issue titles, tests, and design proposals.
-If a proposed change conflicts with an applicable ADR or design contract,
-surface that conflict explicitly rather than silently overriding it.
+## Use the glossary's vocabulary
+
+When naming a domain concept in an issue title, refactor proposal, hypothesis, or test, use the term defined in `GLOSSARY.md`. If the required concept is absent, reconsider whether the project already uses another term, or note the gap for `/domain-modeling`.
+
+## Flag ADR conflicts
+
+Surface a contradiction with an existing ADR explicitly instead of silently overriding it.
