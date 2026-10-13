@@ -79,9 +79,9 @@ jobs:
             echo "Could not confirm that the GHCR version is unused." >&2
             exit 1
           fi
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v3.11.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build the AMD64 release image once
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v6.18.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
@@ -99,7 +99,7 @@ jobs:
           printf '%s\n' "$checked_image_id" > "$RUNNER_TEMP/checked-image-id"
           printf 'image_id=%s\n' "$checked_image_id" >> "$GITHUB_OUTPUT"
       - name: Scan the image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.75.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.75.0
           image-ref: ${{ steps.checked_image.outputs.image_id }}
@@ -111,7 +111,7 @@ jobs:
       - name: Smoke the pinned CLI, Python dependencies, and Node runtime offline
         run: bash scripts/smoke-connector-image.sh "$(cat "$RUNNER_TEMP/checked-image-id")"
       - name: Publish the checked image
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -156,12 +156,12 @@ jobs:
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           test "$latest" = "$RELEASE_TAG"
       - name: Authenticate to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v3.11.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Promote the published AMD64 image without rebuilding it
         run: |
           docker pull --platform linux/amd64 "$IMAGE:$RELEASE_TAG"

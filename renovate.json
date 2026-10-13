@@ -1,0 +1,129 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "enabledManagers": [
+    "pip_requirements",
+    "npm",
+    "github-actions",
+    "dockerfile"
+  ],
+  "ignorePaths": [
+    "collector/lab/vault.Dockerfile"
+  ],
+  "timezone": "Europe/Zurich",
+  "schedule": [
+    "* * * * 1"
+  ],
+  "automerge": false,
+  "rangeStrategy": "pin",
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "matchManagers": [
+        "pip_requirements",
+        "npm"
+      ],
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Python minor and patch"
+    },
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Collector minor and patch"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "Container base images"
+    },
+    {
+      "matchPackageNames": [
+        "python"
+      ],
+      "allowedVersions": ">=3.13 <3.14"
+    },
+    {
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "node"
+      ],
+      "allowedVersions": ">=22 <23"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "node"
+      ],
+      "allowedVersions": ">=20 <21"
+    },
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "matchDepTypes": [
+        "engines"
+      ],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "automerge": false,
+    "minimumReleaseAge": "0 days",
+    "schedule": [],
+    "groupName": null,
+    "prCreation": "immediate"
+  }
+}
