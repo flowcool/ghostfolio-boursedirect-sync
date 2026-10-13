@@ -209,6 +209,28 @@ financial conflicts and ambiguous multiplicity stop the entire run with
 Malformed evidence refuses with `NOTICE_DAY_CONTEXT_INVALID` before broker access.
 No existing activity is changed or adopted by writing a comment.
 
+Before overlap refusal, `NOTICE_SIMILAR_ACTIVITY` lists every same-account,
+established-symbol and same-type candidate within inclusive ±3 civil days for
+trades or ±4 for dividends. There is no amount or fee cutoff. Each source row's
+candidates are ordered by absolute total difference; unavailable comparisons
+come last. Diagnostics show source/destination days and provenance, signed day
+gap, quantities, unit prices, Decimal quantity × price totals and fees. EUR and
+percentage differences mean destination minus source; the percentage is relative
+to the source total. A zero source total leaves the percentage `unverified`.
+Unproved days or financial context remain `unverified` and cannot establish that
+an activity is new. Dividend source totals are net credits, with no inferred
+gross amount or withholding.
+
+`automatic_duplicate` means an exact owned match or a proven one-to-one manual
+match. `represented_other_notice` identifies a row already consumed by another
+exact notice match. Unresolved candidates show `review_required`. All rows and
+missing evidence are reported before whole-run refusal, without confirmation or
+financial writes.
+Reconcile conflicts outside the run, retain the entry evidence for the resulting
+snapshot, then rerun simulation. The same automatic rules apply again; remaining
+conflicts still refuse. These diagnostics never select an instrument mapping or
+change an existing activity. Actual import acceptance remains a separate step.
+
 After deduplication, net active Ghostfolio BUY/SELL quantities form the baseline.
 All pending trades reconcile in source date/execution-time order before any
 proposal is logged. Pre-window holdings and corporate actions must already be
