@@ -182,7 +182,8 @@ def test_proxy_readiness_waits_for_owned_signal_and_refuses_missing_or_wrong(sig
 
 
 @pytest.mark.parametrize('logout', [True, False])
-def test_public_supervisor_retains_complete_readable_receipts_only_after_logout(tmp_path, monkeypatch, logout):
+@pytest.mark.parametrize('fault', [None, 'missing_period', 'browser_exit', 'wrong_account'])
+def test_public_supervisor_retains_complete_readable_receipts_only_after_logout(tmp_path, monkeypatch, logout, fault):
     """Replay the worker protocol through the real planner and importer receipt reader."""
     run = tmp_path / 'run'
     run.mkdir(mode=0o700)
@@ -208,12 +209,19 @@ def test_public_supervisor_retains_complete_readable_receipts_only_after_logout(
             next_row = responses[-1]['result']
             if next_row.get('done'):
                 yield {'action': 'complete', 'accounts_verified': True, 'session_logged_out': logout,
-                    'browser_exit_verified': True, 'totp_requests': 1, 'documents': next_row['documents']}
+                    'browser_exit_verified': fault != 'browser_exit', 'totp_requests': 1, 'documents': next_row['documents']}
                 return
             url = next_row['document']['url']
             query = parse_qs(urlsplit(url).query)
             month = int(query.get('month', ['10'])[0])
+            if fault == 'missing_period' and month == 7:
+                yield {'action': 'next_document'}
+                yield {'action': 'complete', 'accounts_verified': True, 'session_logged_out': logout,
+                    'browser_exit_verified': True, 'totp_requests': 1, 'documents': responses[-1]['result']['documents']}
+                return
             body = calendar(month=month, nc=2, days=())
+            if fault == 'wrong_account':
+                body = calendar(month=month, nc=1, days=())
             if 'month' not in query:
                 body = FORM.replace('value=1 selected', 'value=1').replace('value=2>', 'value=2 selected>').encode() + body
 
@@ -221,13 +229,17 @@ def test_public_supervisor_retains_complete_readable_receipts_only_after_logout(
     monkeypatch.setattr(community, 'read_frame', lambda *args: next(stream))
     call = lambda: community.acquire(run, '2026-10-12', None, ACCOUNT['source_account_ref'], ACCOUNT['target_account_id'], {},
         select_source=lambda available: ACCOUNT['source_account_ref'])
-    if not logout:
+    if not logout or fault:
         with pytest.raises(RuntimeError):
             call()
         assert not (run / 'qualification.yaml').exists()
         return
     account, documents = call()
     assert documents == {'complete': True, 'monthly_statements': 0, 'contract_notes': 0}
+    coverage = community.source.replay.private._read(run / 'qualification.yaml')['notice_coverage']
+    assert coverage['complete'] is True
+    assert coverage['window'] == {'first_day': '2026-07-15', 'last_day': '2026-10-12', 'days': 90}
+    assert coverage['empty_months'] == {'PEA': ['2026-07', '2026-08', '2026-09', '2026-10']}
     retained = community.source.replay.private._read(saved)
     assert retained['account'] == account
     config = {'source_mode': 'notices', 'account': account, 'acquisition_runs': {'current': 'run'}}

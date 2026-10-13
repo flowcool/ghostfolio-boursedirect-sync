@@ -76,8 +76,14 @@ never delete a journal or volume to make a restart succeed.
 The existing acquisition reads notices for the selected account and closes the
 vault and browser before simulation. The connector authenticates to Ghostfolio
 and reads accounts/activities; the authentication POST is not a financial write.
-The rolling window uses today's date in Europe/Zurich. This slice uses the
-existing acquisition path; the dedicated coverage acceptance is task 2.2.
+The rolling window includes today and the previous 89 days in Europe/Zurich.
+`NOTICE_WINDOW_COMPLETED` reports its exact bounds, expected and observed
+calendar months, confirmed empty months, selected-account verification, logout
+and browser exit. Every expected month and every offered in-window notice must
+be captured before simulation. A confirmed empty month succeeds. Missing
+coverage, an unexpected calendar or a different account refuses the run with
+zero financial writes. Monthly statements are never selected. The first month
+is read in full; proposals use the financial row date within the exact window.
 
 Discovery runs before Ghostfolio and mapping validation. It closes the vault
 and browser before publishing the completed receipt. An unfinished discovery,

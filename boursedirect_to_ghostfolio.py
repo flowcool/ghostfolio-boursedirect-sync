@@ -4264,6 +4264,22 @@ def sync_buy_simulation():
             return 1
         account, documents = acquisition.acquire(run, as_of, account, config['source_ref'], config['target'],
                                                 vault_env, origin=config['origin'], binding_path=binding_path)
+        vault_env.clear()
+        acquisition.close_proxy(proxy)
+        proxy = None
+        receipt = read_keyed_yaml(run / 'qualification.yaml', root, acquisition.MAX_BYTES)
+        coverage = receipt['notice_coverage']
+        if (coverage['complete'] is not True or receipt['account_binding'] != account
+                or coverage['window']['last_day'] != as_of or documents['complete'] is not True
+                or documents['monthly_statements'] != 0):
+            fail('NOTICE_WINDOW_INCOMPLETE')
+        wrapper = config['source_ref'].split(' ', 1)[1]
+        print(json.dumps({'code': 'NOTICE_WINDOW_COMPLETED', **coverage['window'],
+            'expected_months': coverage['expected_months'], 'observed_months': coverage['observed_months'][wrapper],
+            'empty_months': coverage['empty_months'][wrapper], 'selected_account_verified': True,
+            'session_logged_out': receipt['session_logged_out'], 'browser_exit_verified': receipt['browser_exit_verified'],
+            'monthly_statements': documents['monthly_statements'], 'contract_notes': documents['contract_notes'],
+            'financial_writes': 0}), flush=True)
         proposals, deferred = [], 0
         for path in sorted(run.glob('document-*.yaml')):
             metadata = read_keyed_yaml(path, root, acquisition.MAX_BYTES)
@@ -4305,6 +4321,7 @@ def main(argv=None):
             allowed = {'INVALID_DRY_RUN', 'IMPORT_NOT_IMPLEMENTED', 'SCHEDULING_NOT_IMPLEMENTED',
                 'EXPLICIT_ACCOUNTS_REQUIRED', 'EXPLICIT_MAPPING_REQUIRED', 'INVALID_EXPLICIT_MAPPING',
                 'NOTICE_ACCOUNT_MISMATCH', 'NOTICE_CAPTURE_CHANGED', 'BUY_CURRENCY_OR_VAT_UNVERIFIED',
+                'NOTICE_WINDOW_INCOMPLETE',
                 'CONFIGURED_ACCOUNT_UNAVAILABLE', 'ACCOUNT_BINDING_INVALID', 'ACCOUNT_BINDING_CONFLICT',
                 'SOURCE_CONNECT_REFUSED', 'SOURCE_PROXY_UNAVAILABLE', 'GHOSTFOLIO_ACCESS_INVALID',
                 'GHOSTFOLIO_ACCESS_REFUSED', 'GHOSTFOLIO_RESPONSE_TOO_LARGE', 'GHOSTFOLIO_ACCOUNTS_INVALID',

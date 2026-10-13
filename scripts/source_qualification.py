@@ -77,6 +77,8 @@ def planner(statement_periods=None, notice_as_of=None, account=None, choose_acco
             raise RuntimeError('SOURCE_REPLAY_REFUSED') from None
         state['notice_window'] = {'first': first.isoformat(), 'last': last.isoformat()}
         state['notice_calendars'] = set()
+        state['notice_empty_calendars'] = set()
+        state['notice_expected_documents'] = set()
         state['notice_documents'] = set()
         state['notice_pending_calendars'] = {}
         state['notice_navigation_verified'] = False
@@ -106,12 +108,19 @@ def notice_calendar_previous(state, url, raw, account, parent):
     months = ('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre')
     replay.require(headings == [[year], [months[int(month) - 1]]])
     period = year + '-' + month.zfill(2)
+    pairs = parse_qsl(urlsplit(url).query, keep_blank_values=True)
+    query = dict(pairs)
+    replay.require(len(pairs) == len(query) and query.get('nc') == nc
+        and (('month' not in query and 'year' not in query)
+            or query.get('month') == str(int(month)) and query.get('year') == year))
     window = state['notice_window']
     replay.require(window['first'][:7] <= period <= window['last'][:7])
     offered = [node for node in soup.select('a[href]') if 'releveOpe.php' in node['href']]
     empty = [' '.join(node.get_text(' ', strip=True).split()) for node in soup.select('div.msg.texte1T7A')]
     replay.require(bool(offered) and not empty or not offered and empty == ["Vous n'avez pas effectué d'opération ce mois-ci."])
     state['notice_calendars'].add((account, period))
+    if not offered:
+        state['notice_empty_calendars'].add((account, period))
     if period == window['first'][:7]:
         return None
     functions = re.findall(r'function\s+MoisPrecedent\(tr,nc,month,year\)\s*\{([\s\S]*?)\n\}', raw.decode('cp1252'))
@@ -263,11 +272,13 @@ def discover(state, url, raw, role):
         if relative.startswith(('javascript:', 'ouvrePopup(')):
             match = re.fullmatch(r"(?:javascript:)?ouvrePopup\('([^']+)'(?:,[^)]*)?\);?", relative)
             if not match:
+                replay.require(not (notice_only and account is not None and 'releveOpe.php' in relative))
                 continue
             relative = match.group(1)
         try:
             target = source_url(url, relative)
         except RuntimeError:
+            replay.require(not (notice_only and account is not None and 'releveOpe.php' in relative))
             continue
         path = urlsplit(target).path
         if notice_only and path in {'/fr/page/releves', '/priv/new/releves.php', '/priv/new/releveCompte.php'}:
@@ -301,6 +312,8 @@ def discover(state, url, raw, role):
                 or document_role == 'monthly_statement' and document_role in state['documents'].get(account, {})):
             continue
         candidates.append({'url': target, 'role': document_role, 'sourceSha256': parent, 'account': account})
+        if notice_only and document_role == 'contract_note':
+            state['notice_expected_documents'].add((account, target))
     # Finish the selected wrapper before switching the broker's account context.
     if notice_only:
         previous = notice_calendar_previous(state, url, raw, account, parent)
@@ -344,6 +357,27 @@ def discover(state, url, raw, role):
     state['queue'][0:0] = candidates
 
 
+def notice_coverage(state):
+    """Summarize observed calendars and offered notices, without personal fields."""
+    first = datetime.strptime(state['notice_window']['first'][:7], '%Y-%m')
+    last = state['notice_window']['last'][:7]
+    periods = []
+    while first.strftime('%Y-%m') <= last:
+        periods.append(first.strftime('%Y-%m'))
+        first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+    observed = {account: sorted(period for wrapper, period in state['notice_calendars'] if wrapper == account)
+        for account in sorted(state['required_accounts'])}
+    empty = {account: sorted(period for wrapper, period in state['notice_empty_calendars'] if wrapper == account)
+        for account in observed}
+    missing = {account: sorted(set(periods) - set(months)) for account, months in observed.items()}
+    return {'window': {'first_day': state['notice_window']['first'], 'last_day': state['notice_window']['last'], 'days': 90},
+        'expected_months': periods, 'observed_months': observed, 'empty_months': empty, 'missing_months': missing,
+        'expected_contract_notes': len(state['notice_expected_documents']),
+        'captured_contract_notes': len(state['notice_documents']),
+        'complete': state['verified'] == state['required_accounts'] and not state['notice_pending_calendars']
+            and not any(missing.values()) and state['notice_expected_documents'] == state['notice_documents']}
+
+
 def next_document(state):
     if state.get('discovery_only') and 'discovered_accounts' in state:
         return {'done': True, 'accounts_verified': True, 'account_discovery_verified': True,
@@ -367,14 +401,7 @@ def next_document(state):
             'document': {key: row[key] for key in ('url', 'role', 'sourceSha256', 'method', 'fields') if key in row}}
     replay.require(state['verified'] == state['required_accounts'])
     if 'notice_window' in state:
-        first = datetime.strptime(state['notice_window']['first'][:7], '%Y-%m')
-        last = state['notice_window']['last'][:7]
-        periods = []
-        while first.strftime('%Y-%m') <= last:
-            periods.append(first.strftime('%Y-%m'))
-            first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
-        complete = (not state['notice_pending_calendars'] and
-            all((account, period) in state['notice_calendars'] for account in state['verified'] for period in periods))
+        complete = notice_coverage(state)['complete']
         return {'done': True, 'accounts_verified': True,
             **({'configured_account_verified': True} if 'account_binding' in state else {}),
             'documents': {'complete': complete,
