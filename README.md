@@ -231,16 +231,31 @@ snapshot, then rerun simulation. The same automatic rules apply again; remaining
 conflicts still refuse. These diagnostics never select an instrument mapping or
 change an existing activity. Actual import acceptance remains a separate step.
 
-After deduplication, net active Ghostfolio BUY/SELL quantities form the baseline.
-All pending trades reconcile in source date/execution-time order before any
-proposal is logged. Pre-window holdings and corporate actions must already be
-represented in Ghostfolio. A SELL exceeding availability stops the entire run,
-including simulation. `NOTICE_INSUFFICIENT_HOLDINGS` reports ISIN, symbol,
-`available`, `sale` and `financial_writes=0`. Preceding pending BUYs contribute
-only to the projected simulation balance. Skipped or duplicate BUYs add nothing;
-represented BUYs already form part of the baseline. Actual dispatch remains
-unavailable in this slice. Its holdings guard also supports confirmed balances
-only: a submitted purchase cannot fund a SELL before exact readback confirms it.
+After deduplication, each pending SELL is checked against stock on its civil
+day. Existing destination sales from the first pending operation onward are
+also checked, so later sales cannot consume the same stock twice.
+The complete active account/instrument history contributes, including
+purchases older than 90 days and prior sales. Later purchases cannot fund an
+earlier sale. Pre-window stock and corporate actions must already be represented
+in Ghostfolio. Manual history requires retained civil-day entry evidence.
+Represented notices count once and retain their proven source execution order;
+a manual stored timestamp alone never proves intraday order. Equal manual rows
+retain the source quantity/time multiset for stock without inferring a timestamp
+association with any particular manual row.
+
+Preceding-day stock can cover same-day sales without proving the order of
+same-day purchases. Otherwise only proven earlier source purchases contribute.
+`NOTICE_INSUFFICIENT_HOLDINGS` or `NOTICE_HOLDINGS_ORDER_UNPROVED` stops the whole
+run before writes, including simulation. Diagnostics include ISIN, symbol,
+`sale_day`, `preceding_day_available`, `available`, `sale`, and dependent
+purchases with missing order evidence. Candidate reporting finishes before this
+check. No confirmation is requested.
+
+Pending BUYs fund simulation only when they precede the sale. Skipped and
+represented BUYs add no second quantity. Actual dispatch remains unavailable in
+this slice. The guard's confirmed-only mode excludes every pending BUY: only
+exact readback-confirmed destination purchases with proven chronology can fund
+sales. Recheck after a rejected purchase before dispatching a dependent sale.
 
 The private `boursedirect-state` volume retains source notices, acquisition
 receipts, login journals, `discovery.yaml`, source bindings under `accounts/`,
