@@ -15,11 +15,12 @@
   ],
   "timezone": "Europe/Zurich",
   "schedule": [
-    "* * * * 1"
+    "before 9am on Monday"
   ],
   "automerge": false,
   "rangeStrategy": "pin",
-  "prConcurrentLimit": 5,
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
   "packageRules": [
     {
       "matchManagers": [
@@ -38,7 +39,7 @@
       "matchManagers": [
         "dockerfile"
       ],
-      "minimumReleaseAge": "14 days"
+      "minimumReleaseAge": "3 days"
     },
     {
       "matchManagers": [
@@ -85,6 +86,12 @@
       "groupName": "Container base images"
     },
     {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
       "matchPackageNames": [
         "python"
       ],
@@ -119,11 +126,12 @@
     }
   ],
   "vulnerabilityAlerts": {
-    "enabled": true,
+    "enabled": false,
     "automerge": false,
     "minimumReleaseAge": "0 days",
     "schedule": [],
     "groupName": null,
     "prCreation": "immediate"
-  }
+  },
+  "osvVulnerabilityAlerts": false
 }
