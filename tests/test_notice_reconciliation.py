@@ -39,7 +39,7 @@ def isolated_entry_evidence(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
 
-def day_evidence(rows, civil_day=None):
+def day_evidence(rows, civil_day=None, entry_timezone=None):
     """Constructed entry provenance, never inferred from runtime/server timezone."""
     activities = {}
     for row in rows:
@@ -48,7 +48,7 @@ def day_evidence(rows, civil_day=None):
         context = {'schema_version': 1, 'activity_id': row['remote_id'],
             'account_id': row['target_account_id'], 'stored_date': row['stored_date'],
             'financial_fingerprint': b.activity_financial_fingerprint(row),
-            'entered_day': day, 'entry_timezone': 'UTC' if day == row['operation_date'] else 'Europe/Zurich'}
+            'entered_day': day, 'entry_timezone': entry_timezone or ('UTC' if day == row['operation_date'] else 'Europe/Zurich')}
         path = Path(row['remote_id'] + '-entry.yaml')
         b.atomic_private_yaml(path, context)
         activities[row['remote_id']] = {key: context[key] for key in
@@ -283,7 +283,7 @@ def replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, statu
             reason = ('unverified_day_provenance' if any(part in name for part in ('unknown', 'stale'))
                 else 'multiplicity_conflict' if 'multiplicity' in name
                 else 'fee_difference' if 'fee' in name else 'financial_or_day_conflict')
-            assert diagnostics[0]['reason'] == reason
+            assert next(item for item in diagnostics if 'reason' in item)['reason'] == reason
     assert (pending, rows, evidence) == original
     print(json.dumps({'scenario': name, 'run_status': status, 'financial_writes': 0,
         'confirmation_requests': 0, 'existing_fields_unchanged': True}))
@@ -732,3 +732,155 @@ def test_manual_dividend_equivalence_exact_decimal_product(monkeypatch):
         context.prec = 6
         replay_manual_calendar_day(monkeypatch, 'constructed_dividend_exact_decimal_product', pending,
             rows, day_evidence(rows), 0, duplicates=1)
+
+
+def retained_dividend_report_case():
+    pending, _, _ = manual_dividend_case()
+    row = remote(pending[0], marker=False, date=DIVIDEND_CASE['stored_date'],
+        quantity=Decimal(DIVIDEND_CASE['destination_quantity']),
+        unitPrice=Decimal(DIVIDEND_CASE['destination_unit_price']),
+        fee=Decimal(DIVIDEND_CASE['destination_fee']))
+    return pending, [row], day_evidence([row], row['operation_date'])
+
+
+def replay_similar_activity_report(monkeypatch, name, pending, rows, evidence, status, duplicates=0):
+    """Replay reconciliation at the shared pre-dispatch boundary, offline."""
+    from contextlib import redirect_stdout
+    from io import StringIO
+    output = StringIO()
+    with redirect_stdout(output):
+        replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, status, duplicates)
+    print(output.getvalue(), end='')
+    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()]
+    reports = [item for item in diagnostics if item.get('code') == 'NOTICE_SIMILAR_ACTIVITY']
+    if status:
+        first_refusal = next(i for i, item in enumerate(diagnostics)
+            if item.get('code') == 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+        assert all(i < first_refusal for i, item in enumerate(diagnostics)
+            if item.get('code') == 'NOTICE_SIMILAR_ACTIVITY')
+    return reports
+
+
+def test_similar_activity_report_retained_dividend_and_constructed_civil_boundary(monkeypatch):
+    pending, rows, evidence = retained_dividend_report_case()
+    reports = replay_similar_activity_report(monkeypatch, 'retained_dividend_mismatch',
+        pending, rows, evidence, 1)
+    assert len(reports) == 1
+    assert reports[0]['source_total'] == '20.9198'
+    assert reports[0]['destination_total'] == '28.416'
+    assert reports[0]['total_difference_eur'] == '7.4962'
+    # Retained clock/separation; constructed historical entry provenance.
+    boundary = DIVIDEND_CASE['civil_boundary_evidence']
+    pending[0]['date'] = boundary['source_day'] + 'T00:00:00.000Z'
+    rows[0]['stored_date'] = boundary['stored_date']
+    rows[0]['operation_date'] = boundary['stored_date'][:10]
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_dividend_utc_civil_boundary',
+        pending, rows, day_evidence(rows, boundary['civil_day'], boundary['entry_timezone']), 1)
+    assert reports[0]['day_gap'] == -3 and reports[0]['day_provenance'] == 'verified'
+    assert reports[0]['status'] == 'review_required'
+    assert reports[0]['fee_difference_eur'] == '0'
+
+
+@pytest.mark.parametrize('kind,window', [('BUY', 3), ('SELL', 3), ('DIVIDEND', 4)])
+def test_similar_activity_report_inclusive_windows_without_amount_filter(monkeypatch, kind, window):
+    from datetime import date, timedelta
+    pending = proposals()
+    pending[0]['type'] = kind
+    source_total = Decimal(pending[0]['quantity']) * Decimal(pending[0]['unitPrice'])
+    rows = []
+    for i, gap in enumerate((-window - 1, -window, window, window + 1)):
+        day = (date.fromisoformat(pending[0]['date'][:10]) + timedelta(days=gap)).isoformat()
+        rows.append(remote(pending[0], marker=False, id='synthetic-window-' + str(i),
+            date=day + 'T00:00:00.000Z', quantity=Decimal(1),
+            unitPrice=source_total + Decimal(i + 1) * 1000, fee=Decimal(i + 1)))
+    rows.extend([dict(rows[1], remote_id='other-account', target_account_id='other'),
+        dict(rows[1], remote_id='other-instrument', symbol='OTHER.PA'),
+        dict(rows[1], remote_id='other-type', kind='FEE')])
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_window_fee_' + kind,
+        pending, list(reversed(rows)), day_evidence(rows), 1)
+    assert [item['day_gap'] for item in reports] == [-window, window]
+    assert [item['total_difference_eur'] for item in reports] == ['2000', '3000']
+    assert [item['fee_difference_eur'] for item in reports] == ['0.1', '1.1']
+    assert all(Decimal(item['total_difference_percent']) > 0 for item in reports)
+
+
+def test_similar_activity_report_before_after_manual_reconciliation(monkeypatch):
+    pending, rows, evidence = retained_dividend_report_case()
+    replay_similar_activity_report(monkeypatch, 'retained_dividend_before_reconciliation',
+        pending, rows, evidence, 1)
+    pending, rows, evidence = manual_dividend_case()
+    rows[0].update(quantity=Decimal(2), unit_price=Decimal('10.4599'))
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_dividend_after_reconciliation',
+        pending, rows, day_evidence(rows), 0, duplicates=1)
+    assert reports[0]['status'] == 'automatic_duplicate'
+    assert reports[0]['total_difference_eur'] == reports[0]['total_difference_percent'] == '0'
+    rows.append(dict(rows[0], remote_id='synthetic-remaining', unit_price=Decimal('10.5')))
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_dividend_remaining_conflict',
+        pending, rows, day_evidence(rows), 1)
+    assert [item['status'] for item in reports] == ['automatic_duplicate', 'review_required']
+
+
+@pytest.mark.parametrize('mode', ['1', '0'])
+def test_similar_activity_report_all_rows_before_refusal(monkeypatch, mode):
+    monkeypatch.setenv('DRY_RUN', mode)
+    pending, rows, _ = retained_manual_case('buy_equal')
+    rows.append(dict(rows[0], remote_id='synthetic-ambiguous'))
+    evidence = day_evidence(rows)
+    second = dict(pending[0], symbol='SECOND.PA', comment=pending[0]['comment'][:-1] +
+        ('0' if pending[0]['comment'][-1] != '0' else '1'))
+    pending.append(second)
+    rows.append(dict(rows[0], remote_id='synthetic-unknown', symbol='SECOND.PA',
+        financial_context_verified=False))
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_multiplicity_multirow_mode_' + mode,
+        pending, rows, evidence, 1)
+    assert len(reports) == 3
+    last = reports[-1]
+    assert last['day_gap'] == last['destination_day'] == 'unverified'
+    assert last['financial_context'] == last['total_difference_eur'] == last['total_difference_percent'] == 'unverified'
+    assert all(item['status'] == 'review_required' for item in reports)
+    print(json.dumps({'scenario': 'constructed_pre_dispatch_mode_' + mode,
+        'boundary': 'reconciliation_only_not_actual_import_acceptance', 'financial_writes': 0}))
+
+
+def test_similar_activity_report_negative_difference_zero_source_and_owned(monkeypatch):
+    pending, rows, _ = manual_dividend_case()
+    rows[0]['unit_price'] = Decimal('10.4599')
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_dividend_negative_difference',
+        pending, rows, day_evidence(rows), 1)
+    assert reports[0]['total_difference_eur'] == '-10.4599'
+    assert reports[0]['total_difference_percent'] == '-50'
+    pending[0]['unitPrice'] = '0'
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_dividend_zero_source',
+        pending, rows, day_evidence(rows), 1)
+    assert reports[0]['total_difference_percent'] == 'unverified'
+    pending[0]['unitPrice'] = DIVIDEND_CASE['source_net_credit']
+    rows = [remote(pending[0])]
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_owned_report',
+        pending, rows, {'schema_version': 1, 'activities': {}}, 0, duplicates=1)
+    assert reports[0]['status'] == 'automatic_duplicate'
+
+
+def test_similar_activity_report_represented_other_notice_and_exact_precision(monkeypatch):
+    pending, rows, _ = manual_dividend_case()
+    second = dict(pending[0], unitPrice='21', comment=pending[0]['comment'][:-1] +
+        ('0' if pending[0]['comment'][-1] != '0' else '1'))
+    pending.append(second)
+    rows.append(remote(second, marker=False, id='synthetic-second'))
+    reports = replay_similar_activity_report(monkeypatch, 'constructed_two_represented_notices',
+        pending, rows, day_evidence(rows), 0, duplicates=2)
+    assert [item['status'] for item in reports] == [
+        'automatic_duplicate', 'represented_other_notice', 'automatic_duplicate', 'represented_other_notice']
+    quantity = Decimal('1.123456789012345678901234567890123456789')
+    price = Decimal('2.123456789012345678901234567890123456789')
+    with localcontext() as context:
+        context.prec = 100
+        total = quantity * price
+    pending = [dict(pending[0], unitPrice=str(total))]
+    rows = [remote(pending[0], marker=False, quantity=quantity, unitPrice=price)]
+    evidence = day_evidence(rows)
+    with localcontext() as context:
+        context.prec = 6
+        reports = replay_similar_activity_report(monkeypatch, 'constructed_report_exact_decimal_product',
+            pending, rows, evidence, 0, duplicates=1)
+    assert reports[0]['destination_total'] == str(total)
+    assert reports[0]['total_difference_eur'] == '0'

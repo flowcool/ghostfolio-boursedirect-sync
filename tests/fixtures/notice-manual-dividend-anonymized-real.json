@@ -5,5 +5,12 @@
   "stored_date": "2019-02-02T22:00:00.000Z",
   "destination_quantity": "2",
   "destination_unit_price": "14.208",
-  "destination_fee": "0.00"
+  "destination_fee": "0.00",
+  "civil_boundary_evidence": {
+    "evidence": "Retained UTC/civil separation and stored clock; dates shifted to summer to preserve the observed Europe/Paris UTC+2 boundary. Historical entry provenance remains a labelled constructed variant, not proven by the capture.",
+    "source_day": "2019-06-06",
+    "stored_date": "2019-06-02T22:00:00.000Z",
+    "civil_day": "2019-06-03",
+    "entry_timezone": "Europe/Paris"
+  }
 }
