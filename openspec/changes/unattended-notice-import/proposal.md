@@ -12,6 +12,8 @@ v0.1.1 needs terminal account selection and never imports. v0.2 imports notices 
 - Missing `BD_SOURCE_ACCOUNT_REF`: discover once, log options, stop; no automatic repeated login.
 - Require YAML, possibly empty; prioritize overrides, existing Ghostfolio profiles, then lookup. Report unresolved candidates.
 - Deduplicate and reconcile holdings before writing; insufficient shares stop the whole run with an error.
+- Recognize manual BUY/SELL by established civil day, exact financial fields and one-to-one multiplicity, without requiring midnight UTC.
+- Dry-run lists similar trades (±3 civil days) and dividends (±4), with total/fee/day differences. Manual dividends always require review. Uncertainty stops the whole run before writes.
 - Optional `CRON` and `APPRISE_URLS` failure alerts.
 
 | Operation considered | v0.2 scope |

@@ -32,7 +32,7 @@ Absent `BD_SOURCE_ACCOUNT_REF` SHALL trigger one discovery, log copyable referen
 
 ### Requirement: Supported financial semantics
 
-BUY/SELL, including foreign operations, SHALL retain Decimal quantities, established EUR prices and brokerage. COUPONS SHALL become DIVIDEND: quantity one, credited EUR amount, zero fee, no inferred withholding. Dates SHALL use the row date, not the notice header date, at midnight UTC. Unknown operations, unproved currency or nonzero TVA SHALL skip and fail the run, even without ISIN. Other known out-of-scope rows and rows without ISIN SHALL log an error line without failing the run. Valid operations continue.
+BUY/SELL, including foreign operations, SHALL retain Decimal quantities, established EUR prices and brokerage. COUPONS SHALL become DIVIDEND: quantity one, credited EUR amount, zero fee, no inferred withholding. New activity dates SHALL use the row date, not the notice header date, at midnight UTC; this serialization SHALL NOT require existing manual activities to have midnight UTC timestamps. Unknown operations, unproved currency or nonzero TVA SHALL skip and fail the run, even without ISIN. Other known out-of-scope rows and rows without ISIN SHALL log an error line without failing the run. Valid operations continue.
 
 #### Scenario: Mixed notices
 - **WHEN** the Compose command above simulates observed BUY/SELL/coupon forms, a DROITS DE GARDE row and a DIVISION row
@@ -54,9 +54,51 @@ Deduplication SHALL read all destination account activities. Existing activities
 - **WHEN** the Compose command above runs in simulation against matching owned activities
 - **THEN** logs report duplicates and zero new proposals; uncertain retained imports instead refuse writing.
 
+### Requirement: Manual trade recognition on an established calendar day
+
+Manual BUY/SELL recognition SHALL require the same destination account, established instrument, operation type and established calendar day, with exact quantity, unit price, currency, data source and fees. Day evidence SHALL come from retained provenance or explicit operator confirmation of the entry context. Stored time SHALL NOT require midnight UTC. Current server timezone SHALL NOT establish historical entry context. Matching SHALL preserve one-to-one multiplicity; unknown provenance or ambiguous multiplicity SHALL remain unresolved. Source execution time SHALL remain part of notice identity and ordering. Owned-import recognition and readback SHALL retain exact stored-date and financial comparison.
+
+The commands in the new reconciliation scenarios describe future implementation acceptance. Their offline cases SHALL use anonymized retained notice/destination evidence; constructed boundary and multiplicity variants SHALL be identified as such, not as observed broker behavior. This planning revision does not claim those cases already pass.
+
+#### Scenario: Same established day with a non-midnight timestamp
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_calendar_day` replays an anonymized retained BUY/SELL with established same-day context, equal financial fields and one matching non-midnight manual activity
+- **THEN** output confirms one manual duplicate, zero new proposals for it, unchanged existing fields and zero financial writes.
+
+#### Scenario: Historical day provenance is unknown
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_calendar_day` replays the same candidate with its entry-day provenance unverified, even if current server TZ suggests the notice day
+- **THEN** output identifies unverified day provenance and confirms whole-run refusal with nonzero run status and zero financial writes.
+
+#### Scenario: Fees or multiplicity conflict
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_calendar_day` replays retained conflicting-fee evidence and a labelled constructed unequal-multiplicity variant
+- **THEN** output identifies the fee difference or multiplicity conflict, confirms no arbitrary adoption or correction, and confirms whole-run refusal with nonzero run status and zero financial writes.
+
+### Requirement: Similar activity reporting before overlap refusal
+
+Dry-run SHALL display all same-account, established-instrument and same-type candidates within ±3 civil days for BUY/SELL and ±4 for DIVIDEND, inclusive. Amount and fee differences SHALL NOT exclude candidates. The report SHALL show source and destination days, day provenance, signed day gap, quantities, unit prices, totals, fees and differences.
+
+Total SHALL mean quantity × unit price, using Decimal. Dividend total SHALL be compared with the notice's credited net EUR amount, without inferring gross amounts or withholding. Candidates SHALL be ordered by absolute total difference and show signed EUR and percentage differences relative to the source total; differences SHALL mean destination minus source. Unavailable comparisons, including a percentage with zero source total, SHALL be marked unverified.
+
+Every manual dividend candidate SHALL require review, including equal-day, equal-total candidates. Similarity SHALL NOT establish event ownership, select a mapping, correct an existing activity or authorize creation of an uncertain operation. Unknown day provenance SHALL be reported and SHALL NOT prove absence of overlap. Dry-run SHALL finish reporting all applicable candidates before unresolved overlap stops the entire run with a nonzero exit and zero financial writes. The same whole-run refusal SHALL precede any financial write in import mode. Already identified, exactly matching connector-owned activities SHALL remain duplicates.
+
+#### Scenario: Dividend crosses the UTC and civil-day boundary
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k similar_activity_report` replays anonymized retained dividend evidence with established civil-day context, four UTC days but three civil days of separation and a different total
+- **THEN** output includes the candidate, source net credit, destination quantity × unit price, signed civil-day/total/fee differences and review-required status, followed by nonzero run status and zero financial writes.
+
+#### Scenario: Equal manual dividend still requires review
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k similar_activity_report` replays a labelled constructed same-day, equal-total manual dividend, including an equivalent quantity/unit-price representation
+- **THEN** output reports zero day/total differences and review-required status, never adopts or corrects the manual dividend, and confirms whole-run refusal before writes; exact connector-owned duplicates still produce no new proposal.
+
+#### Scenario: Inclusive windows without an amount filter
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k similar_activity_report` replays labelled constructed candidates at ±3/±4 civil days for trades and ±4/±5 for dividends, including differing totals and fees
+- **THEN** output includes trade candidates through ±3 and dividend candidates through ±4, excludes established days beyond those windows, orders included candidates by absolute total difference without an amount cutoff, and reports signed EUR/percentage differences; included unresolved candidates refuse the whole run.
+
+#### Scenario: Report all candidates despite an early uncertainty
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k similar_activity_report` replays several notice rows with an early ambiguous candidate and a later candidate whose day or amount context is unverified
+- **THEN** output reports both before the terminal refusal, marks unavailable comparisons unverified without discarding possible overlap, and confirms zero financial writes and no uncertain operation created or corrected in simulation or import mode.
+
 ### Requirement: Holdings reconciliation before import
 
-After deduplication, all pending trades SHALL reconcile against net Ghostfolio quantities per symbol, including preceding pending BUYs. Pre-window holdings and corporate actions must already exist in Ghostfolio. Negative projected holdings or ambiguous manual overlap SHALL stop the entire run before financial writes, including simulation. Errors SHALL identify ISIN/symbol, availability and requested sale. Only confirmed accepted BUYs SHALL fund dispatched SELLs.
+After deduplication, all pending trades SHALL reconcile against net Ghostfolio quantities per symbol, including preceding pending BUYs. Pre-window holdings and corporate actions must already exist in Ghostfolio. Negative projected holdings or unresolved overlap SHALL stop the entire run before financial writes, including simulation; dry-run overlap reporting SHALL finish before this refusal. Errors SHALL identify ISIN/symbol, availability and requested sale. Only confirmed accepted BUYs SHALL fund dispatched SELLs.
 
 #### Scenario: Insufficient shares
 - **WHEN** the Compose command above proposes selling 50 shares while Ghostfolio holds 10, without preceding new BUYs
