@@ -34,8 +34,13 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
   fixtures. No tests for lab tooling, docs or CI. No full-suite rerun for prose edits.
 - **Beads:** one closing note with evidence per bead; no per-step `bd-finding`.
   Out-of-scope discovery → one new bead `discovered-from` the current one.
-- **Git:** one branch and one PR per bead; merge when CI is green. Do not wait
-  for or poll CodeRabbit; no `sleep` loops.
+- **Git:** one branch and one PR per bead. Merge only when CI is green AND
+  CodeRabbit has finished its review of the head commit, or on Florent's
+  explicit go. Wait with one blocking command, not a `sleep` loop:
+  `timeout 1800 gh pr checks <n> --watch`. Then fix or answer each actionable
+  CodeRabbit comment; a pushed fix needs a finished review again. Still open
+  findings after a second round, or timeout: leave the PR open and the bead
+  `in_progress`, stop and report to Florent.
 - **Docs:** README and user docs required by the spec only. No new plan,
   review or contract files.
 - **Subagents:** only on Florent's explicit request.
