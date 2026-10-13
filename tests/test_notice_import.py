@@ -39,7 +39,11 @@ def test_confirmed_exact_response_readback_and_no_default_write(tmp_path, capsys
         retained = b.parse_keyed_yaml(path.read_bytes())
         assert retained['pending']['body'] == b.notice_wire(pending[0]).decode()
         assert retained['confirmed'] == {}
-        return (201 if method == 'POST' else 200), encode([row(pending[0])])
+        value = row(pending[0])
+        if method == 'POST':
+            value.pop('account')
+            value.pop('tags')
+        return (201 if method == 'POST' else 200), encode([value])
     result = b.import_notice_proposals(pending, [], path, journal, run, request, {})
     assert result == {'financial_writes': 1, 'imported': 1, 'rejected': 0}
     assert calls == [('POST', '/api/v1/import'), ('GET', '/api/v1/activities')]
@@ -132,3 +136,26 @@ def test_all_wire_precision_validated_before_any_post(tmp_path):
         b.import_notice_proposals(pending + [bad], [], path, journal, run,
             lambda *args: pytest.fail('no POST allowed'), {})
     assert not path.exists()
+
+
+def test_later_sell_refusal_logs_prior_confirmed_write_counts(tmp_path, capsys):
+    _, path, journal, run = setup(tmp_path)
+    buy = dict(proposals()[0], execution_time='09:00:00')
+    sell = dict(buy, type='SELL', comment=buy['comment'][:-1] + 'b', execution_time='10:00:00')
+    calls = []
+    def request(method, url, body):
+        calls.append(method)
+        if method == 'POST':
+            return 201, encode([row(buy)])
+        # A concurrent represented sale leaves only two shares after BUY readback.
+        prior_sale = row(buy, 'synthetic-prior-sale', type='SELL', quantity=10,
+            date='2018-01-01T00:00:00.000Z', comment=None)
+        return 200, encode([row(buy), prior_sale])
+    progress = {}
+    with pytest.raises(RuntimeError, match='NOTICE_INSUFFICIENT_HOLDINGS'):
+        b.import_notice_proposals([buy, sell], [], path, journal, run, request, progress)
+    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert calls == ['POST', 'GET']
+    assert progress == {'financial_writes': 1, 'imported': 1}
+    assert logs[-1]['code'] == 'NOTICE_INSUFFICIENT_HOLDINGS'
+    assert (logs[-1]['available'], logs[-1]['sale'], logs[-1]['financial_writes'], logs[-1]['imported']) == ('2', '12', 1, 1)

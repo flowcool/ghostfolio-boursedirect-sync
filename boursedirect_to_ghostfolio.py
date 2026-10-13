@@ -2800,7 +2800,11 @@ def reviewed_wire_rows(review):
 
 def compare_import_response(review, raw):
     """Exact POST evidence only; full readback and uncertainty fences remain gates."""
-    expected = reviewed_wire_rows(review)
+    return compare_expected_import_response(reviewed_wire_rows(review), raw)
+
+
+def compare_expected_import_response(expected, raw):
+    """POST projection needs no GET-only account/tags context."""
     result = {"status": "conflicting", "accepted": {}, "missing": sorted(expected),
               "import_ready": False, "blockers": ["COMPLETE_READBACK_REQUIRED", "UNCERTAIN_WRITE_RECOVERY_UNVERIFIED"]}
     try:
@@ -2809,7 +2813,8 @@ def compare_import_response(review, raw):
             fail("INVALID_IMPORT_RESPONSE")
         seen_ids = set()
         for row in data["activities"]:
-            if not isinstance(row, dict):
+            if (not isinstance(row, dict) or row.get("error") or row.get("isDraft") is True
+                    or row.get("isActive") is False):
                 fail("INVALID_IMPORT_RESPONSE")
             marker, remote_id = row.get("comment"), row.get("id")
             if not isinstance(marker, str) or marker not in expected or marker in result["accepted"]:
@@ -4320,7 +4325,7 @@ def reconcile_notice_duplicates(proposals, remote):
     return result, duplicates
 
 
-def reconcile_notice_holdings(proposals, remote, project_buys=True):
+def reconcile_notice_holdings(proposals, remote, project_buys=True, progress=None):
     """DEGIRO's chronological guard. Dispatch must use confirmed balances only."""
     balances = {}
     quantities = [Decimal(p['quantity']) for p in proposals]
@@ -4355,7 +4360,7 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True):
                     print(json.dumps({'code': 'NOTICE_INSUFFICIENT_HOLDINGS', 'level': 'error',
                         'isin': proposal['isin'], 'symbol': proposal['symbol'],
                         'available': canonical_decimal(available), 'sale': canonical_decimal(quantity),
-                        'financial_writes': 0, 'imported': 0}), flush=True)
+                        **({'financial_writes': 0, 'imported': 0} if progress is None else progress)}), flush=True)
                     fail('NOTICE_INSUFFICIENT_HOLDINGS')
                 balances[key] = available - quantity
         return ordered
@@ -4476,7 +4481,7 @@ def import_notice_proposals(proposals, remote, path, journal, run, request, prog
         if proposal['symbol'] in rejected:
             continue
         if proposal['type'] == 'SELL':
-            reconcile_notice_holdings([proposal], remote, project_buys=False)
+            reconcile_notice_holdings([proposal], remote, project_buys=False, progress=progress)
         body = wires[proposal['comment']]
         journal['pending'] = {'body': body.decode(), 'run_id': run.name, 'ordinal': ordinal}
         atomic_private_yaml(path, journal)
@@ -4502,14 +4507,11 @@ def import_notice_proposals(proposals, remote, path, journal, run, request, prog
                 fail('NOTICE_IMPORT_UNCONFIRMED')
             if status != 201:
                 fail('NOTICE_IMPORT_UNCONFIRMED')
-            data = json.loads(response, parse_float=Decimal, object_pairs_hook=unique_json_object)
-            if (not isinstance(data, dict) or not isinstance(data.get('activities'), list)
-                    or len(data['activities']) != 1 or data['activities'][0].get('error')):
+            sent = json.loads(body, parse_float=Decimal, object_pairs_hook=unique_json_object)['activities'][0]
+            comparison = compare_expected_import_response({sent['comment']: sent}, response)
+            if comparison['status'] != 'complete':
                 fail('NOTICE_IMPORT_UNCONFIRMED')
-            # Reuse the complete snapshot normalization and exact owned matcher.
-            response_snapshot = json.dumps({'count': 1, 'activities': data['activities']},
-                default=wire_number, allow_nan=False).encode()
-            _, remote_id = notice_exact_readback(proposal, response_snapshot)
+            remote_id = comparison['accepted'][sent['comment']]
             status, readback = request('GET', '/api/v1/activities', None)
             if status != 200:
                 fail('NOTICE_IMPORT_UNCONFIRMED')

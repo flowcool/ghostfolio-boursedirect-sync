@@ -183,11 +183,11 @@ All pending trades reconcile in source date/execution-time order before any
 proposal is logged. Pre-window holdings and corporate actions must already be
 represented in Ghostfolio. A SELL exceeding availability stops the entire run,
 including simulation. `NOTICE_INSUFFICIENT_HOLDINGS` reports ISIN, symbol,
-`available`, `sale` and `financial_writes=0`. Preceding pending BUYs contribute
-only to the projected simulation balance. Skipped or duplicate BUYs add nothing;
-represented BUYs already form part of the baseline. Actual dispatch remains
-unavailable in this slice. Its holdings guard also supports confirmed balances
-only: a submitted purchase cannot fund a SELL before exact readback confirms it.
+`available`, `sale` and current write/import counts (zero during preflight).
+Preceding pending BUYs contribute only to the projected simulation balance. Skipped or duplicate BUYs add nothing;
+represented BUYs already form part of the baseline. See
+[Import and verify](#import-and-verify) for actual dispatch. A submitted purchase
+cannot fund a SELL before exact readback confirms it.
 
 The private `boursedirect-state` volume retains source notices, acquisition
 receipts, login journals, `discovery.yaml`, source bindings under `accounts/`
