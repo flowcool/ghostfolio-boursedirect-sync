@@ -4331,9 +4331,10 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True):
         (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
     with localcontext() as context:
         context.prec = max(28, precision)
-        targets = {p['accountId'] for p in proposals}
+        tracked = {(p['accountId'], p['symbol']) for p in proposals}
         for row in remote:
-            if row['target_account_id'] not in targets or not row['active'] or row['kind'] not in ('BUY', 'SELL'):
+            if ((row['target_account_id'], row['symbol']) not in tracked
+                    or not row['active'] or row['kind'] not in ('BUY', 'SELL')):
                 continue
             if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
                 fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')

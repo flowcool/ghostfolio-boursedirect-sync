@@ -174,6 +174,14 @@ def test_unsupported_target_holdings_refuse(change):
         b.reconcile_notice_holdings([buy], [dict(remote(buy), **change)])
 
 
+@pytest.mark.parametrize('change', [{'data_source': 'MANUAL'}, {'price_currency': 'USD'},
+    {'financial_context_verified': False}])
+def test_unrelated_holdings_context_does_not_block_a_proposal(change):
+    buy = proposals()[0]
+    unrelated = dict(remote(buy), symbol='00000000-0000-4000-8000-000000000002', **change)
+    assert b.reconcile_notice_holdings([buy], [unrelated]) == [buy]
+
+
 def test_multiple_isins_cannot_share_one_holdings_symbol():
     buy = proposals()[0]
     with pytest.raises(RuntimeError, match='NOTICE_SYMBOL_ISIN_CONFLICT'):
