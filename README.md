@@ -154,8 +154,17 @@ source and destination multiplicities must be equal. Source execution time stays
 in notice identity and ordering. Owned recognition still requires the exact stored
 midnight UTC date and financial fields.
 
+Manual DIVIDEND entries use the same established-day evidence and exact account,
+instrument, type, currency, data source and fee checks. Their Decimal quantity ×
+unit price must equal the notice's credited net EUR amount. Equivalent quantity
+and price representations match automatically, with equal one-to-one
+multiplicity, zero new proposals and no confirmation request. No gross amount or
+withholding is inferred. A conflicting manual dividend within four civil days,
+or unknown day provenance, refuses the whole run before writes. Existing fields
+stay unchanged; owned dividends still require exact quantity, price and stored date.
+
 Retain historical entry-day evidence in private `/state/manual-day-context.yaml`.
-This keyed file is optional; its absence proves no manual trade's civil day.
+This keyed file is optional; its absence proves no manual activity's civil day.
 Each activity ID maps to its exact account, original stored timestamp, financial
 fingerprint, established day and a reference to retained entry-context evidence:
 

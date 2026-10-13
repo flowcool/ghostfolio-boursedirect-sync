@@ -499,7 +499,8 @@ def test_manual_calendar_day_distinct_exact_financial_groups(monkeypatch):
         rows, day_evidence(rows, pending[0]['date'][:10]), 0, duplicates=2)
 
 
-def test_manual_calendar_day_real_sync_loads_and_forwards_valid_evidence(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize('fixture', ['note-sell-anonymized-real.html', 'note-coupon-anonymized-real.html'])
+def test_manual_calendar_day_manual_dividend_equivalence_real_sync(tmp_path, monkeypatch, capsys, fixture):
     """Real sync pipeline with anonymized retained notices and isolated acquisition."""
     import builtins
     import re
@@ -509,12 +510,20 @@ def test_manual_calendar_day_real_sync_loads_and_forwards_valid_evidence(tmp_pat
     from types import SimpleNamespace
     from unittest.mock import Mock
 
-    raw = (Path(__file__).parent / 'fixtures/note-sell-anonymized-real.html').read_bytes()
-    document = b.parse_contract_note(b.decode_document(raw), 16, notice_sync=True)
+    raw = (Path(__file__).parent / 'fixtures' / fixture).read_bytes()
+    if 'coupon' in fixture:
+        # Labelled constructed chronology: keep retained amounts inside the isolated window.
+        raw = raw.replace(b'02/07/2026', b'02/09/2026')
+    document = b.parse_contract_note(b.decode_document(raw), 16, include_coupons=True, notice_sync=True)
     pending = proposals(document)
-    stored_date = MANUAL_CASES['sell_equal']['stored_date']
+    stored_date = ('2026-09-02T15:00:00.000Z' if 'coupon' in fixture
+        else MANUAL_CASES['sell_equal']['stored_date'])
     rows = [remote(proposal, marker=False, id=f'synthetic-trade-{index}', date=stored_date)
         for index, proposal in enumerate(pending)]
+    for row in rows:
+        if row['kind'] == 'DIVIDEND':
+            row['quantity'] = Decimal('2')
+            row['unit_price'] /= 2
     evidence = day_evidence(rows, pending[0]['date'][:10])
     b.atomic_private_yaml(tmp_path / 'manual-day-context.yaml', evidence)
     wire_rows = [{'id': row['remote_id'], 'accountId': proposal['accountId'],
@@ -590,14 +599,136 @@ def test_manual_calendar_day_real_sync_loads_and_forwards_valid_evidence(tmp_pat
     print(output, end='')
     diagnostics = [json.loads(line) for line in output.splitlines()]
     assert diagnostics[-1] == {'code': 'NOTICE_SIMULATION_COMPLETED', 'proposed': 0,
-        'imported': 0, 'skipped': 0, 'failed_rows': 0, 'duplicates': 2,
+        'imported': 0, 'skipped': 0, 'failed_rows': 0, 'duplicates': len(pending),
         'contract_notes': 1, 'financial_writes': 0}
     assert calls == ['isolated_acquisition', 'reconcile_received_valid_evidence']
     artifacts = list((tmp_path / 'runs').glob('*/simulation.yaml'))
     assert len(artifacts) == 1
     saved = b.read_keyed_yaml(artifacts[0], tmp_path, 1024 * 1024)
-    assert saved['duplicates'] == 2 and saved['proposals'] == []
+    assert saved['duplicates'] == len(pending) and saved['proposals'] == []
     assert saved['financial_writes'] == saved['imported'] == 0
     assert b.read_keyed_yaml(tmp_path / 'manual-day-context.yaml', tmp_path, 1024 * 1024) == evidence
-    print('constructed_real_sync_success: valid_context_loaded_and_forwarded duplicates=2 proposed=0 '
+    print(f'constructed_real_sync_success: fixture={fixture} valid_context_loaded_and_forwarded '
+        f'duplicates={len(pending)} proposed=0 '
         'financial_writes=0 confirmation_requests=0 existing_fields_unchanged=true')
+
+
+DIVIDEND_CASE = json.loads((Path(__file__).parent / 'fixtures' /
+    'notice-manual-dividend-anonymized-real.json').read_text())
+
+
+def manual_dividend_case():
+    """Constructed equality using scaled retained net-credit evidence."""
+    proposal = dict(proposals()[0], type='DIVIDEND', quantity='1',
+        unitPrice=DIVIDEND_CASE['source_net_credit'], fee='0', execution_time=None)
+    row = remote(proposal, marker=False, date='2019-02-06T15:00:00.000Z')
+    return [proposal], [row], day_evidence([row], '2019-02-06')
+
+
+def test_manual_dividend_equivalence_retained_mismatch(monkeypatch):
+    pending, _, _ = manual_dividend_case()
+    row = remote(pending[0], marker=False, date=DIVIDEND_CASE['stored_date'],
+        quantity=Decimal(DIVIDEND_CASE['destination_quantity']),
+        unitPrice=Decimal(DIVIDEND_CASE['destination_unit_price']),
+        fee=Decimal(DIVIDEND_CASE['destination_fee']))
+    # Retained mismatch with explicitly constructed historical day context.
+    replay_manual_calendar_day(monkeypatch, 'retained_dividend_mismatch_constructed_day',
+        pending, [row], day_evidence([row], '2019-02-02'), 1)
+
+
+@pytest.mark.parametrize('quantity,price', [('1', '20.9198'), ('2', '10.4599'),
+    ('0.1', '209.198')])
+def test_manual_dividend_equivalence_equal_total(monkeypatch, quantity, price):
+    pending, rows, _ = manual_dividend_case()
+    rows[0].update(quantity=Decimal(quantity), unit_price=Decimal(price))
+    replay_manual_calendar_day(monkeypatch, 'constructed_dividend_equal_representation_' + quantity,
+        pending, rows, day_evidence(rows, '2019-02-06'), 0, duplicates=1)
+
+
+@pytest.mark.parametrize('field,value', [('fee', Decimal('0.01')), ('price_currency', 'USD'),
+    ('data_source', 'MANUAL'), ('unit_price', Decimal('20.9199')),
+    ('financial_context_verified', False), ('active', False)])
+def test_manual_dividend_equivalence_conflicting_context(monkeypatch, field, value):
+    pending, rows, _ = manual_dividend_case()
+    rows[0][field] = value
+    replay_manual_calendar_day(monkeypatch, 'constructed_dividend_conflict_' + field,
+        pending, rows, day_evidence(rows, '2019-02-06'), 1)
+
+
+def test_manual_dividend_equivalence_unknown_day(monkeypatch):
+    pending, rows, _ = manual_dividend_case()
+    monkeypatch.setenv('TZ', 'Europe/Zurich')
+    rows[0]['operation_date'] = '2000-01-01'
+    replay_manual_calendar_day(monkeypatch, 'constructed_dividend_unknown_day', pending, rows,
+        {'schema_version': 1, 'activities': {}}, 1)
+
+
+def test_manual_dividend_equivalence_civil_boundary(monkeypatch):
+    pending, rows, _ = manual_dividend_case()
+    rows[0] = remote(pending[0], marker=False, date='2019-02-05T23:00:00.000Z')
+    replay_manual_calendar_day(monkeypatch, 'constructed_dividend_civil_boundary', pending, rows,
+        day_evidence(rows, '2019-02-06'), 0, duplicates=1)
+
+
+@pytest.mark.parametrize('source_count,destination_count', [(2, 1), (1, 2), (2, 2)])
+def test_manual_dividend_equivalence_multiplicity(monkeypatch, source_count, destination_count):
+    pending, rows, _ = manual_dividend_case()
+    if source_count == 2:
+        pending.append(dict(pending[0], quantity='2', unitPrice='10.4599',
+            comment=pending[0]['comment'][:-1] + ('0' if pending[0]['comment'][-1] != '0' else '1')))
+    if destination_count == 2:
+        rows.append(dict(rows[0], remote_id='synthetic-second', quantity=Decimal('0.1'),
+            unit_price=Decimal('209.198')))
+    status = int(source_count != destination_count)
+    replay_manual_calendar_day(monkeypatch,
+        f'constructed_dividend_multiplicity_{source_count}_{destination_count}', pending, rows,
+        day_evidence(rows, '2019-02-06'), status, duplicates=source_count if not status else 0)
+
+
+@pytest.mark.parametrize('order', ['exact_first', 'conflict_first'])
+def test_manual_dividend_equivalence_exact_cannot_hide_conflict(monkeypatch, order):
+    pending, rows, _ = manual_dividend_case()
+    rows.append(dict(rows[0], remote_id='synthetic-conflict', fee=Decimal('.01')))
+    rows = rows if order == 'exact_first' else list(reversed(rows))
+    replay_manual_calendar_day(monkeypatch, 'constructed_dividend_exact_plus_fee_conflict_' + order,
+        pending, rows, day_evidence(rows, '2019-02-06'), 1)
+
+
+@pytest.mark.parametrize('change,code', [({}, None),
+    ({'quantity': Decimal('2'), 'unitPrice': Decimal('10.4599')}, 'NOTICE_OWNED_ACTIVITY_CONFLICT'),
+    ({'date': '2019-02-06T15:00:00.000Z'}, 'NOTICE_OWNED_ACTIVITY_CONFLICT')])
+def test_manual_dividend_equivalence_owned_stays_exact(monkeypatch, change, code):
+    pending, _, _ = manual_dividend_case()
+    rows = [remote(pending[0], **change)]
+    original = copy.deepcopy(rows)
+    if code:
+        with pytest.raises(RuntimeError, match=code):
+            reconcile(pending, rows)
+    else:
+        replay_manual_calendar_day(monkeypatch, 'constructed_dividend_owned_exact', pending, rows,
+            {'schema_version': 1, 'activities': {}}, 0, duplicates=1)
+    assert rows == original
+    print('constructed_dividend_owned: exact_fields_required=true financial_writes=0 confirmation_requests=0')
+
+
+def test_manual_dividend_equivalence_other_account_or_instrument_is_not_duplicate():
+    pending, rows, _ = manual_dividend_case()
+    for changes in ({'target_account_id': 'other'}, {'symbol': 'OTHER.PA'}, {'kind': 'BUY'}):
+        unrelated = dict(rows[0], **changes)
+        assert reconcile(pending, [unrelated], day_evidence([unrelated])) == (pending, 0)
+    print('constructed_dividend_unrelated: duplicates=0 proposed=1 financial_writes=0 confirmation_requests=0')
+
+
+def test_manual_dividend_equivalence_exact_decimal_product(monkeypatch):
+    pending, rows, _ = manual_dividend_case()
+    quantity = Decimal('1.123456789012345678901234567890123456789')
+    price = Decimal('2.123456789012345678901234567890123456789')
+    with localcontext() as context:
+        context.prec = 100
+        total = quantity * price
+    pending[0]['unitPrice'] = str(total)
+    rows[0].update(quantity=quantity, unit_price=price)
+    with localcontext() as context:
+        context.prec = 6
+        replay_manual_calendar_day(monkeypatch, 'constructed_dividend_exact_decimal_product', pending,
+            rows, day_evidence(rows), 0, duplicates=1)
