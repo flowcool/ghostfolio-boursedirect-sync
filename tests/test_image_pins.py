@@ -7,7 +7,8 @@ import pytest
 
 ROOT = Path(__file__).parents[1]
 IMAGE = "ghcr.io/flowcool/ghostfolio-boursedirect-sync"
-PIN = re.compile(re.escape(IMAGE) + r":([^\s}`'\"]+)")
+# The tag is optional so a bare reference (implicit tag) is caught and rejected.
+PIN = re.compile(re.escape(IMAGE) + r"(?![\w.-])(?::([^\s}`'\"]+))?")
 STABLE = re.compile(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)@sha256:[0-9a-f]{64}\Z")
 
 
@@ -32,3 +33,8 @@ def test_mismatched_pin_fails():
 def test_prerelease_pin_fails():
     with pytest.raises(AssertionError, match="not a stable"):
         single_stable_pin([f"image: {IMAGE}:v0.2.0-rc.1@sha256:" + "a" * 64])
+
+
+def test_bare_reference_fails():
+    with pytest.raises(AssertionError):
+        single_stable_pin([f"image: {IMAGE}\n"])
