@@ -24,7 +24,8 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
 - **OpenSpec → Beads.** After approval, one epic labelled `openspec:<change>`
   and one bead per task. Each bead is self-contained: spec path, requirement,
   scenario, acceptance command, files to touch. Closing a bead ticks its task in
-  `tasks.md`; archive the change when every bead is closed.
+  `tasks.md`; archive the change when every task bead is closed, before the
+  `Release` bead.
 - **Release.** A change that touches shipped code ends with a `Release` bead
   after its last task: archive, replay on `main`, semver tag on Florent's go,
   image pullable; the epic closes only after it (global runbook, release gate).
