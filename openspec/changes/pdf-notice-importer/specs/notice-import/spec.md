@@ -6,7 +6,7 @@ Read Bourse Direct PDF notices from one folder. Add new BUY, SELL and DIVIDEND
 activities to one Ghostfolio account.
 
 "The run command" is `docker compose run --rm -T boursedirect-sync; echo
-"exit=$?"`. It runs without a TTY. Each scenario reads its output.
+"exit=$?"`. Each scenario reads its output.
 
 ## ADDED Requirements
 
@@ -157,7 +157,8 @@ A DROITS DE GARDE row SHALL not be imported. The log SHALL show code
 
 A DIVISION row SHALL get code `share_count_change`. A row with an unknown label
 and an ISIN SHALL get code `unknown_operation`. In both cases, no row of that
-ISIN from any file SHALL be imported. Other securities SHALL continue. A row
+ISIN from any file SHALL be imported. The connector SHALL check all files
+before it writes any activity of an ISIN. Other securities SHALL continue. A row
 with an unknown label and no ISIN SHALL get code `unknown_operation` and SHALL
 not be imported.
 
