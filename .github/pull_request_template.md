@@ -24,16 +24,17 @@ State whether AI assisted this change and what the author verified.
 ## CodeRabbit review
 
 `.coderabbit.yaml` enables automatic reviews for every base branch and draft
-PRs. If no review appears, comment `@coderabbitai review` on the PR to request
-an incremental one; use `@coderabbitai full review` only when a complete new
-pass is needed. These commands are instructions for an actual PR comment; text
-in this PR description does not trigger them.
+PRs, including commits pushed later. Comment `@coderabbitai review` once only
+when the PR head still has no CodeRabbit status 30 minutes after the push; never
+when that status is pending or successful, and never `@coderabbitai full review`.
+Each manual request spends review allowance.
 
-- [ ] Verify that a review completed and covers the final PR head; a walkthrough,
-      summary, skipped notice or rate-limit notice alone is not review evidence.
+- [ ] Merge `main` into the branch before the first push.
+- [ ] Verify that the CodeRabbit status on the final PR head is successful; an
+      incremental pass on a merge commit from `main` counts. A walkthrough,
+      skipped notice or rate-limit notice alone is not review evidence.
 - [ ] Address confirmed findings and record the review link and reviewed head SHA.
 
-If more commits are pushed after the review, request another incremental pass.
 Do not treat CodeRabbit as a substitute for CI or the repository's required
 independent review.
 
