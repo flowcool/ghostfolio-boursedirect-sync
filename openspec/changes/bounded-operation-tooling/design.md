@@ -1,42 +1,30 @@
 # Design
 
-## Context
+## Reuse and dependencies
 
-Historical counts1017/1018; six accounts. Account-dividend Decimal delta differs; binary serialization matches, derivation unproved.
+IBKR `docs/adr/0007-pinned-degiro-core.md` governs ownership. DEGIRO `CORE_PROVENANCE.md`/`scripts/check_core.py` provide immutable projection/reviewed pins/offline checks. No package/automatic propagation.
 
-## Decisions
-
-Minimal assembly: Docker/Compose, tar and product commands.
-
-| Obligation | Reuse/evidence | Missing boundary |
+| Owner | Existing mechanism | Required addition/adoption |
 | --- | --- | --- |
-| Target/image | `compose.yaml`; `tests/test_buy_simulation.py` | Fresh exact target/pins comparison |
-| Backup/restore | tar; `scripts/disposable_acceptance.py:575` | Inventory/hash/alias-preserving deployment-only restoration |
-| Recovery/auth | `scripts/community_connect.py:43`; `tests/test_community_connect.py:72` | Extra account GET; hidden bearer |
-| Product recovery | `boursedirect_to_ghostfolio.py:4845`; `tests/test_notice_import.py:280` | Stdin-to-child-ENV launcher |
-| Finance | `entrypoint.sh`; `tests/test_notice_import.py:39` | Delegate unchanged; `infra-a3ri` owns dispatch scope |
-| Preservation | `boursedirect_to_ghostfolio.py:4747`; `tests/test_notice_import.py:438` | Complete account/cash/aggregate/filesystem comparison |
+| IBKR | `ibkr_to_ghostfolio.py:ghost_exchange_access_token` and Decimal decoding | Canonical exchange through adapter transport; original-JSON Decimal/count/unique-ID validation; exact created-row comparison |
+| IBKR adapter | Requests/import/cash orchestration | Adopt canonical units; retain independent cash policy |
+| DEGIRO adapter | Immutable projection/uncertain-import fence | Explicit pin/regeneration/adoption; retain cash fence |
+| BD adapter | `recover_notice_write` callback, exact readback, Compose | Explicit projection/adoption; dedicated AT1 transport, pre-intent `infra-a3ri` guard, receipts/native-cash preservation |
 
-Reuse sibling `ghost_exchange_access_token` (`../ghostfolio-ibkr-sync/ibkr_to_ghostfolio.py`); configuration/siblings lack these boundaries. Historical helper used `compose run -e`; versioned stdin launcher sets child `GHOST_SESSION_BEARER` only.
+Additions are unavailable. Canonical delivery precedes each independent adoption. Never project `ghost_import_activities` into BD: reduced-batch retry conflicts with one-intent/uncertain-write fencing.
 
-Exact schema (all keys required):
+Minimal assembly fails: `scripts/community_connect.py:ghostfolio_snapshot` always adds an account GET; Compose cannot enforce pre-intent/preservation checks.
 
-```text
-schema_version: integer=1
-target: {ssh_host,hostname,daemon_id,runtime,project,service,network,volume,origin,account_id,source_ref,account_key,consumers,mounts}
-pins: {source_commit,build_files,files,original_image_id}
-protected: {paths,sha256,run_id,ordinal,remote_id}
-deployment: {allowlist,rollback_image_id}
-evidence_root: string
-phases: {PHASE:{grant_id,approval_reference,prerequisites,allowed_delta}}
-```
+## Bindings
 
-PHASE keys match the spec. Consumers map IDs to states; mounts map destinations to `{type,source,read_only,aliases}`. Build_files/files/sha256/allowed_delta map paths to expected-value hashes. Paths/allowlist/aliases/prerequisites are string lists; read_only boolean; ordinal integer; remaining leaves strings. Reject unknown keys/symlinks/secrets.
+Private YAML schema_version=1 retains target `{ssh_host,hostname,daemon_id,runtime,project,service,network,volume,origin,account_id,source_ref,account_key,consumers,mounts}`, pins `{source_commit,build_files,files,original_image_id}`, protected `{paths,sha256,run_id,ordinal,remote_id}`, deployment `{allowlist}`, evidence_root and phases `{prerequisites,allowed_delta,grant_id,approval_reference}`. Reject unknown keys/symlinks/secrets. Grant fields apply only to mutating phases; phase keys match spec.
 
-Private `evidence_root/authority.yaml`, keyed by grant_id: `{phase,approval_reference,config_sha256,source_commit,image_id,prerequisite_hashes,state}`. Hash-map prerequisite_hashes; enum state=`started|succeeded|failed|uncertain`; other leaves strings. Consume atomically under lock; retain across crashes/rollback.
+Types: schema_version/ordinal integers; read_only boolean; paths/allowlist/aliases/prerequisites string lists; consumers ID→state; mounts destination→`{type,source,read_only,aliases}`; build_files/files/sha256/allowed_delta/prerequisite_hashes path→hash maps; remaining leaves strings.
 
-Preflight/pre-install require original_image_id. Build receipt `{built_image_id,source_commit,build_files}` binds actual built digest to source/build hashes before creation; IDs are strings, build_files a hash map. Subsequent phases require built_image_id. Rollback requires built_image_id before, original_image_id after; rollback_image_id equals original_image_id.
+Existing-installation reads/preflight/pre-install bind original_image_id. Build receipt binds built_image_id to source_commit/build_files hashes before creation; post-install phases bind built_image_id. No rollback phase/digest.
 
-## Migration Plan
+`evidence_root/authority.yaml` keys grant_id to `{phase,approval_reference,config_sha256,source_commit,image_id,prerequisite_hashes,state}`. Lock/durably record started before mutation; succeeded/failed/uncertain remain consumed after crashes. Reads/analysis require no consumable grant.
 
-Offline delivery precedes separately validated executable plan. Rollback changes deployment only; retain journals/evidence.
+## Source limits
+
+Ghostfolio3.80.2 (`806d83f`)/3.85.0 (`ae9588b`), `portfolio.service.ts:getAccounts/getAccountsWithAggregations`, prove diagnostic paths below. Account dividend uses unordered Number addition; root uses Big. Image/source correspondence remains unproved; bind before exemptions.

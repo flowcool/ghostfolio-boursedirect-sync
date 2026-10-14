@@ -1,51 +1,60 @@
 # Spec Delta
 
-## Purpose
-
-Bound existing financial commands with exact target bindings, preservation and single-use authority.
-
 ## ADDED Requirements
 
-### Requirement: Exact phase contracts
+### Requirement: Bounded phases
 
-`python3 scripts/operation_run.py --config PATH --phase PHASE` SHALL enforce schema/contracts without progression/retry; verify target/config/phase-specific image/authority; durably consume grants before dispatch. Consumed grants SHALL refuse reuse after crash. Failure SHALL retain phase/exit/safe-code evidence and stop `HORS_CHEMIN`.
+`python3 scripts/operation_run.py --config PATH --phase PHASE` SHALL verify target/config/image/prerequisites, execute only PHASE, retain safe exit/code evidence and stop HORS_CHEMIN on failure/uncertainty. No progression/retry.
 
-| PHASE | Prerequisite | Action; required proof |
-| --- | --- | --- |
-| preflight | Validated plan | Verify target/capabilities/interpreter/stopped consumers; verified complete backups/restore access |
-| install | Preflight | Build pinned source/create stopped connector; actual digest/preservation |
-| at1-preview | Install | Auth/product preview; exact selected intent/journal unchanged |
-| at1-confirm | Preview/separate grant | Auth/product confirmation; only selected marker confirmed |
-| simulate | Confirmation/broker grant | Compose DRY_RUN=1; complete window/pending-set digest/zero writes |
-| import | Simulation/financial grant/a3ri/proven deltas | Compose DRY_RUN=0; exact approved creation/response/readback |
-| readback | Import/destination-read grant | Complete account/activity GETs; exact preservation |
-| repeat | Readback/new broker grant | Compose DRY_RUN=1; duplicates only/zero proposals/writes |
-| rollback-install | Install/rollback grant | Restore authorized deployment only; journals/evidence intact |
+| PHASE | Prerequisite; permitted action/proof |
+| --- | --- |
+| preflight | Validated plan; target/Compose/`/opt/venv/bin/python`/stopped-consumer verification |
+| install | Preflight/mutation grant; pinned build/stopped creation/actual digest |
+| at1-preview | Verified existing installation; selected recovery preview/journal unchanged |
+| at1-confirm | Preview/mutation grant; only selected marker confirmed |
+| simulate | Verified installation/no unresolved AT1; DRY_RUN=1, complete window/pending-set digest/zero writes |
+| import | Simulation/mutation grant/infra-a3ri; Compose DRY_RUN=0/exact additive creations/readback |
+| readback | Verified installation; standalone or post-import complete account/activity GETs |
+| repeat | Readback; DRY_RUN=1, duplicates only/zero proposals/writes |
 
-#### Scenario: Offline phase and crash acceptance
-- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_operation_run.py` exercises all phases with synthetic roots/mocked SSH/Docker/HTTP
-- **THEN** missing grants/proofs and crash/reuse refuse without live/shared-state access.
+Mutating phases SHALL consume grants before dispatch; crash/failed/uncertain grants SHALL refuse reuse. GETs/analysis SHALL need no consumable receipt. New installation requires separate authorization. Before broker connection, SHALL check capture date/last acquisition, enforce one acquisition/day maximum and otherwise reuse private captures.
 
-### Requirement: Recoverable deployment
+#### Scenario: Phase acceptance
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_operation_run.py` runs isolated mocked phases
+- **THEN** drift/reused grants/second daily acquisition/uncertain dispatch refuse; repeated reads remain permitted.
 
-Backup/restore SHALL verify inventories/hashes/ownership/modes/aliases. Before auth, verify Compose capabilities, `/opt/venv/bin/python`, rollback access. Enforce original/built/rollback digests as defined in design; never overwrite unknown images. Preserve originals/post-import journals.
+### Requirement: Dedicated secure recovery transport
 
-#### Scenario: Unsafe preparation
-- **WHEN** the offline command injects drift, missing prerequisites or backup corruption
-- **THEN** refusal precedes authentication/mutation.
+Permanent credential SHALL enter via GHOST_ACCESS_TOKEN. HTTPS SHALL be default; only `http://ghostfolio:3333` on verified trusted Docker network is permitted, with explicit unencrypted-HTTP risk. Verify destination container/image/network/IP and connected peer before each credential-bearing request; no redirects/retries. AT1 SHALL use dedicated callback: maximum one auth/one activities GET, no account GET/broker/import. Readback permits one auth/one account/one activities GET. Bearer SHALL travel pipe/stdin-to-child GHOST_SESSION_BEARER only, never Docker configuration/argv/files/logs. Compose retains empty CRON/APPRISE_URLS=[]/no TTY.
 
-### Requirement: Ephemeral bearer transport
+#### Scenario: Transport acceptance
+- **WHEN** the offline command injects target/peer drift or secret leakage
+- **THEN** transport refuses before disclosure and preserves uncertainty fencing.
 
-Receive external permanent Security Token via `GHOST_ACCESS_TOKEN`. HTTPS SHALL be default; only `http://ghostfolio:3333` on verified trusted Docker network is permitted. HTTP remains unencrypted. Verify exact target/network before token transmission. Exchange once maximum per recovery/readback. Recovery: one activities GET; readback: one account/one activities GET; no broker/financial POST. Bearer SHALL use pipe/stdin-to-child-ENV only, never Docker configuration/argv/files/logs. Compose retains pinned image/empty CRON/`APPRISE_URLS=[]`/no TTY/guards.
+### Requirement: Exact persisted financial proof
 
-#### Scenario: Secret and persistence faults
-- **WHEN** the offline command injects target/network drift or auth/transport/confirmation uncertainty
-- **THEN** Docker-config excludes bearer; argv/log/output-files exclude credentials; uncertainty stays fenced.
+Before any intent, SHALL enforce `infra-a3ri` manifest/account/window/pending-set binding. Before import POST, SHALL prove complete original-token Decimal baseline, unique IDs/count, approved payloads/expected creations. Afterwards SHALL compare every old persisted activity/exact authorized creation, all native accounts[].balance/currency and other protected fields; zero tolerance/no repair. Preserve private originals/journals/receipts. Missing/redacted/incomplete proof SHALL refuse.
 
-### Requirement: Strict cash and derived aggregates
+Only these account-response paths SHALL be diagnostic:
 
-Before any import POST, SHALL prove/retain calculation and expected results for account `activitiesCount`/`dividendInBaseCurrency` and root `activitiesCount`/`totalDividendInBaseCurrency` from complete baseline plus authorized activities. Unproved calculation SHALL block import; no numerical tolerance. Afterwards compare exact results. Retain complete all-account/cash/count-checked activities/originals/output/journal-deltas/hashed receipts. Other account fields/cash, including `balance`/`balanceInBaseCurrency`, remain exact. Preserve activity fields except existing nested-profile exceptions. Missing/redacted/incomplete evidence SHALL refuse.
+```text
+$.accounts[].activitiesCount
+$.accounts[].dividendInBaseCurrency
+$.accounts[].interestInBaseCurrency
+$.accounts[].valueInBaseCurrency
+$.accounts[].allocationInPercentage
+$.accounts[].balanceInBaseCurrency
+$.accounts[].quantity
+$.accounts[].value
+$.activitiesCount
+$.totalBalanceInBaseCurrency
+$.totalDividendInBaseCurrency
+$.totalInterestInBaseCurrency
+$.totalValueInBaseCurrency
+```
 
-#### Scenario: Preservation fault
-- **WHEN** the offline command injects cash/account/activity changes or wrong aggregates
-- **THEN** it refuses with changed paths only, without values.
+Retain/report changes without blocking/predicting. Activity-list count validation remains blocking. Existing nested assetProfile/SymbolProfile activitiesCount/updatedAt exceptions remain; unknown paths stay protected.
+
+#### Scenario: Preservation acceptance
+- **WHEN** the offline command changes native cash/old activities/approved creations or diagnostic paths
+- **THEN** protected changes refuse with paths only; diagnostic changes are reported separately.
