@@ -25,6 +25,9 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
   and one bead per task. Each bead is self-contained: spec path, requirement,
   scenario, acceptance command, files to touch. Closing a bead ticks its task in
   `tasks.md`; archive the change when every bead is closed.
+- **Release.** A change that touches shipped code ends with a `Release` bead
+  after its last task: archive, replay on `main`, semver tag on Florent's go,
+  image pullable; the epic closes only after it (global runbook, release gate).
 - **One bead = one fresh session.** Claim the bead, implement, prove, close,
   stop. Do not start the next bead. Do not arm `autonomous-run` or a goal across
   beads. Budget about 150 tool calls; above that, stop and report the state.
@@ -54,6 +57,11 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
 - **Ask Florent only for:** a Bourse Direct fact missing from the spec, a real
   broker login, a Ghostfolio write outside the lab, a scope change. One question
   at a time, in plain French, with your recommended answer.
+- **Decision beads.** Work only the bead's numbered decision list, inside its
+  authorization envelope. Start each question with `Décision n/N`; anything
+  else (new question, spec, contract or code change, action outside the
+  envelope) is `HORS CHEMIN`: note it in the bead and stop (global runbook,
+  decision beads).
 
 ## Safety invariants
 
