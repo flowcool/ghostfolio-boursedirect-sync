@@ -25,6 +25,7 @@ services:
       DRY_RUN: ${DRY_RUN:-1}
       CRON: ${CRON:-}
       APPRISE_URLS: ${APPRISE_URLS:-}
+      APPRISE_TIMEOUT: ${APPRISE_TIMEOUT:-10}
     tmpfs:
       - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
       - /tmp:rw,nosuid,nodev,mode=1777

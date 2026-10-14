@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 import stat
 import ssl
+import signal
+import subprocess
 import sys
 import uuid
 from urllib.parse import parse_qs, urljoin, urlsplit
@@ -4173,12 +4175,10 @@ def acquire_readonly_snapshot(config_path, input_root, max_bytes, timeout):
 
 
 def buy_simulation_config():
-    """Sibling ENV and verified Yahoo YAML; refuse unfinished live/scheduled modes."""
+    """Sibling ENV and verified Yahoo YAML; scheduling is owned by entrypoint."""
     mode = os.environ.get('DRY_RUN', '1').strip().lower()
     if mode not in ('1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'):
         fail('INVALID_DRY_RUN')
-    if os.environ.get('CRON', ''):
-        fail('SCHEDULING_NOT_IMPLEMENTED')
     source_ref = os.environ.get('BD_SOURCE_ACCOUNT_REF', '')
     if not source_ref:
         return {'source_ref': '', 'discovery_only': True}
@@ -4868,8 +4868,10 @@ def sync_buy_simulation(progress=None):
                 fail('GHOSTFOLIO_ACCESS_REFUSED')
             atomic_private_bytes(run / 'import-baseline.json', snapshot)
             remote = parse_remote_activity_snapshot(snapshot, retain_stored_date=True)
+        progress.update(proposed=len(proposals), skipped=len(skipped), failed_rows=len(failures))
         represented = {}
         proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root, represented)
+        progress.update(proposed=len(proposals), duplicates=duplicates)
         proposals = reconcile_notice_holdings(proposals, remote, represented=represented,
             day_context=day_context, evidence_root=root)
         atomic_private_yaml(run / ('simulation.yaml' if config['dry_run'] else 'proposals.yaml'),
@@ -4880,6 +4882,7 @@ def sync_buy_simulation(progress=None):
         if not config['dry_run']:
             result = import_notice_proposals(proposals, remote, journal_path, journal, run, import_request, progress,
                 represented=represented, day_context=day_context, evidence_root=root)
+            progress.update(skipped=len(skipped) + result['rejected'], failed_rows=len(failures) + result['rejected'])
             print(json.dumps({'code': 'NOTICE_IMPORT_COMPLETED', 'proposed': len(proposals),
                 'imported': result['imported'], 'duplicates': duplicates, 'skipped': len(skipped) + result['rejected'],
                 'failed_rows': len(failures) + result['rejected'],
@@ -4901,14 +4904,151 @@ def sync_buy_simulation(progress=None):
                 os.close(lock)
 
 
+NOTIFY_WORKER_FLAG = "--notify-worker"
+NOTIFY_PAYLOAD_MAX = 32 * 1024
+APPRISE_URLS_MAX = 10
+APPRISE_URL_MAX_LEN = 2048
+APPRISE_TIMEOUT_DEFAULT = 10
+APPRISE_TIMEOUT_MAX = 30
+# The worker inherits only what Apprise needs to reach a destination: never the
+# Bourse Direct or Ghostfolio credentials.
+NOTIFY_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR",
+                        "REQUESTS_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+                        "http_proxy", "https_proxy", "no_proxy")
+# Worker exit code -> delivery status reported by send_notification.  Kept clear
+# of the interpreter's own codes (1 uncaught error, 2 cannot open the script).
+NOTIFY_EXIT_STATUS = {0: "sent", 10: "invalid_payload", 11: "unavailable", 12: "failed",
+                      13: "invalid_destination"}
+
+
+def load_notification_config():
+    """Parse APPRISE_URLS and APPRISE_TIMEOUT; None means notifications are off.
+
+    APPRISE_URLS is a JSON list of Apprise URL strings (blank or [] = off);
+    APPRISE_TIMEOUT an integer number of seconds, 1..30 (default 10).  Never
+    raises: invalid settings only disable delivery, with a fixed warning since
+    the values carry destination credentials.
+    """
+    raw = os.environ.get("APPRISE_URLS", "")
+    if not raw.strip():
+        return None
+    try:
+        urls = json.loads(raw) if len(raw) <= NOTIFY_PAYLOAD_MAX else None
+    except ValueError:
+        urls = None
+    raw_timeout = os.environ.get("APPRISE_TIMEOUT", "").strip()
+    timeout = APPRISE_TIMEOUT_DEFAULT
+    if raw_timeout:
+        timeout = int(raw_timeout) if re.fullmatch(r"[0-9]{1,2}", raw_timeout) else 0
+    if (not isinstance(urls, list) or len(urls) > APPRISE_URLS_MAX
+            or not all(isinstance(u, str) and u.strip() and len(u) <= APPRISE_URL_MAX_LEN
+                       for u in urls)
+            or not 1 <= timeout <= APPRISE_TIMEOUT_MAX):
+        log.warning("APPRISE_URLS or APPRISE_TIMEOUT is invalid: failure notifications disabled")
+        return None
+    if not urls:
+        return None
+    return {"urls": urls, "timeout": timeout}
+
+
+def notify_worker():
+    """Worker process entry: deliver one notification read from stdin.
+
+    Never runs the sync.  Apprise is imported here only, so the sync never
+    loads it.  Exit codes: see NOTIFY_EXIT_STATUS.
+    """
+    logging.disable(logging.CRITICAL)
+    raw = sys.stdin.buffer.read(NOTIFY_PAYLOAD_MAX + 1)
+    try:
+        payload = json.loads(raw) if len(raw) <= NOTIFY_PAYLOAD_MAX else None
+    except ValueError:
+        payload = None
+    if (not isinstance(payload, dict)
+            or not isinstance(payload.get("urls"), list) or not payload["urls"]
+            or not all(isinstance(u, str) for u in payload["urls"])
+            or not isinstance(payload.get("title"), str)
+            or not isinstance(payload.get("body"), str)):
+        return 10
+    try:
+        import apprise
+    except ImportError:
+        return 11
+    notifier = apprise.Apprise()
+    # One entry may hold several space- or comma-separated URLs: bound the
+    # destinations Apprise actually expanded, not the list entries
+    if (not all(notifier.add(url) for url in payload["urls"])
+            or len(notifier) > APPRISE_URLS_MAX):
+        return 13
+    try:
+        sent = notifier.notify(title=payload["title"], body=payload["body"])
+    except Exception:
+        return 12
+    return 0 if sent else 12
+
+
+def _notify_worker_argv():
+    # -I: ignore PYTHON* variables, user site-packages and the current directory
+    return [sys.executable, "-I", os.path.abspath(__file__), NOTIFY_WORKER_FLAG]
+
+
+def _stop_worker(proc):
+    """Kill the worker (and anything it started) if still running, then reap it."""
+    if proc.poll() is None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            proc.kill()
+    proc.wait()
+
+
+def send_notification(settings, title, body):
+    """Deliver one notification through an isolated Apprise worker.
+
+    Apprise plugins can block past any library timeout and can print their
+    destination URL.  So the URLs travel on stdin, the worker gets an
+    allowlisted environment and no output channel, and one deadline covers its
+    whole life (import, setup, send, exit); on expiry it is killed and reaped.
+    No retry: a timed-out send may still have been delivered.  Returns a fixed
+    status string; SystemExit/KeyboardInterrupt propagate after the kill.
+    """
+    payload = json.dumps({"urls": settings["urls"], "title": title, "body": body}).encode()
+    if len(payload) > NOTIFY_PAYLOAD_MAX:
+        return "payload_too_large"
+    # The worker re-runs this file: impossible when the script came from stdin
+    if not os.path.isfile(os.path.abspath(__file__)):
+        return "spawn_failed"
+    env = {k: os.environ[k] for k in NOTIFY_ENV_ALLOWLIST if k in os.environ}
+    try:
+        proc = subprocess.Popen(_notify_worker_argv(), stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                env=env, close_fds=True, start_new_session=True)
+    except (OSError, ValueError):
+        return "spawn_failed"
+    try:
+        proc.communicate(payload, timeout=settings["timeout"])
+    except subprocess.TimeoutExpired:
+        return "timeout"
+    except Exception:
+        return "failed"
+    finally:
+        _stop_worker(proc)
+    return NOTIFY_EXIT_STATUS.get(proc.returncode, "failed")
+
+
 def main(argv=None):
     arguments = sys.argv[1:] if argv is None else argv
+    if arguments == [NOTIFY_WORKER_FLAG]:
+        return notify_worker()
     if arguments == ['--sync']:
-        progress = {'financial_writes': 0, 'imported': 0}
+        progress = dict(proposed=0, imported=0, duplicates=0, skipped=0, failed_rows=0, financial_writes=0)
+        result, code = 1, 'NOTICE_RUN_REFUSED'
         try:
-            return sync_buy_simulation(progress)
+            result = sync_buy_simulation(progress)
+            code = ('SOURCE_ACCOUNT_CONFIGURATION_REQUIRED' if not os.environ.get('BD_SOURCE_ACCOUNT_REF')
+                else 'NOTICE_ROWS_FAILED') if result else 'NOTICE_RUN_SUCCEEDED'
+            return result
         except Exception as error:
-            allowed = {'INVALID_DRY_RUN', 'SCHEDULING_NOT_IMPLEMENTED',
+            allowed = {'INVALID_DRY_RUN',
                 'EXPLICIT_ACCOUNTS_REQUIRED', 'EXPLICIT_MAPPING_REQUIRED', 'INVALID_EXPLICIT_MAPPING',
                 'MAPPING_FILE_UNREADABLE_OR_INVALID', 'INVALID_KEYED_YAML', 'YAML_DUPLICATE_KEY',
                 'YAML_ALIAS_NOT_SUPPORTED', 'YAML_STRING_KEYS_REQUIRED', 'YAML_TOO_DEEP',
@@ -4933,6 +5073,18 @@ def main(argv=None):
             print(json.dumps({'code': code, **progress,
                 **({'broker_attempts': 0} if code in refusals else {})}), flush=True)
             return 1
+        finally:
+            summary = {'code': 'NOTICE_RUN_COMPLETED', 'status': 'failed' if result else 'succeeded',
+                'error': code if result else None, **progress}
+            summary['errors'] = max(1, summary['failed_rows']) if result else 0
+            print(json.dumps(summary, sort_keys=True), flush=True)
+            # Simulation never alerts. Only fixed codes/counts leave the process.
+            if result and os.environ.get('DRY_RUN', '1').strip().lower() in ('0', 'false', 'no', 'off'):
+                settings = load_notification_config()
+                if settings:
+                    status = send_notification(settings, 'ghostfolio-boursedirect-sync: run failed',
+                        json.dumps(summary, sort_keys=True))
+                    print(json.dumps({'code': 'NOTICE_FAILURE_ALERT', 'status': status}), flush=True)
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     inspect = subparsers.add_parser("inspect", help="Inspect a saved statement without network access")

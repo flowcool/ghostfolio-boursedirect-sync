@@ -15,6 +15,12 @@ RUN set -eu; \
         https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/linux64/chrome-headless-shell-linux64.zip -o /opt/chrome.zip; \
       echo '39dcb8c46550632a3d911850ab3b8af840b4e3f6d8622faa2018eb8756278786  /opt/chrome.zip' | sha256sum -c -; \
       unzip -q /opt/chrome.zip -d /opt
+# Same SHA-pinned scheduler as the sibling connectors (AMD64 only).
+RUN curl --fail --silent --show-error --location --connect-timeout 20 --max-time 180 \
+      --proto '=https' --proto-redir '=https' \
+      https://github.com/aptible/supercronic/releases/download/v0.2.49/supercronic-linux-amd64 -o /opt/supercronic \
+    && echo 'a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1  /opt/supercronic' | sha256sum -c - \
+    && chmod 755 /opt/supercronic
 COPY requirements.txt /opt/requirements.txt
 RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir -r /opt/requirements.txt \
     && /opt/venv/bin/pip uninstall -y setuptools pip
@@ -23,6 +29,7 @@ FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 tzdata \
        libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libxss1 libx11-xcb1 libxshmfence1 fonts-liberation \
     && apt-get install -y --only-upgrade perl-base && rm -rf /var/lib/apt/lists/*
+COPY --from=build /opt/supercronic /usr/local/bin/supercronic
 COPY --from=build /opt/venv /opt/venv
 COPY --from=build /opt/chrome-headless-shell-linux64 /opt/chrome-headless-shell-linux64
 RUN ln -s /usr/local/bin/node /usr/bin/node

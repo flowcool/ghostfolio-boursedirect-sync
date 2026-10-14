@@ -51,7 +51,7 @@ def test_default_and_explicit_simulation_use_sibling_mapping(tmp_path, monkeypat
     monkeypatch.delenv('DRY_RUN', raising=False)
     if mode is not None:
         monkeypatch.setenv('DRY_RUN', mode)
-    monkeypatch.setenv('CRON', '')
+    monkeypatch.setenv('CRON', '0 6 * * *')
     monkeypatch.setenv('BD_SOURCE_ACCOUNT_REF', ACCOUNT['source_account_ref'])
     monkeypatch.setenv('GHOST_ACCOUNT_ID', 'synthetic-destination')
     mapping = tmp_path / 'mapping.yaml'
@@ -60,13 +60,6 @@ def test_default_and_explicit_simulation_use_sibling_mapping(tmp_path, monkeypat
     config = connector.buy_simulation_config()
     assert config['mappings'] == MAPPING
     assert config['dry_run'] == (mode not in ('0', 'false', 'no', 'off'))
-
-
-def test_schedule_refuses_before_broker_or_destination(monkeypatch):
-    monkeypatch.setenv('DRY_RUN', '1')
-    monkeypatch.setenv('CRON', '0 6 * * *')
-    with pytest.raises(RuntimeError, match='SCHEDULING_NOT_IMPLEMENTED'):
-        connector.buy_simulation_config()
 
 
 def test_readable_empty_map_is_valid_but_empty_yaml_or_missing_file_refuses(tmp_path, monkeypatch):
@@ -157,4 +150,8 @@ def test_yaml_diagnostics_remain_visible_before_any_network(raw, code, tmp_path,
     path.write_text(raw)
     monkeypatch.setenv('MAPPING_FILE', str(path))
     assert connector.main(['--sync']) == 1
-    assert json.loads(capsys.readouterr().out) == {'code': code, 'financial_writes': 0, 'imported': 0}
+    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert logs[0]['code'] == code
+    assert logs[-1]['code'] == 'NOTICE_RUN_COMPLETED'
+    assert logs[-1]['error'] == code and logs[-1]['errors'] == 1
+    assert logs[-1]['financial_writes'] == logs[-1]['imported'] == 0

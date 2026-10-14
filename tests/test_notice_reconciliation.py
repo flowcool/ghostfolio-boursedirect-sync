@@ -275,7 +275,8 @@ def replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, statu
         actual_status = b.main(['--sync'])
     print(output.getvalue(), end='')
     assert actual_status == status
-    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()]
+    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()
+        if json.loads(line).get('code') != 'NOTICE_RUN_COMPLETED']
     assert all(item['financial_writes'] == item['imported'] == 0 for item in diagnostics)
     if status:
         if name.startswith('constructed_invalid_evidence_'):
@@ -602,7 +603,8 @@ def test_manual_calendar_day_manual_dividend_equivalence_real_sync(tmp_path, mon
         b.os.umask(previous_umask)
     output = capsys.readouterr().out
     print(output, end='')
-    diagnostics = [json.loads(line) for line in output.splitlines()]
+    diagnostics = [json.loads(line) for line in output.splitlines()
+        if json.loads(line).get('code') != 'NOTICE_RUN_COMPLETED']
     assert diagnostics[-1] == {'code': 'NOTICE_SIMULATION_COMPLETED', 'proposed': 0,
         'imported': 0, 'skipped': 0, 'failed_rows': 0, 'duplicates': len(pending),
         'contract_notes': 1, 'financial_writes': 0}
@@ -756,7 +758,8 @@ def replay_similar_activity_report(monkeypatch, name, pending, rows, evidence, s
     with redirect_stdout(output):
         replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, status, duplicates)
     print(output.getvalue(), end='')
-    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()]
+    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()
+        if json.loads(line).get('code') != 'NOTICE_RUN_COMPLETED']
     reports = [item for item in diagnostics if item.get('code') == 'NOTICE_SIMILAR_ACTIVITY']
     if status:
         first_refusal = next(i for i, item in enumerate(diagnostics)
@@ -920,7 +923,8 @@ def replay_chronological_holdings(monkeypatch, name, source, rows, code=None,
     print(output.getvalue(), end='')
     print(json.dumps({'scenario': name, 'outcome': code or 'passed', 'duplicates': duplicates,
         'financial_writes': 0, 'confirmation_requests': 0}))
-    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()]
+    diagnostics = [json.loads(line) for line in output.getvalue().splitlines()
+        if json.loads(line).get('code') != 'NOTICE_RUN_COMPLETED']
     return diagnostics, represented
 
 
