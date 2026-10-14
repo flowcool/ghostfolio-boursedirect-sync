@@ -57,8 +57,11 @@ post-write readback before obtaining one fresh complete Ghostfolio activities
 GET with a pre-obtained session bearer. It SHALL send no authentication or
 financial POST and make no broker request. Positive proof SHALL require one
 exact active owned activity with the saved remote ID, every saved activity still
-present, and every persisted field unchanged except Ghostfolio's derived
-`assetProfile.activitiesCount` or `SymbolProfile.activitiesCount`. A preview
+present, and every persisted activity field unchanged. Comparison SHALL exclude
+only Ghostfolio's derived `activitiesCount` and automatic profile refresh
+`updatedAt` inside `assetProfile` or `SymbolProfile`. The activity's own
+`updatedAt`, all financial and identity fields, and every other profile field
+SHALL remain protected. A preview
 SHALL retain the intent. Explicit confirmation SHALL atomically move only the
 proved identity and remote ID from `pending` to `confirmed`. Missing, incomplete,
 changed, ambiguous or contradictory evidence SHALL refuse and leave the journal
@@ -76,6 +79,10 @@ automatically.
 #### Scenario: Recovery evidence is insufficient
 - **WHEN** the same offline recovery lacks an artifact or exact activity, has an incomplete snapshot, changed persisted field or remote ID, or contains more than one matching activity
 - **THEN** it reports a fixed recovery refusal, sends no POST or broker request, and preserves the journal bytes exactly.
+
+#### Scenario: Asset profile refresh does not change an activity
+- **WHEN** the offline recovery fixture differs only in `assetProfile.updatedAt` or `SymbolProfile.updatedAt` after a profile refresh
+- **THEN** preview and explicit confirmation succeed with zero POSTs and broker requests; a change to the activity's own `updatedAt`, profile identity, currency, name or creation time still refuses and preserves the journal bytes.
 
 ### Requirement: Manual trade recognition on an established calendar day
 
