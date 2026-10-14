@@ -122,7 +122,7 @@ offline_checks:
     commit: 5f2f1ff20285
     exit_code: 0
     passed: 1075
-    source: infra-4g8u.94 final committed verification; unchanged importer/runtime
+    source: legacy-tracker final committed verification; unchanged importer/runtime
       requirements
     changed_existing_python_files: scripts/prove-native-allocation.py; tests/test_native_allocation_proof.py;
       tests/test_native_cdp_allocation.py are covered by retained targeted checks
@@ -651,7 +651,7 @@ actual_browser_init_requalification:
       zombies: 0
     inspection_code_sha256: 6a62b24d3a315fd03551bf48f1d3027526af78a5f4e7f948f5bfe63fd4e7ada3
     kind: independent_owned_browser_idle_inspection
-    owner: infra-4g8u.70
+    owner: legacy-tracker
     runtime_receipt_sha256: 0c95328c6f485d1dc2847e2ce85d14d980ac1e2c0a2a9ba2481ca96b8206b149
   private_idle_receipt_sha256: 1b50a36e6b24ca77ca4e6d2d1c073f141f2dfe13a6dd98c336e7f601b84b080c
 source_account_discovery_requirement:

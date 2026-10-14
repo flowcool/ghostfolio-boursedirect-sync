@@ -8,11 +8,11 @@ context: |
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
-  v0.2 uses operation notices "avis d'opere" only, over a rolling 90-day window.
-  Statements, account history and positions are not financial input sources.
-  Login: Bitwarden CLI provides password and TOTP; three failed logins lock the account.
-  v0.1.1 is a preview-only legacy release; v0.2 rebuilds a small product and reuses only
-  the proven login flow and notice parser.
+  v1 rebuild (option B): a new branch on the ghostfolio-ibkr-sync skeleton.
+  Source: PDF operation notices "avis d'opere", downloaded by BillCollector (Playwright).
+  Login: Bitwarden CLI provides password and TOTP; three failed logins lock the account;
+  the login stops after 2 consecutive failures.
+  v0.1.1 is a preview-only legacy release; the previous work stays in Git tag legacy-wip.
   Readers: the operator (infrastructure expert, not a developer) and community users.
   Writing style: ASD-STE-100 Simplified Technical English in proposal, specs, design and tasks:
   short sentences, one idea per sentence, active voice, no internal jargon or invented labels.
@@ -26,6 +26,7 @@ rules:
     - Build that table from saved real documents of the chosen source; when the source changes, rebuild it.
     - Include a "Non-goals" section.
   specs:
+    - Max 1500 words. Describe visible behavior and error codes only, never internal mechanisms.
     - Every requirement has at least one WHEN/THEN scenario that a person can check by running one command and reading its output.
     - Never state Bourse Direct page or document behavior that is not observed in a saved real document; mark unknowns as open questions.
   design:
@@ -34,4 +35,3 @@ rules:
     - One task = one vertical slice that ends with a runnable check, about one hour of work.
     - First task = one real BUY processed in dry-run with docker compose up, without TTY; reuse sibling import mechanisms, do not create a Ghostfolio lab.
     - No task for internal tooling, lab proofs, process automation or docs beyond README.
-    - 'Exception approved by Florent 2026-10-14 for bounded-operation-tooling (infra-srpp) only: offline operation tooling, offline process automation and isolated synthetic tests are permitted; the first real-BUY task requirement and internal-tooling/process-automation prohibitions do not apply. Keep approximately one-hour vertical slices, existing financial commands, separate infra-a3ri scope, ENV-only credentials and README-only user documentation. This exception grants no implementation, installation, real access or merge authority; future execution requires a separately validated Operation plan.'

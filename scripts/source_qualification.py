@@ -488,7 +488,7 @@ def qualify(root, lab, inventory, public_only=False, notice_as_of=None, account_
         'accountConfig': {'path': str(contract_path), 'sha256': digest(contract_path.read_bytes())}}}
     output = root / ('inputs/source-observations/qualification-' + uuid.uuid4().hex)
     output.mkdir(mode=0o700)
-    intent = {'schema_version': 1, 'owner': 'infra-4g8u.70', 'source_commit': head,
+    intent = {'schema_version': 1, 'owner': 'legacy-tracker', 'source_commit': head,
         'state': 'reserved', 'public_only': public_only,
         'statement_periods': state['statement_periods'],
         'source_contract_sha256': configuration['binding']['accountConfig']['sha256'],

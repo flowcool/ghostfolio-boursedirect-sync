@@ -43,6 +43,8 @@ mapping.yaml
 
 # Claude Code local overrides (a shared .claude/settings.json stays tracked)
 .claude/settings.local.json
+# Private work-tracker pointers (never publish)
+CLAUDE.local.md
 
 # OS cruft
 .DS_Store

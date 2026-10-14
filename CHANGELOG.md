@@ -1,7 +1,7 @@
 # Changelog
 
 User-visible changes are listed by release. Older statement-based CLI and lab
-history remains available through the [documentation archive](docs/archive/README.md).
+history remains available in Git (tag `legacy-wip`).
 
 ## v0.1.1
 
