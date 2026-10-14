@@ -36,14 +36,16 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 - PDF text: `pdftotext -layout` (Debian `poppler-utils`).
 - Row parsing and checks: from the legacy parser (tag `legacy-wip`).
 - Ghostfolio lookup by ISIN: decision of 2026-10-14.
-- `DRY_RUN` absent means simulation (decision D4, target for all importers).
+- `DRY_RUN` absent means simulation (decision D4).
 
 ## Decisions (2026-10-14)
 
 - Clear a stop: the operator fixes Ghostfolio by hand, then adds
   `PAPERLESS_DONE_TAG` to the document.
-- One service per account (PEA, PEA-PME). How the two accounts differ in
-  Paperless is not decided yet.
+- v1 serves one Ghostfolio account. The `Source` filter does not separate PEA
+  and PEA-PME. Before task 6.1 (first real write), Florent confirms that
+  Paperless holds notices of one account only, or decides a per-account
+  criterion.
 - Coupon: quantity 1 at the net amount.
 - Logs show date, type, symbol, quantity, price and fee only.
 - Test data: anonymized `pdftotext` text of real PDFs. The TTF test uses an

@@ -30,15 +30,15 @@ SHALL never show a token.
 
 ### Requirement: Simulation by default
 
-Only `DRY_RUN=0` SHALL send activities to Ghostfolio. Any other value, or no
-value, SHALL simulate. A simulation SHALL log one line for each activity that it would create: date, type, symbol, quantity,
+`DRY_RUN=0` SHALL send activities to Ghostfolio. `DRY_RUN=1`, or no value,
+SHALL simulate. Another value SHALL give `invalid_configuration`. A simulation SHALL log one line for each activity that it would create: date, type, symbol, quantity,
 unit price and fee. It SHALL write nothing to Ghostfolio and send no
 notification.
 
 #### Scenario: Real BUY in simulation
 - **WHEN** the notice documents hold one real BUY notice and the run command
   runs without `DRY_RUN`
-- **THEN** the output shows `DRY RUN`, one BUY line, `exit=0`.
+- **THEN** the output shows `DRY RUN`, a BUY line, `exit=0`.
 
 ### Requirement: Paperless source
 
@@ -107,8 +107,8 @@ mapping file. A missing or invalid mapping file SHALL stop the run with code
 
 ### Requirement: No duplicate activity
 
-A row SHALL be a duplicate, and SHALL not be imported, when an activity of the
-Ghostfolio account:
+A row SHALL be a duplicate, not imported, when an activity of the Ghostfolio
+account:
 
 - has the same `BD#` comment; or
 - for a BUY or SELL, has no `BD#` comment, the same side, security (or ISIN),
