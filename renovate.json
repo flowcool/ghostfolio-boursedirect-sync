@@ -8,7 +8,8 @@
     "pip_requirements",
     "npm",
     "github-actions",
-    "dockerfile"
+    "dockerfile",
+    "custom.regex"
   ],
   "ignorePaths": [
     "collector/lab/vault.Dockerfile"
@@ -123,6 +124,21 @@
         "engines"
       ],
       "enabled": false
+    },
+    {
+      "description": "Own image: after a stable release, bump the README pin; automerge only when required checks pass (tests/test_image_pins.py guards consistency).",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/flowcool/ghostfolio-boursedirect-sync"
+      ],
+      "groupName": "own image",
+      "schedule": [
+        "at any time"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
     }
   ],
   "vulnerabilityAlerts": {
@@ -133,5 +149,19 @@
     "groupName": null,
     "prCreation": "immediate"
   },
-  "osvVulnerabilityAlerts": false
+  "osvVulnerabilityAlerts": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Own published image pins in the README (bumped after each stable release).",
+      "managerFilePatterns": [
+        "/^README\\.md$/"
+      ],
+      "matchStrings": [
+        "ghcr\\.io/flowcool/ghostfolio-boursedirect-sync:(?<currentValue>v\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "ghcr.io/flowcool/ghostfolio-boursedirect-sync",
+      "datasourceTemplate": "docker"
+    }
+  ]
 }
