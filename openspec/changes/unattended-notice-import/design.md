@@ -2,11 +2,11 @@
 
 ## Context
 
-See proposal.md. Retained notices and destination evidence show non-midnight manual trades, fee discrepancies and a dividend with different day and total. Venue text does not establish a listing.
+Retained evidence shows non-midnight trades, fee discrepancies and mismatched dividend day/total. Venue does not establish listing.
 
 ## Goals / Non-Goals
 
-Reuse sibling deployment/APIs. Keep functional Python and bounded broker acquisition. Reading all Ghostfolio history does not reconstruct broker history. No financial corrections or new tooling.
+Reuse sibling deployment/APIs, functional Python and bounded acquisition. Full destination history does not reconstruct broker history. No corrections or new tooling.
 
 ## Decisions
 
@@ -19,8 +19,8 @@ Reuse sibling deployment/APIs. Keep functional Python and bounded broker acquisi
 
 ## Risks / Trade-offs
 
-Unresolved overlap, unknown provenance or ambiguous multiplicity → report, stop the whole run before writes. Missing EUR proof/nonzero TVA → skip, fail; never infer semantics. Lookup uncertainty → retain overrides. Dry-run does not prove persistence.
+Unresolved overlap, unknown provenance or ambiguous multiplicity → report, stop the whole run before writes. Missing EUR proof/nonzero TVA → skip, fail; never infer semantics. Lookup uncertainty → retain overrides. Dry-run does not prove persistence. Task 4.2 proves safeguards offline; 5.1 follows without corrections. Final task 6.1 alone owns actual creation, exact response/readback and duplicate-only repeat. It waits for development completion, operator reconciliation and scoped authorization; no runtime safeguard changes.
 
 ## Migration Plan
 
-Retain previous private state/image for rollback. Revert the planning commit without service changes.
+Rollback: retain previous private state/image; revert the planning commit.
