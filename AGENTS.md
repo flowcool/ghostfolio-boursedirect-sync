@@ -55,6 +55,8 @@ This mode replaces the global per-step ceremony. Safety invariants below still a
   writes the bead close note and merges when allowed. It never edits code and
   returns only the verdict and the threads that need a code change (global
   Delegation rule).
+  In Claude Code the implementing agent runs this lifecycle itself, without a
+  subagent: a nested PR subagent stops right after creating the PR.
 - **Ask Florent only for:** a Bourse Direct fact missing from the spec, a real
   broker login, a Ghostfolio write outside the lab, a scope change. One question
   at a time, in plain French, with your recommended answer.
