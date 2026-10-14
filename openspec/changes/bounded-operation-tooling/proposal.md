@@ -7,8 +7,8 @@ Existing commands lack tested preparation/transport/preservation boundaries.
 ## What Changes
 
 - Retain Compose, `recover-notice-write` and separate `infra-a3ri` scope.
-- Trace schemas/phases, crash-safe authority, stdin bearer, strict preservation and six slices.
-- Florent approved five corrections and the config exception (`infra-srpp`, 2026-10-14).
+- Trace phase digests, crash-safe authority, bounded HTTP, stdin bearer and pre-POST exact deltas.
+- Florent approved offline tooling/process automation and documentary corrections (`infra-srpp`, 2026-10-14).
 
 Notice semantics:
 
