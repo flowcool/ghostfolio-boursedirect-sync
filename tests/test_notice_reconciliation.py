@@ -1038,6 +1038,86 @@ def test_chronological_holdings_represented_sale_reserves_stock(monkeypatch):
     assert candidate_positions and max(candidate_positions) < len(diagnostics) - 1
 
 
+NO_SALE_CASE = json.loads((Path(__file__).parent / 'fixtures' /
+    'notice-holdings-no-sale-anonymized-real.json').read_text())
+
+
+def no_sale_inputs(kind='DIVIDEND'):
+    """Anonymized retained dividend/BUY relation; BUY proposals are a variant."""
+    proposal = {**proposals()[0], **NO_SALE_CASE['proposal'], 'type': kind}
+    fields = NO_SALE_CASE['historical_buy']
+    row = remote(proposal, marker=False, type=fields['type'], date=fields['date'],
+        quantity=Decimal(fields['quantity']), unitPrice=Decimal(fields['unitPrice']),
+        fee=Decimal(fields['fee']))
+    assert row['financial_context_verified'] and not row['date_context_verified']
+    return proposal, row
+
+
+@pytest.mark.parametrize('kind', ['DIVIDEND', 'BUY'])
+def test_holdings_without_pending_sale_returns_source_order(monkeypatch, capsys, kind):
+    import socket
+    monkeypatch.setattr(socket, 'socket', lambda *a, **k: pytest.fail('network access'))
+    first, row = no_sale_inputs(kind)
+    earlier = dict(first, date='2026-08-01T00:00:00.000Z', comment=first['comment'] + 'earlier')
+    pending = [first, earlier]
+    original = copy.deepcopy((pending, row))
+    assert b.reconcile_notice_holdings(pending, [row]) == pending
+    assert (pending, row) == original
+    assert capsys.readouterr().out == ''
+    print(json.dumps({'scenario': 'holdings_without_pending_sale_' + kind,
+        'origin': NO_SALE_CASE['origin'] if kind == 'DIVIDEND' else 'constructed_purchase_only_variant',
+        'outcome': 'returned_in_source_order', 'historical_day_proof': 'not_required',
+        'financial_writes': 0, 'network_requests': 0, 'inputs_unchanged': True}))
+
+
+@pytest.mark.parametrize('kind', ['DIVIDEND', 'BUY'])
+@pytest.mark.parametrize('separation', ['instrument', 'account'])
+def test_holdings_without_pending_sale_in_mixed_run(monkeypatch, capsys, kind, separation):
+    import socket
+    monkeypatch.setattr(socket, 'socket', lambda *a, **k: pytest.fail('network access'))
+    proposal, unrelated = no_sale_inputs(kind)
+    sale = dict(dated_trade('SELL', '2026-09-02', 10),
+        **({'symbol': 'OTHER.PA', 'isin': 'FR0000000010'} if separation == 'instrument'
+            else {'accountId': 'other-destination'}))
+    stock = remote(dict(sale, type='BUY'), id='sale-stock', quantity=10,
+        date='2019-01-01T00:00:00.000Z')
+    pending, rows = [proposal, sale], [unrelated, stock]
+    original = copy.deepcopy((pending, rows))
+    assert b.reconcile_notice_holdings(pending, rows) == pending
+    diagnostic = json.loads(capsys.readouterr().out)
+    assert diagnostic['code'] == 'NOTICE_DATED_HOLDINGS' and diagnostic['available'] == '10'
+    # The required sale history still refuses when its day is unknown.
+    with pytest.raises(RuntimeError, match='NOTICE_HOLDINGS_CONTEXT_UNVERIFIED'):
+        b.reconcile_notice_holdings(pending,
+            [unrelated, dict(stock, comment=None, date_context_verified=False)])
+    assert 'destination_civil_day' in capsys.readouterr().out
+    assert (pending, rows) == original
+    print(json.dumps({'scenario': f'holdings_without_pending_sale_mixed_{kind}_{separation}',
+        'origin': 'constructed_mixed_variant_of_retained_no_sale_case',
+        'outcome': 'sale_stock_verified_unrelated_day_not_required',
+        'missing_sale_day': 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
+        'financial_writes': 0, 'network_requests': 0, 'inputs_unchanged': True}))
+
+
+def test_holdings_without_pending_sale_preserves_independent_overlap_refusal(monkeypatch, capsys):
+    import socket
+    monkeypatch.setattr(socket, 'socket', lambda *a, **k: pytest.fail('network access'))
+    proposal, historical_buy = no_sale_inputs()
+    overlap = remote(proposal, marker=False, id='uncertain-dividend',
+        date='2026-08-31T22:00:00.000Z')
+    pending, rows = [proposal], [historical_buy, overlap]
+    original = copy.deepcopy((pending, rows))
+    assert b.reconcile_notice_holdings(pending, rows) == pending
+    with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
+        reconcile(pending, rows)
+    assert 'unverified_day_provenance' in capsys.readouterr().out
+    assert (pending, rows) == original
+    print(json.dumps({'scenario': 'holdings_without_pending_sale_independent_overlap',
+        'origin': 'constructed_overlap_variant_of_retained_no_sale_case',
+        'outcome': 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS',
+        'financial_writes': 0, 'network_requests': 0, 'inputs_unchanged': True}))
+
+
 def legacy_evidence(rows, zone='Europe/Zurich'):
     """Explicit constructed approval; no historical entry receipt is fabricated."""
     originals = [json.loads(row['stored_activity']) for row in rows]
