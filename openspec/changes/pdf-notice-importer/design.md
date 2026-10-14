@@ -23,10 +23,11 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 - Paperless source (decision D1). Facts from paperless-ngx `docs/api.md` and
   source at commit `2b00cf6`:
   - Header `Authorization: Token <token>`.
-  - `GET /api/documents/?custom_field_query=...` selects the documents whose
-    custom field `Source` equals `PAPERLESS_SOURCE_VALUE`. The exact query
-    comes from BillCollector. Results are paged (`page_size`, `next`) and
-    list their tag IDs.
+  - `GET /api/documents/?custom_field_query=["Source","exact","Bourse Direct"]`
+    (URL-encoded). `Source` is a Text field that a Paperless workflow sets on
+    BillCollector files; `exact` is case sensitive (paperless-ngx v3.3.1,
+    `docs/api.md` lines 121-134; BillCollector spec commit `81cf068`). Results
+    are paged (`page_size`, `next`) and list their tag IDs.
   - `GET /api/tags/?name__iexact=<tag>` gives the ID of the done tag.
   - `GET /api/documents/<id>/download/?original=true` returns the original
     file. Without `original`, Paperless returns its archived version.

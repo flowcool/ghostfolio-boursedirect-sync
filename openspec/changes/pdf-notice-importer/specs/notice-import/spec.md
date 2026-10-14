@@ -7,8 +7,8 @@ activities to one Ghostfolio account.
 
 "The run command" is `docker compose run --rm -T boursedirect-sync; echo
 "exit=$?"`. Each scenario reads its output. "Notice documents" are the
-Paperless documents whose custom field `Source` equals `PAPERLESS_SOURCE_VALUE`
-and that do not have the tag `PAPERLESS_DONE_TAG`.
+Paperless documents whose custom field `PAPERLESS_SOURCE_FIELD` is exactly
+`PAPERLESS_SOURCE_VALUE` (case sensitive), without the tag `PAPERLESS_DONE_TAG`.
 
 ## ADDED Requirements
 
@@ -16,7 +16,8 @@ and that do not have the tag `PAPERLESS_DONE_TAG`.
 
 The connector SHALL read its settings only from ENV. Required: `GHOST_HOST`,
 `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT_NAME`, `PAPERLESS_URL`,
-`PAPERLESS_TOKEN`. Optional: `PAPERLESS_SOURCE_VALUE` (default `Bourse Direct`),
+`PAPERLESS_TOKEN`. Optional: `PAPERLESS_SOURCE_FIELD` (default `Source`), `PAPERLESS_SOURCE_VALUE`
+(default `Bourse Direct`),
 `PAPERLESS_DONE_TAG` (default `ghostfolio-done`), `MAPPING_FILE`, `DRY_RUN`,
 `TZ`, `CRON`, `APPRISE_URLS`, `APPRISE_TIMEOUT`, `LOG_LEVEL`. A missing or
 invalid setting SHALL stop the run with code `invalid_configuration`. The log
@@ -37,7 +38,7 @@ notification.
 #### Scenario: Real BUY in simulation
 - **WHEN** the notice documents hold one real BUY notice and the run command
   runs without `DRY_RUN`
-- **THEN** the output shows `DRY RUN`, one BUY line and `exit=0`.
+- **THEN** the output shows `DRY RUN`, one BUY line, `exit=0`.
 
 ### Requirement: Paperless source
 
@@ -56,7 +57,7 @@ name or address.
   `exit=1`.
 
 #### Scenario: Paperless down
-- **WHEN** `PAPERLESS_URL` does not answer and the run command runs
+- **WHEN** the run command runs and `PAPERLESS_URL` does not answer
 - **THEN** the output shows `paperless_unreachable` and `exit=1`.
 
 #### Scenario: Unreadable document
