@@ -14,6 +14,9 @@ context: |
   v0.1.1 is a preview-only legacy release; v0.2 rebuilds a small product and reuses only
   the proven login flow and notice parser.
   Readers: the operator (infrastructure expert, not a developer) and community users.
+  Writing style: ASD-STE-100 Simplified Technical English in proposal, specs, design and tasks:
+  short sentences, one idea per sentence, active voice, no internal jargon or invented labels.
+  The operator must be able to validate each artifact without reading code.
   A changed decision is applied to proposal, specs, design and tasks before commit.
 
 rules:
