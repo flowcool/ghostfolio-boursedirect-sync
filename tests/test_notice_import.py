@@ -3,6 +3,7 @@ import copy
 import json
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -246,6 +247,157 @@ def retained_derived_count_case(proposal):
         activity['assetProfile']['activitiesCount'] = observation['activities_count_before']
         existing.append(activity)
     return proposal, existing
+
+
+def retained_recovery_case(tmp_path):
+    """Anonymized copy of the retained partial dividend import evidence shape."""
+    config = {'origin': 'https://ghost.invalid'}
+    path, journal = b.notice_write_journal(tmp_path, config, ACCOUNT)
+    proposal, existing = retained_derived_count_case(proposals()[0])
+    recovery = RETAINED_DERIVED_COUNT['recovery']
+    created = row(proposal, recovery['remote_id'])
+    created['assetProfile']['activitiesCount'] = RETAINED_DERIVED_COUNT['observation']['activities_count_after']
+    saved = copy.deepcopy(existing)
+    for activity in saved:
+        activity['assetProfile']['activitiesCount'] = RETAINED_DERIVED_COUNT['observation']['activities_count_after']
+    journal['pending'] = {'body': b.notice_wire(proposal).decode(),
+        'run_id': recovery['run_id'], 'ordinal': recovery['ordinal']}
+    b.atomic_private_yaml(path, journal)
+    runs = b.private_directory(tmp_path / 'runs')
+    run = b.private_directory(runs / recovery['run_id'])
+    b.atomic_private_bytes(run / 'import-baseline.json', encode(existing))
+    b.atomic_private_bytes(run / 'import-response-0.json', encode([created]))
+    b.atomic_private_bytes(run / 'import-readback-0.json', encode(saved + [created]))
+    remaining_data = recovery['remaining_activity']
+    remaining = dict(proposal, type=remaining_data['type'], date=remaining_data['date'],
+        symbol=remaining_data['symbol'], quantity=remaining_data['quantity'],
+        unitPrice=remaining_data['unitPrice'], fee=remaining_data['fee'],
+        currency=remaining_data['currency'], dataSource=remaining_data['dataSource'],
+        comment=proposal['comment'][:-1] + ('a' if proposal['comment'][-1] != 'a' else 'b'))
+    return config, path, proposal, remaining, saved + [created]
+
+
+def test_explicit_recovery_proves_pending_without_post_or_broker_request(tmp_path, monkeypatch):
+    config, path, proposal, remaining, fresh_rows = retained_recovery_case(tmp_path)
+    recovery = RETAINED_DERIVED_COUNT['recovery']
+    original = path.read_bytes()
+    calls = []
+    broker_requests = []
+
+    def broker_request(*args, **kwargs):
+        broker_requests.append(True)
+        pytest.fail('recovery must not start a broker process')
+
+    monkeypatch.setattr(b.subprocess, 'run', broker_request)
+    monkeypatch.setattr(b.subprocess, 'Popen', broker_request)
+
+    def request(method, url, body):
+        calls.append((method, url, body))
+        return 200, encode(fresh_rows)
+
+    preview = b.recover_notice_write(tmp_path, config, ACCOUNT, recovery['run_id'],
+        recovery['ordinal'], request, confirm=False)
+    assert preview == {'matched': 1, 'confirmed': False,
+        'snapshot_sha256': preview['snapshot_sha256'], 'ghostfolio_gets': 1,
+        'financial_writes': 0, 'broker_attempts': 0}
+    assert path.read_bytes() == original
+    confirmed = b.recover_notice_write(tmp_path, config, ACCOUNT, recovery['run_id'],
+        recovery['ordinal'], request, confirm=True)
+    assert confirmed['confirmed'] is True
+    assert calls == [('GET', '/api/v1/activities', None),
+        ('GET', '/api/v1/activities', None)]
+    assert broker_requests == []
+    journal = b.notice_write_journal(tmp_path, config, ACCOUNT)[1]
+    assert journal['pending'] is None
+    assert journal['confirmed'] == {proposal['comment']: recovery['remote_id']}
+    remote = b.parse_remote_activity_snapshot(encode(fresh_rows), retain_stored_date=True)
+    pending, duplicates = b.reconcile_notice_duplicates([proposal, remaining], remote)
+    assert pending == [remaining] and duplicates == 1
+    print(json.dumps({'code': 'OFFLINE_EXPLICIT_NOTICE_RECOVERY_PROVEN',
+        'anonymized_retained_evidence': True, 'preview_journal_unchanged': True,
+        'confirmed_exact_remote_id': True, 'first_notice_duplicates': duplicates,
+        'remaining_notices': len(pending), 'ghostfolio_gets': len(calls),
+        'broker_requests': len(broker_requests), 'financial_writes': 0}))
+
+
+def test_recovery_transport_is_one_get_with_preobtained_bearer(monkeypatch):
+    monkeypatch.setenv('GHOST_SESSION_BEARER', 'synthetic.header.signature')
+    events = []
+
+    def connect(host, port, timeout, context):
+        assert (host, port, timeout) == ('ghost.invalid', 443, 10)
+        assert context.check_hostname is True
+
+        def request(method, path, body=None, headers=None):
+            events.append((method, path, body, headers))
+
+        response = SimpleNamespace(status=200,
+            getheader=lambda key, default='': {'Content-Type': 'application/json'}.get(key, default),
+            read=lambda limit: b'{}')
+        return SimpleNamespace(request=request, getresponse=lambda: response,
+            close=lambda: events.append('close'))
+
+    monkeypatch.setattr(b.http.client, 'HTTPSConnection', connect)
+    request = b.make_notice_recovery_request('https://ghost.invalid', 1000, 10)
+    assert request('GET', '/api/v1/activities', None) == (200, b'{}')
+    assert events[0][:3] == ('GET', '/api/v1/activities', None)
+    assert events[0][3] == {'Authorization': 'Bearer synthetic.header.signature',
+        'Accept': 'application/json', 'Accept-Encoding': 'identity'}
+    assert events[1] == 'close'
+    with pytest.raises(RuntimeError, match='^NOTICE_RECOVERY_REFUSED$'):
+        request('POST', '/api/v1/import', b'{}')
+    assert len(events) == 2
+
+
+@pytest.mark.parametrize('fault', ['missing_artifact', 'incomplete', 'changed_persisted',
+    'changed_id', 'multiple_match', 'absent_match', 'already_confirmed'])
+def test_explicit_recovery_refuses_uncertain_proof_without_changing_journal(tmp_path, fault):
+    config, path, proposal, _, fresh_rows = retained_recovery_case(tmp_path)
+    recovery = RETAINED_DERIVED_COUNT['recovery']
+    if fault == 'missing_artifact':
+        (tmp_path / 'runs' / recovery['run_id'] / 'import-response-0.json').unlink()
+    elif fault == 'changed_persisted':
+        fresh_rows[0]['fee'] = Decimal('1')
+    elif fault == 'changed_id':
+        fresh_rows[-1]['id'] = 'anonymized-changed-id'
+    elif fault == 'multiple_match':
+        duplicate = copy.deepcopy(fresh_rows[-1])
+        duplicate['id'] = 'anonymized-duplicate-id'
+        fresh_rows.append(duplicate)
+    elif fault == 'absent_match':
+        fresh_rows.pop()
+    elif fault == 'already_confirmed':
+        journal = b.parse_keyed_yaml(path.read_bytes())
+        journal['confirmed'][proposal['comment'][:-1] + 'b'] = recovery['remote_id']
+        b.atomic_private_yaml(path, journal)
+    before = path.read_bytes()
+    calls = []
+
+    def request(method, url, body):
+        calls.append((method, url, body))
+        count = len(fresh_rows) + (1 if fault == 'incomplete' else 0)
+        return 200, encode(fresh_rows, count=count)
+
+    with pytest.raises(RuntimeError, match='^NOTICE_RECOVERY_REFUSED$'):
+        b.recover_notice_write(tmp_path, config, ACCOUNT, recovery['run_id'],
+            recovery['ordinal'], request, confirm=True)
+    assert path.read_bytes() == before
+    assert calls == ([] if fault in ('missing_artifact', 'already_confirmed') else
+        [('GET', '/api/v1/activities', None)])
+
+
+@pytest.mark.parametrize('selection', ['run', 'ordinal'])
+def test_explicit_recovery_requires_exact_operator_selection_before_get(tmp_path, selection):
+    config, path, _, _, fresh_rows = retained_recovery_case(tmp_path)
+    recovery = RETAINED_DERIVED_COUNT['recovery']
+    run_id = ('89de1225-ae2c-4791-b671-f2c10c4df17a'
+        if selection == 'run' else recovery['run_id'])
+    ordinal = 1 if selection == 'ordinal' else recovery['ordinal']
+    before = path.read_bytes()
+    with pytest.raises(RuntimeError, match='^NOTICE_RECOVERY_REFUSED$'):
+        b.recover_notice_write(tmp_path, config, ACCOUNT, run_id, ordinal,
+            lambda *args: pytest.fail('wrong selection sent a GET'), confirm=True)
+    assert path.read_bytes() == before
 
 
 def test_retained_derived_profile_count_does_not_mutate_existing_activity(tmp_path, capsys):

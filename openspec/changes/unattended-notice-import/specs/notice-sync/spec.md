@@ -50,9 +50,32 @@ Resolution SHALL prioritize YAML, unique existing Ghostfolio ISIN/profile matche
 
 Deduplication and holdings reconciliation SHALL read all destination account activities, without a 90-day cutoff. Existing activities and cash SHALL never change. A rejected symbol SHALL not block other imports. Success SHALL require readback of the same account, identity comment, date, symbol and amounts. An unconfirmed write SHALL block writes, across restarts, until operator resolution.
 
+Operator resolution of an import intent SHALL be an explicit command selecting
+the exact retained run identifier and ordinal. It SHALL bind the pending body,
+saved HTTP 201 response remote ID, saved pre-write baseline and saved complete
+post-write readback before obtaining one fresh complete Ghostfolio activities
+GET with a pre-obtained session bearer. It SHALL send no authentication or
+financial POST and make no broker request. Positive proof SHALL require one
+exact active owned activity with the saved remote ID, every saved activity still
+present, and every persisted field unchanged except Ghostfolio's derived
+`assetProfile.activitiesCount` or `SymbolProfile.activitiesCount`. A preview
+SHALL retain the intent. Explicit confirmation SHALL atomically move only the
+proved identity and remote ID from `pending` to `confirmed`. Missing, incomplete,
+changed, ambiguous or contradictory evidence SHALL refuse and leave the journal
+bytes unchanged. Normal synchronization SHALL never recover or replay an intent
+automatically.
+
 #### Scenario: Previously imported notices
 - **WHEN** the Compose command above runs in simulation against matching owned activities
 - **THEN** logs report duplicates and zero new proposals; uncertain retained imports instead refuse writing.
+
+#### Scenario: Explicit positive-readback recovery
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_import.py` replays an anonymized retained pending dividend with its saved response, baseline and readback, then supplies a fresh complete GET containing the same unique remote activity
+- **THEN** preview sends one GET and leaves the journal unchanged; explicit confirmation sends one GET, records the exact marker and remote ID atomically, sends no POST or broker request, and a normal reconciliation reports that notice as a duplicate while retaining the next notice as pending.
+
+#### Scenario: Recovery evidence is insufficient
+- **WHEN** the same offline recovery lacks an artifact or exact activity, has an incomplete snapshot, changed persisted field or remote ID, or contains more than one matching activity
+- **THEN** it reports a fixed recovery refusal, sends no POST or broker request, and preserves the journal bytes exactly.
 
 ### Requirement: Manual trade recognition on an established calendar day
 
