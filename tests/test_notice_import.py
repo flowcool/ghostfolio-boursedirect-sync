@@ -54,11 +54,12 @@ def test_confirmed_exact_response_readback_and_no_default_write(tmp_path, capsys
     assert repeat == [] and duplicates == 1
     assert b.import_notice_proposals(repeat, confirmed, path, saved, run,
         lambda *args: pytest.fail('repeat must send no request'), {})['financial_writes'] == 0
-    assert json.loads(capsys.readouterr().out)['exact_readback'] is True
+    assert any(json.loads(line).get('exact_readback') is True
+        for line in capsys.readouterr().out.splitlines())
 
 
 @pytest.mark.parametrize('fault', ['timeout', 'redirect', 'server', 'empty', 'wrong_account',
-    'wrong_date', 'wrong_symbol', 'wrong_amount', 'draft', 'changed_id', 'incomplete', 'lost_readback'])
+    'wrong_date', 'wrong_symbol', 'wrong_amount', 'draft', 'inactive_readback', 'changed_id', 'incomplete', 'lost_readback'])
 def test_uncertain_outcomes_block_restart_without_any_replay(tmp_path, fault):
     config, path, journal, run = setup(tmp_path)
     pending = proposals()
@@ -77,6 +78,8 @@ def test_uncertain_outcomes_block_restart_without_any_replay(tmp_path, fault):
             if fault == 'wrong_symbol':
                 value['assetProfile']['symbol'] = 'OTHER.PA'
             return 201, encode([] if fault == 'empty' else [value])
+        if fault == 'inactive_readback':
+            value['isActive'] = False
         if fault == 'changed_id':
             value['id'] = 'different'
         return 200, encode([value], count=2 if fault == 'incomplete' else 1)
@@ -149,7 +152,7 @@ def test_later_sell_refusal_logs_prior_confirmed_write_counts(tmp_path, capsys):
             return 201, encode([row(buy)])
         # A concurrent represented sale leaves only two shares after BUY readback.
         prior_sale = row(buy, 'synthetic-prior-sale', type='SELL', quantity=10,
-            date='2018-01-01T00:00:00.000Z', comment=None)
+            date='2018-01-01T00:00:00.000Z', comment=buy['comment'][:-1] + 'c')
         return 200, encode([row(buy), prior_sale])
     progress = {}
     with pytest.raises(RuntimeError, match='NOTICE_INSUFFICIENT_HOLDINGS'):
@@ -159,3 +162,32 @@ def test_later_sell_refusal_logs_prior_confirmed_write_counts(tmp_path, capsys):
     assert progress == {'financial_writes': 1, 'imported': 1}
     assert logs[-1]['code'] == 'NOTICE_INSUFFICIENT_HOLDINGS'
     assert (logs[-1]['available'], logs[-1]['sale'], logs[-1]['financial_writes'], logs[-1]['imported']) == ('2', '12', 1, 1)
+
+
+@pytest.mark.parametrize('active', [False, True, None])
+def test_inactive_readback_never_confirms_or_funds_sale(active):
+    buy = dict(proposals()[0], execution_time='09:00:00')
+    sell = dict(buy, type='SELL', execution_time='10:00:00', comment=buy['comment'][:-1] + 'b')
+    changes = {} if active is None else {'isActive': active}
+    raw = encode([row(buy, **changes)])
+    remote = b.parse_remote_activity_snapshot(raw)
+    assert remote[0]['active'] is (active is not False)
+    if active is False:
+        with pytest.raises(RuntimeError, match='NOTICE_OWNED_ACTIVITY_CONFLICT'):
+            b.notice_exact_readback(buy, raw, 'synthetic-created')
+        with pytest.raises(RuntimeError, match='NOTICE_INSUFFICIENT_HOLDINGS'):
+            b.reconcile_notice_holdings([sell], remote, project_buys=False,
+                represented={'synthetic-created': buy})
+    else:
+        assert b.notice_exact_readback(buy, raw, 'synthetic-created')[1] == 'synthetic-created'
+        assert b.reconcile_notice_holdings([sell], remote, project_buys=False,
+            represented={'synthetic-created': buy}) == [sell]
+    print(json.dumps({'code': 'OFFLINE_ACTIVE_READBACK_HOLDINGS_PROVEN',
+        'isActive': active, 'readback_confirmed': active is not False,
+        'sale_funded': active is not False, 'broker_attempts': 0, 'financial_writes': 0}))
+
+
+@pytest.mark.parametrize('active', [0, 1, 'false', None])
+def test_non_boolean_active_flag_refuses_snapshot(active):
+    with pytest.raises(RuntimeError, match='REMOTE_ACTIVE_FLAG_INVALID'):
+        b.parse_remote_activity_snapshot(encode([row(proposals()[0], isActive=active)]))

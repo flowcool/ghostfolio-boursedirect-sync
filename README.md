@@ -236,18 +236,6 @@ financial conflicts and ambiguous multiplicity stop the entire run with
 Malformed evidence refuses with `NOTICE_DAY_CONTEXT_INVALID` before broker access.
 No existing activity is changed or adopted by writing a comment.
 
-<<<<<<< HEAD
-After deduplication, net active Ghostfolio BUY/SELL quantities form the baseline.
-All pending trades reconcile in source date/execution-time order before any
-proposal is logged. Pre-window holdings and corporate actions must already be
-represented in Ghostfolio. A SELL exceeding availability stops the entire run,
-including simulation. `NOTICE_INSUFFICIENT_HOLDINGS` reports ISIN, symbol,
-`available`, `sale` and current write/import counts (zero during preflight).
-Preceding pending BUYs contribute only to the projected simulation balance. Skipped or duplicate BUYs add nothing;
-represented BUYs already form part of the baseline. See
-[Import and verify](#import-and-verify) for actual dispatch. A submitted purchase
-cannot fund a SELL before exact readback confirms it.
-=======
 Before overlap refusal, `NOTICE_SIMILAR_ACTIVITY` lists every same-account,
 established-symbol and same-type candidate within inclusive ±3 civil days for
 trades or ±4 for dividends. There is no amount or fee cutoff. Each source row's
@@ -291,11 +279,10 @@ purchases with missing order evidence. Candidate reporting finishes before this
 check. No confirmation is requested.
 
 Pending BUYs fund simulation only when they precede the sale. Skipped and
-represented BUYs add no second quantity. Actual dispatch remains unavailable in
-this slice. The guard's confirmed-only mode excludes every pending BUY: only
+represented BUYs add no second quantity. The guard's confirmed-only mode excludes
+every pending BUY: only
 exact readback-confirmed destination purchases with proven chronology can fund
 sales. Recheck after a rejected purchase before dispatching a dependent sale.
->>>>>>> origin/main
 
 The private `boursedirect-state` volume retains source notices, acquisition
 receipts, login journals, `discovery.yaml`, source bindings under `accounts/`,

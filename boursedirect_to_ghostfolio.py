@@ -1385,7 +1385,9 @@ def remote_active_context(activity):
         fail("REMOTE_ACCOUNT_CONTEXT_MISSING")
     if not unassigned and account.get("id") != activity["accountId"]:
         fail("REMOTE_ACCOUNT_CONTEXT_CONFLICT")
-    inactive = unassigned
+    if "isActive" in activity and not isinstance(activity["isActive"], bool):
+        fail("REMOTE_ACTIVE_FLAG_INVALID")
+    inactive = unassigned or activity.get("isActive") is False
     reserved = {"0c077abd-eca2-4cbb-818c-6cefbf2d169a", "f2e868af-8333-459f-b161-cbc6544c24bd"}
     for context in (activity,) if unassigned else (activity, account):
         for flag in ("isDraft", "isExcluded"):
@@ -4483,15 +4485,8 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
     return result, duplicates
 
 
-<<<<<<< HEAD
-def reconcile_notice_holdings(proposals, remote, project_buys=True, progress=None):
-    """DEGIRO's chronological guard. Dispatch must use confirmed balances only."""
-    balances = {}
-    quantities = [Decimal(p['quantity']) for p in proposals]
-    quantities.extend(row['quantity'] for row in remote)
-=======
 def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=None,
-                              day_context=None, evidence_root=None):
+                              day_context=None, evidence_root=None, progress=None):
     """Dated account/symbol stock; only source evidence establishes intraday order."""
     represented = {} if represented is None else represented
     tracked = {(p['accountId'], p['symbol']) for p in proposals}
@@ -4533,7 +4528,6 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
             'time': source.get('execution_time') if source else None,
             'kind': row['kind'], 'quantity': row['quantity'], 'proposal': None})
     quantities = [event['quantity'] for event in events]
->>>>>>> origin/main
     precision = max((q.adjusted() for q in quantities), default=0) - min(
         (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
     ordered = sorted(proposals, key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
@@ -4542,33 +4536,6 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
         for sale in events:
             if sale['kind'] != 'SELL' or sale['day'] < first_pending_day[sale['key']]:
                 continue
-<<<<<<< HEAD
-            if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
-                fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
-            key = (row['target_account_id'], row['symbol'])
-            balances[key] = balances.get(key, Decimal(0)) + (
-                row['quantity'] if row['kind'] == 'BUY' else -row['quantity'])
-        ordered = sorted(proposals, key=lambda p: (p['date'], p['execution_time'], p['comment']))
-        symbols = {}
-        for proposal in ordered:
-            key = (proposal['accountId'], proposal['symbol'])
-            if key in symbols and symbols[key] != proposal['isin']:
-                fail('NOTICE_SYMBOL_ISIN_CONFLICT')
-            symbols[key] = proposal['isin']
-            available = balances.get(key, Decimal(0))
-            quantity = Decimal(proposal['quantity'])
-            if proposal['type'] == 'BUY' and project_buys:
-                balances[key] = available + quantity
-            elif proposal['type'] == 'SELL':
-                if available < quantity:
-                    print(json.dumps({'code': 'NOTICE_INSUFFICIENT_HOLDINGS', 'level': 'error',
-                        'isin': proposal['isin'], 'symbol': proposal['symbol'],
-                        'available': canonical_decimal(available), 'sale': canonical_decimal(quantity),
-                        **({'financial_writes': 0, 'imported': 0} if progress is None else progress)}), flush=True)
-                    fail('NOTICE_INSUFFICIENT_HOLDINGS')
-                balances[key] = available - quantity
-        return ordered
-=======
             preceding, available, dependencies = Decimal(0), Decimal(0), []
             for event in events:
                 if event is sale or event['key'] != sale['key'] or event['day'] > sale['day']:
@@ -4601,12 +4568,12 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
                 'sale_origin': 'pending' if proposal else 'destination',
                 'preceding_day_available': canonical_decimal(preceding),
                 'available': canonical_decimal(available), 'sale': canonical_decimal(sale['quantity']),
-                'dependent_purchases': dependencies if uncertain else [], 'financial_writes': 0, 'imported': 0}
+                'dependent_purchases': dependencies if uncertain else [],
+                **({'financial_writes': 0, 'imported': 0} if progress is None else progress)}
             print(json.dumps(diagnostic), flush=True)
             if available < sale['quantity']:
                 fail(diagnostic['code'])
     return ordered
->>>>>>> origin/main
 
 
 def simulate_buy_notice(document, account, mappings, resolver=None, failures=None, skipped=None, occurrences=None):
@@ -4703,7 +4670,7 @@ def notice_write_journal(root, config, account):
 
 
 def notice_exact_readback(proposal, raw, expected_id=None):
-    rows = parse_remote_activity_snapshot(raw)
+    rows = parse_remote_activity_snapshot(raw, retain_stored_date=True)
     matches = [row for row in rows if row['comment'] == proposal['comment']]
     if len(matches) != 1 or expected_id is not None and matches[0]['remote_id'] != expected_id:
         fail('NOTICE_IMPORT_UNCONFIRMED')
@@ -4713,9 +4680,12 @@ def notice_exact_readback(proposal, raw, expected_id=None):
     return rows, matches[0]['remote_id']
 
 
-def import_notice_proposals(proposals, remote, path, journal, run, request, progress):
+def import_notice_proposals(proposals, remote, path, journal, run, request, progress,
+                            represented=None, day_context=None, evidence_root=None):
     """Only readback-confirmed BUYs fund SELLs. Never replay uncertain POSTs."""
-    ordered = reconcile_notice_holdings(proposals, remote)
+    represented = dict(represented or {})
+    ordered = reconcile_notice_holdings(proposals, remote, represented=represented,
+        day_context=day_context, evidence_root=evidence_root)
     # Reject precision loss anywhere before the first POST.
     wires = {p['comment']: notice_wire(p) for p in ordered}
     progress.update(financial_writes=0, imported=0)
@@ -4724,7 +4694,8 @@ def import_notice_proposals(proposals, remote, path, journal, run, request, prog
         if proposal['symbol'] in rejected:
             continue
         if proposal['type'] == 'SELL':
-            reconcile_notice_holdings([proposal], remote, project_buys=False, progress=progress)
+            reconcile_notice_holdings([proposal], remote, project_buys=False, progress=progress,
+                represented=represented, day_context=day_context, evidence_root=evidence_root)
         body = wires[proposal['comment']]
         journal['pending'] = {'body': body.decode(), 'run_id': run.name, 'ordinal': ordinal}
         atomic_private_yaml(path, journal)
@@ -4760,6 +4731,7 @@ def import_notice_proposals(proposals, remote, path, journal, run, request, prog
                 fail('NOTICE_IMPORT_UNCONFIRMED')
             atomic_private_bytes(run / ('import-readback-' + str(ordinal) + '.json'), readback)
             remote, _ = notice_exact_readback(proposal, readback, remote_id)
+            represented[remote_id] = proposal
             journal['confirmed'][proposal['comment']] = remote_id
             journal['pending'] = None
             atomic_private_yaml(path, journal)
@@ -4804,22 +4776,17 @@ def sync_buy_simulation(progress=None):
             if account is None:
                 account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
                            'account_key': str(uuid.uuid4())}
-<<<<<<< HEAD
             journal_path, journal = notice_write_journal(root, config, account)
-            inputs = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True,
-                **({'include_import': True} if not config['dry_run'] else {}))
-            accounts, _, snapshot, lookup = inputs[:4]
-            import_request = inputs[4] if not config['dry_run'] else None
-            remote = parse_remote_activity_snapshot(snapshot)
-=======
-            accounts, _, snapshot, lookup = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True)
+            destination = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True,
+                include_import=not config['dry_run'])
+            accounts, _, snapshot, lookup = destination[:4]
+            import_request = destination[4] if not config['dry_run'] else None
             remote = parse_remote_activity_snapshot(snapshot, retain_stored_date=True)
             context_path = root / 'manual-day-context.yaml'
             day_context = (read_keyed_yaml(context_path, root, acquisition.MAX_BYTES) if context_path.exists()
                 else {'schema_version': 1, 'activities': {}})
             # Reject malformed evidence before attempting broker access.
             notice_manual_day_context(remote, day_context, root)
->>>>>>> origin/main
             rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
             profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
             profiles = [profile for profile in profiles if isinstance(profile, dict)]
@@ -4886,29 +4853,24 @@ def sync_buy_simulation(progress=None):
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
-<<<<<<< HEAD
         if not config['dry_run']:
             status, snapshot = import_request('GET', '/api/v1/activities', None)
             if status != 200:
                 fail('GHOSTFOLIO_ACCESS_REFUSED')
             atomic_private_bytes(run / 'import-baseline.json', snapshot)
-            remote = parse_remote_activity_snapshot(snapshot)
-        proposals, duplicates = reconcile_notice_duplicates(proposals, remote)
-        proposals = reconcile_notice_holdings(proposals, remote)
-        atomic_private_yaml(run / ('simulation.yaml' if config['dry_run'] else 'proposals.yaml'),
-            {'schema_version': 1, 'mode': 'DRY_RUN' if config['dry_run'] else 'IMPORT',
-=======
+            remote = parse_remote_activity_snapshot(snapshot, retain_stored_date=True)
         represented = {}
         proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root, represented)
         proposals = reconcile_notice_holdings(proposals, remote, represented=represented,
             day_context=day_context, evidence_root=root)
-        atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
->>>>>>> origin/main
+        atomic_private_yaml(run / ('simulation.yaml' if config['dry_run'] else 'proposals.yaml'),
+            {'schema_version': 1, 'mode': 'DRY_RUN' if config['dry_run'] else 'IMPORT',
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
             'failed_rows': len(failures), 'skipped': len(skipped), 'duplicates': duplicates,
             'financial_writes': 0, 'imported': 0})
         if not config['dry_run']:
-            result = import_notice_proposals(proposals, remote, journal_path, journal, run, import_request, progress)
+            result = import_notice_proposals(proposals, remote, journal_path, journal, run, import_request, progress,
+                represented=represented, day_context=day_context, evidence_root=root)
             print(json.dumps({'code': 'NOTICE_IMPORT_COMPLETED', 'proposed': len(proposals),
                 'imported': result['imported'], 'duplicates': duplicates, 'skipped': len(skipped) + result['rejected'],
                 'failed_rows': len(failures) + result['rejected'],
@@ -4949,7 +4911,7 @@ def main(argv=None):
                 'INVALID_GHOST_ORIGIN'}
             allowed.update({'NOTICE_IDENTITY_OWNERSHIP_CONFLICT', 'NOTICE_PENDING_IDENTITY_CONFLICT',
                 'NOTICE_OWNED_ACTIVITY_CONFLICT', 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'NOTICE_DAY_CONTEXT_INVALID',
-                'NOTICE_INSUFFICIENT_HOLDINGS', 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
+                'NOTICE_INSUFFICIENT_HOLDINGS', 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED', 'NOTICE_HOLDINGS_ORDER_UNPROVED',
                 'NOTICE_SYMBOL_ISIN_CONFLICT', 'REMOTE_ACTIVITY_COUNT_MISMATCH',
                 'REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED'})
             refusals = {'BROKER_RUN_LOCKED', 'BROKER_STATE_INVALID', 'BROKER_LOGIN_UNRESOLVED',
