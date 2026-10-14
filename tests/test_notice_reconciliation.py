@@ -1159,7 +1159,7 @@ def test_holdings_without_pending_sale_preserves_all_proposals_without_history_d
     buy = proposals()[0]
     dividend = dict(buy, type='DIVIDEND', symbol='OTHER.PA', date='2019-02-05T00:00:00.000Z')
     historical = remote(buy, marker=False, date='2018-01-01T09:00:00.000Z')
-    assert b.reconcile_notice_holdings([buy, dividend], [historical]) == [dividend, buy]
+    assert b.reconcile_notice_holdings([buy, dividend], [historical]) == [buy, dividend]
 
 
 def test_holdings_without_pending_sale_ignores_unrelated_days_in_mixed_run():

@@ -4583,7 +4583,9 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
     quantities = [event['quantity'] for event in events]
     precision = max((q.adjusted() for q in quantities), default=0) - min(
         (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
-    ordered = sorted(proposals, key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
+    ordered = list(proposals)
+    if tracked:
+        ordered.sort(key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
     with localcontext() as context:
         context.prec = max(28, precision)
         for sale in events:
