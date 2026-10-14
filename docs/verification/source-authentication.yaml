@@ -164,7 +164,7 @@ finalization_and_alias_metadata:
       - '# todo 0'
       - '# duration_ms 6502.113499'
     python:
-      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+      command: .venv/bin/python
         -m pytest -q
       exit_code: 0
       log_sha256: a60a63af6aee109aebbbecd13e5f205852c95e617018ed606db2a95920c7ee4b
@@ -186,7 +186,7 @@ finalization_and_alias_metadata:
       - '..........................................                               [100%]'
       - 1194 passed in 85.24s (0:01:25)
     documentation:
-      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+      command: .venv/bin/python
         scripts/check-docs.py
       exit_code: 0
       log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
@@ -246,7 +246,7 @@ method_and_worker_confinement:
       - '# todo 0'
       - '# duration_ms 7221.861437'
     python:
-      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+      command: .venv/bin/python
         -m pytest -q
       exit_code: 0
       log_sha256: 0d33a9953998c14f96911fd892a43e70f369ede890a7d5d5242407fad6bb8844
@@ -268,7 +268,7 @@ method_and_worker_confinement:
       - '..........................................                               [100%]'
       - 1194 passed in 81.08s (0:01:21)
     documentation:
-      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+      command: .venv/bin/python
         scripts/check-docs.py
       exit_code: 0
       log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
@@ -325,7 +325,7 @@ native_building_blocks:
       - '# todo 0'
       - '# duration_ms 6757.14658'
     python:
-      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+      command: .venv/bin/python
         -m pytest -q
       exit_code: 0
       log_sha256: 59ebfb543313e5bd7e204f191e3e5dbd474c82d9a47379717c923366c3650a6e
@@ -347,7 +347,7 @@ native_building_blocks:
       - '...................................................                      [100%]'
       - 1203 passed in 89.33s (0:01:29)
     documentation:
-      command: /home/flow/claude_project/ghostfolio-boursedirect-sync/.venv/bin/python
+      command: .venv/bin/python
         scripts/check-docs.py
       exit_code: 0
       log_sha256: 0d2346b9b9a904ceb4d12f835ce045fb177c187630dd2bc76c169d818a86743e
@@ -1036,7 +1036,7 @@ ghostfolio_383_destination_qualification:
     Final-head CI supplies full offline verification before runtime delivery.
 
 historical_statement_selection:
-  owner: infra-4g8u.25
+  owner: legacy-tracker
   runtime_commit: abaae09a5d73f9f445534920daf8f0af69f06756
   inputs:
     scripts/source_qualification.py: a45c86737ebba7d61c83d962000cdbadb44d40a583aefa237cf5333588a6c80d
@@ -1088,7 +1088,7 @@ historical_statement_selection:
     is waived.
 
 certain_unique_reconciliation:
-  owner: infra-4g8u.25
+  owner: legacy-tracker
   mode: schema2_certain_unique
   inputs:
     boursedirect_to_ghostfolio.py: 47f97fdaf3af4edec1e9964221ae342623f76756025e2f0ee657b62234ddbcaf
@@ -1134,7 +1134,7 @@ certain_unique_reconciliation:
     runtime evidence.
 
 coupon_source_inspection:
-  owner: infra-4g8u.25
+  owner: legacy-tracker
   runtime_inputs:
     boursedirect_to_ghostfolio.py: 086832461bfeedf62f29d3618332edd705a913745d2ec36b23d9d43e9912b1c7
     tests/test_contract_notes.py: 3f7f9bc4c61bc35265b1f444dfdbc93a69a8c0f1cd3540d3dae4f2a7c0fd5001
@@ -1288,7 +1288,7 @@ coupon_saved_snapshot_reconciliation:
     result: success
     reuse_basis: unchanged_runtime_bytes_after_documentary_evidence_update
 verified_session_completion:
-  owner: infra-4g8u.113
+  owner: legacy-tracker
   behavior:
     successful_vault_logout_precedes_native_browser_close: true
     successful_native_close_drains_handlers_before_completion: true
@@ -1340,7 +1340,7 @@ verified_session_completion:
     final_head_ci_and_review: recorded_in_owning_issue
 
 community_compose_connection:
-  owner: infra-4g8u.114
+  owner: legacy-tracker
   inputs:
     Dockerfile: 10c0a2d36236b1d639e37bb41cbb0f7906abbf6802bc3dba1764da489febd801
     compose.yaml: 849aef925094fec67a34f4d6c4b2c068bd9cf0b507b70c165955a7ec35b44c3a
@@ -1385,7 +1385,7 @@ community_compose_connection:
     final_ci: recorded_in_owning_issue_after_publication
 
 community_private_ghostfolio_transport:
-  owner: infra-4g8u.114
+  owner: legacy-tracker
   operator_approval: 2026-10-12 Oui, comme DEGIRO
   inputs:
     Dockerfile: e4159121dfa05bdbc73c4b82da879258a9af9cdafc147683d54326910e444636
@@ -1413,7 +1413,7 @@ community_private_ghostfolio_transport:
     identity checked before start. No production service or route change.
 
 community_real_compose_acceptance:
-  owner: infra-4g8u.114
+  owner: legacy-tracker
   runtime_commit: 6a9dfe8fdaf78af5bf0c7a4f4afb5bbbb562ed33
   invocation: docker compose create --no-build bitwarden; docker start -a exact_owned_id;
     public connect command with approved infra network overlay

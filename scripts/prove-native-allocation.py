@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Opt-in SIGKILL proof of the actual native runner in newly owned lab HOMEs.
 
-Only the pinned agentvm-local fixture is permitted. No production or shared
+Only the pinned workstation-local fixture is permitted. No production or shared
 registry is used. Unreceipted resources are recovered from the supervisor's
 fsynced full create-ID observation, never names, labels or resource discovery.
 """

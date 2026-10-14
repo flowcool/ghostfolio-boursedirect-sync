@@ -734,8 +734,6 @@ If the broker page or authentication flow changes, stop and follow the
 - [Documentation map](docs/README.md): start here for user, contributor, and auditor material.
 - [Contributing](CONTRIBUTING.md): local builds and synthetic verification.
 - [Release process](docs/operations/releasing.md) and [changelog](CHANGELOG.md).
-- [Design contracts](docs/design/index.md): current acquisition, account, financial,
-  preview, and recovery boundaries.
 
 The project uses the terms in its [MIT Non-AI License](LICENSE). The bundled
 browser includes third-party components; see the

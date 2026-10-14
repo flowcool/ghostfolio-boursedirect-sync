@@ -2,103 +2,100 @@
 
 ## Product
 
-Community Docker connector that imports Bourse Direct (PEA, PEA-PME) activities
-into Ghostfolio. Docker-first, every setting through ENV, runs unattended with
-`docker compose up -d`. Target contract = the sibling forks
-`../ghostfolio-ibkr-sync` and `../ghostfolio-degiro-sync`: `CRON`, `DRY_RUN`
-default on, `APPRISE_URLS`, additive deduplicated import. Read sibling code
-before designing any mechanism they already have.
+Community Docker connector. It imports Bourse Direct (PEA, PEA-PME) operations
+into Ghostfolio. It is Docker-first. Every setting comes from ENV. It runs
+unattended with `docker compose up -d`. The target contract is the sibling fork
+`../ghostfolio-ibkr-sync`: `CRON`, `DRY_RUN` on by default, `APPRISE_URLS`,
+additive and deduplicated import. Before you add a mechanism, cite the line of
+ibkr or degiro that does the same thing. If no sibling line exists, stop and ask.
 
-v0.1.1 is a preview-only legacy release. v0.2 is a rebuild driven by the active
-OpenSpec change under `openspec/changes/`. That change is the only spec.
-`docs/design/`, `docs/plans/`, `docs/reviews/` and `docs/archive/` are history:
-do not read them unless the active change cites them.
+Keep public files free of personal hosts, paths, account identifiers and private
+work-tracker IDs.
 
-## Working mode: fast-track
+## Current plan: v1 rebuild (option B)
 
-This mode replaces the global per-step ceremony. Safety invariants below still apply.
+- The v1 is a new branch on the ibkr skeleton. The previous work stays in Git
+  (tag `legacy-wip`). v0.1.1 is a preview-only legacy release.
+- Track A (first priority): BillCollector downloads the notices with Playwright,
+  in the flowcool fork.
+- Track B (in parallel): an importer reads the PDF notices ("avis d'opéré").
+- The connector imports only what Ghostfolio shows exactly: buy, sell, coupon.
+  It stops on a security for each operation that changes the number of shares.
+  It stops on a separate TTF line; the operator enters the TTF manually. It
+  ignores custody fees and shows a message.
+- The only spec is the active OpenSpec change under `openspec/changes/`. The
+  archived change `2026-10-14-unattended-notice-import` is history only.
 
-- **Spec first.** No code without an OpenSpec change approved by Florent. When
-  reality contradicts the spec (page differs, field missing), stop and report.
-  Never invent Bourse Direct behavior; never amend the spec silently.
-- **OpenSpec → Beads.** After approval, one epic labelled `openspec:<change>`
-  and one bead per task. Each bead is self-contained: spec path, requirement,
-  scenario, acceptance command, files to touch. Closing a bead ticks its task in
-  `tasks.md`; archive the change when every task bead is closed, before the
-  `Release` bead.
-- **Release.** A change that touches shipped code ends with a `Release` bead
-  after its last task: archive, replay on `main`, semver tag on Florent's go,
-  image pullable; the epic closes only after it (global runbook, release gate).
-- **One bead = one fresh session.** Claim the bead, implement, prove, close,
-  stop. Do not start the next bead. Do not arm `autonomous-run` or a goal across
-  beads. Budget about 150 tool calls; above that, stop and report the state.
-- **Done = the bead's scenario replayed for real** (command + observed output in
-  the closing note). Green unit tests are not done.
-- **Tests:** offline pytest for parsing and mapping, on anonymized real
-  fixtures. No tests for lab tooling, docs or CI. No full-suite rerun for prose edits.
-- **Beads:** one closing note with evidence per bead; no per-step `bd-finding`.
-  Out-of-scope discovery → one new bead `discovered-from` the current one.
-- **Git:** one branch and one PR per bead. Merge only when CI is green AND
-  CodeRabbit has finished its review of the head commit, or on Florent's
-  explicit go. A PR that changes only `openspec/`, `docs/` or `*.md` needs CI
-  green only. Wait with `~/.agents/bin/pr-gate <n> --repo
-  flowcool/ghostfolio-boursedirect-sync` (in Codex, inside one exec cell, see the
-  global runbook), never a `sleep` loop. Then fix or answer each actionable
-  CodeRabbit comment; a pushed fix needs a finished review again. Still open
-  findings after a second round, or timeout: leave the PR open and the bead
-  `in_progress`, stop and report to Florent.
-- **Docs:** README and user docs required by the spec only. No new plan,
-  review or contract files.
-- **Subagents:** only on Florent's explicit request, except the PR lifecycle:
-  after the code is proven and pushed, one cheaper subagent without history
-  creates the PR, waits with `pr-gate`, answers minor comments, resolves threads,
-  writes the bead close note and merges when allowed. It never edits code and
-  returns only the verdict and the threads that need a code change (global
-  Delegation rule).
-  In Claude Code the implementing agent runs this lifecycle itself, without a
-  subagent: a nested PR subagent stops right after creating the PR.
+## Method (same as ibkr)
+
+- **Spec first.** No code without an OpenSpec change that Florent approved. A
+  spec has 1 500 words or fewer. It describes visible behavior and error codes,
+  never internal mechanisms. Do not specify recovery tools, lab tools, release
+  process or docs layout. When reality is different from the spec, stop and
+  report. Do not change the spec silently.
+- **No bead before the spec.** After approval: one epic for the change and one
+  bead per task. Each bead gives the spec path, requirement, scenario,
+  acceptance command and files to touch.
+- **One bead = one fresh session.** Claim, implement, prove, close, stop. Do not
+  start the next bead. Budget about 150 tool calls; above that, stop and report.
+- **Done = the scenario replayed for real.** Put the command and its output in
+  the closing note. Green unit tests are not done. No review beads: CodeRabbit
+  reviews the PRs. A decision bead never delivers code.
+- **Tests:** offline pytest, one real anonymized notice for each operation type
+  and each error code. No synthetic protocol proofs. No tests for docs or CI.
+- **Git:** one branch and one PR per bead. Merge when CI is green and CodeRabbit
+  finished its review of the head commit, or on Florent's explicit go. A PR that
+  changes only `openspec/`, `docs/` or `*.md` needs CI green only. Wait with
+  `~/.agents/bin/pr-gate <n> --repo flowcool/ghostfolio-boursedirect-sync`, never
+  a `sleep` loop. Fix or answer each actionable comment. In Claude Code, the
+  implementing agent runs the PR lifecycle itself, without a subagent.
+- **Operation beads.** A bead that acts on real state (Bourse Direct login,
+  Ghostfolio write, NAS) runs only from an `Operation plan:` in its design that
+  Florent validated. Only two ceremonies exist: the first real login and the
+  first real Ghostfolio write. A failed or uncertain step: record it and stop.
 - **Ask Florent only for:** a Bourse Direct fact missing from the spec, a real
-  broker login, a Ghostfolio write outside the lab, a scope change. One question
-  at a time, in plain French, with your recommended answer.
-- **Decision beads.** Work only the bead's numbered decision list, inside its
-  authorization envelope. Start each question with `Décision n/N`; anything
-  else (new question, spec, contract or code change, action outside the
-  envelope) is `HORS CHEMIN`: note it in the bead and stop (global runbook,
-  decision beads).
-- **Operation beads.** A bead labelled `operation` acts on real state (host, container,
-  Ghostfolio, Bourse Direct, journal, shared volume).
-  Execute it only from the `Operation plan:` in its design, validated once by
-  Florent: numbered phases, each with exact command, target, expected proof,
-  authorization envelope, stop conditions and rollback. No plan: stop; an
-  offline bead labelled `operation-plan` writes it. Live steps run repository
-  code only, versioned and tested, never a `tmp/` script; a missing tool is a
-  code bead first. A failed or uncertain step is `HORS CHEMIN`: record the
-  evidence in the bead and stop (global runbook,
-  operation beads).
+  broker login, a Ghostfolio write, a scope change. One question at a time, in
+  plain French, with your recommendation.
+
+## Budgets
+
+- The main Python file has 2 500 lines or fewer.
+- No new compose file and no lab without Florent's approval.
+- No release before one real run.
+- Docs: README, one spec, AGENTS.md. History stays in Git. No new plan, review
+  or contract files.
+
+## Writing style
+
+Use ASD-STE-100 (Simplified Technical English) in specs, README, bead first
+lines and messages to Florent: short sentences, one idea per sentence, active
+voice, no internal jargon.
 
 ## Safety invariants
 
-- Bourse Direct locks the account after three failed logins: one login attempt
-  per run at most. On failure or uncertain outcome, stop, record it, never retry
-  automatically. A scheduled run refuses while a failed attempt is unresolved.
-- Secrets come from ENV only (Bitwarden CLI `BW_*`, Ghostfolio token). Never in
-  Git, logs, Beads, tests or reports.
+- Bourse Direct locks the account after three failed logins. The login stops
+  after 2 consecutive failures. One login attempt per run at most. On a failed
+  or uncertain login, stop, record it, and never retry automatically.
+- Secrets come from ENV only (Bitwarden CLI `BW_*`, Ghostfolio token). The `bw`
+  binary is the official one, called from Python. Never put a secret in Git,
+  logs, Beads, tests or reports.
 - Personal data stays off Git: `inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`.
-- Ghostfolio: `DRY_RUN=1` by default; writes are additive only (never update or
-  delete); test writes go to a lab instance; production writes need Florent's go.
+- Ghostfolio: `DRY_RUN=1` by default. Writes are additive only, never update or
+  delete. Real writes need Florent's go.
 - Money: `Decimal`, exact dates, EUR. An unknown operation is skipped and
   reported; the other operations continue.
 
 ## Durable work state
 
-- v0.2 execution: epic `infra-q0jz`, one child bead per task of
-  `openspec/changes/unattended-notice-import/tasks.md`, chained in task order.
-  Task 6.1 (`infra-q0jz.13`) owns final real-import validation after development.
-  Spec originally approved and merged in PR #72 (`infra-2fji`).
-- Audit that set this mode: `infra-uze3` (closed).
+- Beads project metadata: `project=ghostfolio-boursedirect-sync`.
+- Root epic: "v1 rebuild (option B)". Find it with
+  `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic`.
+- Private pointers (bead IDs, decision document) live in `CLAUDE.local.md`,
+  which Git ignores.
 
 ## Code
 
 Functional Python, no classes, no type hints:
-[python conventions](.claude/rules/python-conventions.md). Real broker access and
-the acquisition lab: [connection procedure](docs/operations/source-connection.md).
+[python conventions](.claude/rules/python-conventions.md),
+[security rules](.claude/rules/security.md). The legacy code stays in place
+until the rebuild replaces it.

@@ -14,36 +14,23 @@ docs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(docs)
 
 
-def catalogue(tmp_path):
-    design = tmp_path / "docs/design"
-    design.mkdir(parents=True)
-    (design / "contract.md").write_text("# Contract\n\nA synthetic contract.\n")
-    (design / "index.md").write_text("| [Contract](contract.md) | A synthetic contract. |\n")
-    (tmp_path / "AGENTS.md").write_text("[Index](docs/design/index.md)\n")
-    (tmp_path / "CLAUDE.md").write_text("Read the owning contract.\n")
-    return design
+def entry_documents(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/guide.md").write_text("# Guide\n")
+    (tmp_path / "AGENTS.md").write_text("[Guide](docs/guide.md) [Site](https://example.com)\n")
+    (tmp_path / "CLAUDE.md").write_text("Read [AGENTS.md](AGENTS.md).\n")
 
 
-def test_valid_catalogue(tmp_path):
-    catalogue(tmp_path)
+def test_valid_links(tmp_path):
+    entry_documents(tmp_path)
     assert docs.check_docs(tmp_path) == []
 
 
-@pytest.mark.parametrize("change", ["missing", "duplicate", "stale", "broken", "malformed"])
-def test_invalid_catalogue(tmp_path, change):
-    design = catalogue(tmp_path)
-    index = design / "index.md"
-    if change == "missing":
-        index.write_text("")
-    elif change == "duplicate":
-        index.write_text(index.read_text() * 2)
-    elif change == "stale":
-        (design / "contract.md").write_text("# Renamed\n\nChanged purpose.\n")
-    elif change == "broken":
-        (tmp_path / "CLAUDE.md").write_text("[Missing](missing.md)\n")
-    else:
-        index.write_text("| [Contract](contract.md) |\n")
-    assert docs.check_docs(tmp_path)
+@pytest.mark.parametrize("name", ["AGENTS.md", "README.md", "docs/README.md"])
+def test_broken_link(tmp_path, name):
+    entry_documents(tmp_path)
+    (tmp_path / name).write_text("[Missing](missing.md)\n")
+    assert docs.check_docs(tmp_path) == ["broken local link in " + name + ": missing.md"]
 
 
 @pytest.mark.parametrize("failed_stage", ["docs", "pytest", "npm", "git", "staged", ""])

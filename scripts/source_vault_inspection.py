@@ -126,7 +126,7 @@ def inspect(root, lab, inventory):
     hashes = {name: hashlib.sha256((CODE_ROOT / name).read_bytes()).hexdigest() for name in files}
     output = root / ('inputs/vault-access/alias-inspection-' + uuid.uuid4().hex)
     output.mkdir(mode=0o700)
-    intent = {'schema_version': 1, 'owner': 'infra-4g8u.70', 'state': 'vault_metadata_inspection_reserved',
+    intent = {'schema_version': 1, 'owner': 'legacy-tracker', 'state': 'vault_metadata_inspection_reserved',
         'source_commit': head, 'source_hashes': hashes,
         'binding_sha256': reference['sha256'], 'previous_inspection_sha256': previous_ref['sha256'],
         'broker_requests': 0, 'totp_requests': 0}

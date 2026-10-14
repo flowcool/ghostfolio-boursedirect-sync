@@ -3,7 +3,7 @@
 This page is for source contributors. Operators who want to run the released
 connector should start with the [README](README.md). Changes are welcome through
 GitHub pull requests; read the [documentation map](docs/README.md) and the
-relevant [design contract](docs/design/index.md) before changing behavior. The
+active OpenSpec change under `openspec/changes/` before changing behavior. The
 release is an AMD64-only, one-shot acquisition and dry-run preview; a change
 must preserve the stated account, financial, credential, and transport
 boundaries.

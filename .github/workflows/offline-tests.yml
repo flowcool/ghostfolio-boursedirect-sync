@@ -27,7 +27,7 @@ jobs:
           node-version: '20.20.2'
       - name: Install pinned collector unit dependencies
         run: npm ci --prefix collector --ignore-scripts --no-audit --no-fund
-      - name: Verify documentation catalogue and local links
+      - name: Verify documentation local links
         run: python scripts/check-docs.py
       - name: Verify versioned offline tests
         run: python -m pytest tests -q

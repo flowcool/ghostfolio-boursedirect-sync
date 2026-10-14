@@ -265,7 +265,7 @@ vault_egress:
     scope: CONNECT-only exact destinations; full DNS answer validation; literal-address
       connect; bounded transport; no logs or TLS termination; proxy added only to
       cleared CLI execution env; no secrets in Compose; external network namespace
-      enforcement remains infra-owned
+      enforcement remains owned by the host operator
     external_review: Required before merge; source self-review does not replace CodeRabbit
   readiness:
     real_egress_proven: false
@@ -311,7 +311,7 @@ independent_inspection:
     live_vault_access: false
     broker_authentication: false
 operational_routing:
-  owner: infra-9i9s
+  owner: legacy-tracker
   source_commit: 7ba0245308d2caf2b302728564298327a0a60b2c
   receipt_sha256: cf594265aaf9d6addd931a6d331c0af99e26b2b858782ffe980665e084b31555
   state: routes_qualified

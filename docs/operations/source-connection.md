@@ -101,7 +101,7 @@ creation adapter supplies that ID. This input is not needed by community Compose
 Private paths are ignored, directories0700/files0600. Credentials remain in the
 existing encrypted provisioning store and Bitwarden. The project owns control
 code and pointers; it does not copy broker secrets into its files. Host settings
-remain private configuration. There is no infra-agent relay or browser control
+remain private configuration. There is no agent relay or browser control
 port in the connection path. Former temporary controllers are archived and
 cannot be treated as active commands; no lab-control command depends on `tmp/`.
 
