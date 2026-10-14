@@ -2,15 +2,15 @@
 
 ## Why
 
-Production validation lacks tested target, backup, bearer-delivery and preservation commands. Existing financial commands suffice; assembling them manually cannot enforce the missing boundaries.
+Existing commands lack tested preparation/transport/preservation boundaries.
 
 ## What Changes
 
-- Add bounded preparation and proof commands behind `scripts/operation_run.py`; retain Compose and `recover-notice-write`.
-- Trace each obligation to reused source/tests, demonstrated gaps and offline acceptance.
-- Florent accepted this limited scope and required traceability on 2026-10-14 (`infra-srpp`). No implementation or live authority follows from this proposal.
+- Retain Compose, `recover-notice-write` and separate `infra-a3ri` scope.
+- Trace schemas/phases, crash-safe authority, stdin bearer, strict preservation and six slices.
+- Florent approved five corrections and the config exception (`infra-srpp`, 2026-10-14).
 
-The notice source and `unattended-notice-import` semantics remain unchanged:
+Notice semantics:
 
 | Observed operation | Existing scope |
 | --- | --- |
@@ -20,13 +20,13 @@ The notice source and `unattended-notice-import` semantics remain unchanged:
 
 ## Non-goals
 
-New financial logic, automatic phase progression, retries, new labs/volumes, other-service changes, financial rollback, or `infra-a3ri` dispatch-scope semantics.
+Financial redesign, progression/retry, new labs/volumes, other-service changes/financial rollback. Credential provisioning is operator-owned.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `operation-tooling`: bounded target preparation, secret delivery and preservation evidence.
+- `operation-tooling`: bounded preparation, transport and evidence.
 
 ### Modified Capabilities
 
@@ -34,4 +34,4 @@ None.
 
 ## Impact
 
-Future repository CLI/tests and README only. No new dependency. Existing operation-plan commands require amendment and separate Florent validation after delivery/tests. Planning rollback: revert this commit.
+Future CLI/tests/README. Delivery precedes executable-plan approval; no implementation/live authority. Rollback: revert commit.

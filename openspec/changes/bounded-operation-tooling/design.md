@@ -2,33 +2,39 @@
 
 ## Context
 
-`infra-srpp` records Florent's decision and offline field/hash proof: complete 1017/1018 snapshots; archive metadata present. Remote preview copies are unavailable locally. Evidence is historical.
-
-## Goals / Non-Goals
-
-One explicit phase per invocation; reusable preparation/proof functions, no financial engine or automatic progression.
+Historical hashes/counts match (1017/1018); six accounts/metadata present, previews absent. Account-dividend Decimal delta differs; binary-serialized addition matches, derivation unproved.
 
 ## Decisions
 
-Smallest assembly: Compose/Docker inspection/build/create, tar, product recovery/sync and existing snapshot/comparison functions.
+Minimal assembly: Docker/Compose, tar and product commands.
 
-| Obligation | Existing source/test evidence | Concrete remaining gap |
+| Obligation | Reuse/evidence | Missing boundary |
 | --- | --- | --- |
-| Target/image binding | `compose.yaml`; `tests/test_buy_simulation.py` | ENV binds names, not fresh daemon/mount/config/image equality |
-| Backup/selective restore | tar metadata; `scripts/disposable_acceptance.py:575` | Lab rollback deletes activities; no tested inventory/hash/alias-preserving deployment restore |
-| One-auth recovery | `scripts/community_connect.py:72-80`; `tests/test_community_connect.py:72` | Snapshot adds accounts GET and retains bearer internally; cannot feed recovery within its one-GET envelope |
-| Recovery | `boursedirect_to_ghostfolio.py:4845`; `tests/test_notice_import.py:280` | Reuse unchanged; launcher must pass child ENV securely |
-| Financial phases | `entrypoint.sh`; `tests/test_notice_import.py:39` | Reuse Compose/sync; dispatch scope belongs to `infra-a3ri` |
-| Preservation | `boursedirect_to_ghostfolio.py:4747`; `tests/test_notice_import.py:438` | Activity comparator exists; no complete cross-account/cash or filesystem comparison CLI |
+| Target/image | `compose.yaml`; `tests/test_buy_simulation.py` | Fresh exact target/pins comparison |
+| Backup/restore | tar; `scripts/disposable_acceptance.py:575` | Inventory/hash/alias-preserving deployment-only restoration |
+| Recovery/auth | `scripts/community_connect.py:43`; `tests/test_community_connect.py:72` | Extra account GET; hidden bearer |
+| Product recovery | `boursedirect_to_ghostfolio.py:4845`; `tests/test_notice_import.py:280` | Stdin-to-child-ENV launcher |
+| Finance | `entrypoint.sh`; `tests/test_notice_import.py:39` | Delegate unchanged; `infra-a3ri` owns dispatch scope |
+| Preservation | `boursedirect_to_ghostfolio.py:4747`; `tests/test_notice_import.py:438` | Complete account/cash/aggregate/filesystem comparison |
 
-Configuration cannot add comparisons, restoration or bearer delivery; shell glue is new code. Reuse IBKR `ghost_exchange_access_token` from `../ghostfolio-ibkr-sync/ibkr_to_ghostfolio.py:626`, product transport/comparator. Siblings lack deployment backup/restore.
+Configuration lacks these boundaries; glue requires code. Reuse `ghost_exchange_access_token` in `../ghostfolio-ibkr-sync/ibkr_to_ghostfolio.py`; siblings lack deployment restoration. Historical `phase2-at1-recovery-preview.py:446` used `compose run -e`. A versioned launcher receives stdin, sets child `GHOST_SESSION_BEARER`, invokes recovery.
 
-Exact YAML keys: `schema_version: 1`; `target: {ssh_host,hostname,daemon_id,runtime,compose_project,service,network,volume,consumers,account_id,source_ref,account_key,mounts}`; `pins: {source_commit,build_files,files,installed_image_id}`; `protected: {paths,sha256,run_id,ordinal,remote_id}`; `deployment: {allowlist,rollback_image_id}`; `evidence_root`; keyed `phases: {approval_reference,prerequisites,expected_proof,allowed_delta}`. IDs/paths are strings; consumers/prerequisites/allowlist are lists; files/mounts/hashes are keyed maps; ordinal is an integer. Reject unknown/missing keys, unsafe paths and secrets; credentials use ENV.
+Exact schema (all keys required):
 
-## Risks / Trade-offs
+```text
+schema_version: integer=1
+target: {ssh_host,hostname,daemon_id,runtime,project,service,network,volume,origin,account_id,source_ref,account_key,consumers,mounts}
+pins: {source_commit,build_files,files,installed_image_id}
+protected: {paths,sha256,run_id,ordinal,remote_id}
+deployment: {allowlist,rollback_image_id}
+evidence_root: string
+phases: {PHASE:{grant_id,approval_reference,prerequisites,allowed_delta}}
+```
 
-Historical target evidence → fresh exact preflight. Diagnostic secrecy → fixed codes and sanitized evidence. Restoration after import → deployment-only allowlist, journals retained.
+PHASE keys are the nine spec phases. Consumers map IDs to states; mounts map destinations to `{type,source,read_only,aliases}`. Build_files/files/sha256/allowed_delta map paths to hashes of exact expected values. Paths/allowlist/aliases/prerequisites are string lists; read_only is boolean; ordinal is integer; other leaves are strings. Reject unknown keys, symlinks and secrets.
+
+Private `evidence_root/authority.yaml`, keyed by grant_id, stores `{phase,approval_reference,config_sha256,source_commit,image_id,prerequisite_hashes,state}`. Prerequisite_hashes is a hash map; state is `started|succeeded|failed|uncertain`; other fields are strings. Consume atomically under lock before dispatch; retain across crashes/rollback.
 
 ## Migration Plan
 
-Offline delivery/tests precede amended executable-plan approval. No current deployment. Planning rollback: revert this commit.
+Offline delivery precedes separately validated executable plan. Rollback changes deployment only; retain journals/evidence.

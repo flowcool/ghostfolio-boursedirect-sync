@@ -2,38 +2,50 @@
 
 ## Purpose
 
-Provide tested preparation and evidence commands around existing financial commands, with exact target binding and separately approved operation phases.
+Provide bounded preparation and preservation around existing financial commands with exact bindings and single-use authority.
 
 ## ADDED Requirements
 
-### Requirement: Explicit bounded phases
+### Requirement: Exact phase contracts
 
-`python3 scripts/operation_run.py --config PATH --phase PHASE` SHALL accept only `preflight`, `install`, `at1-preview`, `at1-confirm`, `simulate`, `import`, `readback`, `repeat`, `rollback-install`. Each invocation SHALL enforce its separately approved envelope and prerequisites without progressing or retrying. Missing, failed or uncertain proof SHALL stop with `HORS_CHEMIN`, phase, exit status and safe product codes.
+`python3 scripts/operation_run.py --config PATH --phase PHASE` SHALL enforce the design schema and fixed contracts without progression/retry. Each phase SHALL check target/config/image equality and approved authority; consume its grant durably before dispatch. Consumed grants SHALL refuse reuse, including after crash. Failure SHALL retain phase/exit/safe-code evidence and stop `HORS_CHEMIN`.
 
-#### Scenario: Offline phase acceptance
-- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_operation_run.py` runs with synthetic roots and mocked SSH/Docker/HTTP
-- **THEN** all phases and authority failures are checked without live/shared-state access.
+| PHASE | Prerequisite | Action; required proof |
+| --- | --- | --- |
+| preflight | Validated plan | Verify target/capabilities/interpreter/stopped consumers; verified complete backups/restore access |
+| install | Preflight | Build pinned source/create stopped connector; actual digest/preservation |
+| at1-preview | Install | Auth/product preview; exact selected intent/journal unchanged |
+| at1-confirm | Preview/separate grant | Auth/product confirmation; only selected marker confirmed |
+| simulate | Confirmation/broker grant | Compose DRY_RUN=1; complete window/pending-set digest/zero writes |
+| import | Simulation/financial grant/a3ri | Compose DRY_RUN=0; exact approved creation/response/readback |
+| readback | Import/destination-read grant | Complete account/activity GETs; exact preservation |
+| repeat | Readback/new broker grant | Compose DRY_RUN=1; duplicates only/zero proposals/writes |
+| rollback-install | Install/rollback grant | Restore authorized deployment only; journals/evidence intact |
 
-### Requirement: Target and recoverable deployment
+#### Scenario: Offline phase and crash acceptance
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_operation_run.py` exercises all phases with synthetic roots/mocked SSH/Docker/HTTP
+- **THEN** missing grants/proofs and crash/reuse refuse without live/shared-state access.
 
-Private keyed YAML SHALL bind exact host/daemon/project/service/runtime/network/volume/account, mount aliases, configuration hashes, source revision and image identities. Before authentication, commands SHALL verify stopped consumers, Compose capabilities, `/opt/venv/bin/python` and rollback access. Backup/restore SHALL verify full runtime/shared-state inventories, hashes, ownership, modes and aliases. Installation SHALL pin source and actual built digest before container creation; unknown tags SHALL never be overwritten. Rollback SHALL restore only authorized deployment changes, retaining post-import journals and original evidence.
+### Requirement: Recoverable deployment
 
-#### Scenario: Drift or unsafe restoration
-- **WHEN** the offline command injects target drift, missing capabilities/interpreter, damaged backup or unknown image
-- **THEN** it refuses before authentication or mutation and preserves protected bytes.
+Backup/restore SHALL verify complete inventories, hashes, ownership, modes and aliases. Before authentication, verify Compose capabilities, `/opt/venv/bin/python` and rollback access. Pin actual built digest before creation; never overwrite unknown images. Preserve original artifacts and post-import journals.
 
-### Requirement: Existing financial commands and secret delivery
+#### Scenario: Unsafe preparation
+- **WHEN** the offline command injects drift, missing prerequisites or backup corruption
+- **THEN** refusal precedes authentication/mutation.
 
-Recovery SHALL call the unchanged product with selected run/ordinal, at most one auth and one complete activities GET; no broker/financial POST. Bearer SHALL remain in process memory/child ENV, never argv/files/logs. Compose SHALL perform simulation/import/repeat with pinned image, empty CRON, `APPRISE_URLS=[]`, no TTY and existing financial guards; `infra-a3ri` SHALL own dispatch-scope enforcement.
+### Requirement: Ephemeral bearer transport
 
-#### Scenario: Bounded recovery and persistence
-- **WHEN** the offline command injects auth/GET failures or uncertain confirmation
-- **THEN** it proves request bounds, secret exclusion and preserved uncertainty without retry.
+Receive permanent Security Token via `GHOST_ACCESS_TOKEN`; provisioning remains external. Exchange at most once per recovery/readback invocation. Recovery SHALL send one complete activities GET; readback one account GET/one activities GET; no broker/financial POST. Bearer SHALL travel through pipe/stdin into child ENV only, never Docker configuration, argv/files/logs. Compose SHALL retain pinned image, empty CRON, `APPRISE_URLS=[]`, no TTY and guards.
 
-### Requirement: Complete preservation evidence
+#### Scenario: Secret and persistence faults
+- **WHEN** the offline command injects auth/transport/confirmation uncertainty
+- **THEN** Docker-config excludes bearer; argv/log/output-files exclude credentials; uncertainty stays fenced.
 
-Readback SHALL retain complete all-account/cash and count-checked activity snapshots, originals, product output and journal deltas. Comparisons SHALL allow only approved new activity/local-confirmation/deployment deltas and existing nested-profile exceptions. Receipts SHALL trace phase, pins, artifact hashes, comparison and safe diagnostics; missing/redacted/incomplete evidence SHALL refuse.
+### Requirement: Strict cash and derived aggregates
 
-#### Scenario: Unexpected preservation delta
-- **WHEN** the offline command injects unrelated account/cash/activity/filesystem changes or incomplete readback
-- **THEN** it identifies bounded changed paths without values and refuses success.
+Retain complete all-account/cash and count-checked activities, originals, output/journal deltas and hashed receipts. Account `activitiesCount`/`dividendInBaseCurrency` and root `activitiesCount`/`totalDividendInBaseCurrency` SHALL equal baseline plus exact authorized-activity-derived deltas. All other account fields/cash, including `balance`/`balanceInBaseCurrency`, SHALL remain exact. Preserve activity fields except existing nested-profile exceptions. Missing/redacted/incomplete evidence or unproved derivation SHALL refuse.
+
+#### Scenario: Preservation fault
+- **WHEN** the offline command injects cash/account/activity changes or wrong aggregates
+- **THEN** it refuses with changed paths only, without values.
