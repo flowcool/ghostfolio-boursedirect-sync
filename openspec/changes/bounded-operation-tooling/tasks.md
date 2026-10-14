@@ -1,6 +1,6 @@
 # Tasks
 
-Tooling authorization overrides BUY-first/no-tooling defaults. Checks are offline; include README guidance per slice.
+Checks are offline; include README guidance.
 
 ## 1. Preparation
 
