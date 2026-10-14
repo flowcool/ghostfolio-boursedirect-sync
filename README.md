@@ -174,10 +174,69 @@ accounts. It uses normalized notice fields and preserves identical-row
 multiplicity; ticker, capture URL and capture time do not affect identity.
 An owned activity must match the exact account, date, type, symbol, data source,
 currency, quantity, price and fee. Changed or repeated owned identities refuse.
-An exact manual entry is consumed once. Uncertain dates, nearby differences or
-ambiguous multiplicity stop the entire run with `NOTICE_MANUAL_OVERLAP_AMBIGUOUS`.
+Manual BUY/SELL entries match on an established civil day, even when their stored
+timestamp is not midnight UTC. Account, instrument, type, quantity, unit price,
+currency, data source and fee must match exactly. Each entry is consumed once;
+source and destination multiplicities must be equal. Source execution time stays
+in notice identity and ordering. Owned recognition still requires the exact stored
+midnight UTC date and financial fields.
+
+Manual DIVIDEND entries use the same established-day evidence and exact account,
+instrument, type, currency, data source and fee checks. Their Decimal quantity ×
+unit price must equal the notice's credited net EUR amount. Equivalent quantity
+and price representations match automatically, with equal one-to-one
+multiplicity, zero new proposals and no confirmation request. No gross amount or
+withholding is inferred. A conflicting manual dividend within four civil days,
+or unknown day provenance, refuses the whole run before writes. Existing fields
+stay unchanged; owned dividends still require exact quantity, price and stored date.
+
+Retain historical entry-day evidence in private `/state/manual-day-context.yaml`.
+This keyed file is optional; its absence proves no manual activity's civil day.
+Each activity ID maps to its exact account, original stored timestamp, financial
+fingerprint, established day and a reference to retained entry-context evidence:
+
+```yaml
+schema_version: 1
+activities:
+  synthetic-activity-id:
+    account_id: synthetic-destination
+    stored_date: '2019-02-06T15:00:00.000Z'
+    financial_fingerprint: '<64 lowercase hexadecimal characters>'
+    civil_day: '2019-02-06'
+    provenance:
+      path: 'entries/synthetic-activity-id.yaml'
+      sha256: '<SHA-256 of the retained entry-context file>'
+```
+
+The referenced private YAML must be the retained entry context, not a day
+assertion reconstructed from current runtime settings. Its exact fields are
+`schema_version: 1`, `activity_id`, `account_id`, `stored_date`,
+`financial_fingerprint`, `entered_day` and `entry_timezone` (the historical IANA
+entry timezone). Paths must stay under `/state/`; symlinks are refused. The
+connector checks the retained bytes against SHA-256, binds the context to the
+same activity/account/timestamp/fingerprint, and verifies that the stored instant
+in the retained entry timezone yields the original entered day and `civil_day`.
+A missing file, changed hash, inconsistent context or unsupported timezone leaves
+the day unverified. A free-text reference cannot establish a day. Retain original
+entry evidence; do not fabricate historical context to pass reconciliation.
+
+The fingerprint is `activity_financial_fingerprint` of the normalized captured
+activity. It binds account, UTC day, type, symbol, data source, currency, quantity,
+unit price and fee. The separate stored timestamp binds the original time exactly.
+A changed row invalidates its evidence. Use only evidence that establishes the
+historical entry day; today's server timezone or matching UTC/local display dates
+do not establish it. This file records provenance, not permission to import or
+correct financial data. Keep it and its supporting evidence off Git, with private
+permissions. Runs never ask for confirmation or create this evidence implicitly.
+
+Unverified day provenance for the same account/instrument/type cannot prove that
+a notice is new, even when its stored UTC date is distant. Uncertain dates,
+financial conflicts and ambiguous multiplicity stop the entire run with
+`NOTICE_MANUAL_OVERLAP_AMBIGUOUS`, zero financial writes and a diagnostic reason.
+Malformed evidence refuses with `NOTICE_DAY_CONTEXT_INVALID` before broker access.
 No existing activity is changed or adopted by writing a comment.
 
+<<<<<<< HEAD
 After deduplication, net active Ghostfolio BUY/SELL quantities form the baseline.
 All pending trades reconcile in source date/execution-time order before any
 proposal is logged. Pre-window holdings and corporate actions must already be
@@ -188,11 +247,60 @@ Preceding pending BUYs contribute only to the projected simulation balance. Skip
 represented BUYs already form part of the baseline. See
 [Import and verify](#import-and-verify) for actual dispatch. A submitted purchase
 cannot fund a SELL before exact readback confirms it.
+=======
+Before overlap refusal, `NOTICE_SIMILAR_ACTIVITY` lists every same-account,
+established-symbol and same-type candidate within inclusive ±3 civil days for
+trades or ±4 for dividends. There is no amount or fee cutoff. Each source row's
+candidates are ordered by absolute total difference; unavailable comparisons
+come last. Diagnostics show source/destination days and provenance, signed day
+gap, quantities, unit prices, Decimal quantity × price totals and fees. EUR and
+percentage differences mean destination minus source; the percentage is relative
+to the source total. A zero source total leaves the percentage `unverified`.
+Unproved days or financial context remain `unverified` and cannot establish that
+an activity is new. Dividend source totals are net credits, with no inferred
+gross amount or withholding.
+
+`automatic_duplicate` means an exact owned match or a proven one-to-one manual
+match. `represented_other_notice` identifies a row already consumed by another
+exact notice match. Unresolved candidates show `review_required`. All rows and
+missing evidence are reported before whole-run refusal, without confirmation or
+financial writes.
+Reconcile conflicts outside the run, retain the entry evidence for the resulting
+snapshot, then rerun simulation. The same automatic rules apply again; remaining
+conflicts still refuse. These diagnostics never select an instrument mapping or
+change an existing activity. Actual import acceptance remains a separate step.
+
+After deduplication, each pending SELL is checked against stock on its civil
+day. Existing destination sales from the first pending operation onward are
+also checked, so later sales cannot consume the same stock twice.
+The complete active account/instrument history contributes, including
+purchases older than 90 days and prior sales. Later purchases cannot fund an
+earlier sale. Pre-window stock and corporate actions must already be represented
+in Ghostfolio. Manual history requires retained civil-day entry evidence.
+Represented notices count once and retain their proven source execution order;
+a manual stored timestamp alone never proves intraday order. Equal manual rows
+retain the source quantity/time multiset for stock without inferring a timestamp
+association with any particular manual row.
+
+Preceding-day stock can cover same-day sales without proving the order of
+same-day purchases. Otherwise only proven earlier source purchases contribute.
+`NOTICE_INSUFFICIENT_HOLDINGS` or `NOTICE_HOLDINGS_ORDER_UNPROVED` stops the whole
+run before writes, including simulation. Diagnostics include ISIN, symbol,
+`sale_day`, `preceding_day_available`, `available`, `sale`, and dependent
+purchases with missing order evidence. Candidate reporting finishes before this
+check. No confirmation is requested.
+
+Pending BUYs fund simulation only when they precede the sale. Skipped and
+represented BUYs add no second quantity. Actual dispatch remains unavailable in
+this slice. The guard's confirmed-only mode excludes every pending BUY: only
+exact readback-confirmed destination purchases with proven chronology can fund
+sales. Recheck after a rejected purchase before dispatching a dependent sale.
+>>>>>>> origin/main
 
 The private `boursedirect-state` volume retains source notices, acquisition
-receipts, login journals, `discovery.yaml`, source bindings under `accounts/`
-and `runs/<id>/simulation.yaml`. The previous `community-binding.yaml` is retained
-and reused for its original source account.
+receipts, login journals, `discovery.yaml`, source bindings under `accounts/`,
+`manual-day-context.yaml` and `runs/<id>/simulation.yaml`. The previous
+`community-binding.yaml` is retained and reused for its original source account.
 Simulation does not mark proposals imported. Keep the volume across runs.
 Compose retains bounded logs; they contain the proposed financial fields, so
 restrict access to the Docker host. Credentials, holders and balances are not

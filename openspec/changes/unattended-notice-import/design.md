@@ -2,27 +2,25 @@
 
 ## Context
 
-See proposal.md. Saved real captures contain domestic/foreign trades, coupon notices with ISIN, and custody charges without ISIN. The existing parser extracts execution venue, but that does not identify a Yahoo listing.
+See proposal.md. Retained notices and destination evidence show non-midnight manual trades, fee discrepancies and a dividend with different day and total. Venue text does not establish a listing.
 
 ## Goals / Non-Goals
 
-Reuse sibling deployment and API mechanisms. Keep a functional Python connector and bounded broker acquisition. Do not carry forward the legacy request-controller framework or build acceptance tooling.
+Reuse sibling deployment/APIs. Keep functional Python and bounded broker acquisition. Reading all Ghostfolio history does not reconstruct broker history. No financial corrections or new tooling.
 
 ## Decisions
 
-- **Runtime:** adapt `../ghostfolio-ibkr-sync/entrypoint.sh` (validated supercronic schedule), its README Compose example, and `../ghostfolio-degiro-sync/entrypoint.sh` (one-shot default). Name the service `boursedirect-sync`. Explicit simulation is the first slice; imports remain a product feature. Persist account/discovery/login/write state in private keyed YAML and serialize broker runs across services sharing credentials.
-- **Broker:** extract the proven form/TOTP steps from `collector/source-authentication-dom.mjs`, vault operations from `collector/bitwarden-cli.mjs`, account/calendar navigation from `scripts/source_qualification.py`, and `parse_contract_note` from `boursedirect_to_ghostfolio.py`. Preserve one-attempt refusal and logout/cleanup. Use pinned Playwright seccomp, nonroot Chromium, no disabled sandbox. Discovery precedes Ghostfolio/mapping validation so minimal ENV can list accounts.
-- **Mapping:** adapt DEGIRO's `verified_mapping_document` (`ISIN: {symbol, currency}`) in `../ghostfolio-degiro-sync/degiro_to_ghostfolio.py`, accepting an empty map. Require EUR. Try existing profiles, then `GET /api/v1/symbol/lookup?query=<ISIN>`. Reject ambiguity instead of choosing the first result or adding yfinance/OpenFIGI; log candidates.
-- **Ghostfolio:** reuse IBKR's `ghost_exchange_access_token`, complete activity reading and unresolved-symbol batch reduction; adapt DEGIRO's durable write journal and exact acceptance comparison. Use activities-only payloads. Build stable comments from source/destination account ownership and normalized notice fields, preserving identical-row multiplicity; exclude ticker, retrieval URL and capture timestamp. Midnight UTC preserves the source day in Europe/Zurich. Keep Decimal through serialization/readback.
-- **Holdings:** baseline = IBKR's Ghostfolio net quantities (`ghost_get_existing_orders`), not broker positions. Adapt DEGIRO's `reconcile_trade_holdings` before any POST, ordering pending trades by source date/execution time. Unlike IBKR, insufficiency aborts the run. Dispatch BUYs before dependent SELLs; only confirmed purchases fund sales. Recheck after rejected BUYs.
+- **Runtime:** adapt IBKR's `../ghostfolio-ibkr-sync/entrypoint.sh` supercronic validation/Compose example and DEGIRO's `../ghostfolio-degiro-sync/entrypoint.sh` one-shot default. Use `boursedirect-sync`; simulate first. Persist account/discovery/login/write state in private keyed YAML; serialize broker runs sharing credentials.
+- **Broker:** reuse form/TOTP from `collector/source-authentication-dom.mjs`, vault access from `collector/bitwarden-cli.mjs`, navigation from `scripts/source_qualification.py` and `parse_contract_note`. Preserve one-attempt refusal, logout/cleanup, pinned Playwright seccomp and nonroot sandboxed Chromium. Discovery precedes destination/mapping validation.
+- **Mapping:** adapt DEGIRO's `verified_mapping_document` in `../ghostfolio-degiro-sync/degiro_to_ghostfolio.py` to accept empty YAML and add existing-profile/ISIN lookup after overrides. Require unique EUR selection; no venue inference, yfinance/OpenFIGI or selection from reports.
+- **Ghostfolio:** reuse IBKR's `ghost_exchange_access_token`, complete activity reading and rejected-symbol batch reduction; DEGIRO's durable journal/exact acceptance comparison. Keep activities-only payloads, Decimal, source/destination-account-scoped comments from normalized notice fields and identical-row multiplicity; exclude ticker/URL/capture time. New rows retain source-day midnight UTC; owned recognition/readback stays exact. Source execution time stays in identity/order.
+- **Manual reconciliation:** adapt DEGIRO's `match_manual_activity` search to exact same-day comparison and one-to-one multiplicity. Trades require exact financial fields; dividends compare quantity × price with net credit and fees. Retained day provenance remains required; server TZ proves nothing historical. Runs never prompt. Dry-run lists unresolved candidates at ±3/±4 civil days with signed total/fee/day differences before refusal; no amount cutoff or automatic correction.
+- **Holdings:** reuse IBKR's complete `ghost_get_existing_orders` read and DEGIRO's `reconcile_trade_holdings` safeguards, replacing the current-net baseline with dated stock. Merge relevant existing and pending trades; count represented notices once. All prior Ghostfolio history funds opening stock; later BUYs never fund earlier SELLs. Use proven source execution order within a day. If preceding-day stock is insufficient and order is unproved, report/refuse. Only exact readback-confirmed BUYs fund dispatch; recheck after rejection.
 
 ## Risks / Trade-offs
 
-- Lookup varies by installed version and Yahoo availability → verify read-only lookup during the mapping slice; use YAML when unresolved.
-- Overlapping notices/manual entries → reuse sibling exact matching; ambiguous multiplicity skips rather than guesses.
-- Missing EUR proof or nonzero TVA → report, skip and fail the run; never infer conversion/tax semantics.
-- Dry-run proves proposals, not persistence → creation/readback acceptance waits for separately authorized writes; no new lab.
+Unresolved overlap, unknown provenance or ambiguous multiplicity → report, stop the whole run before writes. Missing EUR proof/nonzero TVA → skip, fail; never infer semantics. Lookup uncertainty → retain overrides. Dry-run does not prove persistence.
 
 ## Migration Plan
 
-Fresh v0.2 ENV/state replaces v0.1.1 bindings; retain old private state for rollback. Pin the previous image to revert runtime. Reverting the planning commit changes no service.
+Retain previous private state/image for rollback. Revert the planning commit without service changes.

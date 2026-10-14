@@ -7,11 +7,14 @@ v0.1.1 needs terminal account selection and never imports. v0.2 imports notices 
 ## What Changes
 
 - **BREAKING**: rebuild on siblings, retaining proven Bitwarden/TOTP login and notice parsing.
-- Read notices only, over 90 days, for one explicit PEA/PEA-PME per service.
+- Read notices for today and the previous 89 days in Europe/Zurich for one explicit PEA/PEA-PME per service; read all Ghostfolio history.
 - `DRY_RUN=0` imports; `1` or absent simulates. First acceptance uses explicit simulation; no new lab.
 - Missing `BD_SOURCE_ACCOUNT_REF`: discover once, log options, stop; no automatic repeated login.
 - Require YAML, possibly empty; prioritize overrides, existing Ghostfolio profiles, then lookup. Report unresolved candidates.
-- Deduplicate and reconcile holdings before writing; insufficient shares stop the whole run with an error.
+- Reconcile stock at each sale date; later purchases never fund earlier sales. Unproved same-day dependencies refuse.
+- Recognize manual trades by established civil day, exact financial fields and one-to-one multiplicity.
+- Recognize same-day manual dividends by exact credited total/fees and multiplicity; quantity/price representation may differ.
+- Dry-run reports unresolved candidates (trades ±3 civil days, dividends ±4) and differences. Runs never prompt; uncertainty refuses all writes.
 - Optional `CRON` and `APPRISE_URLS` failure alerts.
 
 | Operation considered | v0.2 scope |
@@ -31,7 +34,7 @@ Brokerage stays attached to trades. Known out-of-scope rows and rows without ISI
 
 ## Non-goals
 
-Full historical reconstruction, balance reconciliation, currency conversion, corporate actions, standalone MANUAL fees, reusing a broker session between runs (GH #67), automatic correction/deletion, a new lab, or new internal tooling.
+Full broker-history reconstruction, balance reconciliation, currency conversion, corporate actions, standalone MANUAL fees, reusing a broker session between runs (GH #67), automatic correction/deletion, a new lab, or new internal tooling.
 
 ## Capabilities
 

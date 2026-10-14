@@ -1400,7 +1400,7 @@ def remote_active_context(activity):
     return not inactive
 
 
-def parse_remote_activity_snapshot(raw):
+def parse_remote_activity_snapshot(raw, retain_stored_date=False):
     try:
         data = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
     except (ValueError, TypeError, RecursionError):
@@ -1473,6 +1473,8 @@ def parse_remote_activity_snapshot(raw):
                            "operation_date": utc.date().isoformat(),
                            "date_context_verified": utc.hour == utc.minute == utc.second == utc.microsecond == 0,
                            "active": active, "comment": row["comment"]})
+        if retain_stored_date:
+            normalized[-1]["stored_date"] = row["date"]
     return normalized
 
 
@@ -4256,7 +4258,104 @@ def notice_signature(activity):
         *(Decimal(activity[key]) for key in ('quantity', 'unitPrice', 'fee')))
 
 
-def reconcile_notice_duplicates(proposals, remote):
+def notice_manual_day_context(remote, evidence, evidence_root=None):
+    """Bind retained historical entry evidence to exact current financial rows."""
+    if (not isinstance(evidence, dict) or set(evidence) != {'schema_version', 'activities'}
+            or type(evidence['schema_version']) is not int or evidence['schema_version'] != 1
+            or not isinstance(evidence['activities'], dict)):
+        fail('NOTICE_DAY_CONTEXT_INVALID')
+    fields = {'account_id', 'stored_date', 'financial_fingerprint', 'civil_day', 'provenance'}
+    for key, entry in evidence['activities'].items():
+        if (not isinstance(key, str) or not key or not isinstance(entry, dict) or set(entry) != fields
+                or any(not isinstance(entry[field], str) or not entry[field].strip() for field in fields - {'provenance'})
+                or not isinstance(entry['provenance'], dict)
+                or set(entry['provenance']) != {'path', 'sha256'}
+                or not isinstance(entry['provenance']['path'], str) or not entry['provenance']['path']
+                or Path(entry['provenance']['path']).is_absolute()
+                or not isinstance(entry['provenance']['sha256'], str)
+                or not re.fullmatch(r'[0-9a-f]{64}', entry['provenance']['sha256'])
+                or not re.fullmatch(r'[0-9a-f]{64}', entry['financial_fingerprint'])
+                or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', entry['civil_day'])):
+            fail('NOTICE_DAY_CONTEXT_INVALID')
+        try:
+            datetime.strptime(entry['civil_day'], '%Y-%m-%d')
+        except ValueError:
+            fail('NOTICE_DAY_CONTEXT_INVALID')
+    contexts = {}
+    for key, entry in evidence['activities'].items():
+        if evidence_root is None:
+            continue
+        try:
+            raw = read_local_bytes(Path(evidence_root) / entry['provenance']['path'], evidence_root, 1024 * 1024)
+            if hashlib.sha256(raw).hexdigest() != entry['provenance']['sha256']:
+                continue
+            context = parse_keyed_yaml(raw)
+            required = {'schema_version', 'activity_id', 'account_id', 'stored_date',
+                'financial_fingerprint', 'entered_day', 'entry_timezone'}
+            if (set(context) != required or type(context['schema_version']) is not int
+                    or context['schema_version'] != 1 or context['activity_id'] != key
+                    or any(context[field] != entry[field] for field in
+                        ('account_id', 'stored_date', 'financial_fingerprint'))
+                    or context['entered_day'] != entry['civil_day']
+                    or not isinstance(context['entry_timezone'], str)):
+                continue
+            instant = datetime.fromisoformat(context['stored_date'].replace('Z', '+00:00'))
+            if (instant.tzinfo is None or instant.astimezone(ZoneInfo(context['entry_timezone'])).date().isoformat()
+                    != context['entered_day']):
+                continue
+            contexts[key] = context
+        except (OSError, ValueError, KeyError, RuntimeError):
+            # Missing, changed or unusable retained entry context proves no day.
+            continue
+    result = []
+    for row in remote:
+        entry = evidence['activities'].get(row['remote_id'])
+        verified = bool(entry and row['remote_id'] in contexts and entry['account_id'] == row['target_account_id']
+            and entry['stored_date'] == row.get('stored_date')
+            and entry['financial_fingerprint'] == activity_financial_fingerprint(row))
+        result.append(dict(row, manual_civil_day=entry['civil_day'] if verified else None,
+            manual_day_provenance='verified' if verified else 'unverified'))
+    return result
+
+
+def notice_candidate_report(proposal, row, status):
+    """Report evidence only; proximity never changes matching or mapping."""
+    source_day = proposal['date'][:10]
+    destination_day = row.get('manual_civil_day') if 'manual_day_provenance' in row else (
+        row['operation_date'] if row['date_context_verified'] else None)
+    gap = ((datetime.fromisoformat(destination_day).date() - datetime.fromisoformat(source_day).date()).days
+        if destination_day else None)
+    source_quantity, source_price, source_fee = (Decimal(proposal[key]) for key in ('quantity', 'unitPrice', 'fee'))
+    quantity, price, fee = (row[key] for key in ('quantity', 'unit_price', 'fee'))
+    numbers = (source_quantity, source_price, source_fee, quantity, price, fee)
+    with localcontext() as context:
+        # Products and subtraction must not inherit a caller's rounded context.
+        context.prec = max(28, sum(len(n.as_tuple().digits) + abs(n.as_tuple().exponent) for n in numbers) + 10)
+        source_total, destination_total = source_quantity * source_price, quantity * price
+        verified = row['financial_context_verified'] and row['price_currency'] == proposal['currency'] == 'EUR'
+        difference = destination_total - source_total if verified else None
+        fee_difference = fee - source_fee if verified else None
+        percentage = difference / source_total * 100 if verified and source_total else None
+    value = lambda number: canonical_decimal(number) if number is not None else 'unverified'
+    return {'code': 'NOTICE_SIMILAR_ACTIVITY', 'status': status,
+        'type': proposal['type'], 'symbol': proposal['symbol'],
+        'source_day': source_day, 'source_day_provenance': 'notice_row',
+        'destination_day': destination_day or 'unverified',
+        'destination_activity_id': row['remote_id'],
+        'destination_stored_date': row.get('stored_date'),
+        'day_provenance': row.get('manual_day_provenance', 'owned_exact_required'),
+        'day_gap': gap if gap is not None else 'unverified',
+        'source_quantity': value(source_quantity), 'destination_quantity': value(quantity),
+        'source_unit_price': value(source_price), 'destination_unit_price': value(price),
+        'source_total': value(source_total), 'destination_total': value(destination_total),
+        'source_fee': value(source_fee), 'destination_fee': value(fee),
+        'total_difference_eur': value(difference), 'total_difference_percent': value(percentage),
+        'fee_difference_eur': value(fee_difference),
+        'financial_context': 'verified' if verified else 'unverified',
+        'financial_writes': 0, 'imported': 0}, difference
+
+
+def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_root=None, represented=None):
     """Consume exact owned/manual representations; ambiguity aborts the run."""
     if not proposals:
         return [], 0
@@ -4294,51 +4393,156 @@ def reconcile_notice_duplicates(proposals, remote):
             if signature(owned[marker]) != expected:
                 fail('NOTICE_OWNED_ACTIVITY_CONFLICT')
             matched_owned.add(owned[marker]['remote_id'])
+            if represented is not None:
+                represented[owned[marker]['remote_id']] = proposal
             duplicates += 1
         else:
             pending.append(proposal)
-    manual = [row for row in existing if not (row['comment'] or '').startswith('BD#')]
+    manual = notice_manual_day_context(
+        [row for row in existing if not (row['comment'] or '').startswith('BD#')],
+        day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
+
+    def manual_signature(row):
+        if not (row['active'] and row['financial_context_verified'] and row['manual_civil_day']):
+            return None
+        return manual_comparison((row['target_account_id'], row['kind'], row['manual_civil_day'] + 'T00:00:00.000Z',
+            row['symbol'], row['data_source'], row['price_currency'],
+            row['quantity'], row['unit_price'], row['fee']))
+
+    def manual_comparison(fields):
+        if fields[1] != 'DIVIDEND':
+            return fields
+        quantity, price, fee = fields[-3:]
+        # Multiplication must stay exact even beyond the ambient Decimal precision.
+        with localcontext() as context:
+            context.prec = max(28, len(quantity.as_tuple().digits) + len(price.as_tuple().digits))
+            total = quantity * price
+        return fields[:-3] + (total, fee)
+
+    uncertainties = []
+
+    def refuse(reason, **details):
+        uncertainties.append({'code': 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'reason': reason,
+            **details, 'financial_writes': 0, 'imported': 0})
     groups = {}
     for proposal in pending:
-        groups.setdefault(notice_signature(proposal), []).append(proposal)
-    matched = set()
+        groups.setdefault(manual_comparison(notice_signature(proposal)), []).append(proposal)
+    matched, represented_markers = set(), set()
     result = []
     for expected, group in groups.items():
-        matches = [row for row in manual if signature(row) == expected]
+        matches = [row for row in manual if manual_signature(row) == expected]
         if matches:
             if len(matches) != len(group):
-                fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+                refuse('multiplicity_conflict', source_count=len(group), destination_count=len(matches))
+                result.extend(group)
+                continue
+            if represented is not None:
+                # Equal financial rows are interchangeable for stock. Preserve the
+                # source time multiset without attributing manual stored timestamps.
+                for row, proposal in zip(matches, group):
+                    represented[row['remote_id']] = proposal
             matched.update(row['remote_id'] for row in matches)
+            represented_markers.update(proposal['comment'] for proposal in group)
             duplicates += len(group)
         else:
             result.extend(group)
-    for proposal in result:
-        day = datetime.fromisoformat(proposal['date'].replace('Z', '+00:00')).date()
-        for row in existing:
-            if row['remote_id'] in matched | matched_owned:
-                continue
+    manual_by_id = {row['remote_id']: row for row in manual}
+    for proposal in proposals:
+        reports = []
+        for original in existing:
+            row = manual_by_id.get(original['remote_id'], original)
             if (row['kind'], row['symbol']) != (proposal['type'], proposal['symbol']):
                 continue
-            gap = abs((datetime.fromisoformat(row['operation_date']).date() - day).days)
-            if gap <= (3 if proposal['type'] == 'DIVIDEND' else 2):
-                fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
+            exact_owned = row['remote_id'] in matched_owned and row['comment'] == proposal['comment']
+            exact_manual = (row['remote_id'] in matched and proposal['comment'] in represented_markers
+                and manual_signature(row) == manual_comparison(notice_signature(proposal)))
+            represented_elsewhere = (row['remote_id'] in matched_owned or (row['remote_id'] in matched
+                and proposal['comment'] in represented_markers))
+            status = ('automatic_duplicate' if exact_owned or exact_manual else
+                'represented_other_notice' if represented_elsewhere else 'review_required')
+            report, difference = notice_candidate_report(proposal, row, status)
+            gap = report['day_gap']
+            if gap != 'unverified' and abs(gap) > (4 if proposal['type'] == 'DIVIDEND' else 3):
+                continue
+            reports.append((difference, report))
+            if represented_elsewhere or proposal not in pending:
+                continue
+            if gap == 'unverified':
+                refuse('unverified_day_provenance')
+            else:
+                reason = 'fee_difference' if row['fee'] != Decimal(proposal['fee']) else 'financial_or_day_conflict'
+                refuse(reason, day_provenance=report['day_provenance'],
+                    source_fee=proposal['fee'], destination_fee=canonical_decimal(row['fee']))
+        reports.sort(key=lambda item: (item[0] is None, item[0].copy_abs() if item[0] is not None else Decimal(0)))
+        for _, report in reports:
+            print(json.dumps(report), flush=True)
+    if uncertainties:
+        for diagnostic in uncertainties:
+            print(json.dumps(diagnostic), flush=True)
+        fail('NOTICE_MANUAL_OVERLAP_AMBIGUOUS')
     return result, duplicates
 
 
+<<<<<<< HEAD
 def reconcile_notice_holdings(proposals, remote, project_buys=True, progress=None):
     """DEGIRO's chronological guard. Dispatch must use confirmed balances only."""
     balances = {}
     quantities = [Decimal(p['quantity']) for p in proposals]
     quantities.extend(row['quantity'] for row in remote)
+=======
+def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=None,
+                              day_context=None, evidence_root=None):
+    """Dated account/symbol stock; only source evidence establishes intraday order."""
+    represented = {} if represented is None else represented
+    tracked = {(p['accountId'], p['symbol']) for p in proposals}
+    first_pending_day = {}
+    for proposal in proposals:
+        key = (proposal['accountId'], proposal['symbol'])
+        first_pending_day[key] = min(first_pending_day.get(key, proposal['date'][:10]), proposal['date'][:10])
+    symbols, events = {}, []
+    for proposal in [*proposals, *represented.values()]:
+        key = (proposal['accountId'], proposal['symbol'])
+        if key in symbols and symbols[key] != proposal['isin']:
+            fail('NOTICE_SYMBOL_ISIN_CONFLICT')
+        symbols[key] = proposal['isin']
+    for proposal in proposals:
+        key = (proposal['accountId'], proposal['symbol'])
+        if proposal['type'] in ('BUY', 'SELL'):
+            events.append({'key': key, 'day': proposal['date'][:10],
+                'time': proposal.get('execution_time'), 'kind': proposal['type'],
+                'quantity': Decimal(proposal['quantity']), 'proposal': proposal})
+    relevant = [row for row in remote if (row['target_account_id'], row['symbol']) in tracked
+        and row['active'] and row['kind'] in ('BUY', 'SELL')]
+    manual = notice_manual_day_context([row for row in relevant if not (row['comment'] or '').startswith('BD#')],
+        day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
+    manual_days = {row['remote_id']: row.get('manual_civil_day') for row in manual}
+    for row in relevant:
+        if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
+            fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
+        source = represented.get(row['remote_id'])
+        day = source['date'][:10] if source else manual_days.get(row['remote_id'])
+        # An exact importer date proves a day, never an execution time.
+        if not day and (row['comment'] or '').startswith('BD#') and row['date_context_verified']:
+            day = row['operation_date']
+        if not day:
+            print(json.dumps({'code': 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
+                'symbol': row['symbol'], 'missing_evidence': 'destination_civil_day',
+                'financial_writes': 0, 'imported': 0}), flush=True)
+            fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
+        events.append({'key': (row['target_account_id'], row['symbol']), 'day': day,
+            'time': source.get('execution_time') if source else None,
+            'kind': row['kind'], 'quantity': row['quantity'], 'proposal': None})
+    quantities = [event['quantity'] for event in events]
+>>>>>>> origin/main
     precision = max((q.adjusted() for q in quantities), default=0) - min(
         (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
+    ordered = sorted(proposals, key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
     with localcontext() as context:
         context.prec = max(28, precision)
-        tracked = {(p['accountId'], p['symbol']) for p in proposals}
-        for row in remote:
-            if ((row['target_account_id'], row['symbol']) not in tracked
-                    or not row['active'] or row['kind'] not in ('BUY', 'SELL')):
+        for sale in events:
+            if sale['kind'] != 'SELL' or sale['day'] < first_pending_day[sale['key']]:
                 continue
+<<<<<<< HEAD
             if not row['financial_context_verified'] or row['data_source'] != 'YAHOO' or row['price_currency'] != 'EUR':
                 fail('NOTICE_HOLDINGS_CONTEXT_UNVERIFIED')
             key = (row['target_account_id'], row['symbol'])
@@ -4364,6 +4568,45 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, progress=Non
                     fail('NOTICE_INSUFFICIENT_HOLDINGS')
                 balances[key] = available - quantity
         return ordered
+=======
+            preceding, available, dependencies = Decimal(0), Decimal(0), []
+            for event in events:
+                if event is sale or event['key'] != sale['key'] or event['day'] > sale['day']:
+                    continue
+                if event['kind'] == 'BUY' and event['proposal'] is not None and not project_buys:
+                    continue
+                quantity = event['quantity']
+                if event['day'] < sale['day']:
+                    preceding += quantity if event['kind'] == 'BUY' else -quantity
+                    available += quantity if event['kind'] == 'BUY' else -quantity
+                    continue
+                proved_before = bool(event['time'] and sale['time'] and event['time'] < sale['time'])
+                proved_after = bool(event['time'] and sale['time'] and event['time'] > sale['time'])
+                if event['kind'] == 'BUY':
+                    if proved_before:
+                        available += quantity
+                    elif not proved_after:
+                        dependencies.append({'day': event['day'], 'quantity': canonical_decimal(quantity),
+                            'source_execution_time': event['time'], 'missing_evidence': 'strict_source_execution_order'})
+                elif not proved_after:
+                    # Reserve stock for each sale that might precede this sale.
+                    available -= quantity
+            proposal = sale['proposal']
+            possible = available + sum((Decimal(item['quantity']) for item in dependencies), Decimal(0))
+            uncertain = available < sale['quantity'] <= possible
+            diagnostic = {'code': 'NOTICE_HOLDINGS_ORDER_UNPROVED' if uncertain else
+                'NOTICE_INSUFFICIENT_HOLDINGS' if available < sale['quantity'] else 'NOTICE_DATED_HOLDINGS',
+                'isin': proposal['isin'] if proposal else symbols[sale['key']],
+                'symbol': sale['key'][1], 'sale_day': sale['day'],
+                'sale_origin': 'pending' if proposal else 'destination',
+                'preceding_day_available': canonical_decimal(preceding),
+                'available': canonical_decimal(available), 'sale': canonical_decimal(sale['quantity']),
+                'dependent_purchases': dependencies if uncertain else [], 'financial_writes': 0, 'imported': 0}
+            print(json.dumps(diagnostic), flush=True)
+            if available < sale['quantity']:
+                fail(diagnostic['code'])
+    return ordered
+>>>>>>> origin/main
 
 
 def simulate_buy_notice(document, account, mappings, resolver=None, failures=None, skipped=None, occurrences=None):
@@ -4561,12 +4804,22 @@ def sync_buy_simulation(progress=None):
             if account is None:
                 account = {'source_account_ref': config['source_ref'], 'target_account_id': config['target'],
                            'account_key': str(uuid.uuid4())}
+<<<<<<< HEAD
             journal_path, journal = notice_write_journal(root, config, account)
             inputs = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True,
                 **({'include_import': True} if not config['dry_run'] else {}))
             accounts, _, snapshot, lookup = inputs[:4]
             import_request = inputs[4] if not config['dry_run'] else None
             remote = parse_remote_activity_snapshot(snapshot)
+=======
+            accounts, _, snapshot, lookup = acquisition.ghostfolio_snapshot(config['origin'], token, include_lookup=True)
+            remote = parse_remote_activity_snapshot(snapshot, retain_stored_date=True)
+            context_path = root / 'manual-day-context.yaml'
+            day_context = (read_keyed_yaml(context_path, root, acquisition.MAX_BYTES) if context_path.exists()
+                else {'schema_version': 1, 'activities': {}})
+            # Reject malformed evidence before attempting broker access.
+            notice_manual_day_context(remote, day_context, root)
+>>>>>>> origin/main
             rows = json.loads(snapshot, object_pairs_hook=unique_json_object)['activities']
             profiles = [row['assetProfile'] if 'assetProfile' in row else row.get('SymbolProfile') for row in rows]
             profiles = [profile for profile in profiles if isinstance(profile, dict)]
@@ -4633,6 +4886,7 @@ def sync_buy_simulation(progress=None):
             first = datetime.strptime(as_of, '%Y-%m-%d').date() - timedelta(days=89)
             document['notes'] = [note for note in document['notes'] if first <= note['date'] <= datetime.strptime(as_of, '%Y-%m-%d').date()]
             proposals.extend(simulate_buy_notice(document, account, config['mappings'], resolver, failures, skipped, occurrences))
+<<<<<<< HEAD
         if not config['dry_run']:
             status, snapshot = import_request('GET', '/api/v1/activities', None)
             if status != 200:
@@ -4643,6 +4897,13 @@ def sync_buy_simulation(progress=None):
         proposals = reconcile_notice_holdings(proposals, remote)
         atomic_private_yaml(run / ('simulation.yaml' if config['dry_run'] else 'proposals.yaml'),
             {'schema_version': 1, 'mode': 'DRY_RUN' if config['dry_run'] else 'IMPORT',
+=======
+        represented = {}
+        proposals, duplicates = reconcile_notice_duplicates(proposals, remote, day_context, root, represented)
+        proposals = reconcile_notice_holdings(proposals, remote, represented=represented,
+            day_context=day_context, evidence_root=root)
+        atomic_private_yaml(run / 'simulation.yaml', {'schema_version': 1, 'mode': 'DRY_RUN',
+>>>>>>> origin/main
             'proposals': proposals, 'unresolved_isins': sorted({value for value in failures if valid_isin(value)}),
             'failed_rows': len(failures), 'skipped': len(skipped), 'duplicates': duplicates,
             'financial_writes': 0, 'imported': 0})
@@ -4687,7 +4948,7 @@ def main(argv=None):
                 'GHOSTFOLIO_ACCESS_REFUSED', 'GHOSTFOLIO_RESPONSE_TOO_LARGE', 'GHOSTFOLIO_ACCOUNTS_INVALID',
                 'INVALID_GHOST_ORIGIN'}
             allowed.update({'NOTICE_IDENTITY_OWNERSHIP_CONFLICT', 'NOTICE_PENDING_IDENTITY_CONFLICT',
-                'NOTICE_OWNED_ACTIVITY_CONFLICT', 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS',
+                'NOTICE_OWNED_ACTIVITY_CONFLICT', 'NOTICE_MANUAL_OVERLAP_AMBIGUOUS', 'NOTICE_DAY_CONTEXT_INVALID',
                 'NOTICE_INSUFFICIENT_HOLDINGS', 'NOTICE_HOLDINGS_CONTEXT_UNVERIFIED',
                 'NOTICE_SYMBOL_ISIN_CONFLICT', 'REMOTE_ACTIVITY_COUNT_MISMATCH',
                 'REMOTE_NUMERIC_FIELD_INVALID_OR_REDACTED'})
