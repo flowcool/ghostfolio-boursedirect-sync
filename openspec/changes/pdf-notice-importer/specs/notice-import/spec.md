@@ -168,9 +168,9 @@ A DROITS DE GARDE row SHALL not be imported and SHALL get code
 
 ### Requirement: Stop on a share-count change
 
-A DIVISION row SHALL get code `share_count_change`. A row with an unknown label
-SHALL get code `unknown_operation` and SHALL not be imported. When either row
-has an ISIN, no row of that ISIN SHALL be imported. The connector SHALL check
+A DIVISION row SHALL get code `share_count_change`. A row with an unknown
+operation label SHALL get code `unknown_operation` and SHALL not be imported.
+When either row has an ISIN, no row of that ISIN SHALL be imported. The connector SHALL check
 all notice documents before it writes any activity of an ISIN. Other
 securities SHALL continue. The stop SHALL end when the document with that row
 has `PAPERLESS_DONE_TAG`.
