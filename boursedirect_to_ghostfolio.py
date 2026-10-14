@@ -1477,6 +1477,7 @@ def parse_remote_activity_snapshot(raw, retain_stored_date=False):
                            "active": active, "comment": row["comment"]})
         if retain_stored_date:
             normalized[-1]["stored_date"] = row["date"]
+            normalized[-1]["stored_activity"] = json.dumps(row, sort_keys=True, default=canonical_decimal)
     return normalized
 
 
@@ -4672,7 +4673,8 @@ def notice_write_journal(root, config, account):
 def notice_exact_readback(proposal, raw, expected_id=None):
     rows = parse_remote_activity_snapshot(raw, retain_stored_date=True)
     matches = [row for row in rows if row['comment'] == proposal['comment']]
-    if len(matches) != 1 or expected_id is not None and matches[0]['remote_id'] != expected_id:
+    if (len(matches) != 1 or matches[0]['stored_date'] != proposal['date']
+            or expected_id is not None and matches[0]['remote_id'] != expected_id):
         fail('NOTICE_IMPORT_UNCONFIRMED')
     pending, duplicates = reconcile_notice_duplicates([proposal], rows)
     if pending or duplicates != 1:
@@ -4730,13 +4732,20 @@ def import_notice_proposals(proposals, remote, path, journal, run, request, prog
             if status != 200:
                 fail('NOTICE_IMPORT_UNCONFIRMED')
             atomic_private_bytes(run / ('import-readback-' + str(ordinal) + '.json'), readback)
-            remote, _ = notice_exact_readback(proposal, readback, remote_id)
+            confirmed_remote, _ = notice_exact_readback(proposal, readback, remote_id)
+            current = {row['remote_id']: row for row in confirmed_remote}
+            if any(row['remote_id'] not in current or any(
+                    current[row['remote_id']].get(key) != value for key, value in row.items())
+                    for row in remote):
+                fail('NOTICE_IMPORT_UNCONFIRMED')
+            remote = confirmed_remote
             represented[remote_id] = proposal
             journal['confirmed'][proposal['comment']] = remote_id
             journal['pending'] = None
             atomic_private_yaml(path, journal)
             progress['imported'] += 1
-            print(json.dumps({'code': 'NOTICE_IMPORT_CONFIRMED', **proposal,
+            print(json.dumps({'code': 'NOTICE_IMPORT_CONFIRMED',
+                'comment': proposal['comment'], 'type': proposal['type'],
                 'exact_response': True, 'exact_readback': True, **progress}), flush=True)
         except Exception:
             fail('NOTICE_IMPORT_UNCONFIRMED')

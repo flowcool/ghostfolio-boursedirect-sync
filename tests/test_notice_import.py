@@ -54,12 +54,15 @@ def test_confirmed_exact_response_readback_and_no_default_write(tmp_path, capsys
     assert repeat == [] and duplicates == 1
     assert b.import_notice_proposals(repeat, confirmed, path, saved, run,
         lambda *args: pytest.fail('repeat must send no request'), {})['financial_writes'] == 0
-    assert any(json.loads(line).get('exact_readback') is True
-        for line in capsys.readouterr().out.splitlines())
+    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    confirmation = next(line for line in logs if line.get('exact_readback') is True)
+    assert set(confirmation) == {'code', 'comment', 'type', 'exact_response',
+        'exact_readback', 'financial_writes', 'imported'}
+    assert pending[0]['accountId'] not in json.dumps(logs)
 
 
 @pytest.mark.parametrize('fault', ['timeout', 'redirect', 'server', 'empty', 'wrong_account',
-    'wrong_date', 'wrong_symbol', 'wrong_amount', 'draft', 'inactive_readback', 'changed_id', 'incomplete', 'lost_readback'])
+    'wrong_date', 'wrong_symbol', 'wrong_amount', 'draft', 'inactive_readback', 'same_instant_different_date', 'changed_id', 'incomplete', 'lost_readback'])
 def test_uncertain_outcomes_block_restart_without_any_replay(tmp_path, fault):
     config, path, journal, run = setup(tmp_path)
     pending = proposals()
@@ -78,6 +81,8 @@ def test_uncertain_outcomes_block_restart_without_any_replay(tmp_path, fault):
             if fault == 'wrong_symbol':
                 value['assetProfile']['symbol'] = 'OTHER.PA'
             return 201, encode([] if fault == 'empty' else [value])
+        if fault == 'same_instant_different_date':
+            value['date'] = '2019-02-06T01:00:00+01:00'
         if fault == 'inactive_readback':
             value['isActive'] = False
         if fault == 'changed_id':
@@ -191,3 +196,33 @@ def test_inactive_readback_never_confirms_or_funds_sale(active):
 def test_non_boolean_active_flag_refuses_snapshot(active):
     with pytest.raises(RuntimeError, match='REMOTE_ACTIVE_FLAG_INVALID'):
         b.parse_remote_activity_snapshot(encode([row(proposals()[0], isActive=active)]))
+
+
+@pytest.mark.parametrize('change', ['missing', 'financial', 'stored_date', 'active', 'metadata'])
+def test_changed_existing_activity_keeps_write_uncertain(tmp_path, change):
+    _, path, journal, run = setup(tmp_path)
+    buy = proposals()[0]
+    existing = row(buy, 'synthetic-existing', symbol='OTHER.PA', comment='unrelated',
+        date='2018-01-01T00:00:00.000Z', note='retained metadata')
+    existing['assetProfile']['symbol'] = 'OTHER.PA'
+    original = copy.deepcopy(existing)
+    remote = b.parse_remote_activity_snapshot(encode([existing]), retain_stored_date=True)
+    changed = copy.deepcopy(existing)
+    if change == 'financial':
+        changed['fee'] = Decimal('9.9')
+    elif change == 'stored_date':
+        changed['date'] = '2018-01-01T01:00:00+01:00'
+    elif change == 'active':
+        changed['isActive'] = False
+    elif change == 'metadata':
+        changed['note'] = 'changed metadata'
+    def request(method, url, body):
+        return (201, encode([row(buy)])) if method == 'POST' else (
+            200, encode([row(buy)] + ([] if change == 'missing' else [changed])))
+    progress = {}
+    with pytest.raises(RuntimeError, match='NOTICE_IMPORT_UNCONFIRMED'):
+        b.import_notice_proposals([buy], remote, path, journal, run, request, progress)
+    assert progress == {'financial_writes': 1, 'imported': 0}
+    saved = b.parse_keyed_yaml(path.read_bytes())
+    assert saved['pending'] is not None and saved['confirmed'] == {}
+    assert existing == original
