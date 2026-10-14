@@ -16,6 +16,7 @@ in the [top-level README](../README.md).
 - [Design contracts](design/index.md): acquisition, account, financial, preview,
   and recovery boundaries.
 - [Release process](operations/releasing.md): tagged image and archive publication.
+- [Ghostfolio release watch](upstreams.md): compatibility notices and review procedure.
 - [Changelog](../CHANGELOG.md): user-visible changes by release.
 - [Playwright third-party license](../collector/licenses/playwright-LICENSE).
 
