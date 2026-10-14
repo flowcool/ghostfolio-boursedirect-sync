@@ -103,7 +103,7 @@ def test_upstream_error_fails_before_any_write():
 
 def test_draft_baseline_rejected():
     api = fake_api([release(2, "3.80.2", 6, draft=True)])
-    with pytest.raises(ValueError, match="stable"):
+    with pytest.raises(RuntimeError, match="stable"):
         watch.monitor(api, "owner/ghostfolio-boursedirect-sync", CONFIG)
     assert api.writes == []
 

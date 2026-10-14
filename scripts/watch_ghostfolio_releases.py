@@ -100,10 +100,10 @@ def notice_body(config, release, previous_tag):
 def monitor(api, repository, config):
     upstream = config["upstream_repository"]
     if not all(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", name) for name in [upstream, repository]):
-        raise ValueError("Invalid GitHub repository name")
+        raise RuntimeError("Invalid GitHub repository name")
     baseline = api.request("GET", f"repos/{upstream}/releases/tags/{quote(config['first_release'], safe='')}")
     if baseline.get("draft") or baseline.get("prerelease"):
-        raise ValueError("The first release must be a published stable release")
+        raise RuntimeError("The first release must be a published stable release")
     since = published_at(baseline)
     releases = sorted(
         list({r["id"]: r for r in api.list_all(f"repos/{upstream}/releases")
