@@ -206,7 +206,7 @@ def test_baseline_uses_net_active_trades_only_and_exact_decimals():
 def test_unsupported_target_holdings_refuse(change):
     buy = proposals()[0]
     with pytest.raises(RuntimeError, match='NOTICE_HOLDINGS_CONTEXT_UNVERIFIED'):
-        b.reconcile_notice_holdings([buy], [dict(remote(buy), **change)])
+        b.reconcile_notice_holdings([dict(buy, type='SELL')], [dict(remote(buy), **change)])
 
 
 @pytest.mark.parametrize('change', [{'data_source': 'MANUAL'}, {'price_currency': 'USD'},
@@ -1036,3 +1036,138 @@ def test_chronological_holdings_represented_sale_reserves_stock(monkeypatch):
     assert diagnostics[-1]['available'] == '10'
     candidate_positions = [i for i, d in enumerate(diagnostics) if d['code'] == 'NOTICE_SIMILAR_ACTIVITY']
     assert candidate_positions and max(candidate_positions) < len(diagnostics) - 1
+
+
+def legacy_evidence(rows, zone='Europe/Zurich'):
+    """Explicit constructed approval; no historical entry receipt is fabricated."""
+    originals = [json.loads(row['stored_activity']) for row in rows]
+    for original in originals:
+        for key in ('quantity', 'unitPrice', 'fee'):
+            original[key] = Decimal(str(original[key]))
+    raw = json.dumps({'count': len(originals), 'activities': originals},
+        default=lambda number: 'DECIMAL:' + str(number))
+    import re
+    raw = re.sub(r'"DECIMAL:([-0-9.]+)"', r'\1', raw).encode()
+    Path('baseline.json').write_bytes(raw)
+    return {'schema_version': 1, 'activities': {}, 'approved_legacy_baseline': {
+        'snapshot_path': 'baseline.json', 'snapshot_sha256': hashlib.sha256(raw).hexdigest(),
+        'account_id': ACCOUNT['target_account_id'], 'display_timezone': zone,
+        'approval_reference': 'Explicit synthetic operator approval'}}
+
+
+def test_approved_legacy_display_day_is_a_convention_not_entry_proof(capsys):
+    pending = proposals()
+    row = remote(pending[0], marker=False, date='2019-02-05T23:00:00.000Z')
+    evidence = legacy_evidence([row])
+    result = b.notice_manual_day_context([row], evidence, Path.cwd())[0]
+    assert result['manual_civil_day'] == '2019-02-06'
+    assert result['manual_day_provenance'] == 'approved_legacy_display_convention'
+    assert result['date_context_verified'] is False
+    assert result['operation_date'] == '2019-02-05'
+    assert reconcile(pending, [row], evidence) == ([], 1)
+    assert 'approved_legacy_display_convention' in capsys.readouterr().out
+    # The same retained row still refuses without explicit approval.
+    with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
+        reconcile(pending, [row])
+
+
+def test_approved_legacy_retains_genuine_receipt_precedence_and_account_scope():
+    pending = proposals()
+    row = remote(pending[0], marker=False)
+    evidence = legacy_evidence([row])
+    evidence['activities'] = day_evidence([row])['activities']
+    other = remote(pending[0], marker=False, id='foreign', accountId='foreign',
+        account={'id': 'foreign', 'tags': []})
+    result = b.notice_manual_day_context([row, other], evidence, Path.cwd())
+    assert result[0]['manual_day_provenance'] == 'verified'
+    assert result[1]['manual_civil_day'] is None
+    assert result[1]['manual_day_provenance'] == 'unverified'
+
+
+@pytest.mark.parametrize('change', [
+    {'fee': 2}, {'quantity': 13}, {'unitPrice': 9}, {'date': '2019-02-05T23:00:00.000Z'},
+    {'currency': 'USD'}, {'isDraft': True}, {'isExcluded': True}, {'comment': 'changed'},
+    {'tags': [{'id': 'new-tag'}]},
+    {'assetProfile': {'id': 'other-profile', 'symbol': 'ALTERNATE.PA', 'currency': 'EUR', 'dataSource': 'YAHOO'}},
+    {'account': {'id': ACCOUNT['target_account_id'], 'tags': [], 'isExcluded': True}}])
+def test_approved_legacy_changed_manual_context_refuses(change):
+    proposal = proposals()[0]
+    row = remote(proposal, marker=False)
+    evidence = legacy_evidence([row])
+    changed = remote(proposal, marker=False, **change)
+    with pytest.raises(RuntimeError, match='NOTICE_LEGACY_BASELINE_MISMATCH'):
+        reconcile([proposal], [changed], evidence)
+
+
+@pytest.mark.parametrize('variant', ['missing', 'additional', 'hash', 'zone', 'path', 'count', 'symlink'])
+def test_approved_legacy_complete_private_snapshot_guards(variant):
+    proposal = proposals()[0]
+    row = remote(proposal, marker=False)
+    evidence = legacy_evidence([row])
+    grant = evidence['approved_legacy_baseline']
+    current = [row]
+    code = 'NOTICE_LEGACY_BASELINE_INVALID'
+    if variant == 'missing':
+        current = []
+        code = 'NOTICE_LEGACY_BASELINE_MISMATCH'
+    elif variant == 'additional':
+        current.append(remote(proposal, marker=False, id='another'))
+        code = 'NOTICE_LEGACY_BASELINE_MISMATCH'
+    elif variant == 'hash':
+        Path('baseline.json').write_bytes(Path('baseline.json').read_bytes() + b' ')
+    elif variant == 'zone':
+        grant['display_timezone'] = 'not/an/IANA-zone'
+    elif variant == 'path':
+        grant['snapshot_path'] = '../baseline.json'
+    elif variant == 'count':
+        raw = Path('baseline.json').read_bytes().replace(b'"count": 1', b'"count": 2')
+        Path('baseline.json').write_bytes(raw)
+        grant['snapshot_sha256'] = hashlib.sha256(raw).hexdigest()
+    elif variant == 'symlink':
+        Path('linked.json').symlink_to('baseline.json')
+        grant['snapshot_path'] = 'linked.json'
+    with pytest.raises(RuntimeError, match=code):
+        reconcile([proposal], current, evidence)
+
+
+def test_approved_legacy_owned_addition_is_still_exact_and_manual_conflict_refuses():
+    pending = proposals()
+    old = remote(pending[0], marker=False, date='2018-02-06T15:00:00.000Z')
+    evidence = legacy_evidence([old])
+    owned = remote(pending[0], id='owned')
+    assert reconcile(pending, [old, owned], evidence) == ([], 1)
+    with pytest.raises(RuntimeError, match='NOTICE_OWNED_ACTIVITY_CONFLICT'):
+        reconcile(pending, [old, remote(pending[0], id='owned', fee=2)], evidence)
+    exact = remote(pending[0], marker=False)
+    conflict = remote(pending[0], marker=False, id='conflict', fee=2)
+    with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
+        reconcile(pending, [exact, conflict], legacy_evidence([exact, conflict]))
+    identical = remote(pending[0], marker=False, id='identical')
+    with pytest.raises(RuntimeError, match='NOTICE_MANUAL_OVERLAP_AMBIGUOUS'):
+        reconcile(pending, [exact, identical], legacy_evidence([exact, identical]))
+
+
+def test_approved_legacy_day_never_proves_required_same_day_execution_order():
+    buy = proposals()[0]
+    row = remote(buy, marker=False, date='2019-02-06T08:00:00.000Z')
+    sale = dict(buy, type='SELL', execution_time='12:00:00', comment=buy['comment']+'sale')
+    with pytest.raises(RuntimeError, match='NOTICE_HOLDINGS_ORDER_UNPROVED'):
+        b.reconcile_notice_holdings([sale], [row], day_context=legacy_evidence([row]), evidence_root=Path.cwd())
+
+
+def test_holdings_without_pending_sale_preserves_all_proposals_without_history_day():
+    buy = proposals()[0]
+    dividend = dict(buy, type='DIVIDEND', symbol='OTHER.PA', date='2019-02-05T00:00:00.000Z')
+    historical = remote(buy, marker=False, date='2018-01-01T09:00:00.000Z')
+    assert b.reconcile_notice_holdings([buy, dividend], [historical]) == [buy, dividend]
+
+
+def test_holdings_without_pending_sale_ignores_unrelated_days_in_mixed_run():
+    buy = proposals()[0]
+    historical = remote(buy, marker=False, date='2018-01-01T09:00:00.000Z')
+    sale = dict(buy, type='SELL', symbol='SALE.PA', isin='FR0000000003', comment=buy['comment']+'sale')
+    stock = remote(dict(sale, type='BUY'), id='sale-stock', date='2018-01-01T00:00:00.000Z')
+    ordered = b.reconcile_notice_holdings([buy, sale], [historical, stock])
+    assert len(ordered) == 2
+    with pytest.raises(RuntimeError, match='NOTICE_HOLDINGS_CONTEXT_UNVERIFIED'):
+        b.reconcile_notice_holdings([buy, sale], [historical, dict(stock, date_context_verified=False)])

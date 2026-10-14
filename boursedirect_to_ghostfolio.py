@@ -4261,9 +4261,57 @@ def notice_signature(activity):
         *(Decimal(activity[key]) for key in ('quantity', 'unitPrice', 'fee')))
 
 
+def notice_legacy_row_binding(row):
+    """Stable financial and inclusion context; omit mutable market metadata."""
+    source = json.loads(row['stored_activity'], parse_float=Decimal)
+    profile = source.get('assetProfile', source.get('SymbolProfile'))
+    contexts = []
+    for context in (source, source['account']):
+        contexts.append(None if context is None else {
+            'flags': {key: (key in context, context.get(key)) for key in ('isDraft', 'isExcluded')},
+            'tags': sorted(tag['id'] for tag in context['tags'])})
+    return (row['remote_id'], row['stored_date'], activity_financial_fingerprint(row),
+        row['currency_origin'], row['financial_context_verified'], row['comment'], contexts,
+        None if not isinstance(profile, dict) else {
+            key: (key in profile, profile.get(key)) for key in ('id', 'symbol', 'dataSource', 'currency')})
+
+
+def notice_approved_legacy_days(remote, grant, evidence_root):
+    """Apply explicit display convention to unchanged complete manual history."""
+    fields = {'snapshot_path', 'snapshot_sha256', 'account_id', 'display_timezone', 'approval_reference'}
+    if (not isinstance(grant, dict) or set(grant) != fields or evidence_root is None
+            or any(not isinstance(value, str) or not value.strip() for value in grant.values())
+            or Path(grant['snapshot_path']).is_absolute()
+            or not re.fullmatch(r'[0-9a-f]{64}', grant['snapshot_sha256'])):
+        fail('NOTICE_LEGACY_BASELINE_INVALID')
+    try:
+        zone = ZoneInfo(grant['display_timezone'])
+        raw = read_local_bytes(Path(evidence_root) / grant['snapshot_path'], evidence_root, 8 * 1024 * 1024)
+        if hashlib.sha256(raw).hexdigest() != grant['snapshot_sha256']:
+            fail('NOTICE_LEGACY_BASELINE_INVALID')
+        baseline = parse_remote_activity_snapshot(raw, retain_stored_date=True)
+    except (OSError, ValueError, KeyError, RuntimeError):
+        fail('NOTICE_LEGACY_BASELINE_INVALID')
+    def manual(rows):
+        return {row['remote_id']: row for row in rows if row['target_account_id'] == grant['account_id']
+            and not (row['comment'] or '').startswith('BD#')}
+    approved, current = manual(baseline), manual(remote)
+    if not approved or set(approved) != set(current):
+        fail('NOTICE_LEGACY_BASELINE_MISMATCH')
+    days = {}
+    for key, row in current.items():
+        if ('stored_activity' not in row or 'stored_date' not in row
+                or notice_legacy_row_binding(row) != notice_legacy_row_binding(approved[key])):
+            fail('NOTICE_LEGACY_BASELINE_MISMATCH')
+        # This is the approved UI convention, never original entry-day evidence.
+        days[key] = datetime.fromisoformat(row['stored_date'].replace('Z', '+00:00')).astimezone(zone).date().isoformat()
+    return days
+
+
 def notice_manual_day_context(remote, evidence, evidence_root=None):
     """Bind retained historical entry evidence to exact current financial rows."""
-    if (not isinstance(evidence, dict) or set(evidence) != {'schema_version', 'activities'}
+    if (not isinstance(evidence, dict) or not {'schema_version', 'activities'} <= set(evidence)
+            or set(evidence) - {'schema_version', 'activities', 'approved_legacy_baseline'}
             or type(evidence['schema_version']) is not int or evidence['schema_version'] != 1
             or not isinstance(evidence['activities'], dict)):
         fail('NOTICE_DAY_CONTEXT_INVALID')
@@ -4310,14 +4358,17 @@ def notice_manual_day_context(remote, evidence, evidence_root=None):
         except (OSError, ValueError, KeyError, RuntimeError):
             # Missing, changed or unusable retained entry context proves no day.
             continue
+    legacy_days = notice_approved_legacy_days(remote, evidence['approved_legacy_baseline'], evidence_root) \
+        if 'approved_legacy_baseline' in evidence else {}
     result = []
     for row in remote:
         entry = evidence['activities'].get(row['remote_id'])
         verified = bool(entry and row['remote_id'] in contexts and entry['account_id'] == row['target_account_id']
             and entry['stored_date'] == row.get('stored_date')
             and entry['financial_fingerprint'] == activity_financial_fingerprint(row))
-        result.append(dict(row, manual_civil_day=entry['civil_day'] if verified else None,
-            manual_day_provenance='verified' if verified else 'unverified'))
+        result.append(dict(row, manual_civil_day=entry['civil_day'] if verified else legacy_days.get(row['remote_id']),
+            manual_day_provenance='verified' if verified else
+                'approved_legacy_display_convention' if row['remote_id'] in legacy_days else 'unverified'))
     return result
 
 
@@ -4401,9 +4452,10 @@ def reconcile_notice_duplicates(proposals, remote, day_context=None, evidence_ro
             duplicates += 1
         else:
             pending.append(proposal)
-    manual = notice_manual_day_context(
-        [row for row in existing if not (row['comment'] or '').startswith('BD#')],
+    context_rows = notice_manual_day_context(remote,
         day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
+    manual = [row for row in context_rows if row['target_account_id'] == target
+        and row['kind'] in ('BUY', 'SELL', 'DIVIDEND') and not (row['comment'] or '').startswith('BD#')]
 
     def manual_signature(row):
         if not (row['active'] and row['financial_context_verified'] and row['manual_civil_day']):
@@ -4490,7 +4542,7 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
                               day_context=None, evidence_root=None, progress=None):
     """Dated account/symbol stock; only source evidence establishes intraday order."""
     represented = {} if represented is None else represented
-    tracked = {(p['accountId'], p['symbol']) for p in proposals}
+    tracked = {(p['accountId'], p['symbol']) for p in proposals if p['type'] == 'SELL'}
     first_pending_day = {}
     for proposal in proposals:
         key = (proposal['accountId'], proposal['symbol'])
@@ -4503,13 +4555,13 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
         symbols[key] = proposal['isin']
     for proposal in proposals:
         key = (proposal['accountId'], proposal['symbol'])
-        if proposal['type'] in ('BUY', 'SELL'):
+        if key in tracked and proposal['type'] in ('BUY', 'SELL'):
             events.append({'key': key, 'day': proposal['date'][:10],
                 'time': proposal.get('execution_time'), 'kind': proposal['type'],
                 'quantity': Decimal(proposal['quantity']), 'proposal': proposal})
     relevant = [row for row in remote if (row['target_account_id'], row['symbol']) in tracked
         and row['active'] and row['kind'] in ('BUY', 'SELL')]
-    manual = notice_manual_day_context([row for row in relevant if not (row['comment'] or '').startswith('BD#')],
+    manual = notice_manual_day_context(remote,
         day_context if day_context is not None else {'schema_version': 1, 'activities': {}}, evidence_root)
     manual_days = {row['remote_id']: row.get('manual_civil_day') for row in manual}
     for row in relevant:
@@ -4531,7 +4583,9 @@ def reconcile_notice_holdings(proposals, remote, project_buys=True, represented=
     quantities = [event['quantity'] for event in events]
     precision = max((q.adjusted() for q in quantities), default=0) - min(
         (q.as_tuple().exponent for q in quantities), default=0) + len(str(len(quantities) + 1)) + 4
-    ordered = sorted(proposals, key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
+    ordered = list(proposals)
+    if tracked:
+        ordered.sort(key=lambda p: (p['date'], p.get('execution_time') or '', p['comment']))
     with localcontext() as context:
         context.prec = max(28, precision)
         for sale in events:

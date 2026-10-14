@@ -213,7 +213,7 @@ unit price must equal the notice's credited net EUR amount. Equivalent quantity
 and price representations match automatically, with equal one-to-one
 multiplicity, zero new proposals and no confirmation request. No gross amount or
 withholding is inferred. A conflicting manual dividend within four civil days,
-or unknown day provenance, refuses the whole run before writes. Existing fields
+or unaccepted day uncertainty, refuses the whole run before writes. Existing fields
 stay unchanged; owned dividends still require exact quantity, price and stored date.
 
 Retain historical entry-day evidence in private `/state/manual-day-context.yaml`.
@@ -255,12 +255,42 @@ do not establish it. This file records provenance, not permission to import or
 correct financial data. Keep it and its supporting evidence off Git, with private
 permissions. Runs never ask for confirmation or create this evidence implicitly.
 
-Unverified day provenance for the same account/instrument/type cannot prove that
+Without explicit legacy acceptance, unverified day provenance for the same account/instrument/type cannot prove that
 a notice is new, even when its stored UTC date is distant. Uncertain dates,
 financial conflicts and ambiguous multiplicity stop the entire run with
 `NOTICE_MANUAL_OVERLAP_AMBIGUOUS`, zero financial writes and a diagnostic reason.
 Malformed evidence refuses with `NOTICE_DAY_CONTEXT_INVALID` before broker access.
 No existing activity is changed or adopted by writing a comment.
+
+For explicitly approved existing history, the same private file can additionally
+contain this grant. It records a known limitation, not historical proof:
+
+```yaml
+approved_legacy_baseline:
+  snapshot_path: legacy-snapshot.json
+  snapshot_sha256: '<SHA-256 of the complete retained activities snapshot>'
+  account_id: synthetic-destination
+  display_timezone: Europe/Zurich
+  approval_reference: 'Explicit operator approval of this bounded existing history'
+```
+
+The snapshot must contain all activities and an exact `count`. It stays private
+under `/state/`, without symlinks. The connector binds every manual row in the
+approved account by ID, stored timestamp, exact financial fields, profile identity,
+comments and activity/account inclusion context. Changed, missing or additional
+manual history refuses with `NOTICE_LEGACY_BASELINE_MISMATCH`; invalid configuration,
+hash, path or snapshot refuses with `NOTICE_LEGACY_BASELINE_INVALID` before broker
+access. New connector-owned rows retain independent exact checks. Runs never
+create or refresh approval automatically.
+
+Displayed days in the declared timezone carry
+`approved_legacy_display_convention` provenance. They remain an uncertain
+convention. Genuine retained entry receipts take precedence. This grant supplies
+no execution order, financial correction or import permission. Exact amounts,
+fees, instruments, multiplicities and nearby-conflict refusal remain enforced.
+Complete offline simulation must pass before distinct real-import authorization.
+Historical stock-day proof applies only to instruments with a pending SELL;
+purchase-only and dividend-only instruments do not require that proof.
 
 Before overlap refusal, `NOTICE_SIMILAR_ACTIVITY` lists every same-account,
 established-symbol and same-type candidate within inclusive ±3 civil days for
