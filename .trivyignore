@@ -1,9 +1,10 @@
 # Scoped Trivy allowlist for the blocking image scans in container-check.yml
 # and release-image.yml under .github/workflows/.
 #
-# Both scans cover the whole image for fixable HIGH/CRITICAL vulnerabilities.
-# Neither workflow excludes binaries with skip-files. The connector and saved-
-# input preview images do not ship supercronic or an automatic scheduler.
+# Blocking scans cover OS/application dependencies. The native connector scan
+# skips only the SHA-pinned local Supercronic binary (HTTP/TLS paths unused;
+# Sentry unset). An advisory scan still reports all findings, matching IBKR.
+# The saved-input preview image has no scheduler and retains its full scan.
 #
 # Add an entry below only for a genuine, case-by-case suppression in a package we
 # DO control (base image / Python). Each entry needs a reason and a re-review date.

@@ -5,8 +5,7 @@ Compose. Use one explicitly configured PEA or PEA-PME, an existing Ghostfolio
 account and a readable YAML mapping file. Simulation is the default.
 
 Account discovery runs once without a terminal and needs only Bitwarden
-configuration. Deduplication and holdings checks run before proposals. Set `DRY_RUN=0` explicitly to import. Scheduling belongs to the next slice;
-nonempty `CRON` refuses before broker access.
+configuration. Deduplication and holdings checks run before proposals. Set `DRY_RUN=0` explicitly to import. Set `CRON` to schedule nonoverlapping runs.
 
 ## Quick start
 
@@ -73,8 +72,9 @@ never delete a journal or volume to make a restart succeed.
 | `GHOST_ACCOUNT_ID` | Exact existing destination ID |
 | `MAPPING_FILE` | Readable private YAML inside the container; default `/config/mappings.yaml` |
 | `DRY_RUN` | `1`/`true`/`yes`/`on`, or absent, simulates; `0`/`false`/`no`/`off` imports; other values refuse |
-| `CRON` | Leave empty for one run; scheduling is not implemented yet |
-| `APPRISE_URLS` | Reserved for the later alert slice |
+| `CRON` | Empty runs once; five numeric cron fields schedule nonoverlapping runs |
+| `APPRISE_URLS` | Optional JSON list of at most 10 Apprise URLs; failure alerts in import mode only |
+| `APPRISE_TIMEOUT` | Whole alert-worker deadline in seconds, 1–30; default 10 |
 
 The existing acquisition reads notices for the selected account and closes the
 vault and browser before simulation. The connector authenticates to Ghostfolio
@@ -113,6 +113,32 @@ For a trusted existing private Docker network, set `GHOST_HOST` to exactly
 `http://ghostfolio:3333`, set `GHOSTFOLIO_NETWORK`, and include
 `-f compose.yaml -f compose.ghostfolio.yaml` in the Compose command. This reuses
 your instance; it does not create a Ghostfolio lab.
+
+### Scheduling and failure reporting
+
+Set `CRON=0 6 * * *` and run `docker compose up -d --build`. Supercronic
+validates the five numeric fields before broker access. Invalid syntax emits a
+fixed configuration error. Runs use the container timezone (UTC by default).
+Supercronic waits for a running job before starting its next invocation; the
+persistent broker lock also serializes services that share the state volume.
+Keep that volume across restarts. Discovery receipts, unresolved login attempts
+and uncertain writes still refuse on later scheduled runs. Do not clear them to
+resume a schedule. Inspect logs with `docker compose logs boursedirect-sync`.
+
+Each run ends with `NOTICE_RUN_COMPLETED`: status, fixed error code and
+proposed/imported/duplicate/skipped/failed-row, error and dispatched-write counts.
+Counts on an early refusal cover only the work reached, not unseen notices.
+A confirmed empty window succeeds with zero counts.
+
+For optional failure delivery, set `APPRISE_URLS` to a private JSON list such as
+`["discord://webhook_id/webhook_token"]`. An absent value or `[]` disables alerts.
+Simulation never sends alerts. Each failed import run sends at most one message,
+containing only the final fixed-code/count summary. The isolated Apprise worker
+has no broker or Ghostfolio credentials and no log output. Its whole lifetime
+is limited by `APPRISE_TIMEOUT`; timeout kills and reaps it, without retry.
+Invalid notification settings disable delivery with a fixed warning. Delivery
+failure does not change the sync exit status. Each later failed scheduled run
+can send one new alert. Never commit destination URLs or their credentials.
 
 ## Import and verify
 

@@ -32,7 +32,7 @@ Task identifiers remain stable. The checked 4.1 records its original acceptance,
 
 ## 5. Scheduled unattended operation
 
-- [ ] 5.1 Add sibling CRON validation, optional bounded Apprise failure alerts and final count/error summaries. Touch entrypoint, Compose, connector and README. Check `docker compose up --abort-on-container-exit --exit-code-from boursedirect-sync` with invalid `CRON`: fixed error and zero broker attempts. Check `docker compose up -d` with a valid schedule and `DRY_RUN=1`, using isolated state and mocked acquisition/destination: scheduled nonoverlapping simulation logs, zero real broker attempts and zero real financial writes. Verify discovery/login/write refusals remain effective on later scheduled runs with retained evidence/offline fixtures; mock alert delivery unless a destination is explicitly authorized. No real import or financial correction is needed for this development acceptance.
+- [x] 5.1 Add sibling CRON validation, optional bounded Apprise failure alerts and final count/error summaries. Touch entrypoint, Compose, connector and README. Check `docker compose up --abort-on-container-exit --exit-code-from boursedirect-sync` with invalid `CRON`: fixed error and zero broker attempts. Check `docker compose up -d` with a valid schedule and `DRY_RUN=1`, using isolated state and mocked acquisition/destination: scheduled nonoverlapping simulation logs, zero real broker attempts and zero real financial writes. Verify discovery/login/write refusals remain effective on later scheduled runs with retained evidence/offline fixtures; mock alert delivery unless a destination is explicitly authorized. No real import or financial correction is needed for this development acceptance.
 
 ## 6. Final real-import validation
 
