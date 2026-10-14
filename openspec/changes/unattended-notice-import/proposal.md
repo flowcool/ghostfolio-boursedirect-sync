@@ -6,13 +6,13 @@ v0.1.1 requires interactive selection without import. v0.2 imports notices unatt
 
 ## What Changes
 
-- **BREAKING**: rebuild on siblings, retaining proven Bitwarden/TOTP login and notice parsing.
-- Read a 90-day Europe/Zurich notice window for one explicit PEA/PEA-PME per service; read complete Ghostfolio history.
+- **BREAKING**: rebuild on siblings, retaining Bitwarden/TOTP and notice parsing.
+- Read a 90-day Europe/Zurich notice window for one PEA/PEA-PME per service; read complete Ghostfolio history.
 - `DRY_RUN=0` imports; `1` or absent simulates. First acceptance uses explicit simulation; no new lab.
 - Missing `BD_SOURCE_ACCOUNT_REF`: discover once, log options, stop; no automatic repeated login.
 - Require YAML, possibly empty; prioritize overrides, existing Ghostfolio profiles, then lookup. Report unresolved candidates.
-- Reconcile stock at each sale date; later purchases never fund earlier sales. Unproved same-day dependencies refuse.
-- Recognize manual trades by established civil day, exact financial fields and one-to-one multiplicity.
+- Require stock-day proof only for instruments with a pending SELL. Later BUYs cannot fund earlier SELLs; unproved same-day dependencies refuse.
+- Recognize manual trades by proved civil day or explicitly approved legacy display convention; preserve exact financial fields and multiplicity.
 - Recognize same-day manual dividends by exact credited total/fees and multiplicity; quantity/price representation may differ.
 - Dry-run reports candidates (trades ±3 civil days, dividends ±4) and differences. Uncertainty refuses writes without prompting.
 - Optional `CRON` and `APPRISE_URLS` failure alerts.
@@ -49,4 +49,4 @@ None.
 
 ## Impact
 
-Affects Compose, entrypoint, connector, acquisition and README. Reuse Ghostfolio APIs. Rollback: revert planning commit.
+Affects Compose, connector and README. Reuse Ghostfolio APIs. Rollback: revert planning commit.

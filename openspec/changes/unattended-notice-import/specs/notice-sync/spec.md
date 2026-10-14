@@ -56,7 +56,7 @@ Deduplication and holdings reconciliation SHALL read all destination account act
 
 ### Requirement: Manual trade recognition on an established calendar day
 
-Manual BUY/SELL recognition SHALL require the same destination account, established instrument, operation type and established calendar day, with exact quantity, unit price, currency, data source and fees. Day evidence SHALL come from retained entry-context provenance. Stored time SHALL NOT require midnight UTC. Current server timezone SHALL NOT establish historical entry context. Matching SHALL preserve one-to-one multiplicity; unknown provenance or ambiguous multiplicity SHALL remain unresolved. Source execution time SHALL remain part of notice identity and ordering. Owned-import recognition and readback SHALL retain exact stored-date and financial comparison.
+Manual BUY/SELL recognition SHALL require the same destination account, established instrument, operation type and established calendar day, with exact quantity, unit price, currency, data source and fees. Days SHALL come from retained entry-context provenance or the explicitly approved existing-history convention below. Stored time SHALL NOT require midnight UTC. Current server timezone SHALL NOT establish historical entry context. Matching SHALL preserve one-to-one multiplicity; unaccepted day uncertainty or ambiguous multiplicity SHALL remain unresolved. Source execution time SHALL remain part of notice identity and ordering. Owned-import recognition and readback SHALL retain exact stored-date and financial comparison.
 
 The commands in the new reconciliation scenarios describe future implementation acceptance. Their offline cases SHALL use anonymized retained notice/destination evidence; constructed boundary and multiplicity variants SHALL be identified as such, not as observed broker behavior. This planning revision does not claim those cases already pass.
 
@@ -65,16 +65,26 @@ The commands in the new reconciliation scenarios describe future implementation 
 - **THEN** output confirms one manual duplicate, zero new proposals for it, unchanged existing fields and zero financial writes.
 
 #### Scenario: Historical day provenance is unknown
-- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_calendar_day` replays the same candidate with its entry-day provenance unverified, even if current server TZ suggests the notice day
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_calendar_day` replays the same candidate with its entry-day provenance unverified and no approved legacy reference, even if current server TZ suggests the notice day
 - **THEN** output identifies unverified day provenance and confirms whole-run refusal with nonzero run status and zero financial writes.
 
 #### Scenario: Fees or multiplicity conflict
 - **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_calendar_day` replays retained conflicting-fee evidence and a labelled constructed unequal-multiplicity variant
 - **THEN** output identifies the fee difference or multiplicity conflict, confirms no arbitrary adoption or correction, and confirms whole-run refusal with nonzero run status and zero financial writes.
 
+### Requirement: Explicitly approved existing-history reference
+
+An operator MAY explicitly accept existing history without original entry receipts. Optional `approved_legacy_baseline` in private `manual-day-context.yaml` SHALL bind a complete count-checked snapshot using `snapshot_path`, `snapshot_sha256`, `account_id`, `display_timezone` and `approval_reference`. Paths SHALL remain under the evidence root without symlinks. No run SHALL create approval implicitly. Approved displayed days SHALL use the declared IANA timezone as a convention with `approved_legacy_display_convention` provenance. This acceptance SHALL NOT claim historical proof, establish execution order or correct any activity. Genuine entry receipts SHALL take precedence.
+
+All manual history in the approved account SHALL remain exactly bound by identity, stored timestamp, financial fields, instrument/profile identity, comments, account and activity inclusion context. Changed, missing or additional manual rows, incomplete snapshots, changed bytes or invalid configuration SHALL refuse. New connector-owned activities remain subject to exact ownership and financial checks. Existing exact financial comparisons, multiplicity and nearby-conflict refusal SHALL remain enforced. A conflict that can duplicate an operation or change sale availability SHALL refuse before writes. All retained notices, window rows and complete destination history SHALL participate in offline simulation before any distinct real-import authorization.
+
+#### Scenario: Approved history completes reconciliation without inventing evidence
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k approved_legacy` replays complete approved snapshots without original entry receipts
+- **THEN** declared display days supply the bounded convention; provenance stays uncertain; exact comparisons and multiplicity remain enforced; changed snapshots/history and remaining ambiguity refuse; financial writes remain zero.
+
 ### Requirement: Automatic manual dividend recognition
 
-An active manual DIVIDEND SHALL be recognized automatically as already represented when destination account, established instrument, established civil day, currency, data source, total and fees match exactly. Total SHALL mean Decimal quantity × unit price and equal the notice's credited net EUR amount. Different quantity/unit-price representations SHALL NOT block this match. No gross amount or withholding SHALL be inferred. Matching SHALL consume activities one-to-one and require exact multiplicity; unknown day provenance or ambiguous matches SHALL remain unresolved. Recognition SHALL create no activity and change no existing field. Connector-owned recognition and readback SHALL remain exact, including stored date, quantity and unit price.
+An active manual DIVIDEND SHALL be recognized automatically as already represented when destination account, established instrument, established civil day, currency, data source, total and fees match exactly. Total SHALL mean Decimal quantity × unit price and equal the notice's credited net EUR amount. Different quantity/unit-price representations SHALL NOT block this match. No gross amount or withholding SHALL be inferred. Matching SHALL consume activities one-to-one and require exact multiplicity; unaccepted day uncertainty or ambiguous matches SHALL remain unresolved. Recognition SHALL create no activity and change no existing field. Connector-owned recognition and readback SHALL remain exact, including stored date, quantity and unit price.
 
 #### Scenario: Equal manual dividend is recognized automatically
 - **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k manual_dividend_equivalence` replays a labelled constructed same-day manual dividend with equal credited total and fees, including an equivalent quantity/unit-price representation
@@ -90,7 +100,7 @@ Dry-run SHALL display all same-account, established-instrument and same-type can
 
 Total SHALL mean quantity × unit price, using Decimal. Dividend total SHALL be compared with the notice's credited net EUR amount, without inferring gross amounts or withholding. Candidates SHALL be ordered by absolute total difference and show signed EUR and percentage differences relative to the source total; differences SHALL mean destination minus source. Unavailable comparisons, including a percentage with zero source total, SHALL be marked unverified.
 
-Exact automatic matches SHALL be reported as duplicates; other overlapping manual dividend candidates SHALL require manual reconciliation through the dry-run diagnostic. Proximity alone SHALL NOT establish a duplicate, select a mapping, correct an existing activity or authorize creation of an uncertain operation. Unknown day provenance SHALL be reported and SHALL NOT prove absence of overlap. Dry-run SHALL finish reporting all applicable candidates and missing evidence before unresolved overlap stops the entire run with a nonzero exit and zero financial writes. The same whole-run refusal SHALL precede any financial write in import mode, without prompting. After manual reconciliation outside the run, a later dry-run SHALL reevaluate the evidence under the same automatic rules; it SHALL NOT bypass remaining conflicts. Already identified, exactly matching connector-owned activities SHALL remain duplicates.
+Exact automatic matches SHALL be reported as duplicates; other overlapping manual dividend candidates SHALL require manual reconciliation through the dry-run diagnostic. Proximity alone SHALL NOT establish a duplicate, select a mapping, correct an existing activity or authorize creation of an uncertain operation. Unaccepted day uncertainty SHALL be reported and SHALL NOT prove absence of overlap. Dry-run SHALL finish reporting all applicable candidates and missing evidence before unresolved overlap stops the entire run with a nonzero exit and zero financial writes. The same whole-run refusal SHALL precede any financial write in import mode, without prompting. After manual reconciliation outside the run, a later dry-run SHALL reevaluate the evidence under the same automatic rules; it SHALL NOT bypass remaining conflicts. Already identified, exactly matching connector-owned activities SHALL remain duplicates.
 
 #### Scenario: Dividend crosses the UTC and civil-day boundary
 - **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k similar_activity_report` replays anonymized retained dividend evidence with established civil-day context, four UTC days but three civil days of separation and a different total
@@ -110,11 +120,17 @@ Exact automatic matches SHALL be reported as duplicates; other overlapping manua
 
 ### Requirement: Holdings reconciliation before import
 
+Historical stock-day proof SHALL be required only for destination-account/instrument keys with a pending SELL. Purchase-only and dividend-only instruments SHALL NOT require historical stock-day proof. With no pending SELL, the holdings function SHALL return all proposals in source order. Independent overlap, identity, financial-context and import-acceptance guards SHALL remain enforced.
+
 After deduplication, stock at each pending SELL SHALL be calculated per destination account and established instrument from all relevant active Ghostfolio history before that sale, including history older than 90 days, and preceding pending trades. Existing and pending representations of the same notice SHALL be counted once. Later BUYs SHALL never fund an earlier SELL. Pre-window holdings and corporate actions must already be represented in Ghostfolio; no broker-history reconstruction SHALL occur.
 
 Within a civil day, source-proven execution order SHALL be used when available, including for already represented notices. Stored manual timestamps SHALL NOT establish execution order by themselves. If preceding-day stock covers the same-day sales, an unknown same-day BUY order SHALL NOT cause refusal. If a sale depends on a same-day BUY and their order cannot be established, the whole run SHALL refuse before writes, without asking for confirmation. Dry-run SHALL report the sale, dated availability, dependent purchase and missing order evidence.
 
 Negative dated holdings or unresolved overlap SHALL stop the entire run before financial writes, including simulation; dry-run candidate reporting SHALL finish before this refusal. Errors SHALL identify ISIN/symbol, sale day, availability and requested sale. Pending BUYs SHALL support simulation only when they precede the sale. Only exact readback-confirmed BUYs SHALL fund dispatched SELLs, still respecting source chronology; skipped, rejected or merely submitted BUYs SHALL never fund them.
+
+#### Scenario: Historical stock proof applies only to pending sales
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_reconciliation.py -k holdings_without_pending_sale` replays anonymized retained dividend-only inputs, labelled purchase-only inputs and a mixed instrument case with a pending SELL
+- **THEN** dividend-only and purchase-only instruments require no historical stock-day proof; every instrument with a pending SELL still requires its complete relevant history and proved availability/order; all proposals retain source order and independent overlap refusal remains enforced.
 
 #### Scenario: Insufficient shares
 - **WHEN** the Compose command above proposes selling 50 shares while Ghostfolio holds 10, without preceding new BUYs
