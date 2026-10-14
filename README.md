@@ -166,7 +166,10 @@ or repeat a POST to guess its outcome. Normal startup never recovers an intent.
 
 An operator can recover one selected notice only when the pending body, saved
 HTTP 201 response, pre-import baseline, saved complete readback and one fresh
-complete Ghostfolio readback all agree. Record the exact pending `run_id` and
+complete Ghostfolio readback all agree. Preservation ignores only `activitiesCount`
+and the profile refresh `updatedAt` inside `assetProfile` or `SymbolProfile`;
+the activity's own timestamp, all financial and identity fields, and every other
+profile field remain exact. Record the exact pending `run_id` and
 `ordinal`, stop scheduled runs, and take a recoverable backup of the `/state`
 volume. Use the exact deployed image that contains the recovery command. Supply
 a pre-obtained Ghostfolio session bearer for this operation; the long-lived

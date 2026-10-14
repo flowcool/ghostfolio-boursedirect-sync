@@ -400,6 +400,58 @@ def test_explicit_recovery_requires_exact_operator_selection_before_get(tmp_path
     assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize('profile_key', ['assetProfile', 'SymbolProfile'])
+@pytest.mark.parametrize('confirm', [False, True])
+def test_recovery_accepts_only_profile_refresh_timestamp(tmp_path, profile_key, confirm):
+    config, path, proposal, _, fresh_rows = retained_recovery_case(tmp_path)
+    recovery = RETAINED_DERIVED_COUNT['recovery']
+    run = tmp_path / 'runs' / recovery['run_id']
+    previous = '2026-10-14T06:30:00.000Z'
+    refreshed = '2026-10-14T12:00:00.000Z'
+    for name in ('import-baseline.json', 'import-readback-0.json'):
+        data = json.loads((run / name).read_bytes())
+        data['activities'][0].setdefault(profile_key, {})['updatedAt'] = previous
+        b.atomic_private_bytes(run / name, encode(data['activities']))
+    fresh_rows[0].setdefault(profile_key, {})['updatedAt'] = refreshed
+    original = copy.deepcopy(fresh_rows)
+    before = path.read_bytes()
+    calls = []
+    def request(method, url, body):
+        calls.append((method, url, body))
+        return 200, encode(fresh_rows)
+    result = b.recover_notice_write(tmp_path, config, ACCOUNT, recovery['run_id'],
+        recovery['ordinal'], request, confirm=confirm)
+    assert result['matched'] == 1 and result['confirmed'] is confirm
+    assert result['financial_writes'] == 0 and result['broker_attempts'] == 0
+    assert calls == [('GET', '/api/v1/activities', None)]
+    assert fresh_rows == original
+    if confirm:
+        journal = b.parse_keyed_yaml(path.read_bytes())
+        assert journal['pending'] is None
+        assert journal['confirmed'] == {proposal['comment']: recovery['remote_id']}
+    else:
+        assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('change', ['activity_updated_at', 'profile_created_at',
+    'profile_currency', 'profile_name', 'profile_id'])
+def test_profile_refresh_exception_preserves_all_other_fields(tmp_path, change):
+    config, path, _, _, fresh_rows = retained_recovery_case(tmp_path)
+    recovery = RETAINED_DERIVED_COUNT['recovery']
+    if change == 'activity_updated_at':
+        fresh_rows[0]['updatedAt'] = '2026-10-14T12:00:00.000Z'
+    else:
+        field = {'profile_created_at': 'createdAt', 'profile_currency': 'currency',
+            'profile_name': 'name', 'profile_id': 'id'}[change]
+        fresh_rows[0]['assetProfile'][field] = 'changed'
+    fresh_rows[0]['assetProfile']['updatedAt'] = '2026-10-14T12:00:00.000Z'
+    before = path.read_bytes()
+    with pytest.raises(RuntimeError, match='^NOTICE_RECOVERY_REFUSED$'):
+        b.recover_notice_write(tmp_path, config, ACCOUNT, recovery['run_id'],
+            recovery['ordinal'], lambda *args: (200, encode(fresh_rows)), confirm=True)
+    assert path.read_bytes() == before
+
+
 def test_retained_derived_profile_count_does_not_mutate_existing_activity(tmp_path, capsys):
     _, path, journal, run = setup(tmp_path)
     proposal, existing = retained_derived_count_case(proposals()[0])

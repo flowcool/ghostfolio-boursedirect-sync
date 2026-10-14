@@ -4745,7 +4745,7 @@ def notice_exact_readback(proposal, raw, expected_id=None):
 
 
 def notice_persisted_activity_unchanged(before, after):
-    """Ignore Ghostfolio's derived profile count, but preserve every stored field."""
+    """Ignore profile count/refresh time, but preserve all activity fields."""
     for key, value in before.items():
         if key != 'stored_activity':
             if after.get(key) != value:
@@ -4758,6 +4758,7 @@ def notice_persisted_activity_unchanged(before, after):
                 profile = activity.get(profile_key)
                 if isinstance(profile, dict):
                     profile.pop('activitiesCount', None)
+                    profile.pop('updatedAt', None)
         canonical_previous = json.dumps(previous, sort_keys=True, separators=(',', ':'))
         canonical_current = json.dumps(current, sort_keys=True, separators=(',', ':'))
         if canonical_current != canonical_previous:

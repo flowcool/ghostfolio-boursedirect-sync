@@ -25,6 +25,10 @@ Unresolved overlap, unaccepted provenance or ambiguous multiplicity stops writes
 
 Missing, changed, incomplete, ambiguous or contradictory recovery evidence leaves
 the pending journal bytes unchanged. The normal sync never attempts recovery.
+Activity preservation ignores only the nested asset-profile `activitiesCount`
+and `updatedAt`: Ghostfolio refreshes the profile independently of its activities.
+The activity's own timestamp, financial fields, identity, and every other profile
+field remain exact. The same comparison protects import readback and recovery.
 Persisting the local confirmation can fail after positive readback; that outcome
 remains uncertain and requires journal inspection, never a replay.
 
