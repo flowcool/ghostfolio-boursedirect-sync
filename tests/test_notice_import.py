@@ -279,10 +279,12 @@ def test_retained_derived_profile_count_does_not_mutate_existing_activity(tmp_pa
 
 
 @pytest.mark.parametrize('change', ['missing', 'account', 'date', 'type', 'quantity',
-    'unit_price', 'fee', 'currency', 'comment', 'profile_identity'])
+    'unit_price', 'fee', 'currency', 'comment', 'profile_identity', 'integer_to_boolean',
+    'integer_to_float'])
 def test_retained_persisted_activity_change_keeps_write_uncertain(tmp_path, change):
     config, path, journal, run = setup(tmp_path)
     proposal, existing = retained_derived_count_case(proposals()[0])
+    existing[0]['retainedMetadataValue'] = 1
     remote = b.parse_remote_activity_snapshot(encode(existing), retain_stored_date=True)
     observation = RETAINED_DERIVED_COUNT['observation']
     def request(method, url, body):
@@ -314,6 +316,10 @@ def test_retained_persisted_activity_change_keeps_write_uncertain(tmp_path, chan
             changed[0]['comment'] = 'changed-comment'
         elif change == 'profile_identity':
             changed[0]['assetProfile']['symbol'] = 'OTHER.PA'
+        elif change == 'integer_to_boolean':
+            changed[0]['retainedMetadataValue'] = True
+        elif change == 'integer_to_float':
+            changed[0]['retainedMetadataValue'] = 1.0
         return 200, encode(changed + [created])
     progress = {}
     with pytest.raises(RuntimeError, match='NOTICE_IMPORT_UNCONFIRMED'):

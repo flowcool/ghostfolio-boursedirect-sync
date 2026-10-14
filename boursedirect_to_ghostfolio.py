@@ -4750,7 +4750,9 @@ def notice_persisted_activity_unchanged(before, after):
                 profile = activity.get(profile_key)
                 if isinstance(profile, dict):
                     profile.pop('activitiesCount', None)
-        if current != previous:
+        canonical_previous = json.dumps(previous, sort_keys=True, separators=(',', ':'))
+        canonical_current = json.dumps(current, sort_keys=True, separators=(',', ':'))
+        if canonical_current != canonical_previous:
             return False
     return True
 
