@@ -2,18 +2,18 @@
 
 ## Why
 
-The v1 rebuild needs a small and safe importer. BillCollector (a separate
-project) downloads the Bourse Direct notices as PDF files. This change reads
-these files and adds activities to Ghostfolio, on the `ghostfolio-ibkr-sync`
-skeleton.
+The v1 rebuild needs a safe importer. BillCollector (a separate
+project) downloads the Bourse Direct notices as PDF files and publishes them to
+Paperless. This change reads these files and adds activities to Ghostfolio, on
+the `ghostfolio-ibkr-sync` skeleton.
 
 ## What changes
 
-- The connector reads the PDF notices in one mounted folder.
+- The connector reads the PDF notices from Paperless, read-only.
 - It imports BUY, SELL and coupons (DIVIDEND at the net amount received).
 - It stops on a security when a row changes the number of shares.
-- It stops the run on a TTF line. The operator enters the TTF.
-- It ignores custody fees, with a message.
+- It stops the run on a TTF line. The operator enters it.
+- It ignores custody fees.
 - It does not import duplicates.
 - ibkr contract: ENV settings only, simulation when `DRY_RUN` is absent,
   additive writes, `CRON`, `APPRISE_URLS`.
@@ -40,7 +40,7 @@ share transfer. The "other label" rows apply to them.
 
 ## Non-goals
 
-- Notice download, Bourse Direct login, Bitwarden.
+- Notice download, broker login, Bitwarden.
 - Account statements as input.
 - Cash balance, cash deposits, custody fees, TTF or corporate actions as
   activities.
@@ -53,7 +53,7 @@ share transfer. The "other label" rows apply to them.
 
 ### New Capabilities
 
-- `notice-import`: read PDF notices from a folder and add new BUY, SELL and
+- `notice-import`: read PDF notices from Paperless and add new BUY, SELL and
   DIVIDEND activities to one Ghostfolio account.
 
 ### Modified Capabilities
@@ -62,5 +62,6 @@ None.
 
 ## Impact
 
-New main Python file, image, `compose.yaml`, README and tests. Rollback: revert
-the change commits. Simulation is the default.
+New main Python file, image, `compose.yaml`, README and tests. The README
+says that the notices are also in Paperless and paperless-gpt. Rollback: revert
+the commits.

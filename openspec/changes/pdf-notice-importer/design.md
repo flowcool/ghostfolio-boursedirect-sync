@@ -1,49 +1,56 @@
 # Design
 
-One Python file on the `ghostfolio-ibkr-sync` skeleton. `ibkr` below means
-`ibkr_to_ghostfolio.py` in that repository.
+One Python file on the `ghostfolio-ibkr-sync` skeleton. `ibkr` means
+`ibkr_to_ghostfolio.py` there. The Ghostfolio core is copied from ibkr now. A
+verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 
 ## Reused parts
 
 | Part | Reused from |
 | --- | --- |
 | ENV settings, token exchange | ibkr `load_config`, `ghost_exchange_access_token` |
-| Mapping file | ibkr `load_mapping`, `mapping.yaml.example` |
+| Mapping file | ibkr `load_mapping` |
 | Read all activities | ibkr `ghost_get_existing_orders` |
-| Manual BUY/SELL match | ibkr `_match_manual_entry` (adds exact price) |
-| Dividend match, 3 days | ibkr `_dividend_date_matches` |
+| Manual BUY/SELL match | ibkr `_match_manual_entry`, plus exact price |
+| Dividend match | ibkr `_dividend_date_matches` |
 | Sell guard | ibkr `filter_trades_by_holdings` |
-| Import and accepted rows | ibkr `ghost_import_activities`, `accepted_import_subset` |
-| Exit codes, notification | ibkr `record_failure`, `finalize_run`, `send_notification` |
-| CRON, run once | ibkr `entrypoint.sh` |
-| Image | ibkr `Dockerfile` |
+| Import, strict readback | ibkr `ghost_import_activities`, `accepted_import_subset` (line 945) |
+| Exit codes, notification | ibkr `record_failure`, `finalize_run` |
+| CRON, image | ibkr `entrypoint.sh`, `Dockerfile` |
 
-## New parts without a sibling line
+## New parts (no sibling line)
 
-- PDF reading and row checks. Source: the legacy parser (tag `legacy-wip`).
-- Ghostfolio lookup by ISIN, one EUR result. Source: decision of 2026-10-14 and
-  the legacy resolver.
-- `DRY_RUN` absent means simulation. ibkr imports when it is absent. Decision of
-  2026-10-14.
+- Paperless source (decision D1). Facts from paperless-ngx `docs/api.md` and
+  source at commit `2b00cf6`:
+  - Header `Authorization: Token <token>`.
+  - `GET /api/documents/?custom_field_query=...` selects the documents whose
+    custom field `Source` equals `PAPERLESS_SOURCE_VALUE`. The exact query
+    comes from BillCollector. Results are paged (`page_size`, `next`) and
+    list their tag IDs.
+  - `GET /api/tags/?name__iexact=<tag>` gives the ID of the done tag.
+  - `GET /api/documents/<id>/download/?original=true` returns the original
+    file. Without `original`, Paperless returns its archived version.
+  - Header `Accept: application/json; version=10` pins the API version.
+  - Use a Paperless user with view permission only.
+- PDF text: `pdftotext -layout` (Debian `poppler-utils`).
+- Row parsing and checks: from the legacy parser (tag `legacy-wip`).
+- Ghostfolio lookup by ISIN: decision of 2026-10-14.
+- `DRY_RUN` absent means simulation (decision D4, target for all importers).
 
 ## Decisions (2026-10-14)
 
-- PDF text: `pdftotext -layout` (Debian `poppler-utils`) in the image.
-- Clear a TTF or share-count stop: the operator fixes Ghostfolio by hand, then
-  moves the PDF out of `NOTICE_DIR`. BillCollector does not publish a document
-  again (its requirement R4), so the file does not come back.
-- One service and one `NOTICE_DIR` for each account (PEA, PEA-PME).
-- Logs may show date, type, symbol, quantity, price and fee. Logs never show the
-  account number, the holder name or the address.
-- Coupon: quantity 1 at the net amount. The amount stays exact.
-- Test data: anonymized `pdftotext` text of real PDFs. Each operation type waits
-  for a real PDF from BillCollector. The TTF test uses an anonymized copy of the
-  real statement row.
-- Task 1.1 replaces the legacy main file. Task 1.3 removes the legacy-only
-  files. The legacy code stays in tag `legacy-wip`.
+- Clear a stop: the operator fixes Ghostfolio by hand, then adds
+  `PAPERLESS_DONE_TAG` to the document.
+- One service per account (PEA, PEA-PME). How the two accounts differ in
+  Paperless is not decided yet.
+- Coupon: quantity 1 at the net amount.
+- Logs show date, type, symbol, quantity, price and fee only.
+- Test data: anonymized `pdftotext` text of real PDFs. The TTF test uses an
+  anonymized copy of the real statement row.
+- Task 1.3 removes the legacy-only files. The legacy code stays in tag
+  `legacy-wip`.
 
 ## Known limit
 
-Ghostfolio 3.86.0 has `AssetProfileSplit`. Its effect on held quantities is not
-known (GitHub #115). v1 stops on DIVISION in all cases. A later check can
-change this.
+The effect of Ghostfolio `AssetProfileSplit` on held quantities is not known
+(GitHub #115). v1 stops on DIVISION in all cases.

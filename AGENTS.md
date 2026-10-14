@@ -17,8 +17,10 @@ work-tracker IDs.
 - The v1 is a new branch on the ibkr skeleton. The previous work stays in Git
   (tag `legacy-wip`). v0.1.1 is a preview-only legacy release.
 - Track A (first priority): BillCollector downloads the notices with Playwright,
-  in the flowcool fork.
-- Track B (in parallel): an importer reads the PDF notices ("avis d'opéré").
+  in the flowcool fork, and publishes them to Paperless. BillCollector owns the
+  Bourse Direct login and the vault access.
+- Track B (in parallel): an importer reads the PDF notices ("avis d'opéré")
+  from Paperless, read only.
 - The connector imports only what Ghostfolio shows exactly: buy, sell, coupon.
   It stops on a security for each operation that changes the number of shares.
   It stops on a separate TTF line; the operator enters the TTF manually. It
@@ -49,13 +51,13 @@ work-tracker IDs.
   `~/.agents/bin/pr-gate <n> --repo flowcool/ghostfolio-boursedirect-sync`, never
   a `sleep` loop. Fix or answer each actionable comment. In Claude Code, the
   implementing agent runs the PR lifecycle itself, without a subagent.
-- **Operation beads.** A bead that acts on real state (Bourse Direct login,
-  Ghostfolio write, NAS) runs only from an `Operation plan:` in its design that
-  Florent validated. Only two ceremonies exist: the first real login and the
-  first real Ghostfolio write. A failed or uncertain step: record it and stop.
-- **Ask Florent only for:** a Bourse Direct fact missing from the spec, a real
-  broker login, a Ghostfolio write, a scope change. One question at a time, in
-  plain French, with your recommendation.
+- **Operation beads.** A bead that acts on real state (Ghostfolio write, NAS)
+  runs only from an `Operation plan:` in its design that Florent validated. In
+  this repository, the only ceremony is the first real Ghostfolio write. A
+  failed or uncertain step: record it and stop.
+- **Ask Florent only for:** a Bourse Direct fact missing from the spec, a
+  Ghostfolio write, a scope change. One question at a time, in plain French,
+  with your recommendation.
 
 ## Budgets
 
@@ -73,12 +75,11 @@ voice, no internal jargon.
 
 ## Safety invariants
 
-- Bourse Direct locks the account after three failed logins. The login stops
-  after 2 consecutive failures. One login attempt per run at most. On a failed
-  or uncertain login, stop, record it, and never retry automatically.
-- Secrets come from ENV only (Bitwarden CLI `BW_*`, Ghostfolio token). The `bw`
-  binary is the official one, called from Python. Never put a secret in Git,
-  logs, Beads, tests or reports.
+- The importer has no broker login and no vault access. BillCollector owns the
+  Bourse Direct login and its lock rule (stop after 2 consecutive failures).
+- Secrets come from ENV only: the Ghostfolio token and the Paperless token.
+  Never put a secret in Git, logs, Beads, tests or reports.
+- Paperless is read only. The importer never writes to Paperless.
 - Personal data stays off Git: `inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`.
 - Ghostfolio: `DRY_RUN=1` by default. Writes are additive only, never update or
   delete. Real writes need Florent's go.
