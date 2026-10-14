@@ -2,11 +2,16 @@
 import copy
 import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 import boursedirect_to_ghostfolio as b
 from test_notice_reconciliation import ACCOUNT, proposals
+
+
+RETAINED_DERIVED_COUNT = json.loads((Path(__file__).parent / 'fixtures' /
+    'notice-import-derived-count-anonymized-real.json').read_text())
 
 
 def row(proposal, remote_id='synthetic-created', **changes):
@@ -226,3 +231,97 @@ def test_changed_existing_activity_keeps_write_uncertain(tmp_path, change):
     saved = b.parse_keyed_yaml(path.read_bytes())
     assert saved['pending'] is not None and saved['confirmed'] == {}
     assert existing == original
+
+
+def retained_derived_count_case(proposal):
+    observation = RETAINED_DERIVED_COUNT['observation']
+    created = RETAINED_DERIVED_COUNT['created_activity']
+    proposal = dict(proposal, type=created['type'], date=created['date'],
+        quantity=created['quantity'], unitPrice=created['unitPrice'], fee=created['fee'],
+        currency=created['currency'])
+    existing = []
+    for ordinal in range(observation['changed_existing_activities']):
+        activity = row(proposal, 'anonymized-existing-' + str(ordinal),
+            date=f'2018-01-{ordinal + 1:02d}T00:00:00.000Z', comment='unrelated-' + str(ordinal))
+        activity['assetProfile']['activitiesCount'] = observation['activities_count_before']
+        existing.append(activity)
+    return proposal, existing
+
+
+def test_retained_derived_profile_count_does_not_mutate_existing_activity(tmp_path, capsys):
+    _, path, journal, run = setup(tmp_path)
+    proposal, existing = retained_derived_count_case(proposals()[0])
+    original = copy.deepcopy(existing)
+    remote = b.parse_remote_activity_snapshot(encode(existing), retain_stored_date=True)
+    observation = RETAINED_DERIVED_COUNT['observation']
+    def request(method, url, body):
+        created = row(proposal)
+        created['assetProfile']['activitiesCount'] = observation['activities_count_after']
+        if method == 'POST':
+            return 201, encode([created])
+        readback = copy.deepcopy(existing)
+        for activity in readback:
+            activity['assetProfile']['activitiesCount'] = observation['activities_count_after']
+        return 200, encode(readback + [created])
+    result = b.import_notice_proposals([proposal], remote, path, journal, run, request, {})
+    assert result == {'financial_writes': 1, 'imported': 1, 'rejected': 0}
+    assert existing == original
+    saved = b.notice_write_journal(tmp_path, {'origin': 'https://ghost.invalid'}, ACCOUNT)[1]
+    assert saved['pending'] is None and saved['confirmed'] == {proposal['comment']: 'synthetic-created'}
+    print(json.dumps({'code': 'OFFLINE_DERIVED_ACTIVITY_COUNT_ACCEPTED',
+        'anonymized_retained_evidence': True,
+        'changed_existing_activities': observation['changed_existing_activities'],
+        'activities_count_transition': [observation['activities_count_before'],
+            observation['activities_count_after']], 'created_type': proposal['type'],
+        'created_quantity': proposal['quantity'], 'created_unit_price': proposal['unitPrice'],
+        'created_fee': proposal['fee'], 'existing_inputs_unchanged': existing == original,
+        'broker_attempts': 0, 'financial_writes': 0}))
+
+
+@pytest.mark.parametrize('change', ['missing', 'account', 'date', 'type', 'quantity',
+    'unit_price', 'fee', 'currency', 'comment', 'profile_identity'])
+def test_retained_persisted_activity_change_keeps_write_uncertain(tmp_path, change):
+    config, path, journal, run = setup(tmp_path)
+    proposal, existing = retained_derived_count_case(proposals()[0])
+    remote = b.parse_remote_activity_snapshot(encode(existing), retain_stored_date=True)
+    observation = RETAINED_DERIVED_COUNT['observation']
+    def request(method, url, body):
+        created = row(proposal)
+        created['assetProfile']['activitiesCount'] = observation['activities_count_after']
+        if method == 'POST':
+            return 201, encode([created])
+        changed = copy.deepcopy(existing)
+        for activity in changed:
+            activity['assetProfile']['activitiesCount'] = observation['activities_count_after']
+        if change == 'missing':
+            changed.pop(0)
+        elif change == 'account':
+            changed[0]['accountId'] = 'other-account'
+            changed[0]['account']['id'] = 'other-account'
+        elif change == 'date':
+            changed[0]['date'] = '2018-02-01T00:00:00.000Z'
+        elif change == 'type':
+            changed[0]['type'] = 'BUY'
+        elif change == 'quantity':
+            changed[0]['quantity'] = Decimal('2')
+        elif change == 'unit_price':
+            changed[0]['unitPrice'] = Decimal('30.24')
+        elif change == 'fee':
+            changed[0]['fee'] = Decimal('1')
+        elif change == 'currency':
+            changed[0]['currency'] = 'USD'
+        elif change == 'comment':
+            changed[0]['comment'] = 'changed-comment'
+        elif change == 'profile_identity':
+            changed[0]['assetProfile']['symbol'] = 'OTHER.PA'
+        return 200, encode(changed + [created])
+    progress = {}
+    with pytest.raises(RuntimeError, match='NOTICE_IMPORT_UNCONFIRMED'):
+        b.import_notice_proposals([proposal], remote, path, journal, run, request, progress)
+    assert progress == {'financial_writes': 1, 'imported': 0}
+    saved = b.parse_keyed_yaml(path.read_bytes())
+    assert saved['pending'] is not None and saved['confirmed'] == {}
+    original = path.read_bytes()
+    with pytest.raises(RuntimeError, match='NOTICE_WRITE_UNRESOLVED'):
+        b.notice_write_journal(tmp_path, config, ACCOUNT)
+    assert path.read_bytes() == original

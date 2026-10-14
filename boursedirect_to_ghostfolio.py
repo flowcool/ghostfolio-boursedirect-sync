@@ -4736,6 +4736,25 @@ def notice_exact_readback(proposal, raw, expected_id=None):
     return rows, matches[0]['remote_id']
 
 
+def notice_persisted_activity_unchanged(before, after):
+    """Ignore Ghostfolio's derived profile count, but preserve every stored field."""
+    for key, value in before.items():
+        if key != 'stored_activity':
+            if after.get(key) != value:
+                return False
+            continue
+        previous = json.loads(value, object_pairs_hook=unique_json_object)
+        current = json.loads(after.get(key, '{}'), object_pairs_hook=unique_json_object)
+        for activity in (previous, current):
+            for profile_key in ('assetProfile', 'SymbolProfile'):
+                profile = activity.get(profile_key)
+                if isinstance(profile, dict):
+                    profile.pop('activitiesCount', None)
+        if current != previous:
+            return False
+    return True
+
+
 def import_notice_proposals(proposals, remote, path, journal, run, request, progress,
                             represented=None, day_context=None, evidence_root=None):
     """Only readback-confirmed BUYs fund SELLs. Never replay uncertain POSTs."""
@@ -4788,8 +4807,8 @@ def import_notice_proposals(proposals, remote, path, journal, run, request, prog
             atomic_private_bytes(run / ('import-readback-' + str(ordinal) + '.json'), readback)
             confirmed_remote, _ = notice_exact_readback(proposal, readback, remote_id)
             current = {row['remote_id']: row for row in confirmed_remote}
-            if any(row['remote_id'] not in current or any(
-                    current[row['remote_id']].get(key) != value for key, value in row.items())
+            if any(row['remote_id'] not in current or not notice_persisted_activity_unchanged(
+                    row, current[row['remote_id']])
                     for row in remote):
                 fail('NOTICE_IMPORT_UNCONFIRMED')
             remote = confirmed_remote
