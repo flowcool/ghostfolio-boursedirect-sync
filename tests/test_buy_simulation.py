@@ -39,15 +39,14 @@ def test_vat_and_non_eur_price_skip_and_fail_without_hiding_valid_buy(capsys):
         assert '"level": "error"' in capsys.readouterr().out
 
 
-@pytest.mark.parametrize('mode,code', [('0', 'IMPORT_NOT_IMPLEMENTED'), ('false', 'IMPORT_NOT_IMPLEMENTED'),
-    ('invalid', 'INVALID_DRY_RUN')])
+@pytest.mark.parametrize('mode,code', [('invalid', 'INVALID_DRY_RUN')])
 def test_unimplemented_or_invalid_modes_refuse_before_acquisition(monkeypatch, mode, code):
     monkeypatch.setenv('DRY_RUN', mode)
     with pytest.raises(RuntimeError, match=code):
         connector.buy_simulation_config()
 
 
-@pytest.mark.parametrize('mode', [None, '1', 'true', 'yes', 'on'])
+@pytest.mark.parametrize('mode', [None, '1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'])
 def test_default_and_explicit_simulation_use_sibling_mapping(tmp_path, monkeypatch, mode):
     monkeypatch.delenv('DRY_RUN', raising=False)
     if mode is not None:
@@ -58,7 +57,9 @@ def test_default_and_explicit_simulation_use_sibling_mapping(tmp_path, monkeypat
     mapping = tmp_path / 'mapping.yaml'
     mapping.write_text('FR0000000002: {symbol: VERIFIED.PA, currency: EUR}\n')
     monkeypatch.setenv('MAPPING_FILE', str(mapping))
-    assert connector.buy_simulation_config()['mappings'] == MAPPING
+    config = connector.buy_simulation_config()
+    assert config['mappings'] == MAPPING
+    assert config['dry_run'] == (mode not in ('0', 'false', 'no', 'off'))
 
 
 def test_schedule_refuses_before_broker_or_destination(monkeypatch):

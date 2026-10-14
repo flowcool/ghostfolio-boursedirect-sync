@@ -139,3 +139,21 @@ Empty `CRON` SHALL run once; valid five-field `CRON` SHALL schedule nonoverlappi
 #### Scenario: Invalid schedule
 - **WHEN** the Compose command above runs with malformed `CRON`
 - **THEN** it exits nonzero before broker access and logs a fixed configuration error.
+
+### Requirement: Development acceptance and final persistence validation
+
+Development acceptance for import and scheduling SHALL use offline evidence without requiring historical financial corrections or an actual import. Task 4.2 SHALL prove the import safeguards with mocked acquisition/destination; task 5.1 SHALL follow development acceptance, independently of real persistence. Runtime refusal rules SHALL remain unchanged.
+
+Final task 6.1 SHALL exclusively own actual creation, exact response/readback and repeat-with-zero-new-activities acceptance, after development completion and separate operator reconciliation. It SHALL require scoped broker-login and financial-write authorization. Offline or simulated acceptance SHALL NOT establish persistence or production readiness. The change and epic SHALL remain open until final validation succeeds.
+
+#### Scenario: Import implementation accepted offline
+- **WHEN** `.venv/bin/python -m pytest -q -s tests/test_notice_import.py tests/test_notice_reconciliation.py tests/test_wire.py tests/test_community_connect.py` replays anonymized and labelled constructed import cases with mocked destination/acquisition
+- **THEN** checks prove explicit/default simulation, unresolved-intent refusal, exact response/readback, inactive-row rejection, confirmed-only holdings and duplicate-only repeat without a real financial write; scheduled-operation development can follow, while final persistence remains unproven.
+
+#### Scenario: First authorized real creation after development
+- **WHEN** `docker compose up --build --abort-on-container-exit --exit-code-from boursedirect-sync` runs without TTY after development completion and operator reconciliation, with private configured accounts/state, `DRY_RUN=0`, empty `CRON` and scoped authorization
+- **THEN** accepted response fields match the expected import projection and complete readback matches the source-derived account, identity, date, symbol and exact amounts with the same remote ID; unrelated activities and cash remain unchanged, and logs record actual confirmed creations.
+
+#### Scenario: Authorized real repeat creates nothing
+- **WHEN** the same Compose command runs again against the retained state and destination under a scoped broker-login authorization
+- **THEN** logs and complete readback confirm zero new activities; unresolved receipts or remaining conflicts still refuse without a guard bypass.

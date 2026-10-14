@@ -278,3 +278,29 @@ def test_malformed_lookup_is_refused(raw):
     *_, lookup = community.ghostfolio_snapshot('https://ghost.example', 'SYNTHETIC_TOKEN', request, include_lookup=True)
     with pytest.raises((RuntimeError, ValueError)):
         lookup('FR0000000002')
+
+
+def test_opt_in_import_adapter_exchanges_once_and_refuses_other_writes():
+    calls = []
+    def request(method, path, body, headers):
+        calls.append((method, path))
+        if path == '/api/v1/auth/anonymous':
+            return b'{"authToken":"synthetic-bearer"}'
+        if path == '/api/v1/account':
+            return b'{"accounts":[{"id":"synthetic","name":"Synthetic"}]}'
+        assert headers['Authorization'] == 'Bearer synthetic-bearer'
+        if path == '/api/v1/import':
+            return 400, b'{"message":"synthetic rejection"}'
+        return b'{"activities":[],"count":0}'
+    *_, send = community.ghostfolio_snapshot('https://ghost.example', 'SYNTHETIC_TOKEN',
+        request, include_lookup=True, include_import=True)
+    assert send('POST', '/api/v1/import', b'{"activities":[]}')[0] == 400
+    assert send('GET', '/api/v1/activities', None) == (200, b'{"activities":[],"count":0}')
+    before = len(calls)
+    for method, path, body in [('PUT', '/api/v1/account/synthetic', b'{}'),
+        ('DELETE', '/api/v1/activities/synthetic', None), ('GET', '/api/v1/activities', b'{}'),
+        ('POST', '/api/v1/import', None)]:
+        with pytest.raises(RuntimeError, match='GHOSTFOLIO_ACCESS_REFUSED'):
+            send(method, path, body)
+    assert len(calls) == before
+    assert calls.count(('POST', '/api/v1/auth/anonymous')) == 1

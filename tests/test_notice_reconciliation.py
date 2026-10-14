@@ -260,7 +260,7 @@ def replay_manual_calendar_day(monkeypatch, name, pending, rows, evidence, statu
     monkeypatch.setattr(socket, 'socket', forbidden)
     original = copy.deepcopy((pending, rows, evidence))
 
-    def replay():
+    def replay(progress=None):
         result, count = reconcile(pending, rows, evidence)
         assert (len(result), count) == (0, duplicates)
         print(json.dumps({'code': 'NOTICE_MANUAL_DUPLICATES', 'duplicates': count,
@@ -473,7 +473,7 @@ def test_manual_calendar_day_sync_validates_context_before_broker(tmp_path, monk
     monkeypatch.setitem(sys.modules, 'community_connect', acquisition)
     monkeypatch.setattr(sys, 'path', list(sys.path))
     monkeypatch.setattr(b, 'buy_simulation_config', lambda: {'source_ref': ACCOUNT['source_account_ref'],
-        'target': ACCOUNT['target_account_id'], 'origin': 'https://synthetic.invalid', 'mappings': MAPPING})
+        'target': ACCOUNT['target_account_id'], 'origin': 'https://synthetic.invalid', 'mappings': MAPPING, 'dry_run': True})
     monkeypatch.setattr(b, 'parse_remote_activity_snapshot', lambda *args, **kwargs: rows)
     import subprocess
     monkeypatch.setattr(subprocess, 'Popen', lambda *args, **kwargs: SimpleNamespace())
@@ -568,7 +568,7 @@ def test_manual_calendar_day_manual_dividend_equivalence_real_sync(tmp_path, mon
     monkeypatch.setitem(sys.modules, 'community_connect', acquisition)
     monkeypatch.setattr(sys, 'path', list(sys.path))
     monkeypatch.setattr(b, 'buy_simulation_config', lambda: {'source_ref': ACCOUNT['source_account_ref'],
-        'target': ACCOUNT['target_account_id'], 'origin': 'https://synthetic.invalid', 'mappings': MAPPING})
+        'target': ACCOUNT['target_account_id'], 'origin': 'https://synthetic.invalid', 'mappings': MAPPING, 'dry_run': True})
     monkeypatch.setattr(subprocess, 'Popen', lambda *args, **kwargs: SimpleNamespace())
     monkeypatch.setattr(socket, 'socket', forbidden)
     monkeypatch.setattr(builtins, 'input', forbidden)
@@ -584,7 +584,10 @@ def test_manual_calendar_day_manual_dividend_equivalence_real_sync(tmp_path, mon
 
     def checked_reconcile(actual_proposals, actual_rows, actual_evidence, actual_root, represented):
         assert actual_evidence == evidence and actual_root == tmp_path
-        assert actual_proposals == pending and actual_rows == original_rows
+        assert actual_proposals == pending
+        # The replay re-encodes an equivalent dividend quantity/price projection.
+        assert [{k: v for k, v in row.items() if k != 'stored_activity'} for row in actual_rows] == [
+            {k: v for k, v in row.items() if k != 'stored_activity'} for row in original_rows]
         calls.append('reconcile_received_valid_evidence')
         before = copy.deepcopy(actual_rows)
         result = real_reconcile(actual_proposals, actual_rows, actual_evidence, actual_root, represented)

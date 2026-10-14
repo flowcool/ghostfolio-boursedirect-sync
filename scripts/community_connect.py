@@ -40,7 +40,7 @@ def ghostfolio_origin(origin):
     return host, port, True
 
 
-def ghostfolio_snapshot(origin, security_token, request=None, include_lookup=False):
+def ghostfolio_snapshot(origin, security_token, request=None, include_lookup=False, include_import=False):
     """One anonymous token exchange and two fixed GETs; no redirect or retry."""
     host, port, secure = ghostfolio_origin(origin)
     require(isinstance(security_token, str) and 0 < len(security_token) <= 4096
@@ -58,13 +58,13 @@ def ghostfolio_snapshot(origin, security_token, request=None, include_lookup=Fal
                         'GHOSTFOLIO_ACCESS_REFUSED')
             connection.request(method, path, body=body, headers=headers)
             response = connection.getresponse()
-            require(200 <= response.status < 300 if method == 'POST' else response.status == 200,
+            require(path == '/api/v1/import' or (200 <= response.status < 300 if method == 'POST' else response.status == 200),
                     'GHOSTFOLIO_ACCESS_REFUSED')
             require(response.getheader('Content-Type', '').split(';')[0].strip().lower() == 'application/json',
                     'GHOSTFOLIO_ACCESS_REFUSED')
             raw = response.read(MAX_BYTES + 1)
             require(len(raw) <= MAX_BYTES, 'GHOSTFOLIO_RESPONSE_TOO_LARGE')
-            return raw
+            return (response.status, raw) if path == '/api/v1/import' else raw
         finally:
             connection.close()
 
@@ -96,6 +96,15 @@ def ghostfolio_snapshot(origin, security_token, request=None, include_lookup=Fal
             require(isinstance(data, dict) and isinstance(data.get('items'), list)
                     and len(data['items']) <= 1024, 'GHOSTFOLIO_LOOKUP_INVALID')
             return data['items']
+        if include_import:
+            def import_request(method, path, body):
+                require((method, path) in (('POST', '/api/v1/import'), ('GET', '/api/v1/activities')),
+                        'GHOSTFOLIO_ACCESS_REFUSED')
+                require((method == 'POST' and isinstance(body, bytes)) or (method == 'GET' and body is None),
+                        'GHOSTFOLIO_ACCESS_REFUSED')
+                result = send_request(method, path, body, {**headers, 'Content-Type': 'application/json'})
+                return result if method == 'POST' else (200, result)
+            return accounts, accounts_raw, activities_raw, lookup, import_request
         return accounts, accounts_raw, activities_raw, lookup
     return accounts, accounts_raw, activities_raw
 
