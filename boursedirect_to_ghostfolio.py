@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, localcontext
 import fcntl
 import hashlib
 import http.client
+import ipaddress
 import json
 import logging
 import os
@@ -4703,14 +4704,15 @@ def notice_wire(proposal):
         allow_nan=False).encode()
 
 
-def notice_write_journal(root, config, account):
-    """DEGIRO-style intent fencing, under the shared nonblocking broker lock."""
+def notice_read_journal(root, config, account):
+    """Read and validate one owner-bound notice journal without resolving it."""
     owner = {'origin': config['origin'], 'source': account['source_account_ref'],
         'target': account['target_account_id']}
     key = hashlib.sha256(json.dumps([owner['origin'], owner['target']], separators=(',', ':')).encode()).hexdigest()
     path = root / ('notice-writes-' + key + '.yaml')
-    journal = read_keyed_yaml(path, root, 8 * 1024 * 1024) if path.exists() or path.is_symlink() else {
-        'schema_version': 1, 'owner': owner, 'pending': None, 'confirmed': {}}
+    raw = read_local_bytes(path, root, 8 * 1024 * 1024) if path.exists() or path.is_symlink() else None
+    journal = parse_keyed_yaml(raw) if raw is not None else {'schema_version': 1,
+        'owner': owner, 'pending': None, 'confirmed': {}}
     if (set(journal) != {'schema_version', 'owner', 'pending', 'confirmed'}
             or type(journal['schema_version']) is not int or journal['schema_version'] != 1
             or journal['owner'] != owner or not isinstance(journal['confirmed'], dict)
@@ -4718,6 +4720,12 @@ def notice_write_journal(root, config, account):
                 for marker, remote_id in journal['confirmed'].items())
             or journal['pending'] is not None and not isinstance(journal['pending'], dict)):
         fail('NOTICE_WRITE_JOURNAL_INVALID')
+    return path, journal, raw
+
+
+def notice_write_journal(root, config, account):
+    """DEGIRO-style intent fencing, under the shared nonblocking broker lock."""
+    path, journal, _ = notice_read_journal(root, config, account)
     if journal['pending'] is not None:
         # Even exact positive readback requires explicit operator resolution.
         fail('NOTICE_WRITE_UNRESOLVED')
@@ -4755,6 +4763,221 @@ def notice_persisted_activity_unchanged(before, after):
         if canonical_current != canonical_previous:
             return False
     return True
+
+
+def notice_recovery_proposal(pending, account, expected_run_id, expected_ordinal):
+    """Bind the selected durable intent to one canonical notice import body."""
+    try:
+        validate_account_key(expected_run_id)
+    except RuntimeError:
+        fail('NOTICE_RECOVERY_REFUSED')
+    if (type(expected_ordinal) is not int or not 0 <= expected_ordinal <= 1000000
+            or not isinstance(pending, dict) or set(pending) != {'body', 'run_id', 'ordinal'}
+            or pending.get('run_id') != expected_run_id or pending.get('ordinal') != expected_ordinal
+            or not isinstance(pending.get('body'), str)):
+        fail('NOTICE_RECOVERY_REFUSED')
+    try:
+        raw = pending['body'].encode('utf-8')
+        if len(raw) > 8 * 1024 * 1024:
+            fail('NOTICE_RECOVERY_REFUSED')
+        data = json.loads(raw, parse_float=Decimal, object_pairs_hook=unique_json_object)
+        keys = {'accountId', 'comment', 'currency', 'dataSource', 'date', 'fee',
+            'quantity', 'symbol', 'type', 'unitPrice'}
+        if (not isinstance(data, dict) or set(data) != {'activities'}
+                or not isinstance(data['activities'], list) or len(data['activities']) != 1
+                or not isinstance(data['activities'][0], dict) or set(data['activities'][0]) != keys):
+            fail('NOTICE_RECOVERY_REFUSED')
+        sent = data['activities'][0]
+        namespace = hashlib.sha256(json.dumps([account['source_account_ref'],
+            account['target_account_id']], separators=(',', ':')).encode()).hexdigest()
+        if (sent['accountId'] != account['target_account_id']
+                or not isinstance(sent['comment'], str)
+                or not re.fullmatch(r'BD#v2#' + re.escape(namespace) + r'#[0-9a-f]{64}', sent['comment'])
+                or sent['currency'] != 'EUR' or sent['dataSource'] != 'YAHOO'
+                or sent['type'] not in ('BUY', 'SELL', 'DIVIDEND')
+                or not isinstance(sent['symbol'], str)
+                or not re.fullmatch(r'[A-Z0-9^][A-Z0-9.^=_-]{0,63}', sent['symbol'])
+                or not isinstance(sent['date'], str)
+                or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T00:00:00\.000Z', sent['date'])):
+            fail('NOTICE_RECOVERY_REFUSED')
+        datetime.strptime(sent['date'][:10], '%Y-%m-%d')
+        proposal = {key: sent[key] for key in
+            ('accountId', 'comment', 'currency', 'dataSource', 'date', 'symbol', 'type')}
+        proposal.update({key: canonical_decimal(remote_decimal(sent[key]))
+            for key in ('quantity', 'unitPrice', 'fee')})
+        if (Decimal(proposal['quantity']) <= 0 or Decimal(proposal['unitPrice']) <= 0
+                or Decimal(proposal['fee']) < 0
+                or proposal['type'] == 'DIVIDEND'
+                    and (proposal['quantity'] != '1' or proposal['fee'] != '0')
+                or notice_wire(proposal) != raw):
+            fail('NOTICE_RECOVERY_REFUSED')
+    except (KeyError, TypeError, ValueError, UnicodeError, RuntimeError, RecursionError):
+        fail('NOTICE_RECOVERY_REFUSED')
+    return proposal, sent
+
+
+def notice_recovery_artifacts(root, proposal, sent, expected_run_id, expected_ordinal):
+    """Validate retained request evidence before the single fresh GET."""
+    run = Path(root) / 'runs' / expected_run_id
+    baseline_raw = read_local_bytes(run / 'import-baseline.json', root, 8 * 1024 * 1024)
+    response_raw = read_local_bytes(run / ('import-response-' + str(expected_ordinal) + '.json'),
+        root, 8 * 1024 * 1024)
+    readback_raw = read_local_bytes(run / ('import-readback-' + str(expected_ordinal) + '.json'),
+        root, 8 * 1024 * 1024)
+    comparison = compare_expected_import_response({proposal['comment']: sent}, response_raw)
+    if comparison['status'] != 'complete':
+        fail('NOTICE_RECOVERY_REFUSED')
+    remote_id = comparison['accepted'].get(proposal['comment'])
+    baseline = parse_remote_activity_snapshot(baseline_raw, retain_stored_date=True)
+    saved, saved_id = notice_exact_readback(proposal, readback_raw, remote_id)
+    baseline_by_id = {row['remote_id']: row for row in baseline}
+    saved_by_id = {row['remote_id']: row for row in saved}
+    if (saved_id != remote_id or remote_id in baseline_by_id
+            or saved_id not in saved_by_id
+            or any(identity not in saved_by_id
+                or not notice_persisted_activity_unchanged(row, saved_by_id[identity])
+                for identity, row in baseline_by_id.items())):
+        fail('NOTICE_RECOVERY_REFUSED')
+    return saved, remote_id
+
+
+def recover_notice_write(root, config, account, expected_run_id, expected_ordinal,
+                         request, confirm=False):
+    """Resolve one selected pending write from retained proof plus one GET only."""
+    if type(confirm) is not bool or not callable(request):
+        fail('NOTICE_RECOVERY_REFUSED')
+    path = None
+    original = None
+    try:
+        path, journal, original = notice_read_journal(Path(root), config, account)
+        if original is None or journal['pending'] is None:
+            fail('NOTICE_RECOVERY_REFUSED')
+        proposal, sent = notice_recovery_proposal(journal['pending'], account,
+            expected_run_id, expected_ordinal)
+        if proposal['comment'] in journal['confirmed']:
+            fail('NOTICE_RECOVERY_REFUSED')
+        saved, remote_id = notice_recovery_artifacts(root, proposal, sent,
+            expected_run_id, expected_ordinal)
+        if remote_id in journal['confirmed'].values():
+            fail('NOTICE_RECOVERY_REFUSED')
+        status, fresh_raw = request('GET', '/api/v1/activities', None)
+        if status != 200 or not isinstance(fresh_raw, bytes):
+            fail('NOTICE_RECOVERY_REFUSED')
+        fresh, fresh_id = notice_exact_readback(proposal, fresh_raw, remote_id)
+        fresh_by_id = {row['remote_id']: row for row in fresh}
+        if (fresh_id != remote_id or any(identity not in fresh_by_id
+                or not notice_persisted_activity_unchanged(row, fresh_by_id[identity])
+                for identity, row in ((item['remote_id'], item) for item in saved))):
+            fail('NOTICE_RECOVERY_REFUSED')
+        digest = hashlib.sha256(fresh_raw).hexdigest()
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, RecursionError):
+        fail('NOTICE_RECOVERY_REFUSED')
+    if confirm:
+        try:
+            current = read_local_bytes(path, root, 8 * 1024 * 1024)
+        except Exception:
+            fail('NOTICE_RECOVERY_REFUSED')
+        if current != original:
+            fail('NOTICE_RECOVERY_REFUSED')
+        journal['confirmed'][proposal['comment']] = remote_id
+        journal['pending'] = None
+        try:
+            atomic_private_yaml(path, journal)
+        except Exception:
+            fail('NOTICE_RECOVERY_PERSISTENCE_UNCERTAIN')
+    return {'matched': 1, 'confirmed': confirm, 'snapshot_sha256': digest,
+        'ghostfolio_gets': 1, 'financial_writes': 0, 'broker_attempts': 0}
+
+
+def make_notice_recovery_request(origin, max_bytes, timeout):
+    """Build the one-GET recovery adapter; never exchanges a token or sends POST."""
+    if type(max_bytes) is not int or not 1 <= max_bytes <= 64 * 1024 * 1024:
+        fail('NOTICE_RECOVERY_REFUSED')
+    if type(timeout) is not int or not 1 <= timeout <= 120:
+        fail('NOTICE_RECOVERY_REFUSED')
+    if origin == 'http://ghostfolio:3333':
+        host, port, secure = 'ghostfolio', 3333, False
+    else:
+        host, port = validated_ghost_origin(origin)
+        secure = True
+    bearer = os.environ.get('GHOST_SESSION_BEARER')
+    if (not isinstance(bearer, str) or len(bearer) > 16384
+            or not re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', bearer)):
+        fail('NOTICE_RECOVERY_REFUSED')
+
+    def request(method, path, body):
+        if (method, path, body) != ('GET', '/api/v1/activities', None):
+            fail('NOTICE_RECOVERY_REFUSED')
+        connection = None
+        try:
+            connection = (http.client.HTTPSConnection if secure else http.client.HTTPConnection)(
+                host, port, timeout=timeout,
+                **({'context': ssl.create_default_context()} if secure else {}))
+            if not secure:
+                connection.connect()
+                peer = ipaddress.ip_address(connection.sock.getpeername()[0])
+                if not any(peer in ipaddress.ip_network(network) for network in
+                        ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
+                    fail('NOTICE_RECOVERY_REFUSED')
+            connection.request('GET', '/api/v1/activities', headers={
+                'Authorization': 'Bearer ' + bearer, 'Accept': 'application/json',
+                'Accept-Encoding': 'identity'})
+            response = connection.getresponse()
+            if (response.status != 200
+                    or response.getheader('Content-Type', '').split(';', 1)[0].strip().lower() != 'application/json'
+                    or response.getheader('Content-Encoding', 'identity').strip().lower() != 'identity'):
+                fail('NOTICE_RECOVERY_REFUSED')
+            raw = response.read(max_bytes + 1)
+            if not isinstance(raw, bytes) or len(raw) > max_bytes:
+                fail('NOTICE_RECOVERY_REFUSED')
+            return 200, raw
+        except Exception:
+            fail('NOTICE_RECOVERY_REFUSED')
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+    return request
+
+
+def recover_notice_write_runtime(expected_run_id, expected_ordinal, confirm=False,
+                                 max_bytes=8 * 1024 * 1024, timeout=30):
+    """Hold the normal run lock while recovering locally; no broker operation."""
+    origin = os.environ.get('GHOST_HOST', '')
+    source = os.environ.get('BD_SOURCE_ACCOUNT_REF', '')
+    target = os.environ.get('GHOST_ACCOUNT_ID', '')
+    if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{5,63} (?:PEA|PEA-PME)', source)
+            or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', target)):
+        fail('NOTICE_RECOVERY_REFUSED')
+    request = make_notice_recovery_request(origin, max_bytes, timeout)
+    root = Path('/state')
+    private_directory(root)
+    descriptor = None
+    try:
+        descriptor = os.open(root / 'connect.lock',
+            os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or info.st_mode & 0o077):
+            fail('NOTICE_RECOVERY_REFUSED')
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail('NOTICE_RECOVERY_REFUSED')
+        return recover_notice_write(root, {'origin': origin},
+            {'source_account_ref': source, 'target_account_id': target},
+            expected_run_id, expected_ordinal, request, confirm=confirm)
+    except RuntimeError as error:
+        if str(error) == 'NOTICE_RECOVERY_PERSISTENCE_UNCERTAIN':
+            raise
+        fail('NOTICE_RECOVERY_REFUSED')
+    except Exception:
+        fail('NOTICE_RECOVERY_REFUSED')
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def import_notice_proposals(proposals, remote, path, journal, run, request, progress,
@@ -5244,7 +5467,31 @@ def main(argv=None):
     snapshot.add_argument("--input-root", required=True)
     snapshot.add_argument("--max-bytes", type=int, required=True)
     snapshot.add_argument("--timeout", type=int, required=True)
+    recovery = subparsers.add_parser("recover-notice-write",
+        help="Prove one exact pending notice by one activities GET; never replay POST")
+    recovery.add_argument("--expected-run-id", required=True,
+        help="Exact retained UUIDv4 run selected by the operator")
+    recovery.add_argument("--expected-ordinal", type=int, required=True,
+        help="Exact retained import ordinal selected by the operator")
+    recovery.add_argument("--confirm-local-state", action="store_true",
+        help="Atomically confirm only the proved local intent; no financial mutation")
+    recovery.add_argument("--max-bytes", type=int, default=8 * 1024 * 1024)
+    recovery.add_argument("--timeout", type=int, default=30)
     args = parser.parse_args(argv)
+    if args.command == "recover-notice-write":
+        try:
+            result = recover_notice_write_runtime(args.expected_run_id, args.expected_ordinal,
+                confirm=args.confirm_local_state, max_bytes=args.max_bytes, timeout=args.timeout)
+            print(json.dumps({'code': 'NOTICE_RECOVERY_CONFIRMED' if result['confirmed']
+                else 'NOTICE_RECOVERY_VERIFIED', **result}, sort_keys=True), flush=True)
+            return 0
+        except Exception as error:
+            code = ('NOTICE_RECOVERY_PERSISTENCE_UNCERTAIN'
+                if str(error) == 'NOTICE_RECOVERY_PERSISTENCE_UNCERTAIN'
+                else 'NOTICE_RECOVERY_REFUSED')
+            print(json.dumps({'code': code, 'broker_attempts': 0, 'financial_writes': 0},
+                sort_keys=True), flush=True)
+            return 1
     try:
         if args.command == "daily-preview":
             print(json.dumps(preview_local_daily(args.config, args.input_root, args.as_of if args.as_of is not None else daily_preview_today(),

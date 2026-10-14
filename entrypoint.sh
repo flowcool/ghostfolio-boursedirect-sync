@@ -3,6 +3,9 @@ set -eu
 
 # Preserve the released inspection/preview commands for explicit operator use.
 if [ "$#" -gt 0 ]; then
+    if [ "$1" = "recover-notice-write" ]; then
+        exec /opt/venv/bin/python /opt/app/boursedirect_to_ghostfolio.py "$@"
+    fi
     exec /opt/venv/bin/python /opt/app/scripts/community_connect.py "$@"
 fi
 if [ -n "${CRON:-}" ]; then

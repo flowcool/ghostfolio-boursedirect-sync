@@ -9,6 +9,9 @@ v0.1.1 requires interactive selection without import. v0.2 imports notices unatt
 - **BREAKING**: rebuild on siblings, retaining Bitwarden/TOTP and notice parsing.
 - Read a 90-day Europe/Zurich notice window for one PEA/PEA-PME per service; read complete Ghostfolio history.
 - `DRY_RUN=0` imports; `1` or absent simulates. First acceptance uses explicit simulation; no new lab.
+- An explicit operator recovery may confirm one selected pending import from its
+  retained response and complete readbacks plus one fresh Ghostfolio GET. It
+  never logs into the broker, exchanges a token or replays a financial POST.
 - Missing `BD_SOURCE_ACCOUNT_REF`: discover once, log options, stop; no automatic repeated login.
 - Require YAML, possibly empty; prioritize overrides, existing Ghostfolio profiles, then lookup. Report unresolved candidates.
 - Require stock-day proof only for instruments with a pending SELL. Later BUYs cannot fund earlier SELLs; unproved same-day dependencies refuse.
@@ -35,7 +38,7 @@ Brokerage stays attached to trades. Known out-of-scope rows and rows without ISI
 
 ## Non-goals
 
-Broker-history reconstruction, balance reconciliation, currency conversion, corporate actions, MANUAL fees, broker-session reuse (GH #67), automatic correction/deletion, new labs or tooling.
+Broker-history reconstruction, balance reconciliation, currency conversion, corporate actions, MANUAL fees, broker-session reuse (GH #67), automatic intent recovery or replay, automatic correction/deletion, new labs or tooling.
 
 ## Capabilities
 

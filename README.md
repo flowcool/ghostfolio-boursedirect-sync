@@ -162,7 +162,37 @@ readback or unexpected HTTP result leaves the pending intent in
 `NOTICE_WRITE_UNRESOLVED` before network access, including simulation. Preserve
 the journal and private `runs/<run-id>/import-response-*.json` and
 `import-readback-*.json` for explicit operator resolution. Never clear an intent
-or repeat a POST to guess its outcome. Automatic recovery is not implemented.
+or repeat a POST to guess its outcome. Normal startup never recovers an intent.
+
+An operator can recover one selected notice only when the pending body, saved
+HTTP 201 response, pre-import baseline, saved complete readback and one fresh
+complete Ghostfolio readback all agree. Record the exact pending `run_id` and
+`ordinal`, stop scheduled runs, and take a recoverable backup of the `/state`
+volume. Use the exact deployed image that contains the recovery command. Supply
+a pre-obtained Ghostfolio session bearer for this operation; the long-lived
+Security Token is not used and the command performs no token exchange or broker
+request.
+
+First preview the proof:
+
+```console
+GHOST_SESSION_BEARER='<session-jwt>' docker compose run --rm --no-deps \
+  -e GHOST_SESSION_BEARER boursedirect-sync recover-notice-write \
+  --expected-run-id '<retained-run-uuid>' --expected-ordinal '<retained-ordinal>'
+```
+
+`NOTICE_RECOVERY_VERIFIED` means one activities GET proved one exact active
+remote ID and the journal bytes were retained. After separate authorization,
+repeat the same command with `--confirm-local-state`. A successful result is
+`NOTICE_RECOVERY_CONFIRMED`; it only moves that marker and remote ID from
+`pending` to `confirmed`. It sends no financial POST.
+
+Any missing, incomplete, changed, ambiguous or contradictory proof returns
+`NOTICE_RECOVERY_REFUSED` and leaves the journal bytes unchanged. Do not edit the
+journal, restore the pre-import state, or replay the POST. If local persistence
+has an uncertain outcome, preserve the current state and inspect it before any
+new operation. A subsequent normal run must recognize the recovered notice as
+a duplicate before another import is authorized.
 
 After confirmed import, a deliberate repeat reads the exact owned activities
 and creates zero new activities. Simulation never writes an import journal or
