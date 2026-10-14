@@ -3,8 +3,10 @@
 - Secrets come only from `os.environ`: `BW_CLIENTID`, `BW_CLIENTSECRET`,
   `BW_PASSWORD`, `BW_SERVER`, `BW_ITEM_NAME` and the Ghostfolio token. Broker
   credentials come only from the vault item at run time. Never hardcode, commit or
-  log a credential, a vault session, a cookie, an authentication response or the
-  content of a contract note.
+  log a credential, a vault session, a cookie or an authentication response.
+  Logs may show the activity fields of a notice row: date, type, symbol,
+  quantity, price and fee. Never log the account number, the holder name, the
+  address or the full text of a notice.
 - Bourse Direct locks the account after three failed logins: at most one login
   attempt per run, never an automatic retry, and a scheduled run refuses while a
   failed or uncertain attempt is unresolved (see `AGENTS.md` safety invariants).

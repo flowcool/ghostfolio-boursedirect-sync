@@ -26,22 +26,24 @@ One Python file on the `ghostfolio-ibkr-sync` skeleton. `ibkr` below means
 - `DRY_RUN` absent means simulation. ibkr imports when it is absent. Decision of
   2026-10-14.
 
-## Open questions for Florent
+## Decisions (2026-10-14)
 
-1. Does `AssetProfileSplit` change held quantities on Ghostfolio 3.86.0
-   (GitHub #115)? Recommendation: v1 stops on DIVISION in all cases. Test later.
-2. How does the operator clear a TTF or share-count stop? Recommendation: fix
-   Ghostfolio by hand, then move the file out of `NOTICE_DIR`. No new mechanism.
-3. Which PDF text tool? Recommendation: `pdftotext -layout` (Debian
-   `poppler-utils`) in the image.
-4. Test data: only one real PDF exists (BUY). Recommendation: store the
-   anonymized text of each real PDF. Each operation type waits for a real PDF.
-5. PEA and PEA-PME: recommendation: one service and one folder per account.
-6. `.claude/rules/security.md` forbids logging notice content. Recommendation:
-   allow date, type, symbol, quantity, price and fee, as ibkr does.
-7. Coupon as quantity 1 at the net amount, or quantity = shares? Recommendation:
-   quantity 1. The amount stays exact, as in the legacy connector.
-8. The TTF has no real notice or document to test. Recommendation: test the
-   stop with an anonymized copy of the real statement row.
-9. Task 1.1 replaces the legacy main file in `main`. Recommendation: yes. The
-   legacy code stays in tag `legacy-wip`.
+- PDF text: `pdftotext -layout` (Debian `poppler-utils`) in the image.
+- Clear a TTF or share-count stop: the operator fixes Ghostfolio by hand, then
+  moves the PDF out of `NOTICE_DIR`. BillCollector does not publish a document
+  again (its requirement R4), so the file does not come back.
+- One service and one `NOTICE_DIR` for each account (PEA, PEA-PME).
+- Logs may show date, type, symbol, quantity, price and fee. Logs never show the
+  account number, the holder name or the address.
+- Coupon: quantity 1 at the net amount. The amount stays exact.
+- Test data: anonymized `pdftotext` text of real PDFs. Each operation type waits
+  for a real PDF from BillCollector. The TTF test uses an anonymized copy of the
+  real statement row.
+- Task 1.1 replaces the legacy main file. Task 1.3 removes the legacy-only
+  files. The legacy code stays in tag `legacy-wip`.
+
+## Known limit
+
+Ghostfolio 3.86.0 has `AssetProfileSplit`. Its effect on held quantities is not
+known (GitHub #115). v1 stops on DIVISION in all cases. A later check can
+change this.

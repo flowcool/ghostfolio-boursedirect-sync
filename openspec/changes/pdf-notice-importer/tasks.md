@@ -17,6 +17,11 @@ downloaded waits for that PDF. Tests use anonymized text of real PDFs only.
 - [ ] 1.2 Add the settings checks (`invalid_configuration`, `account_failed`)
   and the README settings table. Verify the scenario "Missing account name" with
   the run command.
+- [ ] 1.3 Remove the files that only the legacy code uses: `scripts/`,
+  `collector/`, `compose.lab.yaml`, `compose.broker-inspection.yaml`,
+  `docs/verification/` and the legacy tests. Update the CI workflows that call
+  them. Verify: CI is green, and `wc -l` of the main Python file shows 2 500
+  lines or fewer.
 
 ## 2. Notice checks
 
