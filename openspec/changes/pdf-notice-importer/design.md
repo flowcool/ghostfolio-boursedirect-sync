@@ -1,8 +1,7 @@
 # Design
 
-One Python file on the `ghostfolio-ibkr-sync` skeleton. `ibkr` means
-`ibkr_to_ghostfolio.py` there. The Ghostfolio core is copied from ibkr. A
-verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
+One Python file uses the `ghostfolio-ibkr-sync` skeleton. `ibkr` below means its
+`ibkr_to_ghostfolio.py` file.
 
 ## Reused parts
 
@@ -20,38 +19,37 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 
 ## Changes from ibkr
 
+- Account target: ibkr `ghost_find_account_id` (lines 760-772) returns the first
+  exact name. Here, exactly one match is required; otherwise use
+  `invalid_configuration`. A notice has exactly one labelled account field.
+  Remove its spaces once and compare the full value with `BD_ACCOUNT_REF`.
 - Readback: ibkr `accepted_import_subset` (line 945) accepts a short or empty
-  list. Ghostfolio can answer HTTP 201 with an empty list when the same
-  activity exists in another account. Here, an empty, partial, repeated or
-  extra result gives `import_unconfirmed`.
-- Dividend: ibkr change `dividend-proximity-amount-evidence` excludes its own
-  comments from the 3-day match. It skips a manual row with another amount.
-  Here, that row must have the same net amount.
+  list. Here, any empty, partial, repeated or extra result gives
+  `import_unconfirmed`.
+- Error logs: ibkr `ghost_import_activities` (lines 1076-1089) logs raw bodies.
+  Here, logs allow only HTTP status, error code and Paperless document ID.
+- Dividend: ibkr `dividend-proximity-amount-evidence` excludes owned comments
+  from the 3-day match. Here, a manual row also needs the same net amount.
 
 ## New parts (no sibling line)
 
-- Paperless (decision D1; paperless-ngx `docs/api.md` lines 121-134, commit
-  `2b00cf6`): header `Authorization: Token <token>`; `GET
-  /api/documents/?custom_field_query=["Source","exact","Bourse Direct"]`
-  (paged); `GET /api/tags/?name__iexact=<tag>`; `GET
-  /api/documents/<id>/download/?original=true`; header `Accept:
-  application/json; version=10`. The Paperless user has view permission only.
+- Paperless (paperless-ngx `docs/api.md` lines 121-134, commit `2b00cf6`): page
+  through `Source = Bourse Direct` and download originals. A filter on original
+  file name finds `BourseDirect_*` documents without that Source. Use a
+  view-only Paperless user.
 - PDF text: `pdftotext -layout` (Debian `poppler-utils`).
 - Row parsing and checks: from the legacy parser (tag `legacy-wip`).
 - Ghostfolio lookup by ISIN: decision of 2026-10-14.
 
 ## Decisions
 
-- One container per Bourse Direct account (Florent, 2026-10-15). A notice of an
-  account without a container is only counted.
-- `PAPERLESS_DONE_TAG` clears only the blocking rows of a document (Florent,
-  option A). The operator fixes Ghostfolio by hand first.
-- Identity `BD#v3#<account>:<KIND>:<row key>` (Florent, 2026-10-15), as ibkr
-  `IBKR#v2#`: Ghostfolio duplicate detection ignores the account.
-  v1, v2: legacy. If the real PDF shows a notice reference (task 1.1),
-  it joins the row key.
+- One container serves one Bourse Direct account. Other accounts are counted.
+- `PAPERLESS_DONE_TAG` clears only blocking rows after manual correction.
+- Identity is `BD#v3#<account>:<KIND>:<row key>`, as ibkr `IBKR#v2#`. The key
+  starts with the broker reference, or the first 16 hex characters of the
+  original PDF SHA-256. Ghostfolio duplicate detection ignores the account.
+  v1 and v2 are legacy.
 - Coupon: quantity 1 at the net amount.
-- Logs show activity fields and the comment only.
 - Test data: anonymized `pdftotext` text of real PDFs.
 
 ## Known limits

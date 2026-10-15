@@ -31,7 +31,7 @@ work-tracker IDs.
 ## Method (same as ibkr)
 
 - **Spec first.** No code without an OpenSpec change that Florent approved. A
-  spec has 1 500 words or fewer. It describes visible behavior and error codes,
+  spec has 1 800 words or fewer. It describes visible behavior and error codes,
   never internal mechanisms. Do not specify recovery tools, lab tools, release
   process or docs layout. When reality is different from the spec, stop and
   report. Do not change the spec silently.
