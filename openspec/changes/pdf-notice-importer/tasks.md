@@ -39,7 +39,8 @@ PDFs only. Paperless is read only; no task writes to it.
 ## 4. Sells, coupons and duplicates
 
 - [ ] 4.1 Add the `BD#` comment, the manual match with exact price and
-  `possible_duplicate`, with offline tests. Verify in simulation with the run
+  `possible_duplicate`, with offline tests (two identical rows in one notice
+  give two activities). Verify in simulation with the run
   command: a real BUY that matches a manual Ghostfolio activity shows a
   duplicate.
 - [ ] 4.2 Add SELL rows, the sell guard and `custody_fee_ignored`. Verify the

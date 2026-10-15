@@ -16,8 +16,8 @@ Paperless documents whose custom field `PAPERLESS_SOURCE_FIELD` is exactly
 
 The connector SHALL read its settings only from ENV. Required: `GHOST_HOST`,
 `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT_NAME`, `PAPERLESS_URL`,
-`PAPERLESS_TOKEN`. Optional: `PAPERLESS_SOURCE_FIELD` (default `Source`), `PAPERLESS_SOURCE_VALUE`
-(default `Bourse Direct`),
+`PAPERLESS_TOKEN`. Optional: `PAPERLESS_SOURCE_FIELD` (default `Source`),
+`PAPERLESS_SOURCE_VALUE` (default `Bourse Direct`),
 `PAPERLESS_DONE_TAG` (default `ghostfolio-done`), `MAPPING_FILE`, `DRY_RUN`,
 `TZ`, `CRON`, `APPRISE_URLS`, `APPRISE_TIMEOUT`, `LOG_LEVEL`. A missing or
 invalid setting SHALL stop the run with code `invalid_configuration`. The log
@@ -31,9 +31,9 @@ SHALL never show a token.
 ### Requirement: Simulation by default
 
 `DRY_RUN=0` SHALL send activities to Ghostfolio. `DRY_RUN=1`, or no value,
-SHALL simulate. Another value SHALL give `invalid_configuration`. A simulation SHALL log one line for each activity that it would create: date, type, symbol, quantity,
-unit price and fee. It SHALL write nothing to Ghostfolio and send no
-notification.
+SHALL simulate. Another value SHALL give `invalid_configuration`. A simulation SHALL
+log one line per activity to create: date, type, symbol, quantity, unit price
+and fee. It SHALL not write to Ghostfolio or notify.
 
 #### Scenario: Real BUY in simulation
 - **WHEN** the notice documents hold one real BUY notice and the run command
@@ -42,13 +42,13 @@ notification.
 
 ### Requirement: Paperless source
 
-Each run SHALL read the original PDF file of every notice document. The
+Each run SHALL read the original PDF of every notice document. The
 connector SHALL never write to Paperless. Before any Ghostfolio write, a
 rejected token SHALL stop the run with code `paperless_auth_failed`; no answer
 or an unexpected answer SHALL stop it with code `paperless_unreachable`. A
 document that is not a readable Bourse Direct notice, or that has an unknown
 field label, SHALL get code `notice_unreadable` and SHALL be skipped. The log
-SHALL show the Paperless ID of a document, never the account number, holder
+SHALL show the Paperless document ID, never the account number, holder
 name or address.
 
 #### Scenario: Wrong Paperless token
@@ -82,7 +82,8 @@ A BUY or SELL activity SHALL have: quantity = QUANTITE without sign, unit price 
 COURS, fee = COURTAGE, currency EUR. A COUPONS row SHALL give a DIVIDEND with
 quantity 1, unit price = net amount credited for that row, and fee 0. The
 activity date SHALL be the row date at midnight UTC. The comment SHALL start
-with `BD#`, followed by an identifier made from the row content.
+with `BD#`, followed by an identifier made from the row content and its rank
+among identical rows of the notice.
 
 #### Scenario: Real coupon in simulation
 - **WHEN** the run command runs on a real coupon notice
