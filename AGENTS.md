@@ -23,7 +23,7 @@ work-tracker IDs.
   from Paperless, read only.
 - The connector imports only what Ghostfolio shows exactly: buy, sell, coupon.
   It stops on a security for each operation that changes the number of shares.
-  It stops on a separate TTF line; the operator enters the TTF manually. It
+  It does not track the TTF (only on statements, never in Ghostfolio). It
   ignores custody fees and shows a message.
 - The only spec is the active OpenSpec change under `openspec/changes/`. The
   archived change `2026-10-14-unattended-notice-import` is history only.

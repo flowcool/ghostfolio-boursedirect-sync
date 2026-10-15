@@ -53,8 +53,8 @@ PDFs only. Paperless is read only; no task writes to it.
 - [ ] 5.1 Add `share_count_change`, `unknown_operation` and the
   `PAPERLESS_DONE_TAG` check. Verify the scenario "Division and coupon in one
   notice".
-- [ ] 5.2 Add `ttf_found` and the README TTF section. Verify the scenarios
-  "TTF row" (in simulation) and "Stop cleared".
+- [ ] 5.2 Add the README line: notices do not show the TTF, and Ghostfolio
+  cost prices exclude it. Verify the scenario "Stop cleared".
 
 ## 6. Import, notification and schedule
 

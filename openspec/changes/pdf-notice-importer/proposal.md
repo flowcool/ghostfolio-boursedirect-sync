@@ -12,7 +12,8 @@ the `ghostfolio-ibkr-sync` skeleton.
 - The connector reads the PDF notices from Paperless, read-only.
 - It imports BUY, SELL and coupons (DIVIDEND at the net amount received).
 - It stops on a security when a row changes the number of shares.
-- It stops the run on a TTF line. The operator enters it.
+- It does not track the TTF: notices do not show it, and it never goes to
+  Ghostfolio.
 - It ignores custody fees.
 - It does not import duplicates.
 - ibkr contract: ENV settings only, simulation when `DRY_RUN` is absent,
@@ -31,7 +32,7 @@ and one real account statement. The PDF has the same labels as the HTML notice.
 | COUPONS | HTML notice | DIVIDEND, net |
 | DROITS DE GARDE | HTML notice, statement | Ignored, message |
 | DIVISION | HTML notice | Stop on security |
-| TAXE TRANSACT FINANCIERES | Statement | Stop the run |
+| TAXE TRANSACT FINANCIERES | Statement | Not read, not tracked |
 | Other label, with ISIN | Not seen | Stop on security |
 | Other label, no ISIN | Not seen | Not imported, reported |
 

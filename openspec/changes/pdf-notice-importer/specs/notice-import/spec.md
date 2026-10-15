@@ -141,22 +141,6 @@ code `sell_exceeds_holding` and SHALL not be imported.
   account does not hold
 - **THEN** the output shows `sell_exceeds_holding` and `exit=1`.
 
-### Requirement: TTF line stops the run
-
-A row with the label TAXE TRANSACT FINANCIERES SHALL stop the run with code
-`ttf_found` before any Ghostfolio write. The message SHALL tell the operator to
-enter the TTF by hand, then add `PAPERLESS_DONE_TAG` to the document. The README
-SHALL explain that notices do not show the TTF.
-
-#### Scenario: TTF row
-- **WHEN** the run command runs with `DRY_RUN=0` and a notice document with a
-  TTF row
-- **THEN** the output shows `ttf_found`, no activity line and `exit=1`.
-
-#### Scenario: Stop cleared
-- **WHEN** that document has `PAPERLESS_DONE_TAG` and the run command runs
-- **THEN** the output does not show `ttf_found`.
-
 ### Requirement: Custody fees ignored
 
 A DROITS DE GARDE row SHALL not be imported and SHALL get code
@@ -181,6 +165,11 @@ has `PAPERLESS_DONE_TAG`.
   of the same security
 - **THEN** the output shows `share_count_change`, no DIVIDEND line for that
   security and `exit=1`.
+
+#### Scenario: Stop cleared
+- **WHEN** the document with the DIVISION row has `PAPERLESS_DONE_TAG` and the
+  run command runs
+- **THEN** the output does not show `share_count_change`.
 
 ### Requirement: Additive writes with readback
 

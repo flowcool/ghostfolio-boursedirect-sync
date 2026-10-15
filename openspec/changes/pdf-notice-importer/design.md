@@ -48,8 +48,7 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
   criterion.
 - Coupon: quantity 1 at the net amount.
 - Logs show date, type, symbol, quantity, price and fee only.
-- Test data: anonymized `pdftotext` text of real PDFs. The TTF test uses an
-  anonymized copy of the real statement row.
+- Test data: anonymized `pdftotext` text of real PDFs.
 - Task 1.3 removes the legacy-only files. The legacy code stays in tag
   `legacy-wip`.
 
@@ -57,3 +56,7 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 
 The effect of Ghostfolio `AssetProfileSplit` on held quantities is not known
 (GitHub #115). v1 stops on DIVISION in all cases.
+
+The TTF is only on account statements, never on notices. The connector does
+not read statements, so Ghostfolio cost prices exclude the TTF (Florent,
+2026-10-15).
