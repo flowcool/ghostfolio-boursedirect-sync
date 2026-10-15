@@ -60,7 +60,7 @@ PDFs only. Paperless is read only; no task writes to it.
   the position). Verify the scenarios "Sell without a position" and "Sell
   notice with a custody fee".
 - [ ] 4.3 Add COUPONS rows and the dividend match (exact `BD#`, or 3 days and
-  same net amount without `BD#`). Verify the scenarios "Real coupon in
+  same net amount without `BD#`, else `possible_duplicate`). Verify the scenarios "Real coupon in
   simulation" and "Coupon already in Ghostfolio".
 
 ## 5. Stops

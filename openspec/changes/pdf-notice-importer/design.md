@@ -28,8 +28,9 @@ One Python file uses the `ghostfolio-ibkr-sync` skeleton. `ibkr` below means its
   `import_unconfirmed`.
 - Error logs: ibkr `ghost_import_activities` (lines 1076-1089) logs raw bodies.
   Here, logs allow only HTTP status, error code and Paperless document ID.
-- Dividend: ibkr `dividend-proximity-amount-evidence` excludes owned comments
-  from the 3-day match. Here, a manual row also needs the same net amount.
+- Dividend: reuse the ibkr amount comparison
+  (`dividend-proximity-amount-evidence`). A near manual row with another amount
+  gives `possible_duplicate`, exit 1; ibkr only warns.
 
 ## New parts (no sibling line)
 
