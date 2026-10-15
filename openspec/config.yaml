@@ -9,9 +9,9 @@ context: |
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
   v1 rebuild (option B): a new branch on the ghostfolio-ibkr-sync skeleton.
-  Source: PDF operation notices "avis d'opere", downloaded by BillCollector (Playwright).
-  Login: Bitwarden CLI provides password and TOTP; three failed logins lock the account;
-  the login stops after 2 consecutive failures.
+  Source: PDF operation notices "avis d'opere", downloaded by BillCollector (Playwright)
+  and published to Paperless; the importer reads them through the Paperless API, read only.
+  The importer has no broker login and no vault; BillCollector owns them.
   v0.1.1 is a preview-only legacy release; the previous work stays in Git tag legacy-wip.
   Readers: the operator (infrastructure expert, not a developer) and community users.
   Writing style: ASD-STE-100 Simplified Technical English in proposal, specs, design and tasks:
