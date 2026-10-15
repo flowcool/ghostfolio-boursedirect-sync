@@ -1,7 +1,7 @@
 # Design
 
 One Python file on the `ghostfolio-ibkr-sync` skeleton. `ibkr` means
-`ibkr_to_ghostfolio.py` there. The Ghostfolio core is copied from ibkr now. A
+`ibkr_to_ghostfolio.py` there. The Ghostfolio core is copied from ibkr. A
 verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 
 ## Reused parts
@@ -12,51 +12,50 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 | Mapping file | ibkr `load_mapping` |
 | Read all activities | ibkr `ghost_get_existing_orders` |
 | Manual BUY/SELL match | ibkr `_match_manual_entry`, plus exact price |
-| Dividend match | ibkr `_dividend_date_matches` |
+| Dividend match | ibkr `_dividend_date_matches`, with a change |
 | Sell guard | ibkr `filter_trades_by_holdings` |
-| Import, strict readback | ibkr `ghost_import_activities`, `accepted_import_subset` (line 945) |
+| Import, readback | ibkr `ghost_import_activities`, with a change |
 | Exit codes, notification | ibkr `record_failure`, `finalize_run` |
 | CRON, image | ibkr `entrypoint.sh`, `Dockerfile` |
 
+## Changes from ibkr
+
+- Readback: ibkr `accepted_import_subset` (line 945) accepts a short or empty
+  list. Ghostfolio can answer HTTP 201 with an empty list when the same
+  activity exists in another account. Here, an empty, partial, repeated or
+  extra result gives `import_unconfirmed`.
+- Dividend: ibkr change `dividend-proximity-amount-evidence` excludes its own
+  comments from the 3-day match. It skips a manual row with another amount.
+  Here, that row must have the same net amount.
+
 ## New parts (no sibling line)
 
-- Paperless source (decision D1). Facts from paperless-ngx `docs/api.md` and
-  source at commit `2b00cf6`:
-  - Header `Authorization: Token <token>`.
-  - `GET /api/documents/?custom_field_query=["Source","exact","Bourse Direct"]`
-    (URL-encoded). `Source` is a Text field that a Paperless workflow sets on
-    BillCollector files; `exact` is case sensitive (paperless-ngx v3.3.1,
-    `docs/api.md` lines 121-134; BillCollector spec commit `81cf068`). Results
-    are paged (`page_size`, `next`) and list their tag IDs.
-  - `GET /api/tags/?name__iexact=<tag>` gives the ID of the done tag.
-  - `GET /api/documents/<id>/download/?original=true` returns the original
-    file. Without `original`, Paperless returns its archived version.
-  - Header `Accept: application/json; version=10` pins the API version.
-  - Use a Paperless user with view permission only.
+- Paperless (decision D1; paperless-ngx `docs/api.md` lines 121-134, commit
+  `2b00cf6`): header `Authorization: Token <token>`; `GET
+  /api/documents/?custom_field_query=["Source","exact","Bourse Direct"]`
+  (paged); `GET /api/tags/?name__iexact=<tag>`; `GET
+  /api/documents/<id>/download/?original=true`; header `Accept:
+  application/json; version=10`. The Paperless user has view permission only.
 - PDF text: `pdftotext -layout` (Debian `poppler-utils`).
 - Row parsing and checks: from the legacy parser (tag `legacy-wip`).
 - Ghostfolio lookup by ISIN: decision of 2026-10-14.
-- `DRY_RUN` absent means simulation (decision D4).
 
-## Decisions (2026-10-14)
+## Decisions
 
-- Clear a stop: the operator fixes Ghostfolio by hand, then adds
-  `PAPERLESS_DONE_TAG` to the document.
-- v1 serves one Ghostfolio account. The `Source` filter does not separate PEA
-  and PEA-PME. Before task 6.1 (first real write), Florent confirms that
-  Paperless holds notices of one account only, or decides a per-account
-  criterion.
+- One container per Bourse Direct account (Florent, 2026-10-15). A notice of an
+  account without a container is only counted.
+- `PAPERLESS_DONE_TAG` clears only the blocking rows of a document (Florent,
+  2026-10-15, option A). The operator fixes Ghostfolio by hand first.
+- `BD#` identifier: row content and rank. Task 1.1 checks if the real PDF shows
+  a notice reference. If yes, the spec adds it to the identifier.
 - Coupon: quantity 1 at the net amount.
 - Logs show date, type, symbol, quantity, price and fee only.
 - Test data: anonymized `pdftotext` text of real PDFs.
-- Task 1.3 removes the legacy-only files. The legacy code stays in tag
-  `legacy-wip`.
 
-## Known limit
+## Known limits
 
 The effect of Ghostfolio `AssetProfileSplit` on held quantities is not known
 (GitHub #115). v1 stops on DIVISION in all cases.
 
-The TTF is only on account statements, never on notices. The connector does
-not read statements, so Ghostfolio cost prices exclude the TTF (Florent,
+Notices do not show the TTF. Ghostfolio cost prices exclude it (Florent,
 2026-10-15).
