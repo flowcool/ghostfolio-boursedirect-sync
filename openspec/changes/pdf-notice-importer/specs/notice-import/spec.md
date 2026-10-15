@@ -159,7 +159,8 @@ match a row when:
   amount, at most 3 days away.
 
 A BUY or SELL near such an activity, with another quantity or price, SHALL get
-code `possible_duplicate`, without import.
+code `possible_duplicate`, without import. A DIVIDEND near such a dividend,
+with another net amount, SHALL also get `possible_duplicate`, without import.
 
 #### Scenario: Second run
 - **WHEN** the run command runs twice with `DRY_RUN=0` on the same notice
