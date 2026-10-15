@@ -45,11 +45,13 @@ verified projection (`check_core.py`, as in degiro) comes after ibkr v3.0.0.
 - One container per Bourse Direct account (Florent, 2026-10-15). A notice of an
   account without a container is only counted.
 - `PAPERLESS_DONE_TAG` clears only the blocking rows of a document (Florent,
-  2026-10-15, option A). The operator fixes Ghostfolio by hand first.
-- `BD#` identifier: row content and rank. Task 1.1 checks if the real PDF shows
-  a notice reference. If yes, the spec adds it to the identifier.
+  option A). The operator fixes Ghostfolio by hand first.
+- Identity `BD#v3#<account>:<KIND>:<row key>` (Florent, 2026-10-15), as ibkr
+  `IBKR#v2#`: Ghostfolio duplicate detection ignores the account.
+  v1, v2: legacy. If the real PDF shows a notice reference (task 1.1),
+  it joins the row key.
 - Coupon: quantity 1 at the net amount.
-- Logs show date, type, symbol, quantity, price and fee only.
+- Logs show activity fields and the comment only.
 - Test data: anonymized `pdftotext` text of real PDFs.
 
 ## Known limits

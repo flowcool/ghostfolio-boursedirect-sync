@@ -20,8 +20,7 @@ The connector SHALL read its settings only from ENV. Required: `GHOST_HOST`,
 `PAPERLESS_URL`, `PAPERLESS_TOKEN`. Optional: `PAPERLESS_DONE_TAG` (default
 `ghostfolio-done`), `MAPPING_FILE`, `DRY_RUN`, `TZ`, `CRON`, `APPRISE_URLS`,
 `APPRISE_TIMEOUT`, `LOG_LEVEL`. A missing or invalid setting SHALL stop the run
-with code `invalid_configuration`. The log SHALL never show a secret or
-`BD_ACCOUNT_REF`.
+with code `invalid_configuration`. The log SHALL never show a secret.
 
 #### Scenario: Missing Paperless token
 - **WHEN** the run command runs without `PAPERLESS_TOKEN`
@@ -33,7 +32,7 @@ with code `invalid_configuration`. The log SHALL never show a secret or
 `DRY_RUN=0` SHALL send activities to Ghostfolio. `DRY_RUN=1`, or no value,
 SHALL simulate. Another value SHALL give `invalid_configuration`. A simulation
 SHALL log each activity to create (date, type, symbol, quantity, unit price,
-fee). It SHALL not write to Ghostfolio or notify.
+fee, comment). It SHALL not write to Ghostfolio or notify.
 
 #### Scenario: Real BUY in simulation
 - **WHEN** the run command runs without `DRY_RUN` on one real BUY notice
@@ -45,7 +44,8 @@ Each run SHALL read the original PDF of every notice document. The connector
 SHALL never write to Paperless. A rejected token SHALL stop the run with code
 `paperless_auth_failed`. No answer or an unexpected answer SHALL stop it with
 code `paperless_unreachable`. The log SHALL show the Paperless document ID,
-never the account number, holder name or address.
+never the holder name or address. The account number SHALL appear only in
+the comment and its log line.
 
 #### Scenario: Wrong Paperless token
 - **WHEN** the run command runs with an invalid `PAPERLESS_TOKEN`
@@ -92,9 +92,10 @@ imported.
 A BUY or SELL activity SHALL have: quantity = QUANTITE without sign, unit
 price = COURS, fee = COURTAGE, currency EUR. A COUPONS row SHALL give a
 DIVIDEND with quantity 1, unit price = net credit of the row, and fee 0. The
-activity date SHALL be the row date at midnight UTC. The comment SHALL start
-with `BD#`, followed by an identifier made from the row content and its rank
-among identical rows of the notice.
+activity date SHALL be the row date at midnight UTC. The comment SHALL be
+`BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`. KIND is the activity type. The
+row key is made from the row content and its rank among identical rows of the
+notice.
 
 #### Scenario: Real coupon in simulation
 - **WHEN** the run command runs on a real coupon notice
@@ -119,10 +120,10 @@ empty.
 ### Requirement: No duplicate activity
 
 A row SHALL be a duplicate, not imported, when an activity of the Ghostfolio
-account has the same `BD#` comment. An activity with a `BD#` comment SHALL
-match only by this exact comment. Legacy comments (`BD#v1#`, `BD#v2#`) count
-as no `BD#` comment. An activity without a `BD#` comment SHALL match a row
-when:
+account has the same `BD#v3#` comment. An activity with a `BD#v3#` comment
+SHALL match only by this exact comment. Legacy comments (`BD#v1#`, `BD#v2#`)
+count as no `BD#v3#` comment. An activity without a `BD#v3#` comment SHALL
+match a row when:
 
 - for a BUY or SELL, it has the same side, security (or ISIN), quantity and
   unit price, and a date at most 2 days away. Each activity matches one row
@@ -131,7 +132,7 @@ when:
   amount, at most 3 days away.
 
 A BUY or SELL near such an activity, with another quantity or price, SHALL get
-code `possible_duplicate` and SHALL not be imported.
+code `possible_duplicate`, without import.
 
 #### Scenario: Second run
 - **WHEN** the run command runs twice with `DRY_RUN=0`
@@ -139,8 +140,8 @@ code `possible_duplicate` and SHALL not be imported.
   `exit=0`.
 
 #### Scenario: Coupon already in Ghostfolio
-- **WHEN** the run command runs on the real notice of the coupon written to
-  Ghostfolio by the legacy connector
+- **WHEN** the run command runs on the real notice of the coupon written by
+  the legacy connector
 - **THEN** the output shows that coupon as a duplicate and no DIVIDEND line.
 
 ### Requirement: Sell guard
@@ -169,8 +170,7 @@ A DIVISION row SHALL get code `share_count_change`. A row with an unknown
 operation label SHALL get code `unknown_operation`. When either row has an
 ISIN, no row of that ISIN SHALL be imported, from any notice document. Other
 securities SHALL continue. `PAPERLESS_DONE_TAG` on a document SHALL clear these
-two codes for its rows only. The other rows of that document SHALL still be
-imported.
+two codes for its rows only; its other rows stay importable.
 
 #### Scenario: Division and coupon in one notice
 - **WHEN** the run command runs on the real notice with a coupon and a DIVISION
@@ -187,15 +187,15 @@ imported.
 ### Requirement: Additive writes with readback
 
 The connector SHALL never update or delete data. After each import, each sent
-`BD#` comment SHALL read back exactly once, with the same account, comment,
+`BD#v3#` comment SHALL read back exactly once, with the same account, comment,
 symbol, data source, date, type, quantity, unit price, fee and currency.
 Another result SHALL give code `import_unconfirmed`: a difference, or an
 empty, partial, repeated or extra result. This code SHALL stop all writes of
-the run, without a retry.
+the run; no retry.
 
 #### Scenario: Unexpected import response
-- **WHEN** Ghostfolio returns an empty activity list, or an activity with
-  another quantity, to a run with `DRY_RUN=0`
+- **WHEN** Ghostfolio answers a run with `DRY_RUN=0` with an empty activity
+  list
 - **THEN** the output shows `import_unconfirmed` and `exit=1`.
 
 ### Requirement: Exit code, summary and notification
