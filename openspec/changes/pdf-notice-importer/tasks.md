@@ -16,7 +16,10 @@ PDFs only. Paperless is read only; no task writes to it.
   `BD_ACCOUNT_REF`, read the BUY rows, the mapping file and the Ghostfolio
   account. Log the simulated BUY. Add one offline test from the anonymized
   text of the real BUY PDF and a README quick start. The README and
-  `compose.yaml` show one service per Bourse Direct account. Verify:
+  `compose.yaml` show one service per Bourse Direct account. They use only the
+  ENV names of the spec: the legacy names (`GHOST_ACCOUNT_ID`,
+  `BD_SOURCE_ACCOUNT_REF`) and all `BW_*` variables go away. Verify that
+  `compose.yaml` has no `BW_` variable, then verify:
   `docker compose up --abort-on-container-exit --exit-code-from boursedirect-sync`
   without a TTY and without `DRY_RUN`, with the real BUY PDF as the only notice
   document, shows `DRY RUN`, one BUY line and exit code 0.

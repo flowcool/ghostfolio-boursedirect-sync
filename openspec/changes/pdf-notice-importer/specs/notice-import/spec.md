@@ -58,8 +58,8 @@ reference `BD_ACCOUNT_REF`. It SHALL skip the notices of other accounts and
 log only their count.
 
 #### Scenario: Notice of another account
-- **WHEN** the run command runs on a real BUY notice of the account and a real
-  notice of another account
+- **WHEN** the run command runs on a real BUY notice and a real notice of
+  another account
 - **THEN** the output shows one BUY line, 1 other-account notice and `exit=0`.
 
 ### Requirement: Unreadable documents block writes
@@ -85,7 +85,7 @@ imported.
 
 #### Scenario: Altered amount
 - **WHEN** the run command runs on a real BUY notice with a changed BRUT
-- **THEN** the output shows `amount_check_failed`, no BUY line and `exit=1`.
+- **THEN** the output shows `amount_check_failed` and `exit=1`.
 
 ### Requirement: Activity content
 
@@ -98,8 +98,8 @@ among identical rows of the notice.
 
 #### Scenario: Real coupon in simulation
 - **WHEN** the run command runs on a real coupon notice
-- **THEN** the output shows one DIVIDEND line with quantity 1, the credited
-  amount as unit price, fee 0, and `exit=0`.
+- **THEN** the output shows one DIVIDEND line with quantity 1, the net credit
+  as unit price, fee 0, and `exit=0`.
 
 ### Requirement: Security resolution
 
@@ -146,8 +146,9 @@ code `possible_duplicate` and SHALL not be imported.
 ### Requirement: Sell guard
 
 The position of a security SHALL be the Ghostfolio position plus each new row,
-in date order. A SELL that makes this position negative SHALL get code
-`sell_exceeds_holding` and SHALL not be imported.
+in date order, with SELL rows first on the same date. A SELL that makes this
+position negative SHALL get code `sell_exceeds_holding` and SHALL not be
+imported.
 
 #### Scenario: Sell without a position
 - **WHEN** the run command runs on a real SELL notice of a security not held
