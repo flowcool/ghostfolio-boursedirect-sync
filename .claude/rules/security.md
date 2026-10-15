@@ -17,7 +17,8 @@
 - Use Paperless read only, with a user that has view permission only.
 - Personal data stays off Git (`inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`).
   Tests use anonymized fixtures only.
-- A change to authentication, notice parsing or any new external HTTP call
-  needs a security review before merge: a completed CodeRabbit review of the
+- A code change to authentication, notice parsing or any new external HTTP
+  call needs a security review before merge: a completed CodeRabbit review of the
   final head (the docs-only exception does not apply) and a short security note in
-  the PR.
+  the PR. A change of this file or of spec text only is a docs-only PR
+  (Florent, 2026-10-15).
