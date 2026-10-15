@@ -6,10 +6,10 @@ Read Bourse Direct PDF notices from Paperless. Add new BUY, SELL and DIVIDEND
 activities to one Ghostfolio account. One container serves one Bourse Direct
 account.
 
-"The run command" is `docker compose run --rm -T boursedirect-sync; echo
-"exit=$?"`. "Notice documents" are the Paperless documents whose custom field
-`Source` is exactly `Bourse Direct`, with or without the tag
-`PAPERLESS_DONE_TAG`.
+"The run command" is `docker compose run --rm -T <service>; echo "exit=$?"`.
+Acceptance runs it for each configured account service. "Notice documents" are
+the Paperless documents whose custom field `Source` is exactly `Bourse Direct`,
+with or without the tag `PAPERLESS_DONE_TAG`.
 
 ## ADDED Requirements
 
@@ -21,11 +21,17 @@ The connector SHALL read its settings only from ENV. Required: `GHOST_HOST`,
 `ghostfolio-done`), `MAPPING_FILE`, `DRY_RUN`, `TZ`, `CRON`, `APPRISE_URLS`,
 `APPRISE_TIMEOUT`, `LOG_LEVEL`. A missing or invalid setting SHALL stop the run
 with code `invalid_configuration`. The log SHALL never show a secret.
+`GHOST_ACCOUNT_NAME` SHALL match exactly one Ghostfolio account name. Zero or
+several matches SHALL give `invalid_configuration`.
 
 #### Scenario: Missing Paperless token
 - **WHEN** the run command runs without `PAPERLESS_TOKEN`
 - **THEN** the output shows `invalid_configuration`, `PAPERLESS_TOKEN` and
   `exit=1`.
+
+#### Scenario: Ambiguous Ghostfolio account
+- **WHEN** two Ghostfolio accounts have the exact `GHOST_ACCOUNT_NAME`
+- **THEN** the output shows `invalid_configuration` and `exit=1`.
 
 ### Requirement: Simulation by default
 
@@ -44,17 +50,36 @@ SHALL never write to Paperless. A rejected token SHALL stop the run with code
 `paperless_auth_failed`. No answer or an unexpected answer SHALL stop it with
 code `paperless_unreachable`. The log SHALL show the Paperless document ID,
 never the holder name or address. The account number SHALL appear only in
-the comment and its log line.
+the comment and its log line. An error log SHALL show only the HTTP status,
+error code and Paperless document ID from a response. It SHALL never show a raw
+response body.
+
+The connector SHALL also find Paperless documents whose original file name
+starts with `BourseDirect_` and that lack `Source = Bourse Direct`. Such a
+document SHALL get code `source_field_missing`. This code SHALL stop all
+Ghostfolio writes of the run.
 
 #### Scenario: Wrong Paperless token
 - **WHEN** the run command runs with an invalid `PAPERLESS_TOKEN`
 - **THEN** the output shows `paperless_auth_failed` and `exit=1`.
 
+#### Scenario: Paperless down
+- **WHEN** the run command runs while Paperless is unavailable
+- **THEN** the output shows `paperless_unreachable` and `exit=1`.
+
+#### Scenario: Source field missing
+- **WHEN** a Paperless document has an original file name that starts with
+  `BourseDirect_` and lacks `Source = Bourse Direct`
+- **THEN** the output shows `source_field_missing`, 0 activities created and
+  `exit=1`.
+
 ### Requirement: Account selection
 
-The connector SHALL import only the notices whose text shows the account
-reference `BD_ACCOUNT_REF`. It SHALL only count the notices of other
-accounts.
+Each notice SHALL contain exactly one labelled account field. The connector
+SHALL normalize that field once by removing spaces. It SHALL use full equality
+with `BD_ACCOUNT_REF`. It SHALL import matching notices and only count notices
+of other accounts. Zero or several labelled account fields SHALL give
+`notice_unreadable`.
 
 #### Scenario: Notice of another account
 - **WHEN** the run command runs on a real BUY notice and a real notice of
@@ -83,7 +108,8 @@ be in EUR. A failed row SHALL get code `amount_check_failed`, without import.
 
 #### Scenario: Altered amount
 - **WHEN** the run command runs on a real BUY notice with a changed BRUT
-- **THEN** the output shows `amount_check_failed` and `exit=1`.
+- **THEN** the output shows `amount_check_failed`, 0 activities created and
+  `exit=1`.
 
 ### Requirement: Activity content
 
@@ -92,8 +118,10 @@ price = COURS, fee = COURTAGE, currency EUR. A COUPONS row SHALL give a
 DIVIDEND with quantity 1, unit price = net credit of the row, and fee 0. The
 activity date SHALL be the row date at midnight UTC. The comment SHALL be
 `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`. KIND is the activity type. The
-row key is made from the row content and its rank among identical rows of the
-notice.
+row key SHALL include a stable document namespace. It SHALL use the broker
+notice reference when the PDF shows one. Otherwise, it SHALL use the first 16
+hex characters of the SHA-256 of the original PDF. The remaining key uses the
+row content and its rank among identical rows of the notice.
 
 #### Scenario: Real coupon in simulation
 - **WHEN** the run command runs on a real coupon notice
@@ -134,7 +162,8 @@ A BUY or SELL near such an activity, with another quantity or price, SHALL get
 code `possible_duplicate`, without import.
 
 #### Scenario: Second run
-- **WHEN** the run command runs twice with `DRY_RUN=0`
+- **WHEN** the run command runs twice with `DRY_RUN=0` on the same notice
+  documents both times
 - **THEN** the second output shows 0 activities created, only duplicates, and
   `exit=0`.
 

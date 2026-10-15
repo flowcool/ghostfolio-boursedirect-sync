@@ -26,7 +26,7 @@ rules:
     - Build that table from saved real documents of the chosen source; when the source changes, rebuild it.
     - Include a "Non-goals" section.
   specs:
-    - Max 1500 words. Describe visible behavior and error codes only, never internal mechanisms.
+    - Max 1800 words. Describe visible behavior and error codes only, never internal mechanisms.
     - Every requirement has at least one WHEN/THEN scenario that a person can check by running one command and reading its output.
     - Never state Bourse Direct page or document behavior that is not observed in a saved real document; mark unknowns as open questions.
   design:
