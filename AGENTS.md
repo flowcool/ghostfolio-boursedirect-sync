@@ -51,10 +51,11 @@ work-tracker IDs.
   and each error code. No synthetic protocol proofs. No tests for docs or CI.
 - **Git:** one branch and one PR per bead. Merge when CI is green and CodeRabbit
   finished its review of the head commit, or on Florent's explicit go. A PR that
-  changes only `openspec/`, `docs/` or `*.md` needs CI green only. Wait with
-  `~/.agents/bin/pr-gate <n> --repo flowcool/ghostfolio-boursedirect-sync`, never
-  a `sleep` loop. Fix or answer each actionable comment. In Claude Code, the
-  implementing agent runs the PR lifecycle itself, without a subagent.
+  changes only `openspec/`, `docs/` or `*.md` needs CI green only. Open the PR
+  yourself, then run `~/.agents/bin/pr-ship <n> --repo
+  flowcool/ghostfolio-boursedirect-sync` in one call, never a `sleep` loop: it
+  waits, merges on `ready` and hands back any other verdict (exit 2: re-run).
+  Fix or answer each actionable comment, then re-run. No subagent.
 - **Operation beads.** A bead that acts on real state (Ghostfolio write, NAS)
   runs only from an `Operation plan:` in its design that Florent validated. In
   this repository, the only ceremony is the first real Ghostfolio write. A
