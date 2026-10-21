@@ -32,6 +32,11 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   no `BW_` variable. Verify `.venv/bin/python -m ruff check ghostfolio_boursedirect_sync`,
   `.venv/bin/python -m mypy --strict ghostfolio_boursedirect_sync` and
   `.venv/bin/python -m pytest -q`.
+  Adapt CI to install and check the new Python 3.14 package and image.
+  Update or retire only the legacy checks and jobs that require the removed
+  browser or vault runtime. Keep security coverage for the new runtime.
+  Keep the remaining legacy tests runnable until task 1.3. Install their
+  existing test dependencies; do not skip failures without a proven cause.
   Run the run command without `DRY_RUN` for each configured
   account service. With the real BUY PDF as the only notice document, it shows
   `DRY RUN`, one BUY line and exit code 0.
@@ -48,9 +53,10 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   match. Error logs must not include raw response bodies.
 - [ ] 1.3 Remove the files that only the legacy code uses: `scripts/`,
   `collector/`, `compose.lab.yaml`, `compose.broker-inspection.yaml`,
-  `docs/verification/` and the legacy tests. Update the CI workflows that call
-  them. Remove `boursedirect_to_ghostfolio.py` after its selected parser logic
-  is covered in the package. Start this task only after task 1.1 is merged.
+  `docs/verification/` and the remaining legacy tests. Remove CI calls that
+  remain after task 1.1. Remove `boursedirect_to_ghostfolio.py` after its
+  selected parser logic is covered in the package.
+  Start this task only after task 1.1 is merged.
   Verify: CI is green, and the sum of lines in all application-package Python
   files is 2 500 or fewer. Tests and packaging metadata do not count.
 

@@ -45,6 +45,10 @@ Keep the BD spec:
 
 Do not copy Flex parsing, cash updates, gross dividends or maintenance tools.
 
+Task 1.1 adapts CI and replaces checks that require the removed runtime.
+Keep the remaining legacy tests runnable until task 1.3 removes their files.
+This order prevents legacy checks from blocking the first package merge.
+
 ## Source-specific parts
 
 Previously approved:
