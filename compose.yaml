@@ -1,53 +1,22 @@
-name: ghostfolio-boursedirect-sync
 services:
-  boursedirect-sync:
+  importer:
     build: .
-    image: ${BOURSEDIRECT_IMAGE:-ghostfolio-boursedirect-sync:local}
-    platform: linux/amd64
-    init: true
-    restart: "no"
-    read_only: true
-    user: "1000:1000"
     environment:
-      BW_SERVER: ${BW_SERVER:-https://vault.bitwarden.com}
-      BW_ITEM_NAME: ${BW_ITEM_NAME:-boursedirect.fr}
-      BW_CLIENTID: ${BW_CLIENTID:?Supply your Bitwarden personal API client ID}
-      BW_CLIENTSECRET: ${BW_CLIENTSECRET:?Supply your Bitwarden personal API client secret}
-      BW_PASSWORD: ${BW_PASSWORD:?Supply your Bitwarden master password}
-      # Your Ghostfolio instance supplies the origin and long-lived Security Token.
-      # HTTPS normally; exact http://ghostfolio:3333 requires a trusted private network.
-      GHOST_HOST: ${GHOST_HOST:-}
+      GHOST_HOST: ${GHOST_HOST:?Set the internal Ghostfolio service address}
       GHOST_ACCESS_TOKEN: ${GHOST_ACCESS_TOKEN:-}
-      GHOST_ACCOUNT_ID: ${GHOST_ACCOUNT_ID:-}
-      BD_SOURCE_ACCOUNT_REF: ${BD_SOURCE_ACCOUNT_REF:-}
-      # Required readable YAML; {} enables Ghostfolio ISIN resolution.
-      MAPPING_FILE: ${MAPPING_FILE:-/config/mappings.yaml}
-      DRY_RUN: ${DRY_RUN:-1}
-      CRON: ${CRON:-}
-      APPRISE_URLS: ${APPRISE_URLS:-}
-      APPRISE_TIMEOUT: ${APPRISE_TIMEOUT:-10}
-    tmpfs:
-      - /data:rw,noexec,nosuid,nodev,mode=0700,uid=1000,gid=1000
-      - /tmp:rw,nosuid,nodev,mode=1777
-      - /home/fixture:rw,nosuid,nodev,mode=0700,uid=1000,gid=1000
+      GHOST_TOKEN: ${GHOST_TOKEN:-}
+      GHOST_ACCOUNT_NAME: ${GHOST_ACCOUNT_NAME:?Set the target account name}
+      BD_ACCOUNT_REF: ${BD_ACCOUNT_REF:?Set the source account identifier}
+      PAPERLESS_URL: ${PAPERLESS_URL:?Set the Paperless URL}
+      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:?Set the read-only Paperless token}
+      DRY_RUN: ${DRY_RUN-1}
+      MAPPING_FILE: ${MAPPING_FILE:-}
+    networks:
+      - ghostfolio
     volumes:
-      - boursedirect-state:/state
       - ./config:/config:ro
-    cap_drop: [ALL]
-    # Required by Chromium to create its sandbox chroot.
-    cap_add: [SYS_CHROOT]
-    security_opt: [no-new-privileges, "seccomp=./collector/browser-seccomp.json"]
-    ipc: private
-    shm_size: 128m
-    ulimits:
-      core: {soft: 0, hard: 0}
-    mem_limit: 1536m
-    cpus: 1
-    pids_limit: 256
-    logging: {driver: json-file, options: {max-size: 1m, max-file: "2"}}
-volumes:
-  boursedirect-state:
-    # Services sharing broker credentials must share this volume and its lock.
-    # Docker Compose >= 2.27.0 (compose-go >= 2.1.0). With -p, set BD_STATE_VOLUME
-    # explicitly to the existing volume name, including when upgrading.
-    name: ${BD_STATE_VOLUME:-${COMPOSE_PROJECT_NAME:-ghostfolio-boursedirect-sync}_boursedirect-state}
+
+networks:
+  ghostfolio:
+    external: true
+    name: backend_ghost

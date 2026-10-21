@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghostfolio-boursedirect-sync"
+version = "0.0.0"
+requires-python = ">=3.14"
+
+[tool.setuptools]
+packages = ["ghostfolio_boursedirect_sync"]
+
+[tool.ruff]
+target-version = "py314"
+extend-exclude = ["tmp", "audit"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ghostfolio_boursedirect_sync"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["ghostfolio_boursedirect_sync"]

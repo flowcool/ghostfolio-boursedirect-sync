@@ -1,17 +1,7 @@
-# Verified offline parser bench dependencies (Python 3.13).
-beautifulsoup4==4.15.0
-soupsieve==2.10
-typing_extensions==4.16.0
-PyYAML==6.0.3
-
-# Isolated failure-alert worker; reuse sibling pinned dependency closure.
-apprise==2.0.1
-certifi==2026.7.22
+# Runtime closure selected from the pinned ibkr source. No dev tools in the image.
+certifi==2026.10.19
 charset-normalizer==3.5.2
-click==8.5.0
 idna==3.20
-markdown==3.11
-oauthlib==4.0.0
+PyYAML==6.0.3
 requests==2.34.2
-requests-oauthlib==2.0.0
 urllib3==2.8.0
