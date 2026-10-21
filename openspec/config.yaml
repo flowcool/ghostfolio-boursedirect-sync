@@ -3,12 +3,16 @@ schema: spec-driven
 context: |
   Community Docker connector: Bourse Direct (PEA, PEA-PME) activities -> Ghostfolio.
   Docker-first, every setting through ENV, unattended run with `docker compose up -d`.
-  Python, functional style, no classes, no type hints.
+  Python 3.14, functional style, typed application package ghostfolio_boursedirect_sync.
+  Strict mypy and Ruff; frozen dataclasses and typed dictionaries describe data only.
+  Money and position decisions use Decimal. Application Python totals at most 2500 lines.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
-  v1 rebuild (option B): a new branch on the ghostfolio-ibkr-sync skeleton.
+  v1 rebuild (option B): selectively adapt the merged ghostfolio-ibkr-sync package.
+  The design pins its source commit. Preparation need not wait for ibkr 3.0.0 stable.
+  Review later source updates separately; no shared library or automatic core projection.
   Source: PDF operation notices "avis d'opere", downloaded by BillCollector (Playwright)
   and published to Paperless; the importer reads them through the Paperless API, read only.
   The importer has no broker login and no vault; BillCollector owns them.

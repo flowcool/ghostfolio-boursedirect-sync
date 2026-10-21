@@ -2,9 +2,9 @@
 
 ## Why
 
-BillCollector (a separate project) downloads the Bourse Direct notices as PDF
-files and publishes them to Paperless. This change reads these files and adds
-activities to Ghostfolio, on the `ghostfolio-ibkr-sync` skeleton.
+BillCollector publishes Bourse Direct PDF notices to Paperless. This importer
+reads them and adds Ghostfolio activities. It selectively adapts the merged
+ibkr package.
 
 ## What changes
 
@@ -15,14 +15,16 @@ activities to Ghostfolio, on the `ghostfolio-ibkr-sync` skeleton.
 - It stops on a security when a row changes the number of shares.
 - It does not track the TTF and ignores custody fees.
 - It does not import duplicates.
+- Preparation can precede ibkr stable. The design pins the source commit.
+  Bourse Direct financial rules stay authoritative.
 - ibkr contract: ENV settings only, simulation when `DRY_RUN` is absent,
   additive writes, `CRON`, `APPRISE_URLS`.
 
 ## Operation types
 
-Sources: anonymized real HTML notices (tag `legacy-wip`), one real PDF notice
-and one real account statement. Only a BUY was seen as a real PDF. The PDF
-form of each other label is open until a real PDF exists.
+Sources: real anonymized HTML notices (`legacy-wip`), one PDF notice and one
+account statement. Only BUY has real PDF evidence. Other PDF forms remain
+unverified.
 
 | Label in a real document | Seen in | v1 behavior |
 | --- | --- | --- |
@@ -36,8 +38,8 @@ form of each other label is open until a real PDF exists.
 | Other label, with ISIN | Not seen | Stop on security |
 | Other label, no ISIN | Not seen | Not imported, reported |
 
-No saved document shows subscription rights, share withdrawal or share
-transfer. The "other label" rows apply.
+Subscription rights, share withdrawals and transfers remain unobserved.
+Apply the "other label" rules.
 
 ## Non-goals
 
@@ -62,5 +64,5 @@ None.
 
 ## Impact
 
-New main Python file, image, `compose.yaml`, README and tests. Rollback:
-revert the commits.
+New typed Python 3.14 application package, image, `compose.yaml`, README and
+tests. The package replaces the legacy runtime. Rollback: revert the commits.
