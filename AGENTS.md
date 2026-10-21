@@ -14,8 +14,12 @@ work-tracker IDs.
 
 ## Current plan: v1 rebuild (option B)
 
-- The v1 is a new branch on the ibkr skeleton. The previous work stays in Git
-  (tag `legacy-wip`). v0.1.1 is a preview-only legacy release.
+- The v1 uses the typed ibkr package structure. Selective reuse from a reviewed
+  merged commit can start before ibkr 3.0.0 stable (Florent, 2026-10-21).
+  The active change design owns the source commit and adaptations. Review each
+  later source update separately. No shared library or automatic core projection.
+  The previous work stays in Git (tag `legacy-wip`). v0.1.1 is a preview-only
+  legacy release.
 - Track A (first priority): BillCollector downloads the notices with Playwright,
   in the flowcool fork, and publishes them to Paperless. BillCollector owns the
   Bourse Direct login and the vault access.
@@ -61,7 +65,8 @@ work-tracker IDs.
 
 ## Budgets
 
-- The main Python file has 2 500 lines or fewer.
+- The application package has 2 500 lines or fewer across all its Python files.
+  This replaces the main-file limit. Tests and packaging metadata are excluded.
 - No new compose file and no lab without Florent's approval.
 - No release before one real run.
 - Docs: README, one spec, AGENTS.md. History stays in Git. No new plan, review
@@ -96,7 +101,12 @@ voice, no internal jargon.
 
 ## Code
 
-Functional Python, no classes, no type hints:
+The target is the installed Python 3.14 package `ghostfolio_boursedirect_sync`.
+Docker runs `python -m ghostfolio_boursedirect_sync`. Use typed module-level
+functions. Frozen dataclasses and typed dictionaries describe data only.
+Application code passes strict mypy and Ruff; tests keep relaxed typing.
+Keep `Decimal` for money and position decisions when adapting ibkr code.
+See
 [python conventions](.claude/rules/python-conventions.md),
 [security rules](.claude/rules/security.md). The legacy code stays in place
 until the rebuild replaces it.

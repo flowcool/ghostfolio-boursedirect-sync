@@ -5,18 +5,34 @@ documents" are defined in the spec. A task that needs a real PDF of a type that
 is not yet in Paperless waits for that PDF. Tests use anonymized text of real
 PDFs only. Paperless is read only; no task writes to it.
 
+Use the ibkr source commit and function references in design.md. Selective reuse
+can start before ibkr 3.0.0 stable. Review any later source update separately.
+Use the installed Python 3.14 package `ghostfolio_boursedirect_sync`, with typed
+functions and data records. Pass strict mypy and Ruff as well as each task's
+offline tests. Preserve Decimal and all BD spec rules when adapting source code.
+These checks accompany each code task; they are not separate tooling tasks.
+The architecture approval does not authorize live runs, financial writes or
+publication. Keep the existing real-PDF and first-write authorization gates.
+
 ## 1. First real BUY in simulation
 
 - [ ] 1.1 Gate the real BUY PDF first. Confirm that it has exactly one labelled
   account field. Remove spaces once and require full equality with
   `BD_ACCOUNT_REF`. Measure `QUANTITE x COURS - BRUT` exactly and report the
-  result. If either gate fails, stop and report. Replace the main Python file,
-  `Dockerfile`, `entrypoint.sh`, `requirements.txt` and `compose.yaml` with the
-  ibkr skeleton. With the minimum required settings, read the notice documents
+  result. If either gate fails, stop and report. Add the application package
+  and `pyproject.toml`. Adapt `Dockerfile`, `entrypoint.sh`, `requirements.txt`,
+  `requirements-dev.txt` and `compose.yaml` from the pinned ibkr source.
+  Install the package; Docker runs `python -m ghostfolio_boursedirect_sync`.
+  Keep the legacy source only until task 1.3; the image must not run it.
+  Include `poppler-utils`, without a browser, Node or Bitwarden.
+  With the minimum required settings, read the notice documents
   from Paperless, select the account, read the BUY row, mapping file and the
   single Ghostfolio account, then log the simulated BUY. Add one offline test
   from the anonymized text of the real BUY PDF. Verify that `compose.yaml` has
-  no `BW_` variable. Run the run command without `DRY_RUN` for each configured
+  no `BW_` variable. Verify `.venv/bin/python -m ruff check ghostfolio_boursedirect_sync`,
+  `.venv/bin/python -m mypy --strict ghostfolio_boursedirect_sync` and
+  `.venv/bin/python -m pytest -q`.
+  Run the run command without `DRY_RUN` for each configured
   account service. With the real BUY PDF as the only notice document, it shows
   `DRY RUN`, one BUY line and exit code 0.
 - [ ] 1.2 Add the settings checks, `paperless_auth_failed`,
@@ -28,11 +44,15 @@ PDFs only. Paperless is read only; no task writes to it.
   absent. Verify the scenarios "Missing Paperless token", "Ambiguous
   Ghostfolio account", "Wrong Paperless token", "Paperless down", "Source
   field missing" and "Notice of another account".
+  Keep `DRY_RUN` limited to 0, 1 or absent. Require one exact target-account
+  match. Error logs must not include raw response bodies.
 - [ ] 1.3 Remove the files that only the legacy code uses: `scripts/`,
   `collector/`, `compose.lab.yaml`, `compose.broker-inspection.yaml`,
   `docs/verification/` and the legacy tests. Update the CI workflows that call
-  them. Start this task only after task 1.1 is merged. Verify: CI is green,
-  and `wc -l` of the main Python file shows 2 500 lines or fewer.
+  them. Remove `boursedirect_to_ghostfolio.py` after its selected parser logic
+  is covered in the package. Start this task only after task 1.1 is merged.
+  Verify: CI is green, and the sum of lines in all application-package Python
+  files is 2 500 or fewer. Tests and packaging metadata do not count.
 
 ## 2. Notice checks
 
@@ -55,13 +75,19 @@ PDFs only. Paperless is read only; no task writes to it.
   price and `possible_duplicate`, with offline tests. Two identical rows in one
   notice give two activities. Verify in simulation with the run command: a real
   BUY that matches a manual Ghostfolio activity shows a duplicate.
+  Adapt identity parsing to BD v3; do not copy the IBKR namespace or its
+  source-specific identifiers. Keep legacy BD rows readable for matching.
 - [ ] 4.2 Add SELL rows, the sell guard on the running position and
   `custody_fee_ignored`, with an offline test (two sells that together exceed
   the position). Verify the scenarios "Sell without a position" and "Sell
   notice with a custody fee".
+  Use Decimal and chronological rows, with SELL first on equal dates.
+  When writes are enabled in task 6.1, only confirmed buys can support sells.
 - [ ] 4.3 Add COUPONS rows and the dividend match (exact `BD#`, or 3 days and
   same net amount without `BD#`, else `possible_duplicate`). Verify the scenarios "Real coupon in
   simulation" and "Coupon already in Ghostfolio".
+  Keep quantity 1, net unit price and fee 0. Do not copy Flex action partition,
+  gross amounts or withholding logic.
 
 ## 5. Stops
 
@@ -80,6 +106,12 @@ PDFs only. Paperless is read only; no task writes to it.
   validated. Verify the scenarios "Second run" and "Unexpected import response"
   (the second one with mocked Ghostfolio responses in an offline test: empty
   list and changed quantity).
+  Also reject partial, repeated and extra results and changed account, symbol,
+  data source, date, type, price, fee or currency. Adapt the accepted-subset
+  helper to require full exact confirmation. Stop all writes without retry
+  on `import_unconfirmed`; never project an omitted buy into real holdings.
 - [ ] 6.2 Add the failure notification and `CRON`, with the README sections and
   one README line on the notice copies in Paperless and paperless-gpt. Verify
   the scenarios "Failure notification" and "Invalid schedule".
+  Adapt the isolated notification worker and validated numeric CRON mechanism.
+  Never notify in simulation, including failures and invalid settings.
