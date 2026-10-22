@@ -1,7 +1,7 @@
 """Immutable records. Money stays Decimal through the simulation boundary."""
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -45,3 +45,34 @@ class Activity:
     type: str = "BUY"
     currency: str = "EUR"
     data_source: str = "YAHOO"
+
+
+@dataclass(frozen=True)
+class ExistingActivity:
+    id: str
+    account_id: str
+    date: datetime
+    type: str
+    quantity: Decimal
+    unit_price: Decimal
+    fee: Decimal
+    currency: str
+    symbol: str
+    data_source: str
+    comment: str
+    isin: str | None
+    active: bool
+
+
+@dataclass(frozen=True)
+class ActivityIndex:
+    rows: tuple[ExistingActivity, ...]
+    identities: dict[str, tuple[ExistingActivity, ...]]
+    positions: dict[tuple[str, str], Decimal]
+
+
+@dataclass(frozen=True)
+class Selection:
+    activities: tuple[Activity, ...]
+    duplicates: int
+    errors: tuple[str, ...]

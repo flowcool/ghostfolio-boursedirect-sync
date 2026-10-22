@@ -5,7 +5,7 @@ import os
 from collections import Counter
 
 from ghostfolio_boursedirect_sync import config, ghostfolio, notices, paperless, sync
-from ghostfolio_boursedirect_sync.models import Buy
+from ghostfolio_boursedirect_sync.models import Activity, Buy, Notice
 
 log = logging.getLogger(__name__)
 
@@ -24,30 +24,44 @@ def main() -> int:
             raise RuntimeError("invalid_configuration financial import is not available")
         log.info("DRY RUN")
         mapping = sync.load_mapping(settings.mapping_file)
-        token = ghostfolio.exchange_token(settings)
-        account_id = ghostfolio.find_account(settings, token)
-        simulated = other_accounts = 0
+        other_accounts = 0
+        matching: list[tuple[int, Notice]] = []
         for document_id in paperless.document_ids(settings):
             pdf = paperless.original_pdf(settings, document_id)
             notice = notices.parse_text(notices.extract_text(pdf))
             if notice.account_ref != settings.bd_account_ref:
                 other_accounts += 1
                 continue
+            matching.append((document_id, notice))
+        # IBKR app.py:151 verifies the source before any target-account lookup.
+        token = ghostfolio.exchange_token(settings)
+        account_id = ghostfolio.find_account(settings, token)
+        existing = ghostfolio.read_activities(settings, token)
+        candidates: list[Activity] = []
+        documents: dict[str, int] = {}
+        for document_id, notice in matching:
+            namespace = sync.notice_namespace(notice)
             ranks: Counter[Buy] = Counter()
             for buy in notice.buys:
                 rank = ranks[buy]
                 ranks[buy] += 1
-                activity = sync.activity(buy, mapping, account_id, settings.bd_account_ref, pdf, rank)
-                log.info(
+                activity = sync.activity(buy, mapping, account_id, settings.bd_account_ref, namespace, rank)
+                candidates.append(activity)
+                documents.setdefault(activity.comment, document_id)
+        selected = sync.select_account_activities(candidates, existing)
+        for code in selected.errors:
+            log.error("%s", code)
+        for activity in selected.activities:
+            log.info(
                     "[DRY RUN] document=%s date=%s type=%s symbol=%s quantity=%s "
                     "unitPrice=%s fee=%s currency=%s accountId=%s dataSource=%s comment=%s",
-                    document_id, activity.date, activity.type, activity.symbol,
+                    documents[activity.comment], activity.date, activity.type, activity.symbol,
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
-                )
-                simulated += 1
-        log.info("Summary: simulated=%s other_account_notices=%s created=0", simulated, other_accounts)
-        return 0
+            )
+        log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s created=0",
+                 len(selected.activities), selected.duplicates, other_accounts)
+        return int(bool(selected.errors))
     except RuntimeError as exc:
         # Package RuntimeErrors contain fixed codes/field names only.
         log.error("%s document=%s", exc, document_id)

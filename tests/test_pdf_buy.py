@@ -16,7 +16,15 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from ghostfolio_boursedirect_sync import app, config, ghostfolio, notices, paperless, sync
+from ghostfolio_boursedirect_sync import (
+    app,
+    config,
+    ghostfolio,
+    notices,
+    paperless,
+    sync,
+)
+from ghostfolio_boursedirect_sync.models import ActivityIndex
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pdf_buy.txt"
 
@@ -44,7 +52,8 @@ def test_real_anonymized_buy():
     buy = notice.buys[0]
     assert (buy.date, buy.isin) == (date(2025, 2, 3), "FR0000120271")
     assert (buy.quantity, buy.unit_price, buy.fee) == (Decimal(4), Decimal("25.50"), Decimal(1))
-    result = sync.activity(buy, {buy.isin: "EXAMPLE.PA"}, "target", notice.account_ref, b"original", 0)
+    result = sync.activity(buy, {buy.isin: "EXAMPLE.PA"}, "target", notice.account_ref,
+                           sync.notice_namespace(notice), 0)
     assert result.date == "2025-02-03T00:00:00+00:00"
     assert result.currency == "EUR"
     assert result.type == "BUY"
@@ -81,6 +90,7 @@ def test_simulation_and_no_notification(settings, monkeypatch, caplog):
     monkeypatch.setenv("APPRISE_URLS", "invalid-but-ignored-in-simulation")
     monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
     monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
     monkeypatch.setattr(paperless, "document_ids", lambda _: [123])
     monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
     monkeypatch.setattr(notices, "extract_text", lambda _: FIXTURE.read_text())
