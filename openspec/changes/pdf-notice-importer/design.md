@@ -1,66 +1,55 @@
 # Design
 
-## Context
+## Source and scope
 
-Use the installed Python 3.14 package `ghostfolio_boursedirect_sync`.
-Follow IBKR modules: `app`, `config`, `models`, `ghostfolio`, `sync`,
-`outcome`, `notify`. Keep typed functions and data records, strict mypy,
-Ruff and the 2 500-line limit. Record source references and justify BD
-adaptations here before coding.
+Adopt the complete applicable IBKR v3.0.0 common core, commit
+`f181c957e99836ed511a1fcdce8811beb781bf01`.
+The update extracts offline selection, indexing and accepted-state functions;
+financial behavior stays unchanged. Review later updates separately.
+Use `app`, `config`, `models`, `ghostfolio`, `sync`, `outcome`, `notify`.
+Keep typed functions, data records, strict mypy, Ruff and 2 500 application lines.
+No shared library or automatic projection.
 
-Source: `ghostfolio-ibkr-sync` commit
-`a9bd0b92e4783ff1f42a089eb9547b27ba40f9bd`.
-Module paths below are under `ghostfolio_ibkr_sync/`.
-Preparation can precede IBKR stable. Review later source changes separately.
-Do not add a shared library or automatic core projection.
+## Coverage
 
-## Reused parts
+Paths below are relative to the pinned IBKR checkout. Each row binds the
+implemented runtime/release requirements to BD tasks. Preserve applicable tests.
 
-| Part | Source |
-| --- | --- |
-| ENV | `config.py:95` |
-| Token exchange, account lookup | `ghostfolio.py:116,189` |
-| Complete activity read | `ghostfolio.py:208` |
-| Account-scoped identity | `ghostfolio.py:64,76` |
-| Mapping, manual match, dividend proximity | `sync.py:58,546,718` |
-| Holdings and accepted-buy guard | `sync.py:580,960`, `app.py:343` |
-| Import and accepted response | `ghostfolio.py:398,459` |
-| Failure codes, notification | `outcome.py:49`, `notify.py:81`, `app.py:400` |
-| Package, image, CRON | `pyproject.toml`, `Dockerfile`, `entrypoint.sh` |
+| Core | Source | BD task |
+| --- | --- | --- |
+| ENV, URL, auth, account | `config.py:75,95`, `ghostfolio.py:116,189` | 1.1–1.2 |
+| Complete read, eligibility, profiles | `ghostfolio.py:143,152,208,259` | 1.1–1.2 |
+| Identity, mapping, manual/coupon match | `ghostfolio.py:64,76`, `sync.py:58,546,718` | 3.1,4.1,4.3 |
+| Selection, holdings, accepted state | `app.py:234,416`, `sync.py:580,960` | 1.1,4.2,6.1 |
+| Additive import, acceptance, uncertainty | `ghostfolio.py:405,466` | 6.1 |
+| Outcome, isolated notification | `outcome.py:49`, `notify.py:81`, `app.py:441` | 6.1–6.2 |
+| Package, image, schedule, CI | `pyproject.toml`, `Dockerfile`, `entrypoint.sh`, `.github/workflows/` | 1.1,6.2 |
+| Preview evidence, release checks | `ibkr.py:127`, `scripts/check_container_runtime.sh`, `scripts/release_image.py` | 6.1; existing release work |
 
-## Adaptations
+Python references above are under `ghostfolio_ibkr_sync/`.
 
-Keep the BD spec:
+## BD adaptations
 
-- Require one exact target account and one labelled source account.
-- Accept only absent `DRY_RUN`, `0` or `1`; never notify in simulation.
-- Use Decimal throughout money and position decisions; do not inherit float tolerances.
-- Require exact manual quantity and price. Coupon proximity compares net amounts.
-- Apply the chronological sell guard, with SELL first on equal dates.
-  Advance real holdings only from confirmed activities.
-- Require complete exact readback; partial acceptance fails without retry.
-- Log fixed error codes, HTTP status and Paperless document ID, never response bodies.
-- Keep `BD#v3#<account>:<KIND>:<row key>` and legacy matching.
-  The key includes the broker reference or original-PDF hash, row content
-  and identical-row rank.
+- Use `paperless` and `notices` instead of Flex. Check labelled source accounts
+  before target selection. Require one exact active target.
+- Preserve Decimal, EUR, exact manual quantity/price, net coupons and BD v3
+  identity with broker reference or original-PDF hash, content and identical-row rank.
+- Preserve chronological sells, SELL first on equal dates; only confirmed buys
+  advance real holdings. Keep selection separate from network requests.
+- Accept only absent/0/1 DRY_RUN; simulation never notifies. Use UTC row dates;
+  omit TZ-forced previews and bearer-expiry reminders under BD notification rules.
+- Require full exact readback, including symbol; no retry on uncertain/partial
+  import. Log fixed codes/status/document IDs, never response bodies.
+- Exclude Flex retries, cash writes, gross dividends, historical diagnostics
+  and maintenance conversion. Keep BD legacy matching and target-account scope.
 
-Do not copy Flex parsing, cash updates, gross dividends or maintenance tools.
+Sources: Paperless `docs/api.md:121–134` at `2b00cf6` (originals/search,
+view-only token); `pdftotext -layout`; parser at `legacy-wip`; approved ISIN lookup.
 
-Task 1.1 adapts CI for the package and replaces removed-runtime checks.
-Keep other legacy tests runnable until task 1.3.
+## Qualification and rollback
 
-## Source-specific parts
-
-Use `paperless` and `notices` for BD input. Approved sources:
-
-- Paperless originals and missing-Source search: paperless-ngx
-  `docs/api.md:121-134`, commit `2b00cf6`; view-only token.
-- PDF extraction: `pdftotext -layout` from `poppler-utils`.
-- Row parsing: selected legacy parser functions at `legacy-wip`.
-- ISIN lookup: decision of 2026-10-14.
-
-## Limits and rollback
-
-Other PDF types need real evidence. Keep TTF outside Ghostfolio.
-Stop on DIVISION; split-adjusted holdings remain unverified (#115).
-Revert the adoption commit for code rollback. This does not undo financial writes.
+Reuse infra's existing empty/golden lab and runner protections; adapt its
+IBKR-only launch/evidence for BD. Separate lab credentials; pin candidate digest;
+stop owned instances after checks. Release work owns RC/stable publication.
+Unverified PDF forms wait for real evidence. Revert commits for code rollback;
+accepted financial rows remain. Stop on DIVISION; split holdings remain unverified.

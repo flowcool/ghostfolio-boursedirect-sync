@@ -5,9 +5,11 @@ documents" are defined in the spec. A task that needs a real PDF of a type that
 is not yet in Paperless waits for that PDF. Tests use anonymized text of real
 PDFs only. Paperless is read only; no task writes to it.
 
-Follow the IBKR modules, source commit and function references in design.md.
-Record and justify each BD adaptation there before coding. Selective reuse
-can start before ibkr 3.0.0 stable. Review any later source update separately.
+Adopt the complete applicable IBKR v3.0.0 core mapped in design.md.
+Read its pinned source and coverage before each task. Preserve applicable
+protections and tests, and record reasons for BD adaptations before coding.
+Review later source updates separately. Do not mark a coverage row complete
+until its BD scenario passes.
 Use the installed Python 3.14 package `ghostfolio_boursedirect_sync`, with typed
 functions and data records. Pass strict mypy and Ruff as well as each task's
 offline tests. Preserve Decimal and all BD spec rules when adapting source code.
@@ -28,7 +30,10 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   Include `poppler-utils`, without a browser, Node or Bitwarden.
   With the minimum required settings, read the notice documents
   from Paperless, select the account, read the BUY row, mapping file and the
-  single Ghostfolio account, then log the simulated BUY. Add one offline test
+  single active Ghostfolio account. Read and validate the complete existing
+  activity list before logging the BUY. Adapt the separate indexing and
+  selection functions; keep network requests outside selection. Carry exact
+  Decimal values through JSON reads and decisions. Add one offline test
   from the anonymized text of the real BUY PDF. Verify that `compose.yaml` has
   no `BW_` variable. Verify `.venv/bin/python -m ruff check ghostfolio_boursedirect_sync`,
   `.venv/bin/python -m mypy --strict ghostfolio_boursedirect_sync` and
@@ -52,10 +57,18 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   field missing" and "Notice of another account".
   Keep `DRY_RUN` limited to 0, 1 or absent. Require one exact target-account
   match. Error logs must not include raw response bodies.
-- [ ] 1.3 Remove the files that only the legacy code uses: `scripts/`,
-  `collector/`, `compose.lab.yaml`, `compose.broker-inspection.yaml`,
+  Adopt URL validation, redirect rejection and the 120-second account-read
+  timeout. Reject incomplete, masked and invalid activity evidence with
+  `activities_unavailable`; reject excluded targets. Verify "Unsafe activity
+  evidence" and "Excluded target" with the real BUY fixture and mocked API.
+  Check active flags, tags, current assetProfile precedence and legacy-only
+  SymbolProfile compatibility. Exclude inactive/non-YAHOO holdings and manual
+  matches. Verify "Future activity"; defer future source rows without writes.
+- [ ] 1.3 Remove legacy-only scripts and `collector/`, `compose.lab.yaml`,
+  `compose.broker-inspection.yaml`,
   `docs/verification/` and the remaining legacy tests. Remove CI calls that
-  remain after task 1.1. Remove `boursedirect_to_ghostfolio.py` after its
+  remain after task 1.1. Retain the current package/image/security checks and
+  any adopted publication tooling. Remove `boursedirect_to_ghostfolio.py` after its
   selected parser logic is covered in the package.
   Start this task only after task 1.1 is merged.
   Verify: CI is green, and the sum of lines in all application-package Python
@@ -84,6 +97,9 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   BUY that matches a manual Ghostfolio activity shows a duplicate.
   Adapt identity parsing to BD v3; do not copy the IBKR namespace or its
   source-specific identifiers. Keep legacy BD rows readable for matching.
+  Reject unsupported or malformed reserved BD identities with `invalid_identity`
+  before writes. Verify "Invalid identity". Keep the BD target-account scope;
+  do not import IBKR's global source-account index semantics.
 - [ ] 4.2 Add SELL rows, the sell guard on the running position and
   `custody_fee_ignored`, with an offline test (two sells that together exceed
   the position). Verify the scenarios "Sell without a position" and "Sell
@@ -109,16 +125,33 @@ publication. Keep the existing real-PDF and first-write authorization gates.
 
 - [ ] 6.1 Add the import with `DRY_RUN=0`, the strict readback
   (`import_unconfirmed`), the summary line and the exit codes. This is the
-  first real Ghostfolio write: it runs only from an operation plan that Florent
-  validated. Verify the scenarios "Second run" and "Unexpected import response"
+  first production Ghostfolio write: it needs an operation plan that Florent
+  validated. Before production writes, qualify the same immutable RC digest in
+  the existing infra empty/golden lab. Infra owns the BD launch/evidence
+  adaptation; retain its target checks, snapshots, credential isolation and
+  stop verification. Prove first creation, duplicate rerun, mixed legacy rows,
+  chronological sells, exact readback and uncertain-result stop. Do not use
+  IBKR cash/Flex assertions as BD proof. Verify "Second run" and
+  "Unexpected import response"
   (the second one with mocked Ghostfolio responses in an offline test: empty
   list and changed quantity).
   Also reject partial, repeated and extra results and changed account, symbol,
   data source, date, type, price, fee or currency. Adapt the accepted-subset
   helper to require full exact confirmation. Stop all writes without retry
   on `import_unconfirmed`; never project an omitted buy into real holdings.
+  Adapt the separate accepted-state function and structured preview evidence.
+  Preserve exact Decimal values in the full preview and readback.
 - [ ] 6.2 Add the failure notification and `CRON`, with the README sections and
   one README line on the notice copies in Paperless and paperless-gpt. Verify
   the scenarios "Failure notification" and "Invalid schedule".
   Adapt the isolated notification worker and validated numeric CRON mechanism.
   Never notify in simulation, including failures and invalid settings.
+  Retain one fixed-code summary, bounded worker lifetime, secret-free worker
+  ENV and notification failure isolation. Keep schedule and one-off image checks.
+
+Existing release work adopts IBKR's serialized immutable RC/stable publication,
+native amd64/arm64 security/runtime checks, digest verification and latest rules.
+An RC never moves latest; stable uses the latest RC commit. Bind both infra lab
+verdicts to that RC digest before stable or production activation. Publication
+and production activation retain separate GO. Keep release tooling out of the
+behavior spec and reuse existing release/lab work items.

@@ -14,12 +14,12 @@ work-tracker IDs.
 
 ## Current plan: v1 rebuild (option B)
 
-- The v1 follows the ibkr modules and typed functions. Classes describe data.
-  Record source references and justify BD adaptations in the active design
-  before coding (Florent, 2026-10-22). Selective reuse from a reviewed
-  merged commit can start before ibkr 3.0.0 stable (Florent, 2026-10-21).
-  The active change design owns the source commit and adaptations. Review each
-  later source update separately. No shared library or automatic core projection.
+- The v1 adopts the complete applicable common core from ibkr v3.0.0
+  (Florent, 2026-10-22). Follow its modules and typed functions; classes describe
+  data. Before coding, read the active design for the source commit, coverage
+  and BD adaptations. Cover every applicable implemented runtime and release
+  requirement. Review later source updates separately. No shared library or
+  automatic core projection.
   The previous work stays in Git (tag `legacy-wip`). v0.1.1 is a preview-only
   legacy release.
 - Track A (first priority): BillCollector downloads the notices with Playwright,
@@ -70,8 +70,13 @@ work-tracker IDs.
 
 - The application package has 2 500 lines or fewer across all its Python files.
   This replaces the main-file limit. Tests and packaging metadata are excluded.
-- No new compose file and no lab without Florent's approval.
-- No release before one real run.
+- Reuse the existing infrastructure lab. A dedicated BD test container is
+  permitted in principle (Florent, 2026-10-22). Its exact target, commands and
+  writes still need an approved operation scope. Keep lab tooling in infra.
+  No separate lab or new compose file without approval.
+- Publish an immutable RC after the real simulation. Require empty and golden
+  lab scenarios to pass on that digest before production writes or stable
+  publication. Reuse the IBKR release checks. Publication needs Florent's go.
 - Docs: README, one spec, AGENTS.md. History stays in Git. No new plan, review
   or contract files.
 

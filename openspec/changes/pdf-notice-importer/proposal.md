@@ -2,9 +2,8 @@
 
 ## Why
 
-BillCollector publishes Bourse Direct PDF notices to Paperless. This importer
-reads them and adds Ghostfolio activities. It follows the IBKR modules and
-selectively adapts their code.
+Read BillCollector notices from Paperless into Ghostfolio. Adopt the complete
+applicable IBKR v3.0.0 core, with explicit Bourse Direct adaptations.
 
 ## What changes
 
@@ -15,16 +14,14 @@ selectively adapts their code.
 - It stops on a security when a row changes the number of shares.
 - It does not track the TTF and ignores custody fees.
 - It does not import duplicates.
-- Preparation can precede ibkr stable. The design pins the source commit.
-  Bourse Direct financial rules stay authoritative.
-- ibkr contract: ENV settings only, simulation when `DRY_RUN` is absent,
-  additive writes, `CRON`, `APPRISE_URLS`.
+- Retain IBKR startup checks, complete activity reads, position guards,
+  import confirmation, failure summaries, notifications and scheduling.
+- Bourse Direct financial rules stay authoritative. The design pins the source.
 
 ## Operation types
 
 Sources: real anonymized HTML notices (`legacy-wip`), one PDF notice and one
-account statement. Only BUY has real PDF evidence. Other PDF forms remain
-unverified.
+account statement. Only BUY has PDF evidence. Other forms remain unverified.
 
 | Label in a real document | Seen in | v1 behavior |
 | --- | --- | --- |
@@ -49,7 +46,7 @@ Apply the "other label" rules.
 - Gross coupon amount and withholding tax.
 - Currencies other than EUR.
 - Update or delete of Ghostfolio data.
-- Recovery tools, labs, release process.
+- IBKR Flex, cash reconciliation and historical identity conversion.
 
 ## Capabilities
 
@@ -65,4 +62,5 @@ None.
 ## Impact
 
 New typed Python 3.14 application package, image, `compose.yaml`, README and
-tests. The package replaces the legacy runtime. Rollback: revert the commits.
+tests. Reuse IBKR image, CI and release checks, and the existing infra lab.
+Replace the legacy runtime. Rollback: revert commits; retain imports.
