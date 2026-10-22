@@ -11,6 +11,8 @@ context: |
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
   v1 rebuild (option B): selectively adapt the merged ghostfolio-ibkr-sync package.
+  Follow its modules and typed functions; classes describe data.
+  Record source references and justify BD adaptations in design before coding.
   The design pins its source commit. Preparation need not wait for ibkr 3.0.0 stable.
   Review later source updates separately; no shared library or automatic core projection.
   Source: PDF operation notices "avis d'opere", downloaded by BillCollector (Playwright)

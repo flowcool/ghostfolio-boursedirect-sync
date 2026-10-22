@@ -3,8 +3,8 @@
 ## Why
 
 BillCollector publishes Bourse Direct PDF notices to Paperless. This importer
-reads them and adds Ghostfolio activities. It selectively adapts the merged
-ibkr package.
+reads them and adds Ghostfolio activities. It follows the IBKR modules and
+selectively adapts their code.
 
 ## What changes
 

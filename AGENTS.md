@@ -14,7 +14,9 @@ work-tracker IDs.
 
 ## Current plan: v1 rebuild (option B)
 
-- The v1 uses the typed ibkr package structure. Selective reuse from a reviewed
+- The v1 follows the ibkr modules and typed functions. Classes describe data.
+  Record source references and justify BD adaptations in the active design
+  before coding (Florent, 2026-10-22). Selective reuse from a reviewed
   merged commit can start before ibkr 3.0.0 stable (Florent, 2026-10-21).
   The active change design owns the source commit and adaptations. Review each
   later source update separately. No shared library or automatic core projection.

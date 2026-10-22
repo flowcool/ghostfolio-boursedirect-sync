@@ -5,7 +5,8 @@ documents" are defined in the spec. A task that needs a real PDF of a type that
 is not yet in Paperless waits for that PDF. Tests use anonymized text of real
 PDFs only. Paperless is read only; no task writes to it.
 
-Use the ibkr source commit and function references in design.md. Selective reuse
+Follow the IBKR modules, source commit and function references in design.md.
+Record and justify each BD adaptation there before coding. Selective reuse
 can start before ibkr 3.0.0 stable. Review any later source update separately.
 Use the installed Python 3.14 package `ghostfolio_boursedirect_sync`, with typed
 functions and data records. Pass strict mypy and Ruff as well as each task's

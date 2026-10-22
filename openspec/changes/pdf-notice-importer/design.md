@@ -3,9 +3,10 @@
 ## Context
 
 Use the installed Python 3.14 package `ghostfolio_boursedirect_sync`.
-Keep functions and typed records, with strict mypy and Ruff.
-This permits selective reuse without the old single-file constraint.
-The application package stays within 2 500 lines.
+Follow IBKR modules: `app`, `config`, `models`, `ghostfolio`, `sync`,
+`outcome`, `notify`. Keep typed functions and data records, strict mypy,
+Ruff and the 2 500-line limit. Record source references and justify BD
+adaptations here before coding.
 
 Source: `ghostfolio-ibkr-sync` commit
 `a9bd0b92e4783ff1f42a089eb9547b27ba40f9bd`.
@@ -45,13 +46,12 @@ Keep the BD spec:
 
 Do not copy Flex parsing, cash updates, gross dividends or maintenance tools.
 
-Task 1.1 adapts CI and replaces checks that require the removed runtime.
-Keep the remaining legacy tests runnable until task 1.3 removes their files.
-This order prevents legacy checks from blocking the first package merge.
+Task 1.1 adapts CI for the package and replaces removed-runtime checks.
+Keep other legacy tests runnable until task 1.3.
 
 ## Source-specific parts
 
-Previously approved:
+Use `paperless` and `notices` for BD input. Approved sources:
 
 - Paperless originals and missing-Source search: paperless-ngx
   `docs/api.md:121-134`, commit `2b00cf6`; view-only token.
