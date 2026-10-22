@@ -6,8 +6,8 @@ Read Bourse Direct PDF notices from Paperless into one Ghostfolio account.
 Add BUY, SELL and DIVIDEND activities. One container serves one source account.
 
 "The run command" is `docker compose run --rm -T <service>; echo "exit=$?"`.
-Run it for each configured service. "Notice documents" have Paperless custom
-field `Source` exactly `Bourse Direct`, with or without `PAPERLESS_DONE_TAG`.
+"Notice documents" have Paperless `Source` exactly `Bourse Direct`, with or
+without `PAPERLESS_DONE_TAG`.
 
 ## ADDED Requirements
 
@@ -38,7 +38,8 @@ lists and invalid values, eligibility or profiles with `activities_unavailable`,
 without writes.
 Current assetProfile SHALL take precedence over legacy SymbolProfile.
 Draft, excluded and non-YAHOO activities SHALL not support holdings or manual
-matches. Future source activities SHALL be deferred with `future_activity`.
+matches. Their BD identities SHALL remain occupied.
+Future source activities SHALL be deferred with `future_activity`.
 
 #### Scenario: Unsafe activity evidence
 - **WHEN** the run command receives incomplete, masked or invalid activity evidence
@@ -55,8 +56,8 @@ matches. Future source activities SHALL be deferred with `future_activity`.
 ### Requirement: Simulation by default
 
 `DRY_RUN=0` SHALL send activities to Ghostfolio. `DRY_RUN=1`, or no value,
-SHALL simulate. Another value SHALL give `invalid_configuration`. A simulation
-SHALL log each activity to create, with all its fields. It SHALL not write to Ghostfolio or notify.
+SHALL simulate. Another value SHALL give `invalid_configuration`. Simulation
+SHALL log every proposed field. It SHALL not write to Ghostfolio or notify.
 
 #### Scenario: Real BUY in simulation
 - **WHEN** the run command runs without `DRY_RUN` on one real BUY notice
@@ -65,11 +66,10 @@ SHALL log each activity to create, with all its fields. It SHALL not write to Gh
 ### Requirement: Paperless source
 
 Each run SHALL read every original notice PDF, without writing to Paperless.
-Rejected tokens SHALL stop with `paperless_auth_failed`. Missing or unexpected
-answers SHALL stop with `paperless_unreachable`. Logs SHALL show document IDs,
-never holder names or addresses. Account numbers SHALL appear only in comments
-and their log lines. Error logs SHALL show only HTTP status, error code and
-document ID, never response bodies.
+Rejected tokens SHALL stop with `paperless_auth_failed`. Unexpected
+answers SHALL stop with `paperless_unreachable`. Logs SHALL omit holder names
+and addresses. Account numbers appear only in comments and their log lines.
+Errors show only HTTP status, code and document ID.
 
 Original filenames starting with `BourseDirect_` without `Source = Bourse Direct`
 SHALL give `source_field_missing` and stop all Ghostfolio writes.
@@ -102,7 +102,7 @@ accounts SHALL give `notice_unreadable`.
 
 ### Requirement: Unreadable documents block writes
 
-An unreadable notice, unknown field label or unreadable account SHALL give
+An unreadable notice/account or unknown field label SHALL give
 `notice_unreadable` and stop all Ghostfolio writes. Simulation SHALL still
 list readable activities.
 
@@ -126,15 +126,13 @@ be in EUR. A failed row SHALL get code `amount_check_failed`, without import.
 
 ### Requirement: Activity content
 
-A BUY or SELL activity SHALL have: quantity = QUANTITE without sign, unit
-price = COURS, fee = COURTAGE, currency EUR. A COUPONS row SHALL give a
-DIVIDEND with quantity 1, unit price = net credit of the row, and fee 0. The
-activity date SHALL be the row date at midnight UTC. The comment SHALL be
+BUY/SELL SHALL use absolute QUANTITE, COURS, COURTAGE and EUR.
+COUPONS SHALL give DIVIDEND, quantity 1, net credit as unit price and fee 0.
+Use the row date at midnight UTC. The comment SHALL be
 `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`. KIND is the activity type. The
-row key SHALL include a stable document namespace. It SHALL use the broker
-notice reference when the PDF shows one. Otherwise, it SHALL use the first 16
-hex characters of the SHA-256 of the original PDF. The remaining key uses the
-row content and its rank among identical rows of the notice.
+row key SHALL use the broker notice reference when present; otherwise, normalized
+notice rows. File metadata SHALL not affect identity. Identical rows SHALL use
+their occurrence rank. Copies of the same notice SHALL not add activities.
 
 #### Scenario: Real coupon in simulation
 - **WHEN** the run command runs on a real coupon notice
@@ -155,11 +153,12 @@ file SHALL stop with `invalid_mapping`, unless `MAPPING_FILE` is empty.
 
 ### Requirement: No duplicate activity
 
-A row SHALL be a duplicate, not imported, when an activity of the Ghostfolio
-account has the same `BD#v3#` comment and the same date, type, quantity, unit
-price and fee. The same comment with another value SHALL give code
-`owned_activity_conflict`, without import. Legacy comments (`BD#v1#`, `BD#v2#`)
-count as no `BD#v3#` comment. An activity without a `BD#v3#` comment SHALL
+A matching account, `BD#v3#` comment, date, type, security, currency, quantity, unit price and fee
+SHALL be a duplicate. A different value SHALL give `owned_activity_conflict`,
+without import. The same BD identity in another account SHALL give
+`owned_activity_conflict`.
+Legacy v1/v2 comments count as rows without a v3 identity. An activity without
+a `BD#v3#` comment SHALL
 match a row when:
 
 - for a BUY or SELL, it has the same side, security (or ISIN), quantity and
@@ -173,6 +172,14 @@ amounts, SHALL get `possible_duplicate`, without import.
 
 Malformed or unsupported reserved `BD#v` identities SHALL stop writes with
 `invalid_identity`. Valid legacy v1/v2 comments SHALL remain readable.
+
+#### Scenario: Regenerated notice
+- **WHEN** two PDFs have the same notice rows and different file metadata
+- **THEN** they propose each activity once, with the same identity.
+
+#### Scenario: Moved identity
+- **WHEN** a source identity exists in another Ghostfolio account
+- **THEN** it shows `owned_activity_conflict`, without recreating that activity.
 
 #### Scenario: Invalid identity
 - **WHEN** the run command reads an invalid reserved BD identity
@@ -191,8 +198,8 @@ Malformed or unsupported reserved `BD#v` identities SHALL stop writes with
 
 ### Requirement: Sell guard
 
-The position of a security SHALL be the Ghostfolio position plus each new row,
-in date order, with SELL rows first on the same date. A SELL that makes this
+Use current net Ghostfolio holdings plus new rows in date order, with SELL first
+on equal dates. Historical position replay is not required. A SELL that makes this
 position negative SHALL get code `sell_exceeds_holding` and SHALL not be
 imported.
 
@@ -231,21 +238,26 @@ two codes for its rows only; its other rows stay importable.
 
 ### Requirement: Additive writes with readback
 
-The connector SHALL never update or delete data. After each import, each sent
-`BD#v3#` comment SHALL read back exactly once, with the same account, comment,
-symbol, data source, date, type, quantity, unit price, fee and currency.
-Differences, empty, partial, repeated or extra results SHALL give
-`import_unconfirmed` and stop all writes, without retry. Other comments do not
-count. Only confirmed activities SHALL advance real holdings.
+Never update or delete. After each import, each sent comment SHALL read back
+exactly once, with the same account, comment, symbol, data source, date, type,
+quantity, unit price, fee and currency.
+After a timeout or uncertain response, wait briefly and read Ghostfolio again.
+A complete read that confirms every sent row exactly once SHALL allow continuation.
+A failed read, missing, different, repeated or extra matching result SHALL give
+`import_unconfirmed` and stop writes. Never resend while confirming.
+Other comments do not count. Only confirmed activities advance real holdings.
 
 #### Scenario: Unexpected import response
-- **WHEN** Ghostfolio answers a run with `DRY_RUN=0` with an empty activity
-  list
-- **THEN** the output shows `import_unconfirmed` and `exit=1`.
+- **WHEN** an import response is empty and the delayed read still lacks a sent row
+- **THEN** it shows `import_unconfirmed`, no resend and `exit=1`.
+
+#### Scenario: Delayed confirmation
+- **WHEN** an import times out but the delayed complete read confirms every sent row
+- **THEN** it confirms those activities once and continues without resending.
 
 ### Requirement: Exit code, summary and notification
 
-The log SHALL end with one summary line of counts. The exit code SHALL be 0
+End with one summary line of counts. The exit code SHALL be 0
 when each row is imported, simulated, a duplicate, a custody fee or of another
 account. Else it SHALL be 1. With `DRY_RUN=0` and `APPRISE_URLS`
 set, exit code 1 SHALL send one notification with the codes.
@@ -257,8 +269,8 @@ set, exit code 1 SHALL send one notification with the codes.
 
 ### Requirement: Schedule
 
-A valid `CRON` SHALL schedule the import. Without `CRON`, the import SHALL
-run once. An invalid `CRON` SHALL stop the container with exit code 1.
+Valid `CRON` SHALL schedule imports. Without it, run once.
+Invalid `CRON` SHALL stop with exit code 1.
 
 #### Scenario: Invalid schedule
 - **WHEN** the run command runs with `CRON=bad`

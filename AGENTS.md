@@ -74,9 +74,10 @@ work-tracker IDs.
   permitted in principle (Florent, 2026-10-22). Its exact target, commands and
   writes still need an approved operation scope. Keep lab tooling in infra.
   No separate lab or new compose file without approval.
-- Publish an immutable RC after the real simulation. Require empty and golden
-  lab scenarios to pass on that digest before production writes or stable
-  publication. Reuse the IBKR release checks. Publication needs Florent's go.
+- Build the candidate image once. Require empty and golden lab scenarios to
+  pass on its digest. Publish that exact image without rebuilding. No mandatory
+  RC channel. Reuse applicable IBKR checks. Publication and production writes
+  need Florent's go.
 - Docs: README, one spec, AGENTS.md. History stays in Git. No new plan, review
   or contract files.
 

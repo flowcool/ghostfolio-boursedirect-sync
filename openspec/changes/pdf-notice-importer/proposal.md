@@ -2,41 +2,41 @@
 
 ## Why
 
-Read BillCollector notices from Paperless into Ghostfolio. Adopt the complete
+Read notices from Paperless into Ghostfolio. Adopt the complete
 applicable IBKR v3.0.0 core, with explicit Bourse Direct adaptations.
 
 ## What changes
 
-- The connector reads the PDF notices from Paperless, read-only.
-- One container serves one Bourse Direct account. It imports only the notices
-  of that account.
+- Read PDF notices from Paperless, read-only.
+- One container imports notices for one Bourse Direct account.
 - It imports BUY, SELL and coupons (DIVIDEND at the net amount received).
 - It stops on a security when a row changes the number of shares.
 - It does not track the TTF and ignores custody fees.
 - It does not import duplicates.
 - Retain IBKR startup checks, complete activity reads, position guards,
   import confirmation, failure summaries, notifications and scheduling.
-- Bourse Direct financial rules stay authoritative. The design pins the source.
+- The design pins the source.
 
 ## Operation types
 
-Sources: real anonymized HTML notices (`legacy-wip`), one PDF notice and one
-account statement. Only BUY has PDF evidence. Other forms remain unverified.
+Sources: retained real YTD PDF/HTML notices and an account statement.
+PDF evidence covers BUY, SELL, COUPONS, custody fees and DIVISION.
+Private originals stay outside Git.
 
 | Label in a real document | Seen in | v1 behavior |
 | --- | --- | --- |
-| ACHAT COMPTANT | HTML notice | BUY |
+| ACHAT COMPTANT | PDF notice | BUY |
 | ACHAT ETRANGER | PDF notice | BUY |
-| VENTE COMPTANT, VENTE ETRANGER | HTML notice | SELL |
-| COUPONS | HTML notice | DIVIDEND, net |
-| DROITS DE GARDE | HTML notice, statement | Ignored, message |
-| DIVISION | HTML notice | Stop on security |
+| VENTE COMPTANT, VENTE ETRANGER | PDF notice | SELL |
+| COUPONS | PDF notice | DIVIDEND, net |
+| DROITS DE GARDE | PDF notice, statement | Ignored, message |
+| DIVISION | PDF notice | Stop on security |
 | TAXE TRANSACT FINANCIERES | Statement | Not tracked |
-| Other label, with ISIN | Not seen | Stop on security |
+| Other label, with ISIN | PDF notice | Stop on security |
 | Other label, no ISIN | Not seen | Not imported, reported |
 
-Subscription rights, share withdrawals and transfers remain unobserved.
-Apply the "other label" rules.
+SOUSCRIPTION and ATTRIBUTION appear in retained PDFs. Apply the "other label"
+rules. Share withdrawals and transfers remain unverified.
 
 ## Non-goals
 
@@ -61,6 +61,6 @@ None.
 
 ## Impact
 
-New typed Python 3.14 application package, image, `compose.yaml`, README and
+Typed Python 3.14 package, image, `compose.yaml`, README and
 tests. Reuse IBKR image, CI and release checks, and the existing infra lab.
 Replace the legacy runtime. Rollback: revert commits; retain imports.

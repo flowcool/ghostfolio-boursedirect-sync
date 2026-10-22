@@ -90,16 +90,19 @@ publication. Keep the existing real-PDF and first-write authorization gates.
 
 - [ ] 4.1 For each real PDF type used, record whether it shows a broker notice
   reference. Add the `BD#v3#` comment with that reference as the document
-  namespace, or with the first 16 hex characters of the original PDF SHA-256
-  when it does not. Add `owned_activity_conflict`, the manual match with exact
+  namespace, or sorted normalized notice rows when absent. Preserve multiplicity;
+  exclude file metadata and formatting. Verify "Regenerated notice" from the
+  retained pair. Deduplicate source copies before dispatch. Add
+  `owned_activity_conflict`, the manual match with exact
   price and `possible_duplicate`, with offline tests. Two identical rows in one
   notice give two activities. Verify in simulation with the run command: a real
   BUY that matches a manual Ghostfolio activity shows a duplicate.
   Adapt identity parsing to BD v3; do not copy the IBKR namespace or its
   source-specific identifiers. Keep legacy BD rows readable for matching.
   Reject unsupported or malformed reserved BD identities with `invalid_identity`
-  before writes. Verify "Invalid identity". Keep the BD target-account scope;
-  do not import IBKR's global source-account index semantics.
+  before writes. Verify "Invalid identity" and "Moved identity". Index occupied
+  BD identities across visible accounts, including inactive rows. Only the target
+  account supports manual matches and holdings. Independent rows continue.
 - [ ] 4.2 Add SELL rows, the sell guard on the running position and
   `custody_fee_ignored`, with an offline test (two sells that together exceed
   the position). Verify the scenarios "Sell without a position" and "Sell
@@ -126,19 +129,22 @@ publication. Keep the existing real-PDF and first-write authorization gates.
 - [ ] 6.1 Add the import with `DRY_RUN=0`, the strict readback
   (`import_unconfirmed`), the summary line and the exit codes. This is the
   first production Ghostfolio write: it needs an operation plan that Florent
-  validated. Before production writes, qualify the same immutable RC digest in
+  validated. Before production writes, qualify the candidate image digest in
   the existing infra empty/golden lab. Infra owns the BD launch/evidence
   adaptation; retain its target checks, snapshots, credential isolation and
   stop verification. Prove first creation, duplicate rerun, mixed legacy rows,
   chronological sells, exact readback and uncertain-result stop. Do not use
   IBKR cash/Flex assertions as BD proof. Verify "Second run" and
   "Unexpected import response"
-  (the second one with mocked Ghostfolio responses in an offline test: empty
-  list and changed quantity).
+  and "Delayed confirmation" with offline responses based on real notice rows.
+  An empty POST response may succeed only after a complete exact GET confirms it.
+  Wait five seconds after an uncertain response; never repeat that POST.
   Also reject partial, repeated and extra results and changed account, symbol,
   data source, date, type, price, fee or currency. Adapt the accepted-subset
   helper to require full exact confirmation. Stop all writes without retry
   on `import_unconfirmed`; never project an omitted buy into real holdings.
+  Once the writer exists, rerun every startup/source/identity/amount/stop blocker
+  with DRY_RUN=0 and prove zero POSTs. Until then, DRY_RUN=0 refuses before HTTP.
   Adapt the separate accepted-state function and structured preview evidence.
   Preserve exact Decimal values in the full preview and readback.
 - [ ] 6.2 Add the failure notification and `CRON`, with the README sections and
@@ -149,9 +155,8 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   Retain one fixed-code summary, bounded worker lifetime, secret-free worker
   ENV and notification failure isolation. Keep schedule and one-off image checks.
 
-Existing release work adopts IBKR's serialized immutable RC/stable publication,
-native amd64/arm64 security/runtime checks, digest verification and latest rules.
-An RC never moves latest; stable uses the latest RC commit. Bind both infra lab
-verdicts to that RC digest before stable or production activation. Publication
-and production activation retain separate GO. Keep release tooling out of the
-behavior spec and reuse existing release/lab work items.
+Existing release work adopts IBKR serialization, native amd64/arm64 checks,
+immutable versions and digest verification. Build the candidate once, qualify
+both existing lab scenarios on its digest, then publish the exact tested image
+without rebuilding. No RC channel is required. Publication and production
+activation retain separate GO. Keep tooling outside the behavior spec.
