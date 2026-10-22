@@ -1,11 +1,8 @@
 name: Dependency release watch
 
-# Opens one review issue per new Bitwarden CLI release or available Chrome headless build.
-# These binary pins require manual architecture-checksum updates.
-# Renovate owns Python/npm version proposals. Never changes pins or builds.
+# The PDF importer no longer ships Bitwarden or Chrome. Keep the legacy
+# workflow dormant until task 1.3 removes its scripts. Renovate owns packages.
 on:
-  schedule:
-    - cron: "29 7 * * *"
   workflow_dispatch:
 
 permissions:
@@ -17,7 +14,7 @@ concurrency:
 
 jobs:
   notify:
-    if: github.ref == 'refs/heads/main'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -178,11 +178,6 @@ def test_only_binary_pins_are_read_without_package_manifests(tmp_path):
     assert dockerfile.read_bytes() == before
 
 
-def test_real_repository_has_only_bitwarden_and_chrome_pins():
-    pins = watch.read_pins()
-    assert {(p["ecosystem"], p["name"]) for p in pins} == watch.BINARY_COMPONENTS
-
-
 @pytest.mark.parametrize("dockerfile", [
     "FROM node\n", dockerfile_pins(bitwarden="2026.9.2rc1"),
     dockerfile_pins(chrome="155.0.8059.40rc1"),
@@ -258,9 +253,13 @@ def test_chrome_request_failure_stops_before_any_write(monkeypatch):
     assert api.writes == []
 
 
-def test_main_reads_real_pins_and_uses_simulated_upstreams(monkeypatch, capsys):
+def test_main_reads_fixture_pins_and_uses_simulated_upstreams(monkeypatch, capsys, tmp_path):
     api = fake_api()
-    pins = watch.read_pins()
+    # The package image no longer ships broker or vault binaries. Keep the
+    # legacy watcher's offline behavior covered until task 1.3 removes it.
+    (tmp_path / "Dockerfile").write_text(dockerfile_pins())
+    pins = watch.read_pins(tmp_path)
+    monkeypatch.setattr(watch, "read_pins", lambda: pins)
     bw = next(pin for pin in pins if pin["ecosystem"] == "github")
     chrome = next(pin for pin in pins if pin["ecosystem"] == "chrome")
     bw_next = bw["version"] + ".1"
