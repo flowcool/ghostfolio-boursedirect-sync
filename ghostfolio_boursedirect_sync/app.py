@@ -1,5 +1,7 @@
 """One simulated BUY run; pinned ibkr ghostfolio.py:459 supplies the log format."""
 
+import hashlib
+import json
 import logging
 import os
 from collections import Counter
@@ -26,8 +28,10 @@ def main() -> int:
         mapping = sync.load_mapping(settings.mapping_file)
         other_accounts = 0
         matching: list[tuple[int, Notice]] = []
+        source: list[dict[str, int | str]] = []
         for document_id in paperless.document_ids(settings):
             pdf = paperless.original_pdf(settings, document_id)
+            source.append({"id": document_id, "sha256": hashlib.sha256(pdf).hexdigest()})
             notice = notices.parse_text(notices.extract_text(pdf))
             if notice.account_ref != settings.bd_account_ref:
                 other_accounts += 1
@@ -49,6 +53,14 @@ def main() -> int:
                 candidates.append(activity)
                 documents.setdefault(activity.comment, document_id)
         selected = sync.select_account_activities(candidates, existing)
+        # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
+        # BD binds originals instead of a Flex window; decimal strings stay exact.
+        log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "source", "value": source}))
+        log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "preview", "value": [
+            {"accountId": a.account_id, "symbol": a.symbol, "date": a.date,
+             "quantity": str(a.quantity), "unitPrice": str(a.unit_price), "fee": str(a.fee),
+             "currency": a.currency, "type": a.type, "dataSource": a.data_source,
+             "comment": a.comment} for a in selected.activities]}))
         for code in selected.errors:
             log.error("%s", code)
         for activity in selected.activities:

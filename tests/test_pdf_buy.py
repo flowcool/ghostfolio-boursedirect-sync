@@ -106,6 +106,32 @@ def test_simulation_and_no_notification(settings, monkeypatch, caplog):
     assert "date=2025-02-03T00:00:00+00:00" in caplog.text
 
 
+def test_debug_preview_keeps_exact_decimal_and_original_source(settings, monkeypatch, caplog):
+    """The native image exposes evidence; this isolated test is not a service replay."""
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [123])
+    monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
+    monkeypatch.setattr(notices, "extract_text", lambda _: FIXTURE.read_text())
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected HTTP")))
+    with caplog.at_level(logging.DEBUG):
+        assert app.main() == 0
+    records = [json.loads(r.message.split("LAB_EVIDENCE ", 1)[1])
+               for r in caplog.records if "LAB_EVIDENCE " in r.message]
+    source, preview = records
+    assert source == {"kind": "source", "value": [{"id": 123, "sha256":
+        "0682c5f2076f099c34cfdd15a9e063849ed437a49677e6fcc5b4198c76575be5"}]}
+    assert preview["kind"] == "preview"
+    row, = preview["value"]
+    assert (row["quantity"], row["unitPrice"], row["fee"]) == ("4", "25.50", "1.00")
+    assert row["accountId"] == "target"
+    assert row["dataSource"] == "YAHOO"
+
+
 def test_writes_remain_unavailable(settings, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "0")
     monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected POST")))
