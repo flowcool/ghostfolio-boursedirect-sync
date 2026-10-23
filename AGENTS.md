@@ -72,7 +72,7 @@ work-tracker IDs.
   This replaces the main-file limit. Tests and packaging metadata are excluded.
 - Reuse the existing infrastructure lab. A dedicated BD test container is
   permitted in principle (Florent, 2026-10-22). Its exact target, commands and
-  writes still need an approved operation scope. Keep lab tooling in infra.
+  writes use the permanent lab authority below. Keep lab tooling in infra.
   No separate lab or new compose file without approval.
 - Build the candidate image once. Require empty and golden lab scenarios to
   pass on its digest. Publish that exact image without rebuilding. No mandatory
@@ -119,3 +119,13 @@ See
 [python conventions](.claude/rules/python-conventions.md),
 [security rules](.claude/rules/security.md). The legacy code stays in place
 until the rebuild replaces it.
+
+## Shared Ghostfolio labs
+
+Use the permanent lab authority in the global working agreement and the
+canonical Infra lab runbook. It covers both labs, including test writes,
+configuration and resets. Keep reservations, separate credentials, retained
+proof, stop on uncertainty without automatic resend, and final stop verification.
+Broker access, production, publication and removal of containers or proof
+retain separate authority. This scope overrides generic write-approval rules
+for these two labs only.
