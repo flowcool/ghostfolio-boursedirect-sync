@@ -99,6 +99,12 @@
       "allowedVersions": ">=3.13 <3.14"
     },
     {
+      "description": "Keep the approved Python 3.14 runtime and CI series.",
+      "matchPackageNames": ["python"],
+      "matchFileNames": ["Dockerfile", ".github/workflows/offline-tests.yml", ".github/workflows/release-image.yml"],
+      "allowedVersions": "/^3\\.14(?:\\.|-|$)/"
+    },
+    {
       "matchManagers": [
         "dockerfile"
       ],
