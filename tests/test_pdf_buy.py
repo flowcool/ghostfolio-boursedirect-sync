@@ -74,9 +74,19 @@ def test_account_label_must_be_unique(change):
         notices.parse_text(text)
 
 
-def test_no_amount_rounding_tolerance():
+@pytest.mark.parametrize("edits", [
+    {"102.00": "102.01", "103.00": "103.01"},
+    {"103.00": "103.01"},
+    {"TVA : 0.00": "TVA : 0.01", "103.00": "103.01"},
+    {"COURTAGE : 1.00": "COURTAGE : -1.00", "103.00": "101.00"},
+], ids=["quantity-price", "debit", "vat", "negative-fee"])
+def test_each_amount_guard_fails_alone(edits):
+    text = FIXTURE.read_text()
+    for old, new in edits.items():
+        assert old in text
+        text = text.replace(old, new)
     with pytest.raises(RuntimeError, match="^amount_check_failed$"):
-        notices.parse_text(FIXTURE.read_text().replace("102.00", "102.01"))
+        notices.parse_text(text)
 
 
 @pytest.mark.parametrize("value", ["", "false", "true", " 1", "01"])
@@ -139,6 +149,51 @@ def test_writes_remain_unavailable(settings, monkeypatch):
     assert app.main() == 1
 
 
+@pytest.mark.parametrize("bad_first", [True, False])
+@pytest.mark.parametrize("failure", ["parse", "extract", "amount"])
+def test_bad_document_keeps_readable_preview(settings, monkeypatch, caplog, bad_first, failure):
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [1, 2] if bad_first else [2, 1])
+    monkeypatch.setattr(paperless, "original_pdf", lambda _, doc: str(doc).encode())
+
+    def extract(pdf):
+        text = FIXTURE.read_text()
+        if pdf == b"2":
+            return text
+        if failure == "extract":
+            raise RuntimeError("notice_unreadable")
+        return text.replace("COMPTE", "MISSING") if failure == "parse" else text.replace("103.00", "103.01")
+
+    monkeypatch.setattr(notices, "extract_text", extract)
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected HTTP")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 1
+    assert "type=BUY" in caplog.text
+    assert "simulated=1" in caplog.text
+    assert "unreadable_notices=1" in caplog.text
+    code = "amount_check_failed" if failure == "amount" else "notice_unreadable"
+    assert f"{code} document=1" in caplog.text
+
+
+@pytest.mark.parametrize("documents,other_account,expected", [
+    ([], False, 0), ([1], True, 0), ([1], False, 1),
+])
+def test_no_matching_notice_avoids_target_reads(settings, monkeypatch, caplog, documents, other_account, expected):
+    monkeypatch.setattr(paperless, "document_ids", lambda _: documents)
+    monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
+    text = FIXTURE.read_text().replace("TEST ACCOUNT", "OTHER ACCOUNT") if other_account else "not a notice"
+    monkeypatch.setattr(notices, "extract_text", lambda _: text)
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected HTTP")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == expected
+    assert "Summary: simulated=0" in caplog.text
+
+
 def test_account_name_requires_exact_unique_match(settings, monkeypatch):
     response = Mock(status_code=200)
     response.json.return_value = {"accounts": [{"id": "a", "name": "Example PEA"},
@@ -150,6 +205,18 @@ def test_account_name_requires_exact_unique_match(settings, monkeypatch):
     response.json.return_value["accounts"].pop()
     assert ghostfolio.find_account(settings, "offline") == "a"
     assert get.call_args.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.parametrize("account", [
+    {"isExcluded": True},
+    {"tags": [{"id": next(iter(ghostfolio.INACTIVE_TAGS))}]},
+])
+def test_excluded_or_inactive_target_account_is_refused(settings, monkeypatch, account):
+    response = Mock(status_code=200)
+    response.json.return_value = {"accounts": [{"id": "a", "name": "Example PEA", **account}]}
+    monkeypatch.setattr(requests, "get", Mock(return_value=response))
+    with pytest.raises(RuntimeError, match="invalid_configuration GHOST_ACCOUNT_NAME"):
+        ghostfolio.find_account(settings, "offline")
 
 
 def test_paperless_reads_original_and_ignores_response_url(settings, monkeypatch):

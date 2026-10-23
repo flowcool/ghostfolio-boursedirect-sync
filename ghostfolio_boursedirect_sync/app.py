@@ -27,16 +27,27 @@ def main() -> int:
         log.info("DRY RUN")
         mapping = sync.load_mapping(settings.mapping_file)
         other_accounts = 0
+        unreadable = 0
         matching: list[tuple[int, Notice]] = []
         source: list[dict[str, int | str]] = []
         for document_id in paperless.document_ids(settings):
             pdf = paperless.original_pdf(settings, document_id)
             source.append({"id": document_id, "sha256": hashlib.sha256(pdf).hexdigest()})
-            notice = notices.parse_text(notices.extract_text(pdf))
+            # IBKR app.py:564-573 isolates source failures; BD keeps readable previews.
+            try:
+                notice = notices.parse_text(notices.extract_text(pdf))
+            except RuntimeError as exc:
+                log.error("%s document=%s", exc, document_id)
+                unreadable += 1
+                continue
             if notice.account_ref != settings.bd_account_ref:
                 other_accounts += 1
                 continue
             matching.append((document_id, notice))
+        if not matching:
+            log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
+                     "unreadable_notices=%s created=0", other_accounts, unreadable)
+            return int(unreadable > 0)
         # IBKR app.py:151 verifies the source before any target-account lookup.
         token = ghostfolio.exchange_token(settings)
         account_id = ghostfolio.find_account(settings, token)
@@ -71,9 +82,10 @@ def main() -> int:
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
             )
-        log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s created=0",
-                 len(selected.activities), selected.duplicates, other_accounts)
-        return int(bool(selected.errors))
+        log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s "
+                 "unreadable_notices=%s created=0",
+                 len(selected.activities), selected.duplicates, other_accounts, unreadable)
+        return int(bool(selected.errors) or unreadable > 0)
     except RuntimeError as exc:
         # Package RuntimeErrors contain fixed codes/field names only.
         log.error("%s document=%s", exc, document_id)

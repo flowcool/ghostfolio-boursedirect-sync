@@ -1,6 +1,11 @@
 services:
   importer:
     build: .
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
     environment:
       GHOST_HOST: ${GHOST_HOST:?Set the internal Ghostfolio service address}
       GHOST_ACCESS_TOKEN: ${GHOST_ACCESS_TOKEN:-}
