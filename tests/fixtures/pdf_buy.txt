@@ -1,0 +1,9 @@
+  COMPTE N°                      TEST ACCOUNTEUR PEA
+
+   03/02/2025           ACHAT ETRANGER                        FR0000120271 ANONYMIZED SECURITY                                                            103.00
+
+                        QUANTITE : 4
+                        COURS : 25.50                         BRUT : 102.00
+                        COURTAGE : 1.00                      TVA : 0.00
+
+                        Heure Execution: 12:00:00         Lieu: DEUTSCHER KASSENVEREIN GRUPPE DEUTSC

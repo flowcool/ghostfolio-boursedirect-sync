@@ -10,8 +10,10 @@ context: |
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
-  v1 rebuild (option B): selectively adapt the merged ghostfolio-ibkr-sync package.
-  The design pins its source commit. Preparation need not wait for ibkr 3.0.0 stable.
+  v1 rebuild (option B): adopt the complete applicable common core from IBKR v3.0.0.
+  Cover its implemented runtime and release requirements, with explicit BD adaptations.
+  Follow its modules and typed functions; classes describe data.
+  Read the design coverage table and pinned source before coding.
   Review later source updates separately; no shared library or automatic core projection.
   Source: PDF operation notices "avis d'opere", downloaded by BillCollector (Playwright)
   and published to Paperless; the importer reads them through the Paperless API, read only.
@@ -37,5 +39,5 @@ rules:
     - Max 400 words. Name the sibling file or mechanism reused for each part.
   tasks:
     - One task = one vertical slice that ends with a runnable check, about one hour of work.
-    - First task = one real BUY processed in dry-run with docker compose up, without TTY; reuse sibling import mechanisms, do not create a Ghostfolio lab.
-    - No task for internal tooling, lab proofs, process automation or docs beyond README.
+    - First task = one real BUY processed in simulation with the spec run command, without TTY; adopt the applicable IBKR startup core. Reuse the existing infra lab for later import qualification.
+    - Keep lab tooling in infra and reuse existing release work items. Include their acceptance gates with import and release delivery; add no separate tooling tasks or docs beyond README.
