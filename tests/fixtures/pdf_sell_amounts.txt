@@ -1,0 +1,5 @@
+                        QUANTITE : -47
+                        COURS : +24,02                       BRUT : +1 128,94
+                        COURTAGE : +5,64                     TVA : +0,00
+
+                        Heure Execution: 12:34:56         Lieu: ANONYMIZED VENUE

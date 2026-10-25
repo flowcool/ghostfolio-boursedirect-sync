@@ -8,16 +8,23 @@ import re
 import subprocess
 from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
+from typing import Literal
 
 from ghostfolio_boursedirect_sync.models import Buy, Notice
 
-NUMBER = r"[+-]?[0-9][0-9 ]*(?:[,.][0-9]+)?"
+NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
     rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+ACHAT (?:ETRANGER|COMPTANT)\s+"
     rf"([A-Z]{{2}}[A-Z0-9]{{9}}[0-9])\s+.+?\s{{2,}}({NUMBER})\s*$"
 )
 ACCOUNT = re.compile(
     r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(?:PEA-PME|PEA)\b", re.I
+)
+FIELD = rf"([A-Z][A-Z .]*?)\s*:\s*({NUMBER})"
+FOOTER = re.compile(
+    r"\s*(?:Sous réserve de bonne fin / Ce relevé ne constitue pas une facture|"
+    r"Les montants des colonnes Débit et Crédit sont stipulés TVA Comprise|"
+    r"Bourse Direct\s*,\s*SA au capital de .+)\s*"
 )
 
 
@@ -46,11 +53,57 @@ def decimal(value: str) -> Decimal:
     return parsed
 
 
-def amount(block: str, label: str) -> Decimal:
-    matches = re.findall(rf"\b{label}\s*:\s*({NUMBER})", block)
-    if len(matches) != 1:
+def checked_fields(block: str, required: set[str], optional: set[str] | None = None) -> dict[str, Decimal]:
+    """Reject unknown labels and partial numbers instead of guessing source fields."""
+    values: dict[str, Decimal] = {}
+    for line in block.splitlines():
+        if not line.strip() or FOOTER.fullmatch(line):
+            continue
+        if re.fullmatch(
+            r"\s*Heure Execution:\s*\d{2}:\d{2}:\d{2}\s+Lieu:\s*.+", line
+        ):
+            continue
+        if re.fullmatch(rf"\s*(?:{FIELD}\s*)+", line) is None:
+            raise RuntimeError("notice_unreadable")
+        for match in re.finditer(FIELD, line):
+            label = match[1].strip()
+            if label not in required | (optional or set()) or label in values:
+                raise RuntimeError("notice_unreadable")
+            values[label] = decimal(match[2])
+    if not required <= values.keys():
         raise RuntimeError("notice_unreadable")
-    return decimal(matches[0])
+    return values
+
+
+def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: Decimal,
+                    currency: str) -> dict[str, Decimal]:
+    """BD adapter of DEGIRO sync.py:282: corroborate cash with source fields.
+
+    Unlike DEGIRO, BD requires exact gross and cash equality, without tolerance.
+    Coupon cash is authoritative; its gross price is not a net-price formula.
+    SELL/coupon dispatch is added separately in tasks 4.2/4.3.
+    """
+    if kind == "DIVIDEND":
+        fields = checked_fields(block, {"QUANTITE", "PX UN.BRUT", "BRUT", "COMMISSION"},
+                                {"CRED. IMPOT", "TVA"})
+    else:
+        fields = checked_fields(block, {"QUANTITE", "COURS", "BRUT", "COURTAGE", "TVA"})
+    if currency != "EUR" or not net.is_finite() or net <= 0 or fields.get("TVA", Decimal(0)) != 0:
+        raise RuntimeError("amount_check_failed")
+    if kind == "DIVIDEND":
+        return fields
+    quantity, price, gross, fee, vat = (fields[key] for key in
+                                       ("QUANTITE", "COURS", "BRUT", "COURTAGE", "TVA"))
+    with localcontext() as context:
+        context.prec = max(28, sum(len(format(v, "f")) for v in (*fields.values(), net)) + 8)
+        if (
+            (quantity <= 0 if kind == "BUY" else quantity >= 0)
+            or min(price, gross) <= 0 or fee < 0
+            or quantity.copy_abs() * price != gross
+            or (gross + fee + vat if kind == "BUY" else gross - fee - vat) != net
+        ):
+            raise RuntimeError("amount_check_failed")
+    return fields
 
 
 def parse_text(text: str) -> Notice:
@@ -78,21 +131,6 @@ def parse_text(text: str) -> Notice:
             day = datetime.strptime(header[1], "%d/%m/%Y").date()
         except ValueError:
             raise RuntimeError("notice_unreadable") from None
-        quantity = amount(block, "QUANTITE")
-        price = amount(block, "COURS")
-        gross = amount(block, "BRUT")
-        fee = amount(block, "COURTAGE")
-        vat = amount(block, "TVA")
-        debit = decimal(header[3])
-        with localcontext() as context:
-            context.prec = max(28, sum(len(v.as_tuple().digits) for v in (quantity, price, gross, fee)) + 8)
-            if (
-                min(quantity, price, gross, debit) <= 0
-                or fee < 0
-                or vat != 0
-                or quantity * price != gross
-                or gross + fee + vat != debit
-            ):
-                raise RuntimeError("amount_check_failed")
-        buys.append(Buy(day, header[2], quantity, price, fee))
+        fields = checked_amounts("BUY", block, decimal(header[3]), "EUR")
+        buys.append(Buy(day, header[2], fields["QUANTITE"].copy_abs(), fields["COURS"], fields["COURTAGE"]))
     return Notice(account_ref, tuple(buys))
