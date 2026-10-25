@@ -96,6 +96,13 @@ def test_mode_values_are_exact(settings, monkeypatch, value):
         config.load()
 
 
+def test_done_tag_defaults_and_rejects_control_characters(settings, monkeypatch):
+    assert settings.paperless_done_tag == "ghostfolio-done"
+    monkeypatch.setenv("PAPERLESS_DONE_TAG", "bad\n tag")
+    with pytest.raises(RuntimeError, match="invalid_configuration PAPERLESS_DONE_TAG"):
+        config.load()
+
+
 def test_simulation_and_no_notification(settings, monkeypatch, caplog):
     monkeypatch.setenv("APPRISE_URLS", "invalid-but-ignored-in-simulation")
     monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
@@ -220,12 +227,13 @@ def test_excluded_or_inactive_target_account_is_refused(settings, monkeypatch, a
 
 
 def test_paperless_reads_original_and_ignores_response_url(settings, monkeypatch):
-    first, second, original = (Mock(status_code=200) for _ in range(3))
+    first, second, filename, original = (Mock(status_code=200) for _ in range(4))
     first.json.return_value = {"count": 2, "next": "http://untrusted.test/?page=2",
                               "results": [{"id": 11}]}
     second.json.return_value = {"count": 2, "next": None, "results": [{"id": 12}]}
+    filename.json.return_value = {"count": 0, "next": None, "results": []}
     original.content = b"%PDF-offline"
-    get = Mock(side_effect=[first, second, original])
+    get = Mock(side_effect=[first, second, filename, original])
     monkeypatch.setattr(requests, "get", get)
     assert paperless.document_ids(settings) == [11, 12]
     assert paperless.original_pdf(settings, 11) == original.content
@@ -234,4 +242,22 @@ def test_paperless_reads_original_and_ignores_response_url(settings, monkeypatch
     assert all(call.kwargs["allow_redirects"] is False for call in calls)
     assert json.loads(calls[0].kwargs["params"]["custom_field_query"]) == ["Source", "exact", "Bourse Direct"]
     assert calls[1].kwargs["params"]["page"] == 2
-    assert calls[2].kwargs["params"] == {"original": "true"}
+    assert calls[2].kwargs["params"] == {
+        "original_file_name__istartswith": "BourseDirect_", "page": 1,
+    }
+    assert calls[3].kwargs["params"] == {"original": "true"}
+
+
+def test_paperless_filename_without_source_stops_before_pdf(settings, monkeypatch):
+    labelled = Mock(status_code=200)
+    labelled.json.return_value = {"count": 0, "next": None, "results": []}
+    missing = Mock(status_code=200)
+    missing.json.return_value = {
+        "count": 1, "next": None,
+        "results": [{"id": 99, "original_file_name": "BourseDirect_missing.pdf"}],
+    }
+    get = Mock(side_effect=[labelled, missing])
+    monkeypatch.setattr(requests, "get", get)
+    with pytest.raises(RuntimeError, match="^source_field_missing$"):
+        paperless.document_ids(settings)
+    assert len(get.call_args_list) == 2

@@ -15,6 +15,7 @@ class Settings:
     ghost_token: str | None = field(repr=False)
     ghost_access_token: str | None = field(repr=False)
     mapping_file: str
+    paperless_done_tag: str
     dry_run: bool
 
 

@@ -52,6 +52,9 @@ def load() -> Settings:
     account = required("BD_ACCOUNT_REF")
     if re.fullmatch(r"[A-Za-z0-9]+", account) is None:
         raise RuntimeError("invalid_configuration BD_ACCOUNT_REF")
+    done_tag = os.environ.get("PAPERLESS_DONE_TAG", "ghostfolio-done").strip()
+    if not done_tag or any(ord(c) < 32 or ord(c) == 127 for c in done_tag):
+        raise RuntimeError("invalid_configuration PAPERLESS_DONE_TAG")
     return Settings(
         ghost_host=validate_origin(required("GHOST_HOST"), "GHOST_HOST"),
         ghost_account_name=required("GHOST_ACCOUNT_NAME"),
@@ -61,5 +64,6 @@ def load() -> Settings:
         ghost_token=token,
         ghost_access_token=access,
         mapping_file=os.environ.get("MAPPING_FILE", ""),
+        paperless_done_tag=done_tag,
         dry_run=mode != "0",
     )
