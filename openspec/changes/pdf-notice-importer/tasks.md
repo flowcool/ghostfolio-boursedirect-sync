@@ -94,8 +94,10 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   exclude file metadata and formatting. Verify "Regenerated notice" from the
   retained pair. Deduplicate source copies before dispatch. Add
   `owned_activity_conflict`, the manual match with exact
-  price and `possible_duplicate`, with offline tests. Two identical rows in one
-  notice give two activities. Verify in simulation with the run command: a real
+  price and `possible_duplicate`, with offline tests. Maximize exact manual
+  matches first, then minimize total date distance. Cover competing matches
+  and source copies without reserving manual rows for invalid or occupied
+  sources. Two identical rows in one notice give two activities. Verify in simulation with the run command: a real
   BUY that matches a manual Ghostfolio activity shows a duplicate.
   Adapt identity parsing to BD v3; do not copy the IBKR namespace or its
   source-specific identifiers. Keep legacy BD rows readable for matching.

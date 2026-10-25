@@ -8,6 +8,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from itertools import combinations_with_replacement, permutations
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -156,6 +157,109 @@ def test_manual_match_uses_calendar_days_and_closest_candidate_first():
     result = sync.select_account_activities([first, second], index(manual), now=NOW)
     assert result.duplicates == 1
     assert result.activities == (first,)
+
+
+def test_manual_closest_date_is_recomputed_after_each_match():
+    candidates = [
+        replace(proposed(), date=f"2025-02-{day:02d}T00:00:00+00:00",
+                comment=proposed().comment + f"-{day}")
+        for day in (1, 2, 3)
+    ]
+    rows = [
+        existing_row(id="manual-1", comment="manual one", date="2025-02-01T12:00:00Z"),
+        existing_row(id="manual-2", comment="manual two", date="2025-02-04T12:00:00Z"),
+    ]
+    result = sync.select_account_activities(candidates, index(*rows), now=NOW)
+    assert result.duplicates == 2
+    assert [item.date[:10] for item in result.activities] == ["2025-02-02"]
+
+
+@pytest.mark.parametrize("reverse_candidates", [False, True])
+@pytest.mark.parametrize("reverse_rows", [False, True])
+@pytest.mark.parametrize(("source_days", "manual_days"), [((2, 4), (1, 3)),
+                                                          ((1, 4), (3, 5)),
+                                                          ((2, 4), (1, 2))])
+def test_competing_manual_rows_maximize_matches(reverse_candidates, reverse_rows,
+                                               source_days, manual_days):
+    candidates = [
+        replace(proposed(), date=f"2025-02-{day:02d}T00:00:00+00:00",
+                comment=proposed().comment + f"-{day}")
+        for day in source_days
+    ]
+    rows = [existing_row(id=row_id, comment="manual entry",
+                         date=f"2025-02-{day:02d}T12:00:00Z")
+            for row_id, day in zip(("manual-z", "manual-a"), manual_days, strict=True)]
+    result = sync.select_account_activities(
+        candidates[::-1] if reverse_candidates else candidates,
+        index(*(rows[::-1] if reverse_rows else rows)), now=NOW,
+    )
+    assert result.duplicates == 2
+    assert result.activities == ()
+    assert result.errors == ()
+
+
+def test_manual_assignment_minimizes_total_distance():
+    candidates = [replace(proposed(), date=f"2025-02-{day:02d}T00:00:00+00:00",
+                          comment=proposed().comment + f"-{day}") for day in (1, 2)]
+    ledger = index(*(existing_row(id=f"manual-{day}", comment="manual entry",
+                                  date=f"2025-02-{day:02d}T12:00:00Z") for day in (1, 3)))
+    groups = [sync._manual_rows(candidate, ledger, set()) for candidate in candidates]
+    assignment = sync._manual_assignment(groups, candidates)
+    distances = [distance for i, group in enumerate(groups) for distance, row in group
+                 if assignment.get(i) == row.id]
+    assert len(assignment) == 2
+    assert sum(distances) == 1
+
+
+def test_manual_assignment_matches_exhaustive_small_calendar_oracle():
+    value = proposed()
+    for source_days in combinations_with_replacement(range(1, 5), 3):
+        candidates = [replace(value, date=f"2025-02-{day:02d}T00:00:00+00:00",
+                              comment=value.comment + f"-{i}")
+                      for i, day in enumerate(source_days)]
+        for manual_days in combinations_with_replacement(range(1, 5), 3):
+            ledger = index(*(existing_row(id=f"row-{i}", comment="manual entry",
+                                          date=f"2025-02-{day:02d}T12:00:00Z")
+                             for i, day in enumerate(manual_days)))
+            groups = [sync._manual_rows(candidate, ledger, set()) for candidate in candidates]
+            assignment = sync._manual_assignment(groups, candidates)
+            observed = (-len(assignment), sum(distance for i, group in enumerate(groups)
+                                             for distance, row in group
+                                             if assignment.get(i) == row.id))
+            # Enumerate full pair permutations, allowing unavailable pairs to be omitted.
+            expected = min((-len(gaps), sum(gaps))
+                           for order in permutations(manual_days)
+                           for gaps in [[abs(a - b) for a, b in zip(source_days, order, strict=True)
+                                         if abs(a - b) <= 2]])
+            assert observed == expected, (source_days, manual_days)
+
+
+def test_independent_manual_securities_do_not_share_assignment_work(monkeypatch):
+    value = proposed()
+    candidates = [replace(value, symbol=f"SECURITY-{i}", isin=None,
+                          comment=value.comment + f"-{i}") for i in range(20)]
+    ledger = index(*(existing_row(id=f"row-{i}", comment="manual entry",
+                                  assetProfile={"symbol": candidate.symbol,
+                                                "dataSource": "YAHOO"})
+                     for i, candidate in enumerate(candidates)))
+    solve = Mock(wraps=sync._assign_manual_component)
+    monkeypatch.setattr(sync, "_assign_manual_component", solve)
+    result = sync.select_account_activities(candidates, ledger, now=NOW)
+    assert result.duplicates == 20
+    assert result.activities == ()
+    assert result.errors == ()
+    assert solve.call_count == 0
+
+
+def test_source_copy_does_not_reserve_another_manual_row():
+    first = proposed()
+    second = replace(first, date="2025-02-05T00:00:00+00:00", comment=first.comment + "-second")
+    ledger = index(existing_row(id="first", comment="manual entry"),
+                   existing_row(id="second", comment="manual entry", date=second.date))
+    result = sync.select_account_activities([first, first, second], ledger, now=NOW)
+    assert result.activities == ()
+    assert result.duplicates == 3
+    assert result.errors == ()
 
 
 def test_excluded_owned_duplicate_is_not_recreated():

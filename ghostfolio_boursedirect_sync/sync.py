@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from heapq import heappop, heappush
 from pathlib import Path
 
 import yaml
@@ -92,29 +93,6 @@ def _same_security(candidate: Activity, existing: ExistingActivity) -> bool:
     )
 
 
-def _manual_match_kind(
-    candidate: Activity,
-    existing: ActivityIndex,
-    consumed: set[str],
-) -> str | None:
-    """Return ``duplicate`` or ``possible_duplicate`` for target-account rows.
-
-    Manual evidence is restricted to active YAHOO rows in the selected account.
-    An existing row can satisfy one source row only, so identical source rows
-    retain their multiplicity.
-    """
-    matches = _manual_rows(candidate, existing, consumed)
-    exact = [item for item in matches
-             if item[1].quantity == candidate.quantity and item[1].unit_price == candidate.unit_price]
-    if exact:
-        _, row = min(exact, key=lambda item: (item[0], item[1].id))
-        consumed.add(row.id)
-        return "duplicate"
-    if matches:
-        return "possible_duplicate"
-    return None
-
-
 def _manual_rows(
     candidate: Activity, existing: ActivityIndex, consumed: set[str],
 ) -> list[tuple[int, ExistingActivity]]:
@@ -136,48 +114,131 @@ def _manual_rows(
     return matches
 
 
-def _manual_sort_key(candidate: Activity, existing: ActivityIndex) -> tuple[int, str, str]:
-    """Process the closest exact manual candidates first."""
-    distances = [distance for distance, row in _manual_rows(candidate, existing, set())
-                 if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
-    return (min(distances, default=3), candidate.date, candidate.comment)
+def _manual_assignment(
+    matches: list[list[tuple[int, ExistingActivity]]], candidates: list[Activity],
+) -> dict[int, str]:
+    """Solve independent groups separately; only exact shared rows connect them."""
+    exact = [[(distance, row) for distance, row in group
+              if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
+             for candidate, group in zip(candidates, matches, strict=True)]
+    by_row: dict[str, list[int]] = {}
+    for i, group in enumerate(exact):
+        for _, row in group:
+            by_row.setdefault(row.id, []).append(i)
+    pending = {i for i, group in enumerate(exact) if group}
+    seen_rows: set[str] = set()
+    assigned: dict[int, str] = {}
+    for seed in range(len(candidates)):
+        if seed not in pending:
+            continue
+        stack = [seed]
+        members = []
+        while stack:
+            i = stack.pop()
+            if i not in pending:
+                continue
+            pending.remove(i)
+            members.append(i)
+            for _, row in exact[i]:
+                if row.id not in seen_rows:
+                    seen_rows.add(row.id)
+                    stack.extend(by_row[row.id])
+        members.sort()
+        if len(members) == 1:
+            i = members[0]
+            _, row = min(exact[i], key=lambda item: (item[0], item[1].date, item[1].id))
+            assigned[i] = row.id
+        else:
+            local = _assign_manual_component([exact[i] for i in members],
+                                             [candidates[i] for i in members])
+            assigned.update((members[i], row_id) for i, row_id in local.items())
+    return assigned
+
+
+def _assign_manual_component(
+    matches: list[list[tuple[int, ExistingActivity]]], candidates: list[Activity],
+) -> dict[int, str]:
+    """BD adaptation of IBKR sync.py:546,623; approved maximum/minimum-distance rule.
+
+    Unit-capacity residual paths maximize one-to-one matches. Shortest paths
+    minimize total calendar-day distance. Potentials keep reverse costs usable
+    with Dijkstra; stable node order resolves equal-cost assignments.
+    """
+    rows = sorted({row.id: row for group in matches for _, row in group}.values(),
+                  key=lambda row: (row.date, row.id))
+    offset = len(candidates) + 1
+    row_nodes = {row.id: offset + i for i, row in enumerate(rows)}
+    sink = offset + len(rows)
+    graph: list[list[tuple[int, int]]] = [[] for _ in range(sink + 1)]
+    residual: set[tuple[int, int]] = set()
+    for i, group in enumerate(matches, 1):
+        graph[0].append((i, 0))
+        graph[i].append((0, 0))
+        residual.add((0, i))
+        for distance, row in sorted(group, key=lambda item: (item[0], item[1].date, item[1].id)):
+            if row.quantity != candidates[i - 1].quantity or row.unit_price != candidates[i - 1].unit_price:
+                continue
+            target = row_nodes[row.id]
+            graph[i].append((target, distance))
+            graph[target].append((i, -distance))
+            residual.add((i, target))
+    for target in row_nodes.values():
+        graph[target].append((sink, 0))
+        graph[sink].append((target, 0))
+        residual.add((target, sink))
+    potentials = [0] * len(graph)
+    while True:
+        distances = {0: 0}
+        previous: dict[int, int] = {}
+        queue = [(0, 0)]
+        while queue:
+            cost, node = heappop(queue)
+            if cost != distances[node]:
+                continue
+            for target, weight in graph[node]:
+                if (node, target) not in residual:
+                    continue
+                distance = cost + weight + potentials[node] - potentials[target]
+                if target not in distances or distance < distances[target]:
+                    distances[target] = distance
+                    previous[target] = node
+                    heappush(queue, (distance, target))
+        if sink not in distances:
+            break
+        for node, distance in distances.items():
+            potentials[node] += distance
+        node = sink
+        while node:
+            parent = previous[node]
+            residual.remove((parent, node))
+            residual.add((node, parent))
+            node = parent
+    ids = {node: row_id for row_id, node in row_nodes.items()}
+    return {i - 1: ids[target] for i in range(1, offset)
+            for target, _ in graph[i] if target in ids and (target, i) in residual}
 
 
 def select_account_activities(
     candidates: list[Activity], existing: ActivityIndex, *, now: datetime | None = None,
 ) -> Selection:
-    """IBKR app.py:234: select using isolated input, with no HTTP or dispatch.
-
-    This first BUY slice handles owned identities and source copies. Manual
-    proximity matching is added in task 4.1; no writer exists before task 6.1.
-    """
+    """IBKR app.py:234: isolated selection with BD exact manual assignment."""
     instant = now or datetime.now(UTC)
-    proposals: dict[str, Activity] = {}
+    unique: dict[str, Activity] = {}
     conflicts: set[str] = set()
     errors: list[str] = []
     duplicates = 0
-    consumed_manual: set[str] = set()
-    manual_matches: dict[str, Activity] = {}
-    ordered_candidates = sorted(candidates, key=lambda item: _manual_sort_key(item, existing))
-    for candidate in ordered_candidates:
+    for candidate in sorted(candidates, key=lambda item: (item.date, item.comment)):
         if not parse_identity(candidate.comment, candidate.type):
             raise RuntimeError("invalid_identity")
         if activity_instant(candidate.date) > instant:
             errors.append("future_activity")
             continue
-        previous = proposals.get(candidate.comment)
+        previous = unique.get(candidate.comment)
         if previous is not None:
             if previous == candidate:
                 duplicates += 1
             else:
                 conflicts.add(candidate.comment)
-                errors.append("owned_activity_conflict")
-            continue
-        manual_previous = manual_matches.get(candidate.comment)
-        if manual_previous is not None:
-            if manual_previous == candidate:
-                duplicates += 1
-            else:
                 errors.append("owned_activity_conflict")
             continue
         occupied = existing.identities.get(candidate.comment, ())
@@ -187,15 +248,20 @@ def select_account_activities(
             else:
                 errors.append("owned_activity_conflict")
             continue
-        manual = _manual_match_kind(candidate, existing, consumed_manual)
-        if manual == "duplicate":
-            duplicates += 1
-            manual_matches[candidate.comment] = candidate
+        unique[candidate.comment] = candidate
+    pending = [item for key, item in unique.items() if key not in conflicts]
+    # One ledger scan per unique eligible source, including non-exact nearby rows.
+    matches = [_manual_rows(candidate, existing, set()) for candidate in pending]
+    assigned = _manual_assignment(matches, pending)
+    duplicates += len(assigned)
+    selected = []
+    consumed = set(assigned.values())
+    for i, candidate in enumerate(pending):
+        if i in assigned:
             continue
-        if manual == "possible_duplicate":
+        if any(row.id not in consumed for _, row in matches[i]):
             errors.append("possible_duplicate")
-            continue
-        proposals[candidate.comment] = candidate
-    selected = tuple(sorted((a for key, a in proposals.items() if key not in conflicts),
-                            key=lambda a: (a.date, a.comment)))
-    return Selection(selected, duplicates, tuple(errors))
+        else:
+            selected.append(candidate)
+    return Selection(tuple(sorted(selected, key=lambda a: (a.date, a.comment))),
+                     duplicates, tuple(errors))

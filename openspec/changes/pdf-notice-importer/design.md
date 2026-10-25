@@ -17,7 +17,7 @@ References bind pinned IBKR mechanisms to BD tasks. Preserve applicable tests.
 | --- | --- | --- |
 | ENV, URL, auth, account | `config.py:75,95`, `ghostfolio.py:116,189` | 1.1–1.2 |
 | Complete read, eligibility, profiles | `ghostfolio.py:143,152,208,259` | 1.1–1.2 |
-| Identity, mapping, manual/coupon match | `ghostfolio.py:64,76`, `sync.py:58,546,718` | 3.1,4.1,4.3 |
+| Identity, mapping, manual/coupon match | `ghostfolio.py:64,76`, `sync.py:58,546,623,718` | 3.1,4.1,4.3 |
 | Selection, holdings, accepted state | `app.py:234,416`, `sync.py:580,960` | 1.1,4.2,6.1 |
 | Additive import, acceptance, uncertainty | `ghostfolio.py:405,466` | 6.1 |
 | Outcome, isolated notification | `outcome.py:49`, `notify.py:81`, `app.py:441` | 6.1–6.2 |
@@ -43,6 +43,12 @@ Python references: `ghostfolio_ibkr_sync/`.
 - Index BD identities across visible accounts before eligibility checks. Moved
   identities conflict; inactive identities stay occupied. Manual matches and
   holdings use only the selected account. Exclude Flex, cash and conversion.
+- Manual matching adapts IBKR `sync.py:546,623`. BD first maximizes exact
+  one-to-one matches, then minimizes total calendar-day distance (approved
+  2026-10-25). Use minimum-cost augmenting paths over cached nearby rows.
+  Solve groups that share exact manual rows independently.
+  Remove source copies, invalid/future rows and occupied identities before
+  assignment. Stable date/comment and row-date/ID order resolves remaining ties.
 
 Adapters: Paperless originals/search (`docs/api.md:121` at `2b00cf6`),
 `pdftotext -layout`, legacy notice labels, approved ISIN lookup.
