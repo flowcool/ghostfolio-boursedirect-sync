@@ -117,6 +117,47 @@ def _manual_rows(
 def _manual_assignment(
     matches: list[list[tuple[int, ExistingActivity]]], candidates: list[Activity],
 ) -> dict[int, str]:
+    """Solve independent groups separately; only exact shared rows connect them."""
+    exact = [[(distance, row) for distance, row in group
+              if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
+             for candidate, group in zip(candidates, matches, strict=True)]
+    by_row: dict[str, list[int]] = {}
+    for i, group in enumerate(exact):
+        for _, row in group:
+            by_row.setdefault(row.id, []).append(i)
+    pending = {i for i, group in enumerate(exact) if group}
+    seen_rows: set[str] = set()
+    assigned: dict[int, str] = {}
+    for seed in range(len(candidates)):
+        if seed not in pending:
+            continue
+        stack = [seed]
+        members = []
+        while stack:
+            i = stack.pop()
+            if i not in pending:
+                continue
+            pending.remove(i)
+            members.append(i)
+            for _, row in exact[i]:
+                if row.id not in seen_rows:
+                    seen_rows.add(row.id)
+                    stack.extend(by_row[row.id])
+        members.sort()
+        if len(members) == 1:
+            i = members[0]
+            _, row = min(exact[i], key=lambda item: (item[0], item[1].date, item[1].id))
+            assigned[i] = row.id
+        else:
+            local = _assign_manual_component([exact[i] for i in members],
+                                             [candidates[i] for i in members])
+            assigned.update((members[i], row_id) for i, row_id in local.items())
+    return assigned
+
+
+def _assign_manual_component(
+    matches: list[list[tuple[int, ExistingActivity]]], candidates: list[Activity],
+) -> dict[int, str]:
     """BD adaptation of IBKR sync.py:546,623; approved maximum/minimum-distance rule.
 
     Unit-capacity residual paths maximize one-to-one matches. Shortest paths

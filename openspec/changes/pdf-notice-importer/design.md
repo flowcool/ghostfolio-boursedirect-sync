@@ -46,6 +46,7 @@ Python references: `ghostfolio_ibkr_sync/`.
 - Manual matching adapts IBKR `sync.py:546,623`. BD first maximizes exact
   one-to-one matches, then minimizes total calendar-day distance (approved
   2026-10-25). Use minimum-cost augmenting paths over cached nearby rows.
+  Solve groups that share exact manual rows independently.
   Remove source copies, invalid/future rows and occupied identities before
   assignment. Stable date/comment and row-date/ID order resolves remaining ties.
 

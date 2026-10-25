@@ -234,6 +234,23 @@ def test_manual_assignment_matches_exhaustive_small_calendar_oracle():
             assert observed == expected, (source_days, manual_days)
 
 
+def test_independent_manual_securities_do_not_share_assignment_work(monkeypatch):
+    value = proposed()
+    candidates = [replace(value, symbol=f"SECURITY-{i}", isin=None,
+                          comment=value.comment + f"-{i}") for i in range(20)]
+    ledger = index(*(existing_row(id=f"row-{i}", comment="manual entry",
+                                  assetProfile={"symbol": candidate.symbol,
+                                                "dataSource": "YAHOO"})
+                     for i, candidate in enumerate(candidates)))
+    solve = Mock(wraps=sync._assign_manual_component)
+    monkeypatch.setattr(sync, "_assign_manual_component", solve)
+    result = sync.select_account_activities(candidates, ledger, now=NOW)
+    assert result.duplicates == 20
+    assert result.activities == ()
+    assert result.errors == ()
+    assert solve.call_count == 0
+
+
 def test_source_copy_does_not_reserve_another_manual_row():
     first = proposed()
     second = replace(first, date="2025-02-05T00:00:00+00:00", comment=first.comment + "-second")
