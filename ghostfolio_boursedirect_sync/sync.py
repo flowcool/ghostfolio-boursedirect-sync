@@ -103,9 +103,23 @@ def _manual_match_kind(
     An existing row can satisfy one source row only, so identical source rows
     retain their multiplicity.
     """
+    matches = _manual_rows(candidate, existing, consumed)
+    exact = [item for item in matches
+             if item[1].quantity == candidate.quantity and item[1].unit_price == candidate.unit_price]
+    if exact:
+        _, row = min(exact, key=lambda item: (item[0], item[1].id))
+        consumed.add(row.id)
+        return "duplicate"
+    if matches:
+        return "possible_duplicate"
+    return None
+
+
+def _manual_rows(
+    candidate: Activity, existing: ActivityIndex, consumed: set[str],
+) -> list[tuple[int, ExistingActivity]]:
     candidate_day = activity_instant(candidate.date)
-    exact: list[tuple[int, ExistingActivity]] = []
-    nearby: list[tuple[int, ExistingActivity]] = []
+    matches: list[tuple[int, ExistingActivity]] = []
     for row in existing.rows:
         if row.id in consumed or row.account_id != candidate.account_id or not row.active:
             continue
@@ -118,31 +132,14 @@ def _manual_match_kind(
         distance = abs((row.date.date() - candidate_day.date()).days)
         if distance > 2:
             continue
-        nearby.append((distance, row))
-        if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price:
-            exact.append((int(distance), row))
-    if exact:
-        _, row = min(exact, key=lambda item: (item[0], item[1].id))
-        consumed.add(row.id)
-        return "duplicate"
-    if nearby:
-        return "possible_duplicate"
-    return None
+        matches.append((distance, row))
+    return matches
 
 
 def _manual_sort_key(candidate: Activity, existing: ActivityIndex) -> tuple[int, str, str]:
     """Process the closest exact manual candidates first."""
-    day = activity_instant(candidate.date).date()
-    distances = [
-        abs((row.date.date() - day).days)
-        for row in existing.rows
-        if row.account_id == candidate.account_id and row.active
-        and not row.comment.startswith("BD#v3#")
-        and row.type == candidate.type and row.data_source == candidate.data_source
-        and _same_security(candidate, row)
-        and row.quantity == candidate.quantity and row.unit_price == candidate.unit_price
-        and abs((row.date.date() - day).days) <= 2
-    ]
+    distances = [distance for distance, row in _manual_rows(candidate, existing, set())
+                 if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
     return (min(distances, default=3), candidate.date, candidate.comment)
 
 
