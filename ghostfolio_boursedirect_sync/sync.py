@@ -13,6 +13,7 @@ from ghostfolio_boursedirect_sync.models import (
     Activity,
     ActivityIndex,
     Buy,
+    ExistingActivity,
     Notice,
     Selection,
 )
@@ -66,7 +67,80 @@ def activity(buy: Buy, mapping: dict[str, str], account_id: str, source_account:
         account_id=account_id, symbol=symbol, date=f"{buy.date}T00:00:00+00:00",
         quantity=buy.quantity, unit_price=buy.unit_price, fee=buy.fee,
         comment=f"BD#v3#{source_account}:BUY:{namespace}.{key}",
+        isin=buy.isin,
     )
+
+
+def _same_activity(candidate: Activity, existing: ExistingActivity) -> bool:
+    """Compare all Ghostfolio fields that define an owned activity."""
+    return (
+        existing.account_id == candidate.account_id
+        and existing.date == activity_instant(candidate.date)
+        and existing.type == candidate.type
+        and existing.symbol == candidate.symbol
+        and existing.data_source == candidate.data_source
+        and existing.currency == candidate.currency
+        and existing.quantity == candidate.quantity
+        and existing.unit_price == candidate.unit_price
+        and existing.fee == candidate.fee
+    )
+
+
+def _same_security(candidate: Activity, existing: ExistingActivity) -> bool:
+    return existing.symbol == candidate.symbol or (
+        candidate.isin is not None and existing.isin is not None and existing.isin == candidate.isin
+    )
+
+
+def _manual_match_kind(
+    candidate: Activity,
+    existing: ActivityIndex,
+    consumed: set[str],
+) -> str | None:
+    """Return ``duplicate`` or ``possible_duplicate`` for target-account rows.
+
+    Manual evidence is restricted to active YAHOO rows in the selected account.
+    An existing row can satisfy one source row only, so identical source rows
+    retain their multiplicity.
+    """
+    matches = _manual_rows(candidate, existing, consumed)
+    exact = [item for item in matches
+             if item[1].quantity == candidate.quantity and item[1].unit_price == candidate.unit_price]
+    if exact:
+        _, row = min(exact, key=lambda item: (item[0], item[1].id))
+        consumed.add(row.id)
+        return "duplicate"
+    if matches:
+        return "possible_duplicate"
+    return None
+
+
+def _manual_rows(
+    candidate: Activity, existing: ActivityIndex, consumed: set[str],
+) -> list[tuple[int, ExistingActivity]]:
+    candidate_day = activity_instant(candidate.date)
+    matches: list[tuple[int, ExistingActivity]] = []
+    for row in existing.rows:
+        if row.id in consumed or row.account_id != candidate.account_id or not row.active:
+            continue
+        if row.comment.startswith("BD#v3#"):
+            continue
+        if row.type != candidate.type or row.data_source != candidate.data_source:
+            continue
+        if not _same_security(candidate, row):
+            continue
+        distance = abs((row.date.date() - candidate_day.date()).days)
+        if distance > 2:
+            continue
+        matches.append((distance, row))
+    return matches
+
+
+def _manual_sort_key(candidate: Activity, existing: ActivityIndex) -> tuple[int, str, str]:
+    """Process the closest exact manual candidates first."""
+    distances = [distance for distance, row in _manual_rows(candidate, existing, set())
+                 if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
+    return (min(distances, default=3), candidate.date, candidate.comment)
 
 
 def select_account_activities(
@@ -82,7 +156,10 @@ def select_account_activities(
     conflicts: set[str] = set()
     errors: list[str] = []
     duplicates = 0
-    for candidate in candidates:
+    consumed_manual: set[str] = set()
+    manual_matches: dict[str, Activity] = {}
+    ordered_candidates = sorted(candidates, key=lambda item: _manual_sort_key(item, existing))
+    for candidate in ordered_candidates:
         if not parse_identity(candidate.comment, candidate.type):
             raise RuntimeError("invalid_identity")
         if activity_instant(candidate.date) > instant:
@@ -96,20 +173,27 @@ def select_account_activities(
                 conflicts.add(candidate.comment)
                 errors.append("owned_activity_conflict")
             continue
-        occupied = existing.identities.get(candidate.comment, ())
-        if occupied:
-            if len(occupied) == 1 and (
-                occupied[0].account_id, occupied[0].date, occupied[0].type,
-                occupied[0].symbol, occupied[0].data_source, occupied[0].currency,
-                occupied[0].quantity, occupied[0].unit_price, occupied[0].fee,
-            ) == (
-                candidate.account_id, activity_instant(candidate.date), candidate.type,
-                candidate.symbol, candidate.data_source, candidate.currency,
-                candidate.quantity, candidate.unit_price, candidate.fee,
-            ):
+        manual_previous = manual_matches.get(candidate.comment)
+        if manual_previous is not None:
+            if manual_previous == candidate:
                 duplicates += 1
             else:
                 errors.append("owned_activity_conflict")
+            continue
+        occupied = existing.identities.get(candidate.comment, ())
+        if occupied:
+            if len(occupied) == 1 and _same_activity(candidate, occupied[0]):
+                duplicates += 1
+            else:
+                errors.append("owned_activity_conflict")
+            continue
+        manual = _manual_match_kind(candidate, existing, consumed_manual)
+        if manual == "duplicate":
+            duplicates += 1
+            manual_matches[candidate.comment] = candidate
+            continue
+        if manual == "possible_duplicate":
+            errors.append("possible_duplicate")
             continue
         proposals[candidate.comment] = candidate
     selected = tuple(sorted((a for key, a in proposals.items() if key not in conflicts),

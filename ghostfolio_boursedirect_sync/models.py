@@ -46,6 +46,7 @@ class Activity:
     type: str = "BUY"
     currency: str = "EUR"
     data_source: str = "YAHOO"
+    isin: str | None = None
 
 
 @dataclass(frozen=True)
