@@ -12,7 +12,7 @@ from typing import Literal
 
 from ghostfolio_boursedirect_sync.models import Buy, Notice
 
-NUMBER = r"[+-]?[0-9][0-9 ]*(?:[,.][0-9]+)?"
+NUMBER = r"[+-]?(?:[0-9]{1,3}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
     rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+ACHAT (?:ETRANGER|COMPTANT)\s+"
     rf"([A-Z]{{2}}[A-Z0-9]{{9}}[0-9])\s+.+?\s{{2,}}({NUMBER})\s*$"
@@ -21,6 +21,11 @@ ACCOUNT = re.compile(
     r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(?:PEA-PME|PEA)\b", re.I
 )
 FIELD = rf"([A-Z][A-Z .]*?)\s*:\s*({NUMBER})"
+FOOTER = re.compile(
+    r"\s*(?:Sous réserve de bonne fin / Ce relevé ne constitue pas une facture|"
+    r"Les montants des colonnes Débit et Crédit sont stipulés TVA Comprise|"
+    r"Bourse Direct\s*,\s*SA au capital de .+)\s*"
+)
 
 
 def extract_text(pdf: bytes) -> str:
@@ -52,9 +57,9 @@ def checked_fields(block: str, required: set[str], optional: set[str] | None = N
     """Reject unknown labels and partial numbers instead of guessing source fields."""
     values: dict[str, Decimal] = {}
     for line in block.splitlines():
-        if re.match(r"\s*Bourse Direct\s*,\s*SA au capital de\b", line):
+        if not line.strip() or FOOTER.fullmatch(line):
             continue
-        if ":" not in line or re.fullmatch(
+        if re.fullmatch(
             r"\s*Heure Execution:\s*\d{2}:\d{2}:\d{2}\s+Lieu:\s*.+", line
         ):
             continue

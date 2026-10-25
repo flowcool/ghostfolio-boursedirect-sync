@@ -123,3 +123,20 @@ def test_quantity_sign_must_match_the_operation(kind, old, new, net):
             notices.parse_text(text)
         else:
             notices.checked_amounts(kind, text, Decimal(net), "EUR")
+
+
+@pytest.mark.parametrize("old,new", [
+    ("QUANTITE : 4", "QUANTITE : 0 4"),
+    ("BRUT : 102.00", "BRUT : 10 2.00"),
+    ("103.00", "1 03.00"),
+])
+def test_malformed_digit_grouping_is_not_silently_removed(old, new):
+    text = (FIXTURES / "pdf_buy.txt").read_text().replace(old, new)
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(text)
+
+
+def test_unknown_field_without_a_colon_is_unreadable():
+    text = (FIXTURES / "pdf_buy.txt").read_text() + "\nTAXE 0.01\n"
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(text)
