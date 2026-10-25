@@ -137,6 +137,27 @@ def test_manual_row_does_not_match_two_source_rows():
     assert result.activities == (second,)
 
 
+def test_manual_match_source_copy_is_still_a_duplicate():
+    result = sync.select_account_activities(
+        [proposed(), proposed()], index(existing_row(comment="manual entry")), now=NOW
+    )
+    assert result.activities == ()
+    assert result.duplicates == 2
+
+
+def test_manual_match_uses_calendar_days_and_closest_candidate_first():
+    manual = existing_row(comment="manual entry", date="2025-02-05T10:00:00Z")
+    result = sync.select_account_activities([proposed()], index(manual), now=NOW)
+    assert result.duplicates == 1 and result.errors == ()
+
+    first = replace(proposed(), date="2025-02-03T00:00:00+00:00", comment=proposed().comment + "-first")
+    second = replace(proposed(), date="2025-02-05T00:00:00+00:00", comment=proposed().comment + "-second")
+    manual = existing_row(comment="manual entry", date="2025-02-05T10:00:00Z")
+    result = sync.select_account_activities([first, second], index(manual), now=NOW)
+    assert result.duplicates == 1
+    assert result.activities == (first,)
+
+
 def test_excluded_owned_duplicate_is_not_recreated():
     result = sync.select_account_activities([proposed()], index(existing_row(isExcluded=True)), now=NOW)
     assert result.duplicates == 1
