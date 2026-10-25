@@ -158,6 +158,21 @@ def test_manual_match_uses_calendar_days_and_closest_candidate_first():
     assert result.activities == (first,)
 
 
+def test_manual_closest_date_is_recomputed_after_each_match():
+    candidates = [
+        replace(proposed(), date=f"2025-02-{day:02d}T00:00:00+00:00",
+                comment=proposed().comment + f"-{day}")
+        for day in (1, 2, 3)
+    ]
+    rows = [
+        existing_row(id="manual-1", comment="manual one", date="2025-02-01T12:00:00Z"),
+        existing_row(id="manual-2", comment="manual two", date="2025-02-04T12:00:00Z"),
+    ]
+    result = sync.select_account_activities(candidates, index(*rows), now=NOW)
+    assert result.duplicates == 2
+    assert [item.date[:10] for item in result.activities] == ["2025-02-02"]
+
+
 def test_excluded_owned_duplicate_is_not_recreated():
     result = sync.select_account_activities([proposed()], index(existing_row(isExcluded=True)), now=NOW)
     assert result.duplicates == 1

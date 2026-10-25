@@ -136,9 +136,11 @@ def _manual_rows(
     return matches
 
 
-def _manual_sort_key(candidate: Activity, existing: ActivityIndex) -> tuple[int, str, str]:
+def _manual_sort_key(
+    candidate: Activity, existing: ActivityIndex, consumed: set[str],
+) -> tuple[int, str, str]:
     """Process the closest exact manual candidates first."""
-    distances = [distance for distance, row in _manual_rows(candidate, existing, set())
+    distances = [distance for distance, row in _manual_rows(candidate, existing, consumed)
                  if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
     return (min(distances, default=3), candidate.date, candidate.comment)
 
@@ -158,8 +160,10 @@ def select_account_activities(
     duplicates = 0
     consumed_manual: set[str] = set()
     manual_matches: dict[str, Activity] = {}
-    ordered_candidates = sorted(candidates, key=lambda item: _manual_sort_key(item, existing))
-    for candidate in ordered_candidates:
+    pending = list(candidates)
+    while pending:
+        candidate = min(pending, key=lambda item: _manual_sort_key(item, existing, consumed_manual))
+        pending.remove(candidate)
         if not parse_identity(candidate.comment, candidate.type):
             raise RuntimeError("invalid_identity")
         if activity_instant(candidate.date) > instant:
