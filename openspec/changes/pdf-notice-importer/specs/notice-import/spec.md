@@ -162,8 +162,8 @@ a `BD#v3#` comment SHALL
 match a row when:
 
 - for a BUY or SELL, it has the same side, security (or ISIN), quantity and
-  unit price, and a date at most 2 days away. Each activity matches one row
-  only, closest date first;
+  unit price, and a date at most 2 days away. Maximize one-to-one exact
+  matches, then minimize total date distance;
 - for a DIVIDEND, it is a dividend of the same security with the same net
   amount, at most 3 days away.
 

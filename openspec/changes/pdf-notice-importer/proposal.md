@@ -13,6 +13,7 @@ applicable IBKR v3.0.0 core, with explicit Bourse Direct adaptations.
 - It stops on a security when a row changes the number of shares.
 - It does not track the TTF and ignores custody fees.
 - It does not import duplicates.
+- Maximize exact manual matches, then minimize their total date distance.
 - Retain IBKR startup checks, complete activity reads, position guards,
   import confirmation, failure summaries, notifications and scheduling.
 - The design pins the source.
