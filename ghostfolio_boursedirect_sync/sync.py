@@ -94,7 +94,7 @@ def _same_security(candidate: Activity, existing: ExistingActivity) -> bool:
 
 def _manual_match_kind(
     candidate: Activity,
-    existing: ActivityIndex,
+    matches: list[tuple[int, ExistingActivity]],
     consumed: set[str],
 ) -> str | None:
     """Return ``duplicate`` or ``possible_duplicate`` for target-account rows.
@@ -103,11 +103,11 @@ def _manual_match_kind(
     An existing row can satisfy one source row only, so identical source rows
     retain their multiplicity.
     """
-    matches = _manual_rows(candidate, existing, consumed)
+    matches = [item for item in matches if item[1].id not in consumed]
     exact = [item for item in matches
              if item[1].quantity == candidate.quantity and item[1].unit_price == candidate.unit_price]
     if exact:
-        _, row = min(exact, key=lambda item: (item[0], item[1].id))
+        _, row = min(exact, key=lambda item: (item[0], item[1].date, item[1].id))
         consumed.add(row.id)
         return "duplicate"
     if matches:
@@ -137,11 +137,12 @@ def _manual_rows(
 
 
 def _manual_sort_key(
-    candidate: Activity, existing: ActivityIndex, consumed: set[str],
+    candidate: Activity, matches: list[tuple[int, ExistingActivity]], consumed: set[str],
 ) -> tuple[int, str, str]:
     """Process the closest exact manual candidates first."""
-    distances = [distance for distance, row in _manual_rows(candidate, existing, consumed)
-                 if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
+    distances = [distance for distance, row in matches
+                 if row.id not in consumed and row.quantity == candidate.quantity
+                 and row.unit_price == candidate.unit_price]
     return (min(distances, default=3), candidate.date, candidate.comment)
 
 
@@ -160,10 +161,13 @@ def select_account_activities(
     duplicates = 0
     consumed_manual: set[str] = set()
     manual_matches: dict[str, Activity] = {}
-    pending = list(candidates)
+    # Cache nearby rows once; recompute distances only against unconsumed evidence.
+    # Manual matching and chronological ties adapt pinned IBKR sync.py:546,623.
+    pending = [(candidate, _manual_rows(candidate, existing, set())) for candidate in candidates]
     while pending:
-        candidate = min(pending, key=lambda item: _manual_sort_key(item, existing, consumed_manual))
-        pending.remove(candidate)
+        entry = min(pending, key=lambda item: _manual_sort_key(item[0], item[1], consumed_manual))
+        pending.remove(entry)
+        candidate, matches = entry
         if not parse_identity(candidate.comment, candidate.type):
             raise RuntimeError("invalid_identity")
         if activity_instant(candidate.date) > instant:
@@ -191,7 +195,7 @@ def select_account_activities(
             else:
                 errors.append("owned_activity_conflict")
             continue
-        manual = _manual_match_kind(candidate, existing, consumed_manual)
+        manual = _manual_match_kind(candidate, matches, consumed_manual)
         if manual == "duplicate":
             duplicates += 1
             manual_matches[candidate.comment] = candidate

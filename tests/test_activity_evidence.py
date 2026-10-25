@@ -173,6 +173,27 @@ def test_manual_closest_date_is_recomputed_after_each_match():
     assert [item.date[:10] for item in result.activities] == ["2025-02-02"]
 
 
+@pytest.mark.parametrize("reverse_candidates", [False, True])
+@pytest.mark.parametrize("reverse_rows", [False, True])
+def test_equal_distance_manual_rows_use_chronological_ties(reverse_candidates, reverse_rows):
+    candidates = [
+        replace(proposed(), date=f"2025-02-{day:02d}T00:00:00+00:00",
+                comment=proposed().comment + f"-{day}")
+        for day in (2, 4)
+    ]
+    rows = [
+        existing_row(id="manual-z", comment="manual one", date="2025-02-01T12:00:00Z"),
+        existing_row(id="manual-a", comment="manual two", date="2025-02-03T12:00:00Z"),
+    ]
+    result = sync.select_account_activities(
+        candidates[::-1] if reverse_candidates else candidates,
+        index(*(rows[::-1] if reverse_rows else rows)), now=NOW,
+    )
+    assert result.duplicates == 2
+    assert result.activities == ()
+    assert result.errors == ()
+
+
 def test_excluded_owned_duplicate_is_not_recreated():
     result = sync.select_account_activities([proposed()], index(existing_row(isExcluded=True)), now=NOW)
     assert result.duplicates == 1
