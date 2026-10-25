@@ -14,7 +14,13 @@ services:
       BD_ACCOUNT_REF: ${BD_ACCOUNT_REF:?Set the source account identifier}
       PAPERLESS_URL: ${PAPERLESS_URL:?Set the Paperless URL}
       PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:?Set the read-only Paperless token}
+      PAPERLESS_DONE_TAG: ${PAPERLESS_DONE_TAG:-ghostfolio-done}
       DRY_RUN: ${DRY_RUN-1}
+      TZ: ${TZ:-}
+      CRON: ${CRON:-}
+      APPRISE_URLS: ${APPRISE_URLS:-}
+      APPRISE_TIMEOUT: ${APPRISE_TIMEOUT:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       MAPPING_FILE: ${MAPPING_FILE:-}
     networks:
       - ghostfolio

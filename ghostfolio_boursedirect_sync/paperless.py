@@ -27,15 +27,29 @@ def get(settings: Settings, path: str, params: dict[str, str | int]) -> requests
 
 
 def document_ids(settings: Settings) -> list[int]:
-    """The exact label filter works for both string and select Source fields."""
+    """Return labelled documents and reject unlabelled BourseDirect files.
+
+    The second query is a read-only safety check. It catches a file that keeps
+    the BillCollector filename but lost the Paperless Source field.
+    """
+    source_ids = _document_ids(settings, {
+        "custom_field_query": json.dumps(["Source", "exact", "Bourse Direct"]),
+    })
+    filename_ids = _document_ids(settings, {
+        "original_filename__istartswith": "BourseDirect_",
+    })
+    if set(filename_ids).difference(source_ids):
+        raise RuntimeError("source_field_missing")
+    return source_ids
+
+
+def _document_ids(settings: Settings, filters: dict[str, str]) -> list[int]:
+    """Read every page for one Paperless filter with stable count evidence."""
     ids: list[int] = []
     page = 1
     expected_count: int | None = None
     while True:
-        response = get(settings, "/api/documents/", {
-            "custom_field_query": json.dumps(["Source", "exact", "Bourse Direct"]),
-            "page": page,
-        })
+        response = get(settings, "/api/documents/", {**filters, "page": page})
         try:
             body: object = response.json()
         except ValueError:

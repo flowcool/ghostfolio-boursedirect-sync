@@ -44,8 +44,11 @@ work-tracker IDs.
 - **No bead before the spec.** After approval: one epic for the change and one
   bead per task. Each bead gives the spec path, requirement, scenario,
   acceptance command and files to touch.
-- **One bead = one fresh session.** Claim, implement, prove, close, stop. Do not
-  start the next bead. Budget about 150 tool calls; above that, stop and report.
+- **One bead = one fresh session.** Claim, implement, prove, close, stop. The
+  implementation beads may proceed offline before an upstream source or live
+  acceptance gate is available. Keep those gates separate and do not start the
+  next bead in the same session. Budget about 150 tool calls; above that, stop
+  and report.
 - **Done = the scenario replayed for real.** Put the command and its output in
   the closing note. Green unit tests are not done. No review beads: CodeRabbit
   reviews the PRs. A decision bead never delivers code.
@@ -72,7 +75,7 @@ work-tracker IDs.
   This replaces the main-file limit. Tests and packaging metadata are excluded.
 - Reuse the existing infrastructure lab. A dedicated BD test container is
   permitted in principle (Florent, 2026-10-22). Its exact target, commands and
-  writes still need an approved operation scope. Keep lab tooling in infra.
+  writes use the permanent lab authority below. Keep lab tooling in infra.
   No separate lab or new compose file without approval.
 - Build the candidate image once. Require empty and golden lab scenarios to
   pass on its digest. Publish that exact image without rebuilding. No mandatory
@@ -119,3 +122,13 @@ See
 [python conventions](.claude/rules/python-conventions.md),
 [security rules](.claude/rules/security.md). The legacy code stays in place
 until the rebuild replaces it.
+
+## Shared Ghostfolio labs
+
+Use the permanent lab authority in the global working agreement and the
+canonical Infra lab runbook. It covers both labs, including test writes,
+configuration and resets. Keep reservations, separate credentials, retained
+proof, stop on uncertainty without automatic resend, and final stop verification.
+Broker access, production, publication and removal of containers or proof
+retain separate authority. This scope overrides generic write-approval rules
+for these two labs only.
