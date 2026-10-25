@@ -157,7 +157,7 @@ def test_writes_remain_unavailable(settings, monkeypatch):
 
 
 @pytest.mark.parametrize("bad_first", [True, False])
-@pytest.mark.parametrize("failure", ["parse", "extract", "amount"])
+@pytest.mark.parametrize("failure", ["parse", "extract", "amount", "unknown-field", "not-notice"])
 def test_bad_document_keeps_readable_preview(settings, monkeypatch, caplog, bad_first, failure):
     monkeypatch.setattr(paperless, "document_ids", lambda _: [1, 2] if bad_first else [2, 1])
     monkeypatch.setattr(paperless, "original_pdf", lambda _, doc: str(doc).encode())
@@ -168,6 +168,10 @@ def test_bad_document_keeps_readable_preview(settings, monkeypatch, caplog, bad_
             return text
         if failure == "extract":
             raise RuntimeError("notice_unreadable")
+        if failure == "unknown-field":
+            return text + "\nTAXE : 0.01\n"
+        if failure == "not-notice":
+            return "This document is not an operation notice."
         return text.replace("COMPTE", "MISSING") if failure == "parse" else text.replace("103.00", "103.01")
 
     monkeypatch.setattr(notices, "extract_text", extract)
