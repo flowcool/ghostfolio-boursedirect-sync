@@ -52,12 +52,28 @@ def main() -> int:
         token = ghostfolio.exchange_token(settings)
         account_id = ghostfolio.find_account(settings, token)
         existing = ghostfolio.read_activities(settings, token)
+        # IBKR sync.py:92 gives explicit mappings priority. The approved BD
+        # adaptation replaces the broker-symbol fallback with an ISIN lookup.
+        unresolved: set[str] = set()
+        for isin in sorted({buy.isin for _, notice in matching for buy in notice.buys}):
+            if isin in mapping:
+                continue
+            symbol = ghostfolio.lookup_symbol(settings, token, isin)
+            if symbol is None:
+                unresolved.add(isin)
+                # Pinned IBKR app.py:580: one mapping hint per ISIN.
+                log.error("unresolved_security isin=%s symbol_mapping: '%s: <yahoo ticker>'",
+                          isin, isin)
+            else:
+                mapping[isin] = symbol
         candidates: list[Activity] = []
         documents: dict[str, int] = {}
         for document_id, notice in matching:
             namespace = sync.notice_namespace(notice)
             ranks: Counter[Buy] = Counter()
             for buy in notice.buys:
+                if buy.isin in unresolved:
+                    continue
                 rank = ranks[buy]
                 ranks[buy] += 1
                 activity = sync.activity(buy, mapping, account_id, settings.bd_account_ref, namespace, rank)
@@ -85,7 +101,7 @@ def main() -> int:
         log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s "
                  "unreadable_notices=%s created=0",
                  len(selected.activities), selected.duplicates, other_accounts, unreadable)
-        return int(bool(selected.errors) or unreadable > 0)
+        return int(bool(selected.errors) or unreadable > 0 or bool(unresolved))
     except RuntimeError as exc:
         # Package RuntimeErrors contain fixed codes/field names only.
         log.error("%s document=%s", exc, document_id)

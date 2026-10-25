@@ -173,6 +173,36 @@ def read_activities(settings: Settings, token: str) -> ActivityIndex:
     return index_existing_activities(data)
 
 
+def lookup_symbol(settings: Settings, token: str, isin: str) -> str | None:
+    """Approved BD adapter: legacy scripts/community_connect.py:92-100.
+
+    The spec requires exactly one EUR result. Activities use YAHOO, so a
+    different provider cannot supply the selected symbol. Never log API bodies.
+    """
+    try:
+        response = requests.get(
+            f"{settings.ghost_host}/api/v1/symbol/lookup",
+            params={"query": isin}, headers={"Authorization": f"Bearer {token}"},
+            timeout=(10, 60), allow_redirects=False,
+        )
+        if not 200 <= response.status_code < 300:
+            return None
+        body: object = response.json()
+    except (requests.RequestException, ValueError):
+        return None
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+        return None
+    eur = [item for item in items if item.get("currency") == "EUR"]
+    if len(eur) != 1 or eur[0].get("dataSource") != "YAHOO":
+        return None
+    symbol = eur[0].get("symbol")
+    if (not isinstance(symbol, str) or not symbol.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in symbol)):
+        return None
+    return symbol
+
+
 def exchange_token(settings: Settings) -> str:
     if settings.ghost_token is not None:
         return settings.ghost_token

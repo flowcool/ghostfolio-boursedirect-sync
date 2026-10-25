@@ -82,7 +82,7 @@ publication. Keep the existing real-PDF and first-write authorization gates.
 
 ## 3. Security resolution
 
-- [ ] 3.1 Add the Ghostfolio lookup by ISIN, `unresolved_security` and the list
+- [x] 3.1 Add the Ghostfolio lookup by ISIN, `unresolved_security` and the list
   of mapping lines to paste. Add the README mapping section. Verify the scenario
   "No EUR lookup result".
 

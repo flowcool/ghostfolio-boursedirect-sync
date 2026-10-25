@@ -74,8 +74,22 @@ symbol_mapping:
   FR0000000002: VERIFIED.PA
 ```
 
-The mapping is read only. Later security resolution also checks Ghostfolio for
-one EUR result. An unresolved ISIN is reported and is never written.
+The mapping file is read only. A mapped ISIN takes priority over lookup.
+For each unmapped ISIN, the connector queries Ghostfolio once per run.
+It accepts exactly one EUR result from the YAHOO data source.
+
+If lookup fails or has no single EUR result, the connector skips that ISIN.
+Other resolved securities continue. The run exits with code 1 and logs
+`unresolved_security` with one mapping line per ISIN:
+
+```text
+symbol_mapping: 'FR0000000002: <yahoo ticker>'
+```
+
+Verify the EUR Yahoo ticker in Ghostfolio. Replace `<yahoo ticker>` with that
+ticker. Add the `ISIN: TICKER` line under `symbol_mapping` in the YAML file.
+Then run the connector again. A missing or invalid file stops the run with
+`invalid_mapping`. Leave `MAPPING_FILE` empty to use lookup without a file.
 
 ## Ghostfolio evidence
 

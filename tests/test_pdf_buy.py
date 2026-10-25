@@ -156,6 +156,97 @@ def test_writes_remain_unavailable(settings, monkeypatch):
     assert app.main() == 1
 
 
+@pytest.mark.parametrize("items,expected", [
+    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "YAHOO"}], 0),
+    ([], 1),
+    ([{"symbol": "EXAMPLE", "currency": "USD", "dataSource": "YAHOO"}], 1),
+    ([{"symbol": s, "currency": "EUR", "dataSource": "YAHOO"}
+      for s in ("FIRST.PA", "SECOND.PA")], 1),
+    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "YAHOO"},
+      {"symbol": "EXAMPLE", "currency": "USD", "dataSource": "YAHOO"}], 0),
+    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "MANUAL"}], 1),
+    ([{"currency": "EUR", "dataSource": "YAHOO"}], 1),
+    ([{"symbol": "bad\nline", "currency": "EUR", "dataSource": "YAHOO"}], 1),
+    ([{"symbol": "EXAMPLE.PA", "dataSource": "YAHOO"}], 1),
+    ([None], 1),
+    (None, 1),
+    ({"symbol": "EXAMPLE.PA"}, 1),
+    (302, 1),
+    (401, 1),
+    (500, 1),
+    (requests.Timeout("sensitive-provider-detail"), 1),
+    (ValueError("sensitive-provider-detail"), 1),
+])
+def test_security_lookup_from_real_buy(settings, monkeypatch, caplog, items, expected):
+    monkeypatch.setenv("GHOST_TOKEN", "offline-bearer")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [123])
+    monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
+    monkeypatch.setattr(notices, "extract_text", lambda _: FIXTURE.read_text())
+
+    def get(url, **kwargs):
+        if url.endswith("/api/v1/account"):
+            return Mock(status_code=200, json=lambda: {"accounts": [
+                {"id": "target", "name": "Example PEA"}]})
+        if url.endswith("/api/v1/activities"):
+            return Mock(status_code=200, content=b'{"activities": [], "count": 0}')
+        assert url == "http://ghostfolio.test/api/v1/symbol/lookup"
+        assert kwargs["params"] == {"query": "FR0000120271"}
+        assert kwargs["headers"] == {"Authorization": "Bearer offline-bearer"}
+        assert kwargs["allow_redirects"] is False
+        assert kwargs["timeout"] == (10, 60)
+        if isinstance(items, requests.RequestException):
+            raise items
+        if isinstance(items, ValueError):
+            return Mock(status_code=200, json=Mock(side_effect=items))
+        if isinstance(items, int):
+            return Mock(status_code=items, json=Mock(side_effect=AssertionError("read error body")))
+        return Mock(status_code=200, json=lambda: {"items": items})
+
+    request = Mock(side_effect=get)
+    monkeypatch.setattr(requests, "get", request)
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected POST")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == expected
+    assert request.call_count == 3
+    assert "sensitive-provider-detail" not in caplog.text
+    assert "offline-bearer" not in caplog.text
+    if expected:
+        assert "unresolved_security" in caplog.text
+        assert "FR0000120271: <yahoo ticker>" in caplog.text
+        assert "type=BUY" not in caplog.text
+    else:
+        assert "type=BUY symbol=EXAMPLE.PA" in caplog.text
+        assert "unresolved_security" not in caplog.text
+
+
+def test_unresolved_isins_keep_mapped_rows_and_report_each_isin_once(settings, monkeypatch, caplog, tmp_path):
+    mapping = tmp_path / "mapping.yaml"
+    mapping.write_text("symbol_mapping:\n  FR0000000002: VERIFIED.PA\n")
+    monkeypatch.setenv("MAPPING_FILE", str(mapping))
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [1, 2, 3, 4])
+    monkeypatch.setattr(paperless, "original_pdf", lambda _, doc: str(doc).encode())
+    monkeypatch.setattr(notices, "extract_text", lambda pdf: FIXTURE.read_text().replace(
+        "FR0000120271", {b"1": "FR0000120271", b"2": "FR0000000010",
+                         b"3": "FR0000000002", b"4": "FR0000120271"}[pdf]))
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    get = Mock(return_value=Mock(status_code=200, json=lambda: {"items": []}))
+    monkeypatch.setattr(requests, "get", get)
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected POST")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 1
+    assert get.call_count == 2
+    assert {c.kwargs["params"]["query"] for c in get.call_args_list} == {
+        "FR0000120271", "FR0000000010"}
+    errors = [r.message for r in caplog.records if "unresolved_security" in r.message]
+    assert len(errors) == 2
+    assert all(f"{isin}: <yahoo ticker>" in caplog.text for isin in (
+        "FR0000120271", "FR0000000010"))
+    assert "type=BUY symbol=VERIFIED.PA" in caplog.text
+    assert "simulated=1" in caplog.text
+    assert mapping.read_text() == "symbol_mapping:\n  FR0000000002: VERIFIED.PA\n"
+
+
 @pytest.mark.parametrize("bad_first", [True, False])
 @pytest.mark.parametrize("failure", ["parse", "extract", "amount", "unknown-field", "not-notice"])
 def test_bad_document_keeps_readable_preview(settings, monkeypatch, caplog, bad_first, failure):
