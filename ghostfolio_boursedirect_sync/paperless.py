@@ -36,7 +36,7 @@ def document_ids(settings: Settings) -> list[int]:
         "custom_field_query": json.dumps(["Source", "exact", "Bourse Direct"]),
     })
     filename_ids = _document_ids(settings, {
-        "original_file_name__istartswith": "BourseDirect_",
+        "original_filename__istartswith": "BourseDirect_",
     })
     if set(filename_ids).difference(source_ids):
         raise RuntimeError("source_field_missing")

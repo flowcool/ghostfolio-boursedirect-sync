@@ -247,7 +247,7 @@ def test_paperless_reads_original_and_ignores_response_url(settings, monkeypatch
     assert json.loads(calls[0].kwargs["params"]["custom_field_query"]) == ["Source", "exact", "Bourse Direct"]
     assert calls[1].kwargs["params"]["page"] == 2
     assert calls[2].kwargs["params"] == {
-        "original_file_name__istartswith": "BourseDirect_", "page": 1,
+        "original_filename__istartswith": "BourseDirect_", "page": 1,
     }
     assert calls[3].kwargs["params"] == {"original": "true"}
 
