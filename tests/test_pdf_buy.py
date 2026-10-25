@@ -156,28 +156,28 @@ def test_writes_remain_unavailable(settings, monkeypatch):
     assert app.main() == 1
 
 
-@pytest.mark.parametrize("items,expected", [
-    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "YAHOO"}], 0),
-    ([], 1),
-    ([{"symbol": "EXAMPLE", "currency": "USD", "dataSource": "YAHOO"}], 1),
+@pytest.mark.parametrize("items,expected,reason", [
+    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "YAHOO"}], 0, None),
+    ([], 1, None),
+    ([{"symbol": "EXAMPLE", "currency": "USD", "dataSource": "YAHOO"}], 1, None),
     ([{"symbol": s, "currency": "EUR", "dataSource": "YAHOO"}
-      for s in ("FIRST.PA", "SECOND.PA")], 1),
+      for s in ("FIRST.PA", "SECOND.PA")], 1, None),
     ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "YAHOO"},
-      {"symbol": "EXAMPLE", "currency": "USD", "dataSource": "YAHOO"}], 0),
-    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "MANUAL"}], 1),
-    ([{"currency": "EUR", "dataSource": "YAHOO"}], 1),
-    ([{"symbol": "bad\nline", "currency": "EUR", "dataSource": "YAHOO"}], 1),
-    ([{"symbol": "EXAMPLE.PA", "dataSource": "YAHOO"}], 1),
-    ([None], 1),
-    (None, 1),
-    ({"symbol": "EXAMPLE.PA"}, 1),
-    (302, 1),
-    (401, 1),
-    (500, 1),
-    (requests.Timeout("sensitive-provider-detail"), 1),
-    (ValueError("sensitive-provider-detail"), 1),
+      {"symbol": "EXAMPLE", "currency": "USD", "dataSource": "YAHOO"}], 0, None),
+    ([{"symbol": "EXAMPLE.PA", "currency": "EUR", "dataSource": "MANUAL"}], 1, None),
+    ([{"currency": "EUR", "dataSource": "YAHOO"}], 1, "reason=invalid_response"),
+    ([{"symbol": "bad\nline", "currency": "EUR", "dataSource": "YAHOO"}], 1, "reason=invalid_response"),
+    ([{"symbol": "EXAMPLE.PA", "dataSource": "YAHOO"}], 1, None),
+    ([None], 1, "reason=invalid_response"),
+    (None, 1, "reason=invalid_response"),
+    ({"symbol": "EXAMPLE.PA"}, 1, "reason=invalid_response"),
+    (302, 1, "HTTP 302"),
+    (401, 1, "HTTP 401"),
+    (500, 1, "HTTP 500"),
+    (requests.Timeout("sensitive-provider-detail"), 1, "reason=transport"),
+    (ValueError("sensitive-provider-detail"), 1, "reason=invalid_response"),
 ])
-def test_security_lookup_from_real_buy(settings, monkeypatch, caplog, items, expected):
+def test_security_lookup_from_real_buy(settings, monkeypatch, caplog, items, expected, reason):
     monkeypatch.setenv("GHOST_TOKEN", "offline-bearer")
     monkeypatch.setattr(paperless, "document_ids", lambda _: [123])
     monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
@@ -210,6 +210,10 @@ def test_security_lookup_from_real_buy(settings, monkeypatch, caplog, items, exp
     assert request.call_count == 3
     assert "sensitive-provider-detail" not in caplog.text
     assert "offline-bearer" not in caplog.text
+    if reason is None:
+        assert "Security lookup failed" not in caplog.text
+    else:
+        assert f"Security lookup failed isin=FR0000120271 {reason}" in caplog.text
     if expected:
         assert "unresolved_security" in caplog.text
         assert "FR0000120271: <yahoo ticker>" in caplog.text

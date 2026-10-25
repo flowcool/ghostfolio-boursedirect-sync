@@ -4,6 +4,7 @@ Only token exchange uses POST. No financial write exists in this task.
 """
 
 import json
+import logging
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from ghostfolio_boursedirect_sync.models import (
 )
 
 INACTIVE_TAGS = {"0c077abd-eca2-4cbb-818c-6cefbf2d169a", "f2e868af-8333-459f-b161-cbc6544c24bd"}
+log = logging.getLogger(__name__)
 
 
 def activity_is_active(value: object) -> bool:
@@ -185,13 +187,21 @@ def lookup_symbol(settings: Settings, token: str, isin: str) -> str | None:
             params={"query": isin}, headers={"Authorization": f"Bearer {token}"},
             timeout=(10, 60), allow_redirects=False,
         )
-        if not 200 <= response.status_code < 300:
-            return None
+    except requests.RequestException:
+        log.warning("Security lookup failed isin=%s reason=transport", isin)
+        return None
+    # Pinned IBKR ghostfolio.py:562 reports HTTP failures; BD omits response bodies.
+    if not 200 <= response.status_code < 300:
+        log.warning("Security lookup failed isin=%s HTTP %s", isin, response.status_code)
+        return None
+    try:
         body: object = response.json()
-    except (requests.RequestException, ValueError):
+    except ValueError:
+        log.warning("Security lookup failed isin=%s reason=invalid_response", isin)
         return None
     items = body.get("items") if isinstance(body, dict) else None
     if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+        log.warning("Security lookup failed isin=%s reason=invalid_response", isin)
         return None
     eur = [item for item in items if item.get("currency") == "EUR"]
     if len(eur) != 1 or eur[0].get("dataSource") != "YAHOO":
@@ -199,6 +209,7 @@ def lookup_symbol(settings: Settings, token: str, isin: str) -> str | None:
     symbol = eur[0].get("symbol")
     if (not isinstance(symbol, str) or not symbol.strip()
             or any(ord(c) < 32 or ord(c) == 127 for c in symbol)):
+        log.warning("Security lookup failed isin=%s reason=invalid_response", isin)
         return None
     return symbol
 

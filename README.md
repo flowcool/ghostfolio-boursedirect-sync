@@ -86,6 +86,9 @@ Other resolved securities continue. The run exits with code 1 and logs
 symbol_mapping: 'FR0000000002: <yahoo ticker>'
 ```
 
+Lookup failures also report a fixed transport, HTTP or invalid-response reason.
+A valid lookup with no single EUR result does not report a lookup failure.
+
 Verify the EUR Yahoo ticker in Ghostfolio. Replace `<yahoo ticker>` with that
 ticker. Add the `ISIN: TICKER` line under `symbol_mapping` in the YAML file.
 Then run the connector again. A missing or invalid file stops the run with
