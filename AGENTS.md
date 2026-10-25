@@ -44,8 +44,11 @@ work-tracker IDs.
 - **No bead before the spec.** After approval: one epic for the change and one
   bead per task. Each bead gives the spec path, requirement, scenario,
   acceptance command and files to touch.
-- **One bead = one fresh session.** Claim, implement, prove, close, stop. Do not
-  start the next bead. Budget about 150 tool calls; above that, stop and report.
+- **One bead = one fresh session.** Claim, implement, prove, close, stop. The
+  implementation beads may proceed offline before an upstream source or live
+  acceptance gate is available. Keep those gates separate and do not start the
+  next bead in the same session. Budget about 150 tool calls; above that, stop
+  and report.
 - **Done = the scenario replayed for real.** Put the command and its output in
   the closing note. Green unit tests are not done. No review beads: CodeRabbit
   reviews the PRs. A decision bead never delivers code.
