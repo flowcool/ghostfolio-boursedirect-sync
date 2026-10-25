@@ -18,7 +18,7 @@ HEADER = re.compile(
     rf"([A-Z]{{2}}[A-Z0-9]{{9}}[0-9])\s+.+?\s{{2,}}({NUMBER})\s*$"
 )
 ACCOUNT = re.compile(
-    r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)([A-Z]{3})\s*(?:PEA-PME|PEA)\b", re.I
+    r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(?:PEA-PME|PEA)\b", re.I
 )
 FIELD = rf"([A-Z][A-Z .]*?)\s*:\s*({NUMBER})"
 
@@ -71,7 +71,7 @@ def checked_fields(block: str, required: set[str], optional: set[str] | None = N
 
 
 def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: Decimal,
-                    currency: str = "EUR") -> dict[str, Decimal]:
+                    currency: str) -> dict[str, Decimal]:
     """BD adapter of DEGIRO sync.py:282: corroborate cash with source fields.
 
     Unlike DEGIRO, BD requires exact gross and cash equality, without tolerance.
@@ -92,7 +92,8 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
     with localcontext() as context:
         context.prec = max(28, sum(len(format(v, "f")) for v in (*fields.values(), net)) + 8)
         if (
-            quantity == 0 or min(price, gross) <= 0 or fee < 0
+            (quantity <= 0 if kind == "BUY" else quantity >= 0)
+            or min(price, gross) <= 0 or fee < 0
             or quantity.copy_abs() * price != gross
             or (gross + fee + vat if kind == "BUY" else gross - fee - vat) != net
         ):
@@ -125,6 +126,6 @@ def parse_text(text: str) -> Notice:
             day = datetime.strptime(header[1], "%d/%m/%Y").date()
         except ValueError:
             raise RuntimeError("notice_unreadable") from None
-        fields = checked_amounts("BUY", block, decimal(header[3]), match[2])
+        fields = checked_amounts("BUY", block, decimal(header[3]), "EUR")
         buys.append(Buy(day, header[2], fields["QUANTITE"].copy_abs(), fields["COURS"], fields["COURTAGE"]))
     return Notice(account_ref, tuple(buys))

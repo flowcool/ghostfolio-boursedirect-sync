@@ -19,7 +19,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 @pytest.mark.parametrize("change", [
     "unknown-label", "renamed-label", "numeric-suffix", "numeric-prefix",
-    "duplicate-field", "non-eur",
+    "duplicate-field", "non-eur", "missing-currency",
 ])
 def test_unexpected_buy_fields_are_rejected(change):
     text = (FIXTURES / "pdf_buy.txt").read_text()
@@ -33,9 +33,11 @@ def test_unexpected_buy_fields_are_rejected(change):
         text = text.replace("BRUT : 102.00", "BRUT : oops102.00")
     elif change == "duplicate-field":
         text += "\n                        BRUT : 102.00\n"
-    else:
+    elif change == "non-eur":
         text = text.replace("EUR PEA", "USD PEA")
-    code = "amount_check_failed" if change == "non-eur" else "notice_unreadable"
+    else:
+        text = text.replace("EUR PEA", "PEA")
+    code = "notice_unreadable"
     with pytest.raises(RuntimeError, match=f"^{code}$"):
         notices.parse_text(text)
 
@@ -43,7 +45,7 @@ def test_unexpected_buy_fields_are_rejected(change):
 def test_real_sell_amounts_use_absolute_quantity():
     # Retained real SELL text. Identifiers, time and amounts are anonymized.
     fields = notices.checked_amounts(
-        "SELL", (FIXTURES / "pdf_sell_amounts.txt").read_text(), Decimal("1123.30")
+        "SELL", (FIXTURES / "pdf_sell_amounts.txt").read_text(), Decimal("1123.30"), "EUR"
     )
     assert fields["QUANTITE"] == Decimal("-47")
 
@@ -57,13 +59,13 @@ def test_altered_real_sell_amount_fails(old, new):
     text = (FIXTURES / "pdf_sell_amounts.txt").read_text()
     assert old in text
     with pytest.raises(RuntimeError, match="^amount_check_failed$"):
-        notices.checked_amounts("SELL", text.replace(old, new), Decimal("1123.30"))
+        notices.checked_amounts("SELL", text.replace(old, new), Decimal("1123.30"), "EUR")
 
 
 def test_real_coupon_uses_positive_net_credit_without_recomputing_gross():
     # This retained coupon has gross 5.72 and net credit 4.86.
     notices.checked_amounts(
-        "DIVIDEND", (FIXTURES / "pdf_coupon_amounts.txt").read_text(), Decimal("4.86")
+        "DIVIDEND", (FIXTURES / "pdf_coupon_amounts.txt").read_text(), Decimal("4.86"), "EUR"
     )
 
 
@@ -71,7 +73,7 @@ def test_real_coupon_uses_positive_net_credit_without_recomputing_gross():
 def test_coupon_requires_a_positive_credit(credit):
     with pytest.raises(RuntimeError, match="^amount_check_failed$"):
         notices.checked_amounts(
-            "DIVIDEND", (FIXTURES / "pdf_coupon_amounts.txt").read_text(), Decimal(credit)
+            "DIVIDEND", (FIXTURES / "pdf_coupon_amounts.txt").read_text(), Decimal(credit), "EUR"
         )
 
 
@@ -107,3 +109,17 @@ def test_buy_equality_does_not_round_under_a_small_decimal_context():
 def test_non_pdf_bytes_are_unreadable():
     with pytest.raises(RuntimeError, match="^notice_unreadable$"):
         notices.extract_text(b"This is not a PDF.")
+
+
+@pytest.mark.parametrize("kind,old,new,net", [
+    ("BUY", "QUANTITE : 4", "QUANTITE : -4", "103.00"),
+    ("SELL", "QUANTITE : -47", "QUANTITE : +47", "1123.30"),
+])
+def test_quantity_sign_must_match_the_operation(kind, old, new, net):
+    name = "pdf_buy.txt" if kind == "BUY" else "pdf_sell_amounts.txt"
+    text = (FIXTURES / name).read_text().replace(old, new)
+    with pytest.raises(RuntimeError, match="^amount_check_failed$"):
+        if kind == "BUY":
+            notices.parse_text(text)
+        else:
+            notices.checked_amounts(kind, text, Decimal(net), "EUR")
