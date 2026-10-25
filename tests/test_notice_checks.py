@@ -128,6 +128,7 @@ def test_quantity_sign_must_match_the_operation(kind, old, new, net):
 @pytest.mark.parametrize("old,new", [
     ("QUANTITE : 4", "QUANTITE : 0 4"),
     ("BRUT : 102.00", "BRUT : 10 2.00"),
+    ("BRUT : 102.00", "BRUT : 0 102.00"),
     ("103.00", "1 03.00"),
 ])
 def test_malformed_digit_grouping_is_not_silently_removed(old, new):

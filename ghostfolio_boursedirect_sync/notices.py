@@ -12,7 +12,7 @@ from typing import Literal
 
 from ghostfolio_boursedirect_sync.models import Buy, Notice
 
-NUMBER = r"[+-]?(?:[0-9]{1,3}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
+NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
     rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+ACHAT (?:ETRANGER|COMPTANT)\s+"
     rf"([A-Z]{{2}}[A-Z0-9]{{9}}[0-9])\s+.+?\s{{2,}}({NUMBER})\s*$"
