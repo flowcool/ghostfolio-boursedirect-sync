@@ -1,0 +1,13 @@
+  COMPTE N°                      TEST ACCOUNTEUR PEA
+
+   01/07/2026           VENTE ETRANGER                        FR0000000002 ANONYMIZED SECURITY                                                                                                 1 123,30
+
+                        QUANTITE : -47
+                        COURS : +24,02                        BRUT : +1 128,94
+                        COURTAGE : +5,64                      TVA : +0,00
+
+                        Heure Execution: 12:34:56         Lieu: ANONYMIZED VENUE
+
+
+
+   01/07/2026           DROITS DE GARDE                                                   CONSERV ETG 2026T2                                                      1,17

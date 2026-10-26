@@ -101,7 +101,7 @@ def test_buy_equality_does_not_round_under_a_small_decimal_context():
     with localcontext() as context:
         context.prec = 6
         notice = notices.parse_text(text)
-        assert notice.buys[0].unit_price == Decimal("25.50000000000000000000000000001")
+        assert notice.trades[0].unit_price == Decimal("25.50000000000000000000000000001")
         with pytest.raises(RuntimeError, match="^amount_check_failed$"):
             notices.parse_text(text.replace("103.00000000000000000000000000004", "103.00"))
 

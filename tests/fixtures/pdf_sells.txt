@@ -1,0 +1,19 @@
+  COMPTE N°                      TEST ACCOUNTEUR PEA
+
+   23/09/2026           VENTE COMPTANT                        FR0000000002 ANONYMIZED SECURITY                                                                                                       1 041,10
+
+                        QUANTITE : -90
+                        COURS : +11,6                         BRUT : +1 044,00
+                        COURTAGE : +2,90                      TVA : +0,00
+
+                        Heure Execution: 12:34:56         Lieu: ANONYMIZED VENUE
+
+
+
+   23/09/2026           VENTE COMPTANT                        FR0000000002 ANONYMIZED SECURITY                                                                                            1 762,10
+
+                        QUANTITE : -100
+                        COURS : +17,65                        BRUT : +1 765,00
+                        COURTAGE : +2,90                      TVA : +0,00
+
+                        Heure Execution: 12:34:56         Lieu: ANONYMIZED VENUE

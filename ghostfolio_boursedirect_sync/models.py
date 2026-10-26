@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -20,18 +21,20 @@ class Settings:
 
 
 @dataclass(frozen=True)
-class Buy:
+class Trade:
     date: date
     isin: str
     quantity: Decimal
     unit_price: Decimal
     fee: Decimal
+    type: Literal["BUY", "SELL"] = "BUY"
 
 
 @dataclass(frozen=True)
 class Notice:
     account_ref: str
-    buys: tuple[Buy, ...]
+    trades: tuple[Trade, ...]
+    custody_fees: int = 0
 
 
 @dataclass(frozen=True)

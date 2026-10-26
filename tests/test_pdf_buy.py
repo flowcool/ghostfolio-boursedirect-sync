@@ -48,8 +48,8 @@ def settings(monkeypatch):
 def test_real_anonymized_buy():
     notice = notices.parse_text(FIXTURE.read_text())
     assert notice.account_ref == "TESTACCOUNT"
-    assert len(notice.buys) == 1
-    buy = notice.buys[0]
+    assert len(notice.trades) == 1
+    buy = notice.trades[0]
     assert (buy.date, buy.isin) == (date(2025, 2, 3), "FR0000120271")
     assert (buy.quantity, buy.unit_price, buy.fee) == (Decimal(4), Decimal("25.50"), Decimal(1))
     result = sync.activity(buy, {buy.isin: "EXAMPLE.PA"}, "target", notice.account_ref,

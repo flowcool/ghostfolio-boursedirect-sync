@@ -1,9 +1,9 @@
-"""Pure mapping and BUY conversion; pinned ibkr sync.py:58 and ghostfolio.py:64."""
+"""Pure mapping and trade conversion; pinned ibkr sync.py:58 and ghostfolio.py:64."""
 
 import hashlib
 import json
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from heapq import heappop, heappush
 from pathlib import Path
 
@@ -13,10 +13,10 @@ from ghostfolio_boursedirect_sync.ghostfolio import activity_instant, parse_iden
 from ghostfolio_boursedirect_sync.models import (
     Activity,
     ActivityIndex,
-    Buy,
     ExistingActivity,
     Notice,
     Selection,
+    Trade,
 )
 
 
@@ -25,9 +25,9 @@ def canonical_decimal(value: Decimal) -> str:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
-def buy_content(buy: Buy) -> str:
-    return json.dumps(["BUY", buy.date.isoformat(), buy.isin,
-                       *(canonical_decimal(v) for v in (buy.quantity, buy.unit_price, buy.fee)),
+def trade_content(trade: Trade) -> str:
+    return json.dumps([trade.type, trade.date.isoformat(), trade.isin,
+                       *(canonical_decimal(v) for v in (trade.quantity, trade.unit_price, trade.fee)),
                        "EUR"], separators=(",", ":"))
 
 
@@ -37,7 +37,7 @@ def notice_namespace(notice: Notice) -> str:
     Legacy notice_identity uses normalized source fields (legacy-wip:4256).
     Sorting preserves duplicate multiplicity and removes page/row-order effects.
     """
-    basis = json.dumps([notice.account_ref, sorted(buy_content(buy) for buy in notice.buys)],
+    basis = json.dumps([notice.account_ref, sorted(trade_content(trade) for trade in notice.trades)],
                        separators=(",", ":"))
     return hashlib.sha256(basis.encode()).hexdigest()[:16]
 
@@ -57,18 +57,18 @@ def load_mapping(path: str) -> dict[str, str]:
     return dict(raw)
 
 
-def activity(buy: Buy, mapping: dict[str, str], account_id: str, source_account: str,
+def activity(trade: Trade, mapping: dict[str, str], account_id: str, source_account: str,
              namespace: str, rank: int) -> Activity:
-    symbol = mapping.get(buy.isin)
+    symbol = mapping.get(trade.isin)
     if not symbol:
         raise RuntimeError("unresolved_security")
-    content = f"{buy_content(buy)}|{rank}"
+    content = f"{trade_content(trade)}|{rank}"
     key = hashlib.sha256(content.encode()).hexdigest()[:16]
     return Activity(
-        account_id=account_id, symbol=symbol, date=f"{buy.date}T00:00:00+00:00",
-        quantity=buy.quantity, unit_price=buy.unit_price, fee=buy.fee,
-        comment=f"BD#v3#{source_account}:BUY:{namespace}.{key}",
-        isin=buy.isin,
+        account_id=account_id, symbol=symbol, date=f"{trade.date}T00:00:00+00:00",
+        quantity=trade.quantity, unit_price=trade.unit_price, fee=trade.fee,
+        comment=f"BD#v3#{source_account}:{trade.type}:{namespace}.{key}",
+        isin=trade.isin, type=trade.type,
     )
 
 
@@ -263,5 +263,22 @@ def select_account_activities(
             errors.append("possible_duplicate")
         else:
             selected.append(candidate)
-    return Selection(tuple(sorted(selected, key=lambda a: (a.date, a.comment))),
-                     duplicates, tuple(errors))
+    # IBKR sync.py:580,960 checks net holdings after duplicates are removed.
+    # BD uses exact chronological running quantities, SELL first on equal dates.
+    # This is a simulation only. Task 6.1 must advance real holdings on readback.
+    positions = dict(existing.positions)
+    guarded = []
+    for candidate in sorted(selected, key=lambda a: (a.date, a.type != "SELL", a.comment)):
+        if candidate.type in ("BUY", "SELL"):
+            key = (candidate.account_id, candidate.symbol)
+            current = positions.get(key, Decimal(0))
+            with localcontext() as context:
+                context.prec = max(28, len(format(current, "f")) + len(format(candidate.quantity, "f")) + 2)
+                remaining = (current - candidate.quantity if candidate.type == "SELL"
+                             else current + candidate.quantity)
+            if candidate.type == "SELL" and remaining < 0:
+                errors.append("sell_exceeds_holding")
+                continue
+            positions[key] = remaining
+        guarded.append(candidate)
+    return Selection(tuple(guarded), duplicates, tuple(errors))
