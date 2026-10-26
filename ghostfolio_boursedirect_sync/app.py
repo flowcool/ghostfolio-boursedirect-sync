@@ -168,14 +168,13 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                        and (row.id == occupied[0].id if occupied
                             else not row.comment.startswith("BD#v3#"))
                        and (candidate.isin is None or row.isin is None or row.isin == candidate.isin)]
-            if (occupied and candidate.type == "BUY" and candidate.brokerage is not None
-                    and not any(row.id == occupied[0].id for row in matches)):
+            if occupied and not any(row.id == occupied[0].id for row in matches):
                 errors.add("owned_activity_conflict")
                 log.error("owned_activity_conflict")
                 continue
-            if occupied and candidate.type == "BUY" and candidate.brokerage is not None:
+            if occupied:
                 matches = [occupied[0]]
-            if len(matches) != 1 or candidate.type != "BUY" or candidate.brokerage is None:
+            if len(matches) != 1:
                 eligible.append(candidate)
                 continue
             row = matches[0]
