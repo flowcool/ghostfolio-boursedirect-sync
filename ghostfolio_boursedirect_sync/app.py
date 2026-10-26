@@ -94,13 +94,16 @@ def main() -> int:
             log.error("%s", code)
         for activity in selected.activities:
             log.info(
-                    "[DRY RUN] document=%s date=%s type=%s symbol=%s quantity=%s "
+                    "%s document=%s date=%s type=%s symbol=%s quantity=%s "
                     "unitPrice=%s fee=%s currency=%s accountId=%s dataSource=%s comment=%s",
+                    "[DRY RUN]" if settings.dry_run else "IMPORT",
                     documents[activity.comment], activity.date, activity.type, activity.symbol,
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
             )
-        if selected.errors or unreadable > 0 or unresolved:
+        has_errors = bool(selected.errors or unreadable > 0 or unresolved)
+        blocking = has_errors if settings.dry_run else (has_errors and not selected.activities)
+        if blocking:
             log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities) if settings.dry_run else 0, selected.duplicates, other_accounts, unreadable)
             return 1

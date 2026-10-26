@@ -269,6 +269,7 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
     # float conversion while keeping Ghostfolio DTO validation numeric.
     encoded = json.dumps(payload_rows, default=lambda value: f"__DECIMAL__{value}__", separators=(",", ":"))
     encoded = re.sub(r'"__DECIMAL__(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
+    uncertain = False
     try:
         response = requests.post(
             f"{settings.ghost_host}/api/v1/import",
@@ -277,17 +278,25 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
             timeout=(10, 120), allow_redirects=False,
         )
     except requests.RequestException:
-        raise RuntimeError("import_unconfirmed") from None
-    if not 200 <= response.status_code < 300:
+        uncertain = True
+    if not uncertain and not 200 <= response.status_code < 300:
         raise RuntimeError(f"import_failed HTTP {response.status_code}")
-    # Ghostfolio may commit asynchronously. One bounded confirmation read is
-    # allowed; a missing row remains uncertain and is never retried here.
-    time.sleep(5)
-    confirmed = read_activities(settings, token)
-    by_comment = {row.comment: row for row in confirmed.rows}
+    # Only an uncertain POST gets a delayed confirmation read. Never resend.
+    if uncertain:
+        time.sleep(5)
+    try:
+        confirmed = read_activities(settings, token)
+    except RuntimeError:
+        raise RuntimeError("import_unconfirmed") from None
+    by_comment: dict[str, list[ExistingActivity]] = defaultdict(list)
+    for row in confirmed.rows:
+        by_comment[row.comment].append(row)
     for activity in rows:
-        row = by_comment.get(activity.comment)
-        if row is None or not (
+        matches = by_comment.get(activity.comment, [])
+        if len(matches) != 1:
+            raise RuntimeError("import_unconfirmed")
+        row = matches[0]
+        if not (
             row.account_id == activity.account_id
             and row.type == activity.type
             and row.symbol == activity.symbol
