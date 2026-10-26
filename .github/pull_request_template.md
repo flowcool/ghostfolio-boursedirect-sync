@@ -30,10 +30,10 @@ Spec reports when `code-review` applies. Add the security note when
 - [ ] Merge `main` into the branch before the first push.
 - [ ] Require a completed Pullfrog review of the final code head and green CI.
 - [ ] Read the general review and all threads. Address every remark, including
-      cleanup, as required by AGENTS.md. Repeat after each new commit.
-- [ ] Address confirmed findings and record the review link and reviewed head SHA.
+      cleanup, as required by AGENTS.md, and record the review link and
+      reviewed head SHA. Repeat after each new commit.
 
-Run `pr-ship` from the main session after these review checks. Keep publication and live-write authority
-separate. Docs-only PRs require green CI.
+Run `pr-ship` from the main session after these review checks. Keep publication
+and live-write authority separate. Docs-only PRs require green CI.
 
 Review evidence: <!-- completed review URL and reviewed commit SHA -->
