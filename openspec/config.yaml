@@ -10,6 +10,8 @@ context: |
   Money and position decisions use Decimal. Application Python totals at most 2500 lines.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
+  BD exception: only the exact BUY fee correction defined in the active spec.
+  Preserve all other fields and identity; confirm readback; never delete.
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
   v1 rebuild (option B): adopt the complete applicable common core from IBKR v3.0.0.

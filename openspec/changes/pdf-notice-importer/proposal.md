@@ -2,27 +2,22 @@
 
 ## Why
 
-Read notices from Paperless into Ghostfolio. Adopt the complete
-applicable IBKR v3.0.0 core, with explicit Bourse Direct adaptations.
+Import Paperless notices into Ghostfolio. Adopt complete applicable IBKR v3.0.0 core.
 
 ## What changes
 
-- Read PDF notices from Paperless, read-only.
 - One container imports notices for one Bourse Direct account.
 - It imports BUY, SELL and coupons (DIVIDEND at the net amount received).
 - It stops on a security when a row changes the number of shares.
-- It does not track the TTF and ignores custody fees.
+- It adds uniquely attributed, charged TTF to BUY fees and ignores custody fees.
 - It does not import duplicates.
 - Maximize exact manual matches, then minimize their total date distance.
 - Retain IBKR startup checks, complete activity reads, position guards,
   import confirmation, failure summaries, notifications and scheduling.
-- The design pins the source.
 
 ## Operation types
 
-Sources: retained real YTD PDF/HTML notices and an account statement.
-PDF evidence covers BUY, SELL, COUPONS, custody fees and DIVISION.
-Private originals stay outside Git.
+Sources: saved real notices and a statement. Originals stay private.
 
 | Label in a real document | Seen in | v1 behavior |
 | --- | --- | --- |
@@ -32,29 +27,29 @@ Private originals stay outside Git.
 | COUPONS | PDF notice | DIVIDEND, net |
 | DROITS DE GARDE | PDF notice, statement | Ignored, message |
 | DIVISION | PDF notice | Stop on security |
-| TAXE TRANSACT FINANCIERES | Statement | Not tracked |
+| TAXE TRANSACT FINANCIERES | PDF notice, statement | Charged TTF in associated BUY fee |
+| DET DROIT DE SOUSCRIPTION, INDEMNISATION, ESPECES SUR OST, ATTRIBUTION, RETRAIT TITRES FISCALISE | PDF notice | Stop on security |
 | Other label, with ISIN | PDF notice | Stop on security |
 | Other label, no ISIN | Not seen | Not imported, reported |
 
-SOUSCRIPTION and ATTRIBUTION appear in retained PDFs. Apply the "other label"
-rules. Share withdrawals and transfers remain unverified.
+Retained PEA notices cover January–October 2026. Other account types and
+transfer forms remain unverified.
 
 ## Non-goals
 
 - Notice download, broker login, Bitwarden.
 - Account statements as input.
-- Cash, custody fees, TTF or corporate actions as activities.
+- Cash, custody fees, standalone TTF or corporate-action activities.
 - Gross coupon amount and withholding tax.
 - Currencies other than EUR.
-- Update or delete of Ghostfolio data.
+- Deletes and updates other than the approved BUY fee-only correction.
 - IBKR Flex, cash reconciliation and historical identity conversion.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `notice-import`: read PDF notices from Paperless and add new BUY, SELL and
-  DIVIDEND activities to the Ghostfolio account of one Bourse Direct account.
+- `notice-import`: import notices into one account.
 
 ### Modified Capabilities
 
@@ -62,6 +57,7 @@ None.
 
 ## Impact
 
-Typed Python package, image, `compose.yaml`, README and
-tests. Reuse IBKR image, CI and release checks, and the existing infra lab.
-Replace the legacy runtime. Rollback: revert commits; retain imports.
+Package, image, Compose, README and tests. Reuse IBKR checks and Infra labs.
+Continue the current v1. Correct only an exact existing BUY whose fee is
+brokerage alone. Preserve all other fields; confirm the charged TTF correction.
+Rollback: revert commits; retain accepted financial state.

@@ -1,5 +1,13 @@
 # Bourse Direct to Ghostfolio
 
+**Status: v1 candidate. Not qualified and not published.**
+
+This README describes the v1 candidate on this branch. Its implemented features
+do not establish complete runtime acceptance. The rules below are the accepted
+target; TTF handling and fee correction still need implementation and proof.
+The published **v0.1.1 is a legacy preview only**. It does not import activities
+or provide the v1 unattended service.
+
 This Docker connector reads Bourse Direct operation notices from Paperless.
 It reads BUY, SELL and coupon activities for one active Ghostfolio account.
 
@@ -25,7 +33,7 @@ It has no browser, Node or vault client. Paperless documents must have the custo
 field `Source` with the exact value `Bourse Direct`. A filename starting with
 `BourseDirect_` without that field stops the run with `source_field_missing`.
 
-Existing release checks keep this stable image reference:
+The published legacy preview has this immutable image reference:
 `ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.1@sha256:486cc5ef8b3dde9e65b2b502789b65c9d956acb4ea03e3e2544c316d2bbef231`.
 
 ## Settings
@@ -105,6 +113,31 @@ identities remain occupied for duplicate protection.
 
 All selection is offline after the reads. Money uses exact `Decimal` values.
 
+## Amounts and fees
+
+The accepted v1 rule checks printed BRUT against quantity times unit price,
+rounded to EUR cents with ROUND_HALF_UP. Source quantity and price stay exact.
+Missing COURTAGE means zero only with explicit TVA zero and Debit equal to BRUT.
+The connector reports that exception. Other amount differences reject the row.
+
+Charged TTF belongs in BUY fees with brokerage. It needs exactly one BUY in the
+same source account, notice, date and ISIN. Ambiguity suspends the affected BUYs;
+independent operations continue. The connector never estimates tax from a rate.
+Ghostfolio net performance includes fees. Its average price excludes fees; it
+is not a fiscal cost basis.
+
+An existing BUY can receive a fee-only correction when exactly one activity
+matches account, date, security, quantity and unit price, and its fee is exactly
+brokerage alone. The new fee is brokerage plus the attributed charged TTF.
+Every other field and the logical identity stay unchanged. Exact readback must
+confirm the result. An already-correct fee is a no-op. Other differences are
+reported without correction. An uncertain result stops writes without resend.
+The connector never deletes activities.
+
+Custody fees are ignored with `custody_fee_ignored`. The done tag clears only
+`share_count_change` and `unknown_operation` for that document. Other rows stay
+subject to their normal checks.
+
 ## Development checks
 
 ```sh
@@ -115,6 +148,12 @@ All selection is offline after the reads. Money uses exact `Decimal` values.
 
 The retained fixtures contain anonymized text from real Bourse Direct notices.
 Private originals and runtime state stay outside Git.
+
+Qualification uses saved real PDFs with the installed candidate and the existing
+Infra empty and golden labs. This proves financial behavior without broker or
+Paperless access. It still uses real Ghostfolio lab requests. Paperless service
+integration is a separate gate. Both scenarios must pass on the same candidate
+image before release. Lab tooling stays in Infra.
 
 ## Failure notifications
 

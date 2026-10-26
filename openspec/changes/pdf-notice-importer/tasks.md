@@ -1,9 +1,9 @@
 # Tasks
 
-Each task is one bead, one branch and one PR. "The run command" and "notice
-documents" are defined in the spec. A task that needs a real PDF of a type that
-is not yet in Paperless waits for that PDF. Tests use anonymized text of real
-PDFs only. Paperless is read only; no task writes to it.
+Each task is one bead, one branch and one PR. "Run" and notice documents
+are defined in the spec. Reuse retained real PDFs for offline and
+lab acceptance before Paperless integration is available. Tests use anonymized
+text of real PDFs only. Paperless is read only; no task writes to it.
 
 Adopt the complete applicable IBKR v3.0.0 core mapped in design.md.
 Read its pinned source and coverage before each task. Preserve applicable
@@ -14,15 +14,18 @@ Use the installed Python package `ghostfolio_boursedirect_sync`, with typed
 functions and data records. Pass strict mypy and Ruff as well as each task's
 offline tests. Preserve Decimal and all BD spec rules when adapting source code.
 These checks accompany each code task; they are not separate tooling tasks.
-The architecture approval does not authorize live runs, financial writes or
-publication. Keep the existing real-PDF and first-write authorization gates.
+The shared labs use permanent scoped authority, including test writes/resets.
+Reserve instances, isolate credentials, retain evidence, stop on uncertainty
+without resend, then stop and verify. Production and publication retain separate
+authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 1. First real BUY in simulation
 
 - [ ] 1.1 Gate the real BUY PDF first. Confirm that it has exactly one labelled
   account field. Remove spaces once and require full equality with
   `BD_ACCOUNT_REF`. Measure `QUANTITE x COURS - BRUT` exactly and report the
-  result. If either gate fails, stop and report. Add the application package
+  result. Apply task 2.1 rounding when the product has fractional cents.
+  If either gate fails, stop and report. Add the application package
   and `pyproject.toml`. Adapt `Dockerfile`, `entrypoint.sh`, `requirements.txt`,
   `requirements-dev.txt` and `compose.yaml` from the pinned ibkr source.
   Install the package; Docker runs `python -m ghostfolio_boursedirect_sync`.
@@ -78,7 +81,11 @@ publication. Keep the existing real-PDF and first-write authorization gates.
 
 - [ ] 2.1 Add the amount checks (BUY, SELL and coupon) and `notice_unreadable`
   with the block of all writes, with offline tests from altered anonymized
-  text. Verify the scenarios "Altered amount" and "Unreadable document".
+  text. Compare HALF_UP(abs(quantity) * source price, EUR 0.01) exactly to BRUT.
+  Preserve source quantity/price. Infer missing COURTAGE as zero only for BUY
+  with explicit TVA=0 and Debit=BRUT; report `brokerage_zero_inferred`.
+  Verify "Altered amount", "Rounded gross", "Omitted brokerage" and
+  "Unreadable document" against retained notices; reject unproven omissions.
 
 ## 3. Security resolution
 
@@ -122,9 +129,12 @@ publication. Keep the existing real-PDF and first-write authorization gates.
 - [ ] 5.1 Add `share_count_change`, `unknown_operation` and the
   `PAPERLESS_DONE_TAG` check. Verify the scenario "Division and coupon in one
   notice".
-- [ ] 5.2 Add the README lines: notices do not show the TTF, Ghostfolio cost
-  prices exclude it, and the done tag clears only the blocking rows. Verify
-  the scenario "Stop cleared".
+- [ ] 5.2 Align README and guidance with the accepted TTF/fee policy.
+  State that main describes an unqualified, unpublished v1 candidate and
+  v0.1.1 is preview-only. Explain brokerage plus charged TTF, fee-exclusive
+  average price, and the exact fee-only correction. Explain that the done tag
+  clears only blocking rows. Verify "Stop cleared" through task 5.1 evidence.
+  Documentation delivery alone does not complete that runtime scenario.
 
 ## 6. Import, notification and schedule
 
@@ -135,7 +145,20 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   the existing infra empty/golden lab. Infra owns the BD launch/evidence
   adaptation; retain its target checks, snapshots, credential isolation and
   stop verification. Prove first creation, duplicate rerun, mixed legacy rows,
-  chronological sells, exact readback and uncertain-result stop. Do not use
+  chronological sells, exact readback and uncertain-result stop. Add charged
+  TTF attribution within source account/notice/date/ISIN; ambiguity suspends
+  affected BUYs with `ttf_attribution_failed`, without blocking independent rows.
+  Verify "Attributed TTF" and "Ambiguous TTF" from retained notice rows.
+  Implement the approved fee-only correction for exactly one matching BUY
+  whose fee is brokerage alone. Preserve all other fields and logical identity.
+  Verify "Existing brokerage-only BUY", already-correct no-op, other-value
+  conflicts, exact readback, uncertain stop and rerun without duplicate/tax
+  recount. Check the exact upstream update API before implementation.
+  Extend the existing Infra BD adapter for saved-PDF input and financial
+  checks; no fake Paperless, new runner or Compose. Use the same image for
+  DRY_RUN, empty creation/readback/rerun and golden preservation/correction.
+  Real Ghostfolio lab HTTP remains necessary. Keep real Paperless integration
+  a separate gate. Do not use
   IBKR cash/Flex assertions as BD proof. Verify "Second run" and
   "Unexpected import response"
   and "Delayed confirmation" with offline responses based on real notice rows.
