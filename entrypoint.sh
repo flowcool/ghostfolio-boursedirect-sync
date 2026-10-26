@@ -14,9 +14,12 @@ if [ -n "${CRON:-}" ]; then
         mktemp "${TMPDIR:-/tmp}/bd-crontab.XXXXXX" 2>/dev/null
     ); then
         echo 'Could not create runtime crontab' >&2
-        exit 1
+        exec python -m ghostfolio_boursedirect_sync --invalid-cron
     fi
-    printf '%s python -m ghostfolio_boursedirect_sync\n' "${CRON:-}" > "$crontab_path"
+    if ! printf '%s python -m ghostfolio_boursedirect_sync\n' "${CRON:-}" 2>/dev/null > "$crontab_path"; then
+        echo 'Could not write runtime crontab' >&2
+        exec python -m ghostfolio_boursedirect_sync --invalid-cron
+    fi
     if ! supercronic -test "$crontab_path" > /dev/null 2>&1; then
         echo 'Invalid CRON: schedule validation failed' >&2
         exec python -m ghostfolio_boursedirect_sync --invalid-cron

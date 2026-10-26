@@ -94,18 +94,22 @@ assert status == "sent", status
 thread.join(timeout=2)
 assert len(received) == 1 and b"unresolved_security" in received[0]
 print("Installed isolated Apprise delivery passed")
-for cron in ("bad", "60 * * * *"):
+for cron, extra_env, expected_error in (
+    ("bad", {}, b"Invalid CRON"),
+    ("60 * * * *", {}, b"Invalid CRON"),
+    ("* * * * *", {"TMPDIR": "/missing-runtime-directory"}, b"Could not create runtime crontab"),
+):
     thread = threading.Thread(target=server.handle_request, daemon=True)
     thread.start()
     result = subprocess.run(["/app/entrypoint.sh"], capture_output=True, timeout=20,
         env={**os.environ, "CRON": cron, "DRY_RUN": "0",
-             "APPRISE_URLS": json.dumps([f"json://127.0.0.1:{server.server_port}/hook"])})
+             "APPRISE_URLS": json.dumps([f"json://127.0.0.1:{server.server_port}/hook"]), **extra_env})
     thread.join(timeout=2)
     output = result.stdout + result.stderr
     assert result.returncode == 1, output
-    assert b"Invalid CRON" in output and b"Failure notification sent" in output, output
+    assert expected_error in output and b"Failure notification sent" in output, output
     assert output.count(b"Summary:") == 1, output
-assert len(received) == 3
+assert len(received) == 4
 assert all(b"invalid_configuration" in body for body in received[1:])
 server.server_close()
 print("Installed invalid CRON finalization and notification passed")
