@@ -61,6 +61,11 @@ work-tracker IDs.
   Fix actionable findings and record both reports in the owning bead. Apply
   `security-review` when its trigger matches the change. This pre-PR review
   does not replace Pullfrog's review of the final PR head.
+  Before every code merge, wait for Pullfrog's complete review of the latest
+  head. Read its general review body and all comment threads. Address each
+  remark, including cleanup outside inline threads. Record the outcome and
+  reviewed SHA. A green status alone is insufficient. After a new commit,
+  repeat this review gate before running `pr-ship`.
 - **Git:** one branch and one PR per bead. Merge when CI is green and Pullfrog
   finished its review of the head commit, or on Florent's explicit go. A PR that
   changes only `openspec/`, `docs/` or `*.md` needs CI green only. Open the PR
