@@ -33,8 +33,8 @@ from decimal import Decimal
 from pathlib import Path
 from ghostfolio_boursedirect_sync.notices import parse_text
 notice = parse_text(Path("/tmp/buy.txt").read_text())
-assert notice.account_ref == "TESTACCOUNT" and len(notice.buys) == 1
-buy = notice.buys[0]
+assert notice.account_ref == "TESTACCOUNT" and len(notice.trades) == 1
+buy = notice.trades[0]
 assert (buy.quantity, buy.unit_price, buy.fee) == (Decimal(4), Decimal("25.50"), Decimal(1))
 print("Installed real anonymized BUY parser passed")
 '
