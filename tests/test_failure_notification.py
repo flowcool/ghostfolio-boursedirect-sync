@@ -52,15 +52,15 @@ def test_unresolved_real_buy_notifies_once_without_changing_exit(monkeypatch, ca
 
 @pytest.mark.parametrize("mode", [None, "1", "bad", "false", ""])
 @pytest.mark.parametrize("destinations", ["invalid private destination", '["json://notify.invalid/hook"]'])
-def test_simulation_or_invalid_mode_never_reads_notification_settings(monkeypatch, mode, destinations):
+def test_simulation_or_invalid_mode_never_notifies(monkeypatch, mode, destinations):
     failure_run(monkeypatch)
     if mode is not None:
         monkeypatch.setenv("DRY_RUN", mode)
     monkeypatch.setenv("APPRISE_URLS", destinations)
-    loader = Mock(side_effect=AssertionError("must stay silent"))
-    monkeypatch.setattr(config, "load_notification_config", loader)
+    sender = Mock(side_effect=AssertionError("must stay silent"))
+    monkeypatch.setattr(notify, "send_notification", sender)
     assert app.main() == 1
-    loader.assert_not_called()
+    sender.assert_not_called()
 
 
 def test_config_failure_can_notify_without_disclosing_value(monkeypatch):
@@ -80,6 +80,32 @@ def test_success_stays_silent(monkeypatch):
     monkeypatch.setattr(notify, "send_notification", sender)
     assert app.main() == 0
     sender.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", ["0", "1"])
+@pytest.mark.parametrize("field,value", [
+    ("APPRISE_URLS", "private invalid destination"),
+    ("APPRISE_TIMEOUT", "0"),
+    ("APPRISE_TIMEOUT", "31"),
+])
+def test_invalid_notification_settings_stop_before_service_access(monkeypatch, caplog, mode, field, value):
+    monkeypatch.setenv("DRY_RUN", mode)
+    monkeypatch.setenv(field, value)
+    source = Mock(side_effect=AssertionError("no service access"))
+    monkeypatch.setattr(paperless, "document_ids", source)
+    target = Mock(side_effect=AssertionError("no target access"))
+    monkeypatch.setattr(ghostfolio, "exchange_token", target)
+    sender = Mock()
+    monkeypatch.setattr(notify, "send_notification", sender)
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 1
+    source.assert_not_called()
+    target.assert_not_called()
+    sender.assert_not_called()
+    assert f"invalid_configuration {field}" in caplog.text
+    assert "private invalid destination" not in caplog.text
+    assert caplog.text.count("Summary:") == 1
+    assert "created=0" in caplog.text
 
 
 def test_unknown_failure_text_is_replaced_by_fixed_code():

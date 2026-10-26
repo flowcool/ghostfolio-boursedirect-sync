@@ -42,6 +42,9 @@ Python references: `ghostfolio_ibkr_sync/`.
   dates. Only confirmed imports advance real holdings. Selection stays offline.
 - Accept only absent/0/1 DRY_RUN; simulation never notifies. Use UTC row dates;
   omit TZ-forced previews and bearer-expiry reminders under BD notification rules.
+- Validate APPRISE settings before service access, as required by the ENV spec.
+  IBKR `config.py:171` warns and disables delivery for malformed settings;
+  BD stops with `invalid_configuration` and omits the setting values.
 - After each POST, confirm through a fresh complete activity GET. On uncertainty,
   wait five seconds before that GET. Require full exact evidence, including symbol.
   Never resend; failed confirmation fences writes. No unresolved-symbol POST retry.

@@ -15,7 +15,7 @@ from ghostfolio_boursedirect_sync.config import (
 
 NOTIFY_WORKER_FLAG = "--notify-worker"
 # The worker inherits only what Apprise needs to reach a destination: never the
-# IBKR or Ghostfolio credentials.
+# Paperless or Ghostfolio credentials.
 NOTIFY_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR",
                         "REQUESTS_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
                         "http_proxy", "https_proxy", "no_proxy")

@@ -1,7 +1,6 @@
 """ENV-only configuration, adapted from pinned ibkr config.py:62-142."""
 
 import json
-import logging
 import os
 import re
 from typing import TypedDict
@@ -45,6 +44,8 @@ def load() -> Settings:
     mode = os.environ.get("DRY_RUN", "1")
     if mode not in ("0", "1"):
         raise RuntimeError("invalid_configuration DRY_RUN")
+    # BD rejects invalid optional settings before any service access (spec ENV).
+    load_notification_config()
     token = os.environ.get("GHOST_TOKEN") or None
     access = os.environ.get("GHOST_ACCESS_TOKEN") or None
     if bool(token) == bool(access):
@@ -88,27 +89,24 @@ def load_notification_config() -> NotificationConfigDict | None:
     """Parse APPRISE_URLS and APPRISE_TIMEOUT; None means notifications are off.
 
     APPRISE_URLS is a JSON list of Apprise URL strings (blank or [] = off);
-    APPRISE_TIMEOUT an integer number of seconds, 1..30 (default 10).  Never
-    raises: invalid settings only disable delivery, with a fixed warning since
-    the values carry destination credentials.
+    APPRISE_TIMEOUT an integer number of seconds, 1..30 (default 10).
+    BD rejects invalid settings with a fixed field name, without their values.
     """
     raw = os.environ.get("APPRISE_URLS", "")
-    if not raw.strip():
-        return None
     try:
-        urls = json.loads(raw) if len(raw) <= NOTIFY_PAYLOAD_MAX else None
+        urls = (json.loads(raw) if len(raw) <= NOTIFY_PAYLOAD_MAX else None) if raw.strip() else []
     except ValueError:
         urls = None
     raw_timeout = os.environ.get("APPRISE_TIMEOUT", "").strip()
     timeout = APPRISE_TIMEOUT_DEFAULT
     if raw_timeout:
         timeout = int(raw_timeout) if re.fullmatch(r"[0-9]{1,2}", raw_timeout) else 0
+    if not 1 <= timeout <= APPRISE_TIMEOUT_MAX:
+        raise RuntimeError("invalid_configuration APPRISE_TIMEOUT")
     if (not isinstance(urls, list) or len(urls) > APPRISE_URLS_MAX
             or not all(isinstance(u, str) and u.strip() and len(u) <= APPRISE_URL_MAX_LEN
-                       for u in urls)
-            or not 1 <= timeout <= APPRISE_TIMEOUT_MAX):
-        logging.getLogger(__name__).warning("APPRISE_URLS or APPRISE_TIMEOUT is invalid: failure notifications disabled")
-        return None
+                       for u in urls)):
+        raise RuntimeError("invalid_configuration APPRISE_URLS")
     if not urls:
         return None
     return {"urls": urls, "timeout": timeout}

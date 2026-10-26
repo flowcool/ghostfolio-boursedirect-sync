@@ -126,7 +126,7 @@ Simulation never sends a notification, including failures and invalid settings.
 Successful runs stay silent. Notification delivery uses a separate process.
 The deadline covers process startup and delivery. On expiry, the process stops.
 A timed-out notification can still arrive. The connector does not retry it.
-Invalid notification settings disable delivery and show a fixed warning.
+Invalid notification settings stop before service access with `invalid_configuration`.
 Delivery failure does not change the import exit code.
 
 ## Schedule

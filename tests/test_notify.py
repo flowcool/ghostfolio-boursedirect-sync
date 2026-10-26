@@ -58,19 +58,22 @@ def test_timeout_accepts_integers_from_1_to_30(notify_env, value, expected):
     (json.dumps(URLS), "0"), (json.dumps(URLS), "31"), (json.dumps(URLS), "-5"),
     (json.dumps(URLS), "1.5"), (json.dumps(URLS), "ten"), (json.dumps(URLS), "999"),
 ])
-def test_invalid_settings_disable_delivery_with_a_fixed_warning(notify_env, caplog, urls, timeout):
+def test_invalid_settings_are_rejected_without_disclosing_values(notify_env, caplog, urls, timeout):
     notify_env.setenv("APPRISE_URLS", urls)
     if timeout is not None:
         notify_env.setenv("APPRISE_TIMEOUT", timeout)
-    assert config.load_notification_config() is None
-    assert [r.levelname for r in caplog.records] == ["WARNING"]
+    field = "APPRISE_TIMEOUT" if timeout is not None else "APPRISE_URLS"
+    with pytest.raises(RuntimeError, match=f"^invalid_configuration {field}$"):
+        config.load_notification_config()
+    assert caplog.records == []
     assert URL_SECRET not in caplog.text
 
 
 def test_oversized_setting_is_rejected_before_parsing(notify_env, monkeypatch):
     notify_env.setenv("APPRISE_URLS", json.dumps(["x" * 100] * 400))
     monkeypatch.setattr(json, "loads", lambda *a: pytest.fail("must not parse"))
-    assert config.load_notification_config() is None
+    with pytest.raises(RuntimeError, match="^invalid_configuration APPRISE_URLS$"):
+        config.load_notification_config()
 
 
 
@@ -134,12 +137,13 @@ def test_worker_rejects_malformed_or_oversized_payloads_before_importing_apprise
 
 def test_worker_mode_never_runs_the_sync(tmp_path):
     # The package is importable from the repository root here; the installed
-    # `-I` form is proved against the image by scripts/check_container_runtime.sh.
+    # `-I` form is proved against the image by scripts/smoke-connector-image.sh.
     proc = subprocess.run([sys.executable, "-m", "ghostfolio_boursedirect_sync", notify.NOTIFY_WORKER_FLAG],
                           input=b"not json", capture_output=True, timeout=30, cwd=ROOT,
-                          env={"IBKR_TOKEN": "x"})
+                          env={"PAPERLESS_TOKEN": "offline"})
     assert proc.returncode == 10
-    assert b"Starting IBKR" not in proc.stdout + proc.stderr
+    assert b"Summary:" not in proc.stdout + proc.stderr
+    assert b"invalid_configuration" not in proc.stdout + proc.stderr
 
 
 def test_default_worker_argv_is_fixed_and_carries_no_secret():

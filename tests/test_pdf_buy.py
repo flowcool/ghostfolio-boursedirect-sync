@@ -104,7 +104,7 @@ def test_done_tag_defaults_and_rejects_control_characters(settings, monkeypatch)
 
 
 def test_simulation_and_no_notification(settings, monkeypatch, caplog):
-    monkeypatch.setenv("APPRISE_URLS", "invalid-but-ignored-in-simulation")
+    monkeypatch.setenv("APPRISE_URLS", '["json://notify.invalid/hook"]')
     monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
     monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
     monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
