@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
-from ghostfolio_boursedirect_sync.models import Notice, Trade
+from ghostfolio_boursedirect_sync.models import TTF, Notice, Trade
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
@@ -19,6 +19,10 @@ HEADER = re.compile(
 )
 CUSTODY_HEADER = re.compile(
     rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+DROITS DE GARDE\s+.+?\s{{2,}}({NUMBER})\s*$"
+)
+TTF_HEADER = re.compile(
+    rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+TAXE TRANSACT FINANCIERES(?:\s+([A-Z]{{2}}[A-Z0-9]{{9}}[0-9]))?.*?\s{{2,}}({NUMBER})\s*$",
+    re.I,
 )
 ACCOUNT = re.compile(
     r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(?:PEA-PME|PEA)\b", re.I
@@ -133,12 +137,14 @@ def parse_text(text: str) -> Notice:
     trades = []
     custody_fees = 0
     inferred_brokerages = 0
+    ttf_rows: list[TTF] = []
     for rank, index in enumerate(starts):
         end = starts[rank + 1] if rank + 1 < len(starts) else len(lines)
         block = "\n".join(lines[index + 1:end])
         header = HEADER.fullmatch(lines[index])
         custody = CUSTODY_HEADER.fullmatch(lines[index])
-        if header is None and custody is None:
+        ttf = TTF_HEADER.fullmatch(lines[index])
+        if header is None and custody is None and ttf is None:
             raise RuntimeError("notice_unreadable")
         try:
             day = datetime.strptime(lines[index].strip()[:10], "%d/%m/%Y").date()
@@ -149,6 +155,14 @@ def parse_text(text: str) -> Notice:
                 raise RuntimeError("notice_unreadable")
             custody_fees += 1
             continue
+        if ttf is not None:
+            if any(line.strip() and not FOOTER.fullmatch(line) for line in block.splitlines()):
+                raise RuntimeError("notice_unreadable")
+            amount = decimal(ttf[3])
+            if amount <= 0:
+                raise RuntimeError("amount_check_failed")
+            ttf_rows.append(TTF(day, ttf[2] or "", amount))
+            continue
         assert header is not None
         kind: Literal["BUY", "SELL", "DIVIDEND"] = (
             "DIVIDEND" if header[2] == "COUPONS" else "BUY" if header[2].startswith("ACHAT") else "SELL"
@@ -158,5 +172,6 @@ def parse_text(text: str) -> Notice:
         trades.append(Trade(day, header[3],
                             Decimal(1) if kind == "DIVIDEND" else fields["QUANTITE"].copy_abs(),
                             decimal(header[4]) if kind == "DIVIDEND" else fields["COURS"],
-                            Decimal(0) if kind == "DIVIDEND" else fields["COURTAGE"], kind))
-    return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages)
+                            Decimal(0) if kind == "DIVIDEND" else fields["COURTAGE"], kind,
+                            None if kind == "DIVIDEND" else fields["COURTAGE"]))
+    return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages, tuple(ttf_rows))

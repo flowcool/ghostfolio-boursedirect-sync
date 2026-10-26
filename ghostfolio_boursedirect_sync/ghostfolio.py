@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal, localcontext
 from typing import cast
+from urllib.parse import quote
 
 import requests
 
@@ -139,11 +140,17 @@ def index_existing_activities(data: object, *, now: datetime | None = None) -> A
             raise RuntimeError("activities_unavailable")
         eligible = activity_is_active(raw)
         day = activity_instant(raw.get("date"))
+        raw_tags = raw.get("tags", [])
+        if (not isinstance(raw_tags, list)
+                or any(not isinstance(tag, dict) or not isinstance(tag.get("id"), str)
+                       or not tag["id"].strip() for tag in raw_tags)):
+            raise RuntimeError("activities_unavailable")
         row = ExistingActivity(
             row_id, account_id, day, kind, exact_number(raw.get("quantity")),
             exact_number(raw.get("unitPrice")), exact_number(raw.get("fee")),
             currency, symbol, source, comment, isin,
             eligible and day <= instant and source == "YAHOO",
+            tuple(tag["id"] for tag in raw_tags),
         )
         rows.append(row)
         if owned:
@@ -309,6 +316,59 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
         ):
             raise RuntimeError("import_unconfirmed")
 
+
+def correct_activity_fee(
+    settings: Settings, token: str, existing: ExistingActivity, new_fee: Decimal,
+) -> None:
+    """Update one owned BUY fee through Ghostfolio's UpdateOrderDto.
+
+    The PUT repeats the complete activity identity and financial fields because
+    Ghostfolio validates the full DTO. Only ``fee`` differs from the read row.
+    """
+    if settings.dry_run:
+        raise RuntimeError("invalid_configuration fee correction in simulation")
+    payload: dict[str, object] = {
+        "id": existing.id, "accountId": existing.account_id,
+        "currency": existing.currency, "date": existing.date.isoformat(),
+        "type": existing.type, "comment": existing.comment,
+        "symbol": existing.symbol, "dataSource": existing.data_source,
+        "quantity": existing.quantity, "unitPrice": existing.unit_price,
+        "fee": new_fee, "tags": list(existing.tags),
+    }
+    encoded = json.dumps(payload, default=lambda value: f"__DECIMAL__{value:f}__",
+                         separators=(",", ":"))
+    encoded = re.sub(r'"__DECIMAL__(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
+    uncertain = False
+    try:
+        response = requests.put(
+            f"{settings.ghost_host}/api/v1/activities/{quote(existing.id, safe='')}",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            data=encoded, timeout=(10, 120), allow_redirects=False,
+        )
+    except requests.RequestException:
+        uncertain = True
+    if not uncertain:
+        uncertain = not 200 <= response.status_code < 300
+    if uncertain:
+        time.sleep(5)
+    try:
+        confirmed = read_activities(settings, token)
+    except RuntimeError:
+        raise RuntimeError("import_unconfirmed") from None
+    matches = [row for row in confirmed.rows
+               if row.id == existing.id and row.comment == existing.comment]
+    comment_matches = [row for row in confirmed.rows if row.comment == existing.comment]
+    if len(matches) != 1 or len(comment_matches) != 1:
+        raise RuntimeError("import_unconfirmed")
+    row = matches[0]
+    if (row.account_id != existing.account_id or row.comment != existing.comment
+            or row.symbol != existing.symbol or row.data_source != existing.data_source
+            or row.isin != existing.isin
+            or row.date != existing.date or row.type != existing.type
+            or row.quantity != existing.quantity or row.unit_price != existing.unit_price
+            or row.currency != existing.currency or row.fee != new_fee
+            or row.tags != existing.tags):
+        raise RuntimeError("import_unconfirmed")
 def find_account(settings: Settings, token: str) -> str:
     try:
         response = requests.get(

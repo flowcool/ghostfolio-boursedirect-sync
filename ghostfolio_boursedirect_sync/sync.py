@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, localcontext
 from heapq import heappop, heappush
 from pathlib import Path
@@ -69,7 +69,38 @@ def activity(trade: Trade, mapping: dict[str, str], account_id: str, source_acco
         quantity=trade.quantity, unit_price=trade.unit_price, fee=trade.fee,
         comment=f"BD#v3#{source_account}:{trade.type}:{namespace}.{key}",
         isin=trade.isin, type=trade.type,
+        brokerage=trade.brokerage,
     )
+
+
+def attribute_ttf_rows(notice: Notice) -> tuple[Notice, tuple[str, ...]]:
+    """Return independently usable trades and ISINs with ambiguous TTF."""
+    if not notice.ttf_rows:
+        return notice, ()
+    additions: dict[tuple[date, str], Decimal] = {}
+    failed: set[str] = set()
+    failed_keys: set[tuple[date, str]] = set()
+    for tax in notice.ttf_rows:
+        matches = [trade for trade in notice.trades
+                   if trade.type == "BUY" and trade.date == tax.date and trade.isin == tax.isin]
+        if len(matches) != 1:
+            failed.add(tax.isin)
+            failed_keys.add((tax.date, tax.isin))
+        else:
+            key = (tax.date, tax.isin)
+            additions[key] = additions.get(key, Decimal(0)) + tax.amount
+    trades = tuple(
+        Trade(trade.date, trade.isin, trade.quantity, trade.unit_price,
+              trade.fee + (additions.get((trade.date, trade.isin), Decimal(0))
+                           if trade.type == "BUY" else Decimal(0)),
+              trade.type, trade.brokerage)
+        for trade in notice.trades
+        if not (trade.type == "BUY" and
+                ((trade.date, trade.isin) in failed_keys
+                 or any(day == trade.date and not isin for day, isin in failed_keys)))
+    )
+    return Notice(notice.account_ref, trades, notice.custody_fees,
+                  notice.inferred_brokerages, ()), tuple(sorted(failed))
 
 
 def _same_activity(candidate: Activity, existing: ExistingActivity) -> bool:
@@ -232,6 +263,7 @@ def _assign_manual_component(
 
 def select_account_activities(
     candidates: list[Activity], existing: ActivityIndex, *, now: datetime | None = None,
+    reserved_existing_ids: set[str] | None = None,
 ) -> Selection:
     """IBKR app.py:234: isolated selection with BD exact manual assignment."""
     instant = now or datetime.now(UTC)
@@ -263,7 +295,7 @@ def select_account_activities(
         unique[candidate.comment] = candidate
     pending = [item for key, item in unique.items() if key not in conflicts]
     # One ledger scan per unique eligible source, including non-exact nearby rows.
-    matches = [_manual_rows(candidate, existing, set()) for candidate in pending]
+    matches = [_manual_rows(candidate, existing, reserved_existing_ids or set()) for candidate in pending]
     assigned = _manual_assignment(matches, pending)
     duplicates += len(assigned)
     selected = []
