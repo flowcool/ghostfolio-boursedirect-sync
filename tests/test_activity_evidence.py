@@ -23,7 +23,7 @@ NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 def proposed():
     notice = notices.parse_text(FIXTURE.read_text())
-    return sync.activity(notice.buys[0], {notice.buys[0].isin: "EXAMPLE.PA"},
+    return sync.activity(notice.trades[0], {notice.trades[0].isin: "EXAMPLE.PA"},
                          "target", notice.account_ref, sync.notice_namespace(notice), 0)
 
 
@@ -289,7 +289,7 @@ def test_row_namespace_ignores_rendering_and_retains_multiplicity():
     notice = notices.parse_text(FIXTURE.read_text())
     reformatted = notices.parse_text(FIXTURE.read_text().replace("25.50", "25.500"))
     assert sync.notice_namespace(notice) == sync.notice_namespace(reformatted)
-    assert sync.notice_namespace(notice) != sync.notice_namespace(replace(notice, buys=notice.buys * 2))
+    assert sync.notice_namespace(notice) != sync.notice_namespace(replace(notice, trades=notice.trades * 2))
 
 
 def test_activity_read_uses_exact_wire_numbers_and_one_full_request(monkeypatch):

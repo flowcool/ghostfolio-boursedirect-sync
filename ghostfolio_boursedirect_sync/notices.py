@@ -1,4 +1,4 @@
-"""Parse the observed BUY PDF layout, using legacy parse_contract_note labels.
+"""Parse observed trade/custody PDF layouts, using legacy parse_contract_note labels.
 
 The source-specific PDF extractor is the approved pdftotext -layout mechanism.
 No holder data or raw text crosses the logging boundary.
@@ -10,12 +10,15 @@ from datetime import datetime
 from decimal import Decimal, DecimalException, localcontext
 from typing import Literal
 
-from ghostfolio_boursedirect_sync.models import Buy, Notice
+from ghostfolio_boursedirect_sync.models import Notice, Trade
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
-    rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+ACHAT (?:ETRANGER|COMPTANT)\s+"
+    rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+(ACHAT|VENTE) (?:ETRANGER|COMPTANT)\s+"
     rf"([A-Z]{{2}}[A-Z0-9]{{9}}[0-9])\s+.+?\s{{2,}}({NUMBER})\s*$"
+)
+CUSTODY_HEADER = re.compile(
+    rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+DROITS DE GARDE\s+.+?\s{{2,}}({NUMBER})\s*$"
 )
 ACCOUNT = re.compile(
     r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(?:PEA-PME|PEA)\b", re.I
@@ -81,7 +84,7 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
 
     Unlike DEGIRO, BD requires exact gross and cash equality, without tolerance.
     Coupon cash is authoritative; its gross price is not a net-price formula.
-    SELL/coupon dispatch is added separately in tasks 4.2/4.3.
+    Coupon dispatch is added separately in task 4.3.
     """
     if kind == "DIVIDEND":
         fields = checked_fields(block, {"QUANTITE", "PX UN.BRUT", "BRUT", "COMMISSION"},
@@ -117,20 +120,31 @@ def parse_text(text: str) -> Notice:
         raise RuntimeError("notice_unreadable")
     account_ref = match[1].replace(" ", "")
     lines = text.splitlines()
-    headers = [(index, HEADER.fullmatch(line)) for index, line in enumerate(lines)]
-    starts = [(index, header) for index, header in headers if header is not None]
-    # Other operation layouts need their own real evidence in later tasks.
-    operation_lines = [line for line in lines if re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line)]
-    if not starts or len(starts) != len(operation_lines):
+    starts = [index for index, line in enumerate(lines)
+              if re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line)]
+    if not starts:
         raise RuntimeError("notice_unreadable")
-    buys = []
-    for rank, (index, header) in enumerate(starts):
-        end = starts[rank + 1][0] if rank + 1 < len(starts) else len(lines)
+    trades = []
+    custody_fees = 0
+    for rank, index in enumerate(starts):
+        end = starts[rank + 1] if rank + 1 < len(starts) else len(lines)
         block = "\n".join(lines[index + 1:end])
+        header = HEADER.fullmatch(lines[index])
+        custody = CUSTODY_HEADER.fullmatch(lines[index])
+        if header is None and custody is None:
+            raise RuntimeError("notice_unreadable")
         try:
-            day = datetime.strptime(header[1], "%d/%m/%Y").date()
+            day = datetime.strptime(lines[index].strip()[:10], "%d/%m/%Y").date()
         except ValueError:
             raise RuntimeError("notice_unreadable") from None
-        fields = checked_amounts("BUY", block, decimal(header[3]), "EUR")
-        buys.append(Buy(day, header[2], fields["QUANTITE"].copy_abs(), fields["COURS"], fields["COURTAGE"]))
-    return Notice(account_ref, tuple(buys))
+        if custody is not None:
+            if any(line.strip() and not FOOTER.fullmatch(line) for line in block.splitlines()):
+                raise RuntimeError("notice_unreadable")
+            custody_fees += 1
+            continue
+        assert header is not None
+        kind: Literal["BUY", "SELL"] = "BUY" if header[2] == "ACHAT" else "SELL"
+        fields = checked_amounts(kind, block, decimal(header[4]), "EUR")
+        trades.append(Trade(day, header[3], fields["QUANTITE"].copy_abs(), fields["COURS"],
+                            fields["COURTAGE"], kind))
+    return Notice(account_ref, tuple(trades), custody_fees)

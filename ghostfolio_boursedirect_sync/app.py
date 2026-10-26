@@ -1,4 +1,4 @@
-"""One simulated BUY run; pinned ibkr ghostfolio.py:459 supplies the log format."""
+"""One simulated notice run; pinned ibkr ghostfolio.py:459 supplies the log format."""
 
 import hashlib
 import json
@@ -7,7 +7,7 @@ import os
 from collections import Counter
 
 from ghostfolio_boursedirect_sync import config, ghostfolio, notices, paperless, sync
-from ghostfolio_boursedirect_sync.models import Activity, Buy, Notice
+from ghostfolio_boursedirect_sync.models import Activity, Notice, Trade
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,10 @@ def main() -> int:
             if notice.account_ref != settings.bd_account_ref:
                 other_accounts += 1
                 continue
-            matching.append((document_id, notice))
+            if notice.custody_fees:
+                log.warning("custody_fee_ignored document=%s rows=%s", document_id, notice.custody_fees)
+            if notice.trades:
+                matching.append((document_id, notice))
         if not matching:
             log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
                      "unreadable_notices=%s created=0", other_accounts, unreadable)
@@ -55,7 +58,7 @@ def main() -> int:
         # IBKR sync.py:92 gives explicit mappings priority. The approved BD
         # adaptation replaces the broker-symbol fallback with an ISIN lookup.
         unresolved: set[str] = set()
-        for isin in sorted({buy.isin for _, notice in matching for buy in notice.buys}):
+        for isin in sorted({trade.isin for _, notice in matching for trade in notice.trades}):
             if isin in mapping:
                 continue
             symbol = ghostfolio.lookup_symbol(settings, token, isin)
@@ -70,13 +73,13 @@ def main() -> int:
         documents: dict[str, int] = {}
         for document_id, notice in matching:
             namespace = sync.notice_namespace(notice)
-            ranks: Counter[Buy] = Counter()
-            for buy in notice.buys:
-                if buy.isin in unresolved:
+            ranks: Counter[Trade] = Counter()
+            for trade in notice.trades:
+                if trade.isin in unresolved:
                     continue
-                rank = ranks[buy]
-                ranks[buy] += 1
-                activity = sync.activity(buy, mapping, account_id, settings.bd_account_ref, namespace, rank)
+                rank = ranks[trade]
+                ranks[trade] += 1
+                activity = sync.activity(trade, mapping, account_id, settings.bd_account_ref, namespace, rank)
                 candidates.append(activity)
                 documents.setdefault(activity.comment, document_id)
         selected = sync.select_account_activities(candidates, existing)
