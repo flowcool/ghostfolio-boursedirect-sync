@@ -57,6 +57,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 continue
             if notice.custody_fees:
                 log.warning("custody_fee_ignored document=%s rows=%s", document_id, notice.custody_fees)
+            if notice.inferred_brokerages:
+                log.info("brokerage_zero_inferred document=%s rows=%s", document_id, notice.inferred_brokerages)
             if notice.trades:
                 matching.append((document_id, notice))
         if not matching:

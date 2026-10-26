@@ -286,6 +286,32 @@ def test_bad_document_keeps_readable_preview(settings, monkeypatch, caplog, bad_
     assert f"{code} document=1" in caplog.text
 
 
+@pytest.mark.parametrize("failure", ["half-even-gross", "missing-brokerage-evidence"])
+def test_rejected_cent_or_brokerage_evidence_blocks_all_writes(settings, monkeypatch, caplog, failure):
+    monkeypatch.setenv("DRY_RUN", "0")
+    if failure == "half-even-gross":
+        bad = (FIXTURE.parent / "pdf_buy_half_cent.txt").read_text()
+        bad = bad.replace("37.01", "37.00").replace("37.11", "37.10")
+    else:
+        bad = (FIXTURE.parent / "pdf_buy_no_brokerage.txt").read_text()
+        bad = bad.replace("37.02\n", "37.03\n", 1)
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [1, 2])
+    monkeypatch.setattr(paperless, "original_pdf", lambda _, doc: str(doc).encode())
+    monkeypatch.setattr(notices, "extract_text", lambda pdf: bad if pdf == b"1" else FIXTURE.read_text())
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected write")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 1
+    assert "amount_check_failed document=1" in caplog.text
+    assert "created=0" in caplog.text
+    assert "unreadable_notices=1" in caplog.text
+    requests.post.assert_not_called()
+
+
 @pytest.mark.parametrize("documents,other_account,expected", [
     ([], False, 0), ([1], True, 0), ([1], False, 1),
 ])
@@ -455,3 +481,24 @@ def test_real_notice_import_summary_and_exit(settings, monkeypatch, caplog, mode
         requests.post.assert_not_called()
     else:
         requests.post.assert_called_once()
+
+
+@pytest.mark.parametrize("other_account", [False, True])
+def test_zero_brokerage_information_follows_account_filter(settings, monkeypatch, caplog, other_account):
+    text = (FIXTURE.parent / "pdf_buy_no_brokerage.txt").read_text()
+    if other_account:
+        text = text.replace("TEST ACCOUNT", "OTHER ACCOUNT")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [123])
+    monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
+    monkeypatch.setattr(notices, "extract_text", lambda _: text)
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000000002": "EXAMPLE.PA"})
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected write")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 0
+    messages = [r.message for r in caplog.records if "brokerage_zero_inferred" in r.message]
+    assert messages == ([] if other_account else ["brokerage_zero_inferred document=123 rows=1"])
+    requests.post.assert_not_called()

@@ -7,7 +7,8 @@ into Ghostfolio. It is Docker-first. Every setting comes from ENV. It runs
 unattended with `docker compose up -d`. The target contract is the sibling fork
 `../ghostfolio-ibkr-sync`: `CRON`, `DRY_RUN` on by default, `APPRISE_URLS`,
 additive and deduplicated import. Before you add a mechanism, cite the line of
-ibkr or degiro that does the same thing. If no sibling line exists, stop and ask.
+ibkr or degiro that does the same thing. If no sibling line exists, stop and ask, except for BD adaptations already
+approved in the active spec.
 
 Keep public files free of personal hosts, paths, account identifiers and private
 work-tracker IDs.
@@ -29,8 +30,9 @@ work-tracker IDs.
   from Paperless, read only.
 - The connector imports only what Ghostfolio shows exactly: buy, sell, coupon.
   It stops on a security for each operation that changes the number of shares.
-  It does not track the TTF (only on statements, never in Ghostfolio). It
-  ignores custody fees and shows a message.
+  It adds actually charged TTF to one BUY in the same source account, notice,
+  date and ISIN. Ambiguity suspends affected BUYs. It ignores custody fees
+  and shows a message. Follow the active spec for fee-only corrections.
 - The only spec is the active OpenSpec change under `openspec/changes/`. The
   archived change `2026-10-14-unattended-notice-import` is history only.
 
@@ -69,10 +71,10 @@ work-tracker IDs.
   the main session. Publication and live-write authority remain separate.
 - **Operation beads.** A bead that acts on real state (Ghostfolio write, NAS)
   runs only from an `Operation plan:` in its design that Florent validated. In
-  this repository, the only ceremony is the first real Ghostfolio write. A
+  this repository, the production gate is the first production Ghostfolio write. A
   failed or uncertain step: record it and stop.
 - **Ask Florent only for:** a Bourse Direct fact missing from the spec, a
-  Ghostfolio write, a scope change. One question at a time, in plain French,
+  production Ghostfolio write, a scope change. One question at a time, in plain French,
   with your recommendation.
 
 ## Budgets
@@ -104,8 +106,11 @@ voice, no internal jargon.
   Never put a secret in Git, logs, Beads, tests or reports.
 - Paperless is read only. The importer never writes to Paperless.
 - Personal data stays off Git: `inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`.
-- Ghostfolio: `DRY_RUN=1` by default. Writes are additive only, never update or
-  delete. Real writes need Florent's go.
+- Ghostfolio: `DRY_RUN=1` by default. Add new activities; never delete. The only
+  update is the approved BUY fee-only correction in the active spec. Preserve
+  every other field and logical identity. Confirm exact readback; stop on
+  uncertainty without resend. Production writes need Florent's go. Shared labs
+  use their permanent authority below.
 - Money: `Decimal`, exact dates, EUR. An unknown operation is skipped and
   reported; the other operations continue.
 

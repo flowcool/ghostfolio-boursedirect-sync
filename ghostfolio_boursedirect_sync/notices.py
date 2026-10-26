@@ -7,7 +7,7 @@ No holder data or raw text crosses the logging boundary.
 import re
 import subprocess
 from datetime import datetime
-from decimal import Decimal, DecimalException, localcontext
+from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
 from ghostfolio_boursedirect_sync.models import Notice, Trade
@@ -82,7 +82,7 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
                     currency: str) -> dict[str, Decimal]:
     """BD adapter of DEGIRO sync.py:282: corroborate cash with source fields.
 
-    Unlike DEGIRO, BD requires exact gross and cash equality, without tolerance.
+    Unlike DEGIRO, BD requires exact cent-rounded gross and cash, without tolerance.
     Coupon cash is authoritative; its gross price is not a net-price formula.
     Coupon dispatch is added separately in task 4.3.
     """
@@ -90,11 +90,18 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
         fields = checked_fields(block, {"QUANTITE", "PX UN.BRUT", "BRUT", "COMMISSION"},
                                 {"CRED. IMPOT", "TVA"})
     else:
-        fields = checked_fields(block, {"QUANTITE", "COURS", "BRUT", "COURTAGE", "TVA"})
+        fields = checked_fields(block, {"QUANTITE", "COURS", "BRUT"}, {"COURTAGE", "TVA"})
+        if "TVA" not in fields:
+            raise RuntimeError("amount_check_failed" if "COURTAGE" not in fields else "notice_unreadable")
     if currency != "EUR" or not net.is_finite() or net <= 0 or fields.get("TVA", Decimal(0)) != 0:
         raise RuntimeError("amount_check_failed")
     if kind == "DIVIDEND":
         return fields
+    inferred_brokerage = "COURTAGE" not in fields
+    if inferred_brokerage:
+        if kind != "BUY" or net != fields["BRUT"]:
+            raise RuntimeError("amount_check_failed")
+        fields["COURTAGE"] = Decimal(0)
     quantity, price, gross, fee, vat = (fields[key] for key in
                                        ("QUANTITE", "COURS", "BRUT", "COURTAGE", "TVA"))
     with localcontext() as context:
@@ -102,7 +109,7 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
         if (
             (quantity <= 0 if kind == "BUY" else quantity >= 0)
             or min(price, gross) <= 0 or fee < 0
-            or quantity.copy_abs() * price != gross
+            or (quantity.copy_abs() * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) != gross
             or (gross + fee + vat if kind == "BUY" else gross - fee - vat) != net
         ):
             raise RuntimeError("amount_check_failed")
@@ -126,6 +133,7 @@ def parse_text(text: str) -> Notice:
         raise RuntimeError("notice_unreadable")
     trades = []
     custody_fees = 0
+    inferred_brokerages = 0
     for rank, index in enumerate(starts):
         end = starts[rank + 1] if rank + 1 < len(starts) else len(lines)
         block = "\n".join(lines[index + 1:end])
@@ -145,6 +153,7 @@ def parse_text(text: str) -> Notice:
         assert header is not None
         kind: Literal["BUY", "SELL"] = "BUY" if header[2] == "ACHAT" else "SELL"
         fields = checked_amounts(kind, block, decimal(header[4]), "EUR")
+        inferred_brokerages += int(re.search(r"\bCOURTAGE\s*:", block) is None)
         trades.append(Trade(day, header[3], fields["QUANTITE"].copy_abs(), fields["COURS"],
                             fields["COURTAGE"], kind))
-    return Notice(account_ref, tuple(trades), custody_fees)
+    return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages)

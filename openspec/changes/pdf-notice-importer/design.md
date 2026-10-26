@@ -1,70 +1,53 @@
 # Design
 
-## Source
+## Source and coverage
 
-Adopt the complete applicable IBKR v3.0.0 common core, commit
-`403b4ccf13dcce076c2dc4c08633905c96c1a898`.
-Review later updates separately.
-Modules: `app`, `config`, `models`, `ghostfolio`, `sync`, `outcome`, `notify`.
-Typed functions, data records, strict mypy, Ruff; 2 500 application lines.
-No shared library/projection.
+Continue v1. Adopt complete applicable IBKR v3.0.0 core at
+`403b4ccf13dcce076c2dc4c08633905c96c1a898`; review later updates separately.
+References below use `ghostfolio_ibkr_sync/`.
 
-Follow the latest stable Python, Node and base-image releases without version
-ceilings (approved 2026-10-26). Align Python CI and the native image. Retain
-image digests, dependency pins, compatibility checks, security scans and head
-review before integration. This replaces the earlier Python 3.14 target.
-
-## Coverage
-
-References bind pinned IBKR mechanisms to BD tasks. Preserve applicable tests.
-
-| Core | Source | BD task |
+| Mechanism | Source | Tasks |
 | --- | --- | --- |
-| ENV, URL, auth, account | `config.py:75,95`, `ghostfolio.py:116,189` | 1.1–1.2 |
-| Complete read, eligibility, profiles | `ghostfolio.py:143,152,208,259` | 1.1–1.2 |
-| Identity, mapping, manual/coupon match | `ghostfolio.py:64,76`, `sync.py:58,546,623,718` | 3.1,4.1,4.3 |
-| Selection, holdings, accepted state | `app.py:234,416`, `sync.py:580,960` | 1.1,4.2,6.1 |
-| Additive import, acceptance, uncertainty | `ghostfolio.py:405,466` | 6.1 |
-| Outcome, isolated notification | `outcome.py:49`, `notify.py:81`, `app.py:441` | 6.1–6.2 |
-| Package, image, schedule, CI | `pyproject.toml`, `Dockerfile`, `entrypoint.sh`, `.github/workflows/` | 1.1,6.2 |
-| Preview evidence, release checks | `ibkr.py:127`, `scripts/check_container_runtime.sh`, `scripts/release_image.py` | 6.1; existing release work |
-
-Python references: `ghostfolio_ibkr_sync/`.
+| ENV, URL, auth, account | `config.py:75,95`; `ghostfolio.py:116,189` | 1.1–1.2 |
+| Complete reads, eligibility, profiles | `ghostfolio.py:143,152,208,259` | 1.1–1.2 |
+| Identity, mapping, matching | `ghostfolio.py:64,76`; `sync.py:58,546,623,718` | 3.1,4.1,4.3 |
+| Selection, holdings, accepted state | `app.py:234,416`; `sync.py:580,960` | 1.1,4.2,6.1 |
+| Import, exact confirmation, uncertainty | `ghostfolio.py:405,466` | 6.1 |
+| Outcome, notification | `outcome.py:49`; `notify.py:81`; `app.py:441` | 6.1–6.2 |
+| Package, image, schedule, CI | `pyproject.toml`; `Dockerfile`; `entrypoint.sh`; `.github/workflows/` | 1.1,6.2 |
+| Preview, release | `ibkr.py:127`; `scripts/check_container_runtime.sh`; `scripts/release_image.py` | 6.1; release |
 
 ## BD adaptations
 
-- Use `paperless` and `notices` instead of Flex. Check labelled source accounts
-  before target selection. Require one active target.
-- Keep Decimal, EUR, exact matches and net coupons. BD v3 keys use broker
-  reference or sorted normalized rows, then row content and identical-row rank.
-  Exclude metadata, holder data and formatting; retain multiplicity.
-- Use current net holdings, chronological new rows and SELL first on equal
-  dates. Only confirmed imports advance real holdings. Selection stays offline.
-- Accept only absent/0/1 DRY_RUN; simulation never notifies. Use UTC row dates;
-  omit TZ-forced previews and bearer-expiry reminders under BD notification rules.
-- Validate APPRISE settings before service access, as required by the ENV spec.
-  IBKR `config.py:171` warns and disables delivery for malformed settings;
-  BD stops with `invalid_configuration` and omits the setting values.
-- After each POST, confirm through a fresh complete activity GET. On uncertainty,
-  wait five seconds before that GET. Require full exact evidence, including symbol.
-  Never resend; failed confirmation fences writes. No unresolved-symbol POST retry.
-- Index BD identities across visible accounts before eligibility checks. Moved
-  identities conflict; inactive identities stay occupied. Manual matches and
-  holdings use only the selected account. Exclude Flex, cash and conversion.
-- Manual matching adapts IBKR `sync.py:546,623`. BD first maximizes exact
-  one-to-one matches, then minimizes total calendar-day distance (approved
-  2026-10-25). Use minimum-cost augmenting paths over cached nearby rows.
-  Solve groups that share exact manual rows independently.
-  Remove source copies, invalid/future rows and occupied identities before
-  assignment. Stable date/comment and row-date/ID order resolves remaining ties.
+Use Paperless originals/search (`docs/api.md:121` at `2b00cf6`),
+`pdftotext -layout` and observed notice labels instead of Flex.
+Check source accounts before target selection. Require one active target.
+Use typed functions/data records, strict mypy/Ruff and at most 2500 application
+lines. No shared library/projection. Keep Decimal, EUR and UTC row dates.
+Align CI/runtime. Follow latest stable runtimes; pin digests and verify compatibility/security.
 
-Adapters: Paperless originals/search (`docs/api.md:121` at `2b00cf6`),
-`pdftotext -layout`, legacy notice labels, approved ISIN lookup.
+BD v3 keys retain normalized source rows and multiplicity, excluding metadata.
+Preserve current identities during fee correction; never derive identity from
+corrected target fees. Index identities across accounts, including inactive rows.
+Only eligible target rows support matching/holdings.
+Manual matching maximizes exact matches, then minimizes calendar-day distance
+through independent minimum-cost groups; stable dates/comments/IDs break ties.
+Remove source copies and invalid/future/occupied rows before assignment.
+Use chronological selection, SELL first on ties, confirmed holdings only.
+
+Apply the spec's HALF_UP, omitted-brokerage and TTF rules. The fee-only update
+is an approved BD exception to additive import, not a new generic repair path.
+Verify its endpoint/payload against the exact Ghostfolio version before coding.
+After every write, require complete exact readback; after uncertainty wait five
+seconds before GET. Never resend. Failed confirmation stops writes.
+Validate APPRISE before service access; invalid values stop without values.
+Simulation never notifies. Exclude Flex, cash, conversion and retry-on-symbol.
 
 ## Qualification and rollback
 
-Adapt infra's existing empty/golden runner for BD. Isolate credentials; pin digest;
-stop owned instances after checks. Build once, qualify empty/golden, publish that
-exact image without rebuild. No mandatory RC channel. Publication/production
-need GO. Revert commits for rollback; accepted rows remain. Unknown forms wait
-for evidence. Stop on DIVISION; splits remain unverified.
+Adapt the existing Infra BD adapter. Feed retained PDFs to the installed
+candidate without fake Paperless. Use real lab HTTP and permanent lab authority.
+Reserve instances, isolate credentials, retain evidence and verify final stop.
+Qualify one image in empty/golden scenarios, including correction/idempotence.
+Paperless integration remains separate. Publish that image only on GO.
+Revert commits for rollback; retain accepted financial state.
