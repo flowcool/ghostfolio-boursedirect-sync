@@ -39,12 +39,19 @@ class TTF:
 
 
 @dataclass(frozen=True)
+class NoticeStop:
+    code: Literal["share_count_change", "unknown_operation"]
+    isin: str | None
+
+
+@dataclass(frozen=True)
 class Notice:
     account_ref: str
     trades: tuple[Trade, ...]
     custody_fees: int = 0
     inferred_brokerages: int = 0
     ttf_rows: tuple[TTF, ...] = ()
+    stops: tuple[NoticeStop, ...] = ()
 
 
 @dataclass(frozen=True)

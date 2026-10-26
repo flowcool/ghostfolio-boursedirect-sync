@@ -117,12 +117,10 @@ def test_rejected_sell_does_not_consume_holdings_or_block_an_independent_securit
     assert result.errors == ("sell_exceeds_holding",)
 
 
-@pytest.mark.parametrize("change", ["unknown-operation", "unknown-field", "custody-field", "invalid-date"])
+@pytest.mark.parametrize("change", ["unknown-field", "custody-field", "invalid-date"])
 def test_sell_or_custody_with_an_unknown_layout_fails_closed(change):
     text = (FIXTURES / "pdf_sell_custody.txt").read_text()
-    if change == "unknown-operation":
-        text = text.replace("VENTE ETRANGER", "VENTE INCONNUE")
-    elif change == "unknown-field":
+    if change == "unknown-field":
         text = text.replace("COURTAGE", "INCONNU")
     elif change == "custody-field":
         text += "\nQUANTITE : 1\n"
