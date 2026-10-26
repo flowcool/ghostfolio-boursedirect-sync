@@ -50,4 +50,108 @@ smoke_output=$("${smoke_run[@]}" "$smoke_image_id" 2>&1) || smoke_status=$?
 printf '%s\n' "$smoke_output"
 test "$smoke_status" -eq 1
 [[ "$smoke_output" == *invalid_configuration* ]]
+# Pinned IBKR check_container_runtime.sh:101+: keep one-off and scheduled checks.
+[[ "$smoke_output" == *'Running once'* ]]
+for smoke_cron in bad '60 * * * *' '* * * * * *' '* * * * *; id' '@daily'; do
+  smoke_status=0
+  smoke_output=$("${smoke_run[@]}" --env "CRON=$smoke_cron" "$smoke_image_id" 2>&1) || smoke_status=$?
+  test "$smoke_status" -eq 1
+  [[ "$smoke_output" == *'Invalid CRON'* ]]
+  [[ "$smoke_output" == *'invalid_configuration CRON'* ]]
+  [[ "$smoke_output" == *'Summary: simulated=0'* ]]
+  [[ "$smoke_output" != *'Failure notification'* ]]
+done
+# Force a real write denial after the temporary-path allocator returns.
+smoke_status=0
+smoke_output=$("${smoke_run[@]}" --env 'CRON=* * * * *' --env DRY_RUN=1 \
+  --entrypoint bash "$smoke_image_id" -c '
+mktemp() { printf "%s\n" /proc/bd-denied-crontab; }
+export -f mktemp
+exec /app/entrypoint.sh
+' 2>&1) || smoke_status=$?
+test "$smoke_status" -eq 1
+[[ "$smoke_output" == *'Could not write runtime crontab'* ]]
+[[ "$smoke_output" == *'invalid_configuration CRON'* ]]
+[[ "$smoke_output" == *'Summary: simulated=0'* ]]
+[[ "$smoke_output" != *'Failure notification'* ]]
+# The real isolated worker must dispatch without loading settings or starting a run.
+smoke_status=0
+smoke_output=$(printf 'invalid payload' | "${smoke_run[@]}" -i --entrypoint python \
+  "$smoke_image_id" -I -m ghostfolio_boursedirect_sync --notify-worker 2>&1) || smoke_status=$?
+test "$smoke_status" -eq 10
+test -z "$smoke_output"
+# Real Apprise delivery stays inside this network-isolated container.
+"${smoke_run[@]}" --entrypoint python "$smoke_image_id" -I -c '
+import json
+import os
+import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from ghostfolio_boursedirect_sync import notify, outcome
+received = []
+class Sink(BaseHTTPRequestHandler):
+    def do_POST(self):
+        received.append(self.rfile.read(int(self.headers["Content-Length"])))
+        self.send_response(200)
+        self.end_headers()
+    def log_message(self, *args):
+        pass
+server = HTTPServer(("127.0.0.1", 0), Sink)
+server.timeout = 15
+thread = threading.Thread(target=server.handle_request, daemon=True)
+thread.start()
+status = notify.send_notification(
+    {"urls": [f"json://127.0.0.1:{server.server_port}/hook"], "timeout": 10},
+    notify.NOTIFY_TITLE, outcome.failure_summary({"unresolved_security"}))
+assert status == "sent", status
+thread.join(timeout=2)
+assert len(received) == 1 and b"unresolved_security" in received[0]
+print("Installed isolated Apprise delivery passed")
+for cron, extra_env, expected_error in (
+    ("bad", {}, b"Invalid CRON"),
+    ("60 * * * *", {}, b"Invalid CRON"),
+    ("* * * * *", {"TMPDIR": "/missing-runtime-directory"}, b"Could not create runtime crontab"),
+):
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    result = subprocess.run(["/app/entrypoint.sh"], capture_output=True, timeout=20,
+        env={**os.environ, "CRON": cron, "DRY_RUN": "0",
+             "APPRISE_URLS": json.dumps([f"json://127.0.0.1:{server.server_port}/hook"]), **extra_env})
+    thread.join(timeout=2)
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    assert expected_error in output and b"Failure notification sent" in output, output
+    assert output.count(b"Summary:") == 1, output
+assert len(received) == 4
+assert all(b"invalid_configuration" in body for body in received[1:])
+server.server_close()
+print("Installed invalid CRON finalization and notification passed")
+'
+# A real minute tick must reach the installed program's configuration gate.
+# Stop only this owned offline container. Retain its logs before removal.
+smoke_scheduled_id=''
+cleanup_schedule() {
+  if [ -n "$smoke_scheduled_id" ]; then
+    docker stop --time 10 "$smoke_scheduled_id" >/dev/null
+    test "$(docker inspect --format '{{.State.Running}}' "$smoke_scheduled_id")" = false
+    docker rm "$smoke_scheduled_id" >/dev/null
+  fi
+}
+trap cleanup_schedule EXIT
+smoke_scheduled_id=$(docker run -d --network none --read-only --cap-drop ALL \
+  --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+  --env 'CRON=* * * * *' "$smoke_image_id")
+smoke_ticked=0
+for smoke_attempt in {1..75}; do
+  smoke_output=$(docker logs "$smoke_scheduled_id" 2>&1)
+  if [[ "$smoke_output" == *invalid_configuration* ]]; then
+    smoke_ticked=1
+    break
+  fi
+  test "$(docker inspect --format '{{.State.Running}}' "$smoke_scheduled_id")" = true
+  sleep 1
+done
+printf '%s\n' "$smoke_output"
+test "$smoke_ticked" -eq 1
+printf '%s\n' 'Installed worker, invalid CRON and scheduled tick passed'
 printf '%s\n' 'CONNECTOR_IMAGE_SMOKE_PASSED'

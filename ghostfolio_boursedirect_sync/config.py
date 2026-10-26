@@ -1,7 +1,10 @@
 """ENV-only configuration, adapted from pinned ibkr config.py:62-142."""
 
+import json
+import logging
 import os
 import re
+from typing import TypedDict
 from urllib.parse import urlsplit
 
 from ghostfolio_boursedirect_sync.models import Settings
@@ -42,6 +45,8 @@ def load() -> Settings:
     mode = os.environ.get("DRY_RUN", "1")
     if mode not in ("0", "1"):
         raise RuntimeError("invalid_configuration DRY_RUN")
+    # BD rejects invalid optional settings before any service access (spec ENV).
+    load_notification_config()
     token = os.environ.get("GHOST_TOKEN") or None
     access = os.environ.get("GHOST_ACCESS_TOKEN") or None
     if bool(token) == bool(access):
@@ -67,3 +72,55 @@ def load() -> Settings:
         paperless_done_tag=done_tag,
         dry_run=mode != "0",
     )
+
+
+NOTIFY_PAYLOAD_MAX = 32 * 1024
+APPRISE_URLS_MAX = 10
+APPRISE_URL_MAX_LEN = 2048
+APPRISE_TIMEOUT_DEFAULT = 10
+APPRISE_TIMEOUT_MAX = 30
+
+
+class NotificationConfigDict(TypedDict):
+    urls: list[str]
+    timeout: int
+
+
+def load_notification_config() -> NotificationConfigDict | None:
+    """Parse APPRISE_URLS and APPRISE_TIMEOUT; None means notifications are off.
+
+    APPRISE_URLS is a JSON list of Apprise URL strings (blank or [] = off);
+    APPRISE_TIMEOUT an integer number of seconds, 1..30 (default 10).
+    BD rejects invalid settings with a fixed field name, without their values.
+    """
+    raw = os.environ.get("APPRISE_URLS", "")
+    try:
+        urls = (json.loads(raw) if len(raw) <= NOTIFY_PAYLOAD_MAX else None) if raw.strip() else []
+    except ValueError:
+        urls = None
+    raw_timeout = os.environ.get("APPRISE_TIMEOUT", "").strip()
+    timeout = APPRISE_TIMEOUT_DEFAULT
+    if raw_timeout:
+        timeout = int(raw_timeout) if re.fullmatch(r"[0-9]{1,2}", raw_timeout) else 0
+    if not 1 <= timeout <= APPRISE_TIMEOUT_MAX:
+        raise RuntimeError("invalid_configuration APPRISE_TIMEOUT")
+    if (not isinstance(urls, list) or len(urls) > APPRISE_URLS_MAX
+            or not all(isinstance(u, str) and u.strip() and len(u) <= APPRISE_URL_MAX_LEN
+                       for u in urls)):
+        raise RuntimeError("invalid_configuration APPRISE_URLS")
+    if not urls:
+        return None
+    try:
+        import apprise
+        previous_disable = logging.root.manager.disable
+        logging.disable(logging.CRITICAL)
+        try:
+            notifier = apprise.Apprise()
+            valid = all(notifier.add(url) for url in urls) and len(notifier) <= APPRISE_URLS_MAX
+        finally:
+            logging.disable(previous_disable)
+        if not valid:
+            raise RuntimeError("invalid_configuration APPRISE_URLS")
+    except ImportError:
+        raise RuntimeError("invalid_configuration APPRISE_URLS") from None
+    return {"urls": urls, "timeout": timeout}

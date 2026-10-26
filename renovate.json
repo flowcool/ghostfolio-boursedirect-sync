@@ -150,6 +150,18 @@
       ],
       "depNameTemplate": "ghcr.io/flowcool/ghostfolio-boursedirect-sync",
       "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the SHA-verified scheduler; update both binary hashes with the version.",
+      "managerFilePatterns": [
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG SUPERCRONIC_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "aptible/supercronic",
+      "datasourceTemplate": "github-releases"
     }
   ]
 }

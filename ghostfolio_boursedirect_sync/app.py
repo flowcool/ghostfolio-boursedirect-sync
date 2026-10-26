@@ -6,18 +6,28 @@ import logging
 import os
 from collections import Counter
 
-from ghostfolio_boursedirect_sync import config, ghostfolio, notices, paperless, sync
+from ghostfolio_boursedirect_sync import (
+    config,
+    ghostfolio,
+    notices,
+    notify,
+    outcome,
+    paperless,
+    sync,
+)
 from ghostfolio_boursedirect_sync.models import Activity, Notice, Trade
 
 log = logging.getLogger(__name__)
 
 
-def main() -> int:
+def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     document_id: int | None = None
     created = 0
     other_accounts = unreadable = duplicates = 0
     try:
+        if invalid_schedule:
+            raise RuntimeError("invalid_configuration CRON")
         settings = config.load()
         level = os.environ.get("LOG_LEVEL", "INFO")
         if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
@@ -38,6 +48,7 @@ def main() -> int:
             try:
                 notice = notices.parse_text(notices.extract_text(pdf))
             except RuntimeError as exc:
+                errors.add(str(exc).split()[0] if str(exc).split() else "unhandled_error")
                 log.error("%s document=%s", exc, document_id)
                 unreadable += 1
                 continue
@@ -65,6 +76,7 @@ def main() -> int:
             symbol = ghostfolio.lookup_symbol(settings, token, isin)
             if symbol is None:
                 unresolved.add(isin)
+                errors.add("unresolved_security")
                 # Pinned IBKR app.py:580: one mapping hint per ISIN.
                 log.error("unresolved_security isin=%s symbol_mapping: '%s: <yahoo ticker>'",
                           isin, isin)
@@ -94,6 +106,7 @@ def main() -> int:
              "currency": a.currency, "type": a.type, "dataSource": a.data_source,
              "comment": a.comment} for a in selected.activities]}))
         for code in selected.errors:
+            errors.add(code)
             log.error("%s", code)
         for activity in selected.activities:
             log.info(
@@ -121,9 +134,34 @@ def main() -> int:
         log.info("Summary: simulated=0 duplicates=%s other_account_notices=%s unreadable_notices=%s created=%s",
                  selected.duplicates, other_accounts, unreadable, created)
         return int(has_errors)
-    except RuntimeError as exc:
-        # Package RuntimeErrors contain fixed codes/field names only.
-        log.error("%s document=%s", exc, document_id)
+    except Exception as exc:
+        # Pinned IBKR app.main catches unforeseen failures. Keep confirmed counts
+        # here and omit unexpected exception text, which can contain credentials.
+        message = str(exc) if isinstance(exc, RuntimeError) else "unhandled_error"
+        errors.add(message.split()[0] if message.split() else "unhandled_error")
+        log.error("%s document=%s", message, document_id)
         log.info("Summary: simulated=0 duplicates=%s other_account_notices=%s unreadable_notices=%s created=%s",
                  duplicates, other_accounts, unreadable, created)
         return 1
+
+
+def main(*, invalid_schedule: bool = False) -> int:
+    """Finalize once; BD simulation never loads notification settings (IBKR app.py:441)."""
+    errors: set[str] = set()
+    code = run_sync(errors, invalid_schedule=invalid_schedule)
+    if code == 0 or os.environ.get("DRY_RUN", "1") != "0":
+        return code
+    try:
+        settings = config.load_notification_config()
+        if settings is None:
+            return code
+        status = notify.send_notification(settings, notify.NOTIFY_TITLE, outcome.failure_summary(errors))
+        if status == "sent":
+            log.info("Failure notification sent")
+        elif status == "timeout":
+            log.warning("Failure notification timed out (it may still arrive; not retried)")
+        else:
+            log.warning("Failure notification not delivered")
+    except Exception:
+        log.warning("Failure notification could not be sent")
+    return code
