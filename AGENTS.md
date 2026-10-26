@@ -50,17 +50,23 @@ work-tracker IDs.
   next bead in the same session. Budget about 150 tool calls; above that, stop
   and report.
 - **Done = the scenario replayed for real.** Put the command and its output in
-  the closing note. Green unit tests are not done. No review beads: CodeRabbit
-  reviews the PRs. A decision bead never delivers code.
+  the closing note. Green unit tests are not done. Keep review evidence in the
+  owning bead. A decision bead never delivers code.
 - **Tests:** offline pytest, one real anonymized notice for each operation type
   and each error code. No synthetic protocol proofs. No tests for docs or CI.
-- **Git:** one branch and one PR per bead. Merge when CI is green and CodeRabbit
+- **Review:** follow the invoked implementation skill. When it requires
+  `code-review`, run independent Standards and Spec subagents before the PR.
+  Fix actionable findings and record both reports in the owning bead. Apply
+  `security-review` when its trigger matches the change. This pre-PR review
+  does not replace Pullfrog's review of the final PR head.
+- **Git:** one branch and one PR per bead. Merge when CI is green and Pullfrog
   finished its review of the head commit, or on Florent's explicit go. A PR that
   changes only `openspec/`, `docs/` or `*.md` needs CI green only. Open the PR
   yourself, then run `~/.agents/bin/pr-ship <n> --repo
   flowcool/ghostfolio-boursedirect-sync` in one call, never a `sleep` loop: it
   waits, merges on `ready` and hands back any other verdict (exit 2: re-run).
-  Fix or answer each actionable comment, then re-run. No subagent.
+  Fix or answer each actionable comment, then re-run. Run the PR lifecycle in
+  the main session. Publication and live-write authority remain separate.
 - **Operation beads.** A bead that acts on real state (Ghostfolio write, NAS)
   runs only from an `Operation plan:` in its design that Florent validated. In
   this repository, the only ceremony is the first real Ghostfolio write. A

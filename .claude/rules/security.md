@@ -17,8 +17,8 @@
 - Use Paperless read only, with a user that has view permission only.
 - Personal data stays off Git (`inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`).
   Tests use anonymized fixtures only.
-- A code change to authentication, notice parsing or any new external HTTP
-  call needs a security review before merge: a completed CodeRabbit review of the
-  final head (the docs-only exception does not apply) and a short security note in
-  the PR. A change of this file or of spec text only is a docs-only PR
-  (Florent, 2026-10-15).
+- Apply the `security-review` skill to changes that handle credentials,
+  authentication, notice parsing or new external HTTP calls. Add a short
+  security note to the PR. Require Pullfrog's completed review of the final
+  code head before merge. Skill-based pre-PR subagent reviews are additional
+  checks. A change of this file or of spec text only is a docs-only PR.
