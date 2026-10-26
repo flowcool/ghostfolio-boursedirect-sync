@@ -2,7 +2,17 @@
 
 Set `MAPPING_FILE=/config/mappings.yaml` to use a private mapping file.
 Compose mounts this directory read only at `/config`. Keep the private file
-outside Git. Set its mode to `0600`.
+outside Git. The container runs as UID and GID `10001`. Give that user read
+access to the file and traversal access to the directory. From the repository
+root, use group access while retaining the host owner's access:
+
+```sh
+sudo chgrp 10001 config config/mappings.yaml
+chmod 0750 config
+chmod 0640 config/mappings.yaml
+```
+
+Other host users cannot read the file. The container mount remains read only.
 
 The file must contain `symbol_mapping`. Use an ISIN as each key and a verified
 EUR Yahoo ticker as its value. See [mappings.example.yaml](mappings.example.yaml).
