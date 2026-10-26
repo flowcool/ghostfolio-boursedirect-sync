@@ -60,6 +60,33 @@ def test_real_anonymized_buy():
     assert isinstance(result.unit_price, Decimal)
 
 
+@pytest.mark.parametrize("charged_ttf", [False, True])
+def test_simulation_maximizes_manual_matches_before_exact_day_preference(settings, monkeypatch, caplog,
+                                                                       charged_ttf):
+    text = FIXTURE.read_text()
+    first = text + ("\n03/02/2025 TAXE TRANSACT FINANCIERES FR0000120271  0.30\n" if charged_ttf else "")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [1, 2])
+    monkeypatch.setattr(paperless, "original_pdf", lambda _, doc: str(doc).encode())
+    monkeypatch.setattr(notices, "extract_text", lambda pdf: first if pdf == b"1" else
+                        text.replace("03/02/2025", "05/02/2025"))
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    rows = [{"id": f"manual-{day}", "accountId": "target", "comment": "manual entry",
+             "type": "BUY", "date": f"2025-02-{day:02d}T00:00:00Z", "quantity": 4,
+             "unitPrice": Decimal("25.50"), "fee": Decimal("1.30") if charged_ttf else 1, "currency": "EUR",
+             "assetProfile": {"symbol": "EXAMPLE.PA", "dataSource": "YAHOO"}}
+            for day in (1, 3)]
+    ledger = ghostfolio.index_existing_activities({"count": 2, "activities": rows})
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ledger)
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected write")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 0
+    assert "simulated=0 duplicates=2" in caplog.text
+    assert "type=BUY" not in caplog.text
+
+
 @pytest.mark.parametrize("change", ["missing", "same_line", "second_line"])
 def test_account_label_must_be_unique(change):
     text = FIXTURE.read_text()

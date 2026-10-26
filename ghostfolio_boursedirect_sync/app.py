@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from collections import Counter
+from datetime import UTC, datetime
 
 from ghostfolio_boursedirect_sync import (
     config,
@@ -135,6 +136,13 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
             seen_comments.add(candidate.comment)
             unique_candidates.append(candidate)
         for candidate in unique_candidates:
+            # Task 4.1 owns ordinary matching. Fee correction must not consume
+            # an exact-day manual row before maximum one-to-one assignment.
+            if (candidate.type != "BUY" or candidate.brokerage is None
+                    or candidate.fee == candidate.brokerage
+                    or ghostfolio.activity_instant(candidate.date) > datetime.now(UTC)):
+                eligible.append(candidate)
+                continue
             occupied = existing.identities.get(candidate.comment, ())
             if len(occupied) > 1 or any(
                     row.account_id != candidate.account_id for row in occupied):
@@ -172,11 +180,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 continue
             row = matches[0]
             if row.fee == candidate.fee:
-                if row.id in reserved_existing_ids:
-                    eligible.append(candidate)
-                else:
-                    correction_duplicates += 1
-                    reserved_existing_ids.add(row.id)
+                eligible.append(candidate)
             elif row.fee == candidate.brokerage:
                 if row.id in reserved_existing_ids:
                     errors.add("owned_activity_conflict")

@@ -4,6 +4,7 @@ API envelopes follow pinned IBKR ghostfolio.py:208,259. All HTTP is mocked.
 """
 
 import json
+import re
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -136,6 +137,14 @@ def test_manual_row_does_not_match_two_source_rows():
     result = sync.select_account_activities([first, second], index(existing_row(comment="manual entry")), now=NOW)
     assert result.duplicates == 1
     assert result.activities == (second,)
+
+
+def test_manual_trade_in_another_currency_is_not_an_exact_match():
+    ledger = index(existing_row(comment="manual entry", currency="USD"))
+    result = sync.select_account_activities([proposed()], ledger, now=NOW)
+    assert result.activities == ()
+    assert result.duplicates == 0
+    assert result.errors == ("possible_duplicate",)
 
 
 def test_manual_match_source_copy_is_still_a_duplicate():
@@ -290,6 +299,92 @@ def test_row_namespace_ignores_rendering_and_retains_multiplicity():
     reformatted = notices.parse_text(FIXTURE.read_text().replace("25.50", "25.500"))
     assert sync.notice_namespace(notice) == sync.notice_namespace(reformatted)
     assert sync.notice_namespace(notice) != sync.notice_namespace(replace(notice, trades=notice.trades * 2))
+
+
+def test_empty_execution_venue_preserves_source_identity():
+    # Retained notices have a labelled execution time and an empty Lieu field.
+    text = FIXTURE.read_text()
+    altered = text.replace("Lieu: DEUTSCHER KASSENVEREIN GRUPPE DEUTSC", "Lieu:")
+    notice = notices.parse_text(altered)
+    value = sync.activity(notice.trades[0], {notice.trades[0].isin: "EXAMPLE.PA"},
+                          "target", notice.account_ref, sync.notice_namespace(notice), 0)
+    assert value == proposed()
+
+
+def test_page_counter_preserves_notice_rows_and_multiplicity():
+    text = FIXTURE.read_text()
+    row = text[text.index("   03/02/2025"):]
+    plain = notices.parse_text(text + "\n" + row)
+    paged = notices.parse_text("1/2\n" + text + "\f2/2\n" + row + "\f")
+    assert paged == plain
+    assert sync.notice_namespace(paged) == sync.notice_namespace(plain)
+    assert len(paged.trades) == 2
+
+
+def test_page_counter_shape_inside_a_row_is_not_ignored():
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(FIXTURE.read_text() + "\n2/2\n")
+
+
+def test_coupon_without_isin_is_not_identified_by_security_name():
+    text = (FIXTURE.parent / "pdf_coupon.txt").read_text()
+    altered = re.sub(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", "", text)
+    assert altered != text
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(altered)
+
+
+def test_identical_real_notice_rows_keep_two_identities_and_deduplicate_copies():
+    text = FIXTURE.read_text()
+    notice = notices.parse_text(text + "\n" + text[text.index("   03/02/2025"):])
+    assert len(notice.trades) == 2
+    values = [sync.activity(trade, {trade.isin: "EXAMPLE.PA"}, "target", notice.account_ref,
+                            sync.notice_namespace(notice), rank)
+              for rank, trade in enumerate(notice.trades)]
+    assert values[0].comment != values[1].comment
+    result = sync.select_account_activities(values * 2, index(), now=NOW)
+    assert set(result.activities) == set(values)
+    assert result.duplicates == 2
+    assert result.errors == ()
+
+
+@pytest.mark.parametrize("comment", ["manual entry", "BD#v1#legacy-account#" + "a" * 64,
+                                    "BD#v2#" + "a" * 64 + "#" + "b" * 64])
+def test_legacy_and_unowned_rows_match_only_the_exact_target_account(comment):
+    value = proposed()
+    result = sync.select_account_activities([value], index(existing_row(comment=comment)), now=NOW)
+    assert result.activities == () and result.duplicates == 1 and result.errors == ()
+    other = sync.select_account_activities([value], index(existing_row(
+        comment=comment, accountId="other")), now=NOW)
+    assert other.activities == (value,) and other.duplicates == 0 and other.errors == ()
+
+
+def test_different_manual_quantity_blocks_only_the_nearby_security():
+    value = proposed()
+    independent = replace(value, symbol="INDEPENDENT.PA", isin="FR0000000002",
+                          comment=value.comment + "-independent")
+    ledger = index(existing_row(comment="manual entry", quantity=Decimal("4.00000000000000000001")))
+    before = deepcopy(ledger)
+    result = sync.select_account_activities([value, independent], ledger, now=NOW)
+    assert result.activities == (independent,)
+    assert result.duplicates == 0 and result.errors == ("possible_duplicate",)
+    assert ledger == before
+
+
+@pytest.mark.parametrize("invalid", ["future", "conflicting-source", "occupied"])
+def test_rejected_source_does_not_reserve_an_exact_manual_row(invalid):
+    value = proposed()
+    valid = replace(value, comment=value.comment + "-valid")
+    rejected = replace(value, date="2099-01-01T00:00:00Z") if invalid == "future" else value
+    candidates = [rejected, valid]
+    rows = [existing_row(comment="manual entry")]
+    if invalid == "conflicting-source":
+        candidates.append(replace(rejected, quantity=Decimal(5)))
+    if invalid == "occupied":
+        rows.append(existing_row(id="moved", accountId="other"))
+    result = sync.select_account_activities(candidates, index(*rows), now=NOW)
+    assert result.activities == () and result.duplicates == 1
+    assert result.errors == (("future_activity",) if invalid == "future" else ("owned_activity_conflict",))
 
 
 def test_activity_read_uses_exact_wire_numbers_and_one_full_request(monkeypatch):
