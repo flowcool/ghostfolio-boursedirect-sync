@@ -147,10 +147,10 @@ def _manual_rows(
 
 def _manual_exact(candidate: Activity, row: ExistingActivity) -> bool:
     """BD net-cash adaptation of pinned IBKR sync.py:718; no float tolerance."""
-    if candidate.type != "DIVIDEND":
-        return row.quantity == candidate.quantity and row.unit_price == candidate.unit_price
     if row.currency != candidate.currency:
         return False
+    if candidate.type != "DIVIDEND":
+        return row.quantity == candidate.quantity and row.unit_price == candidate.unit_price
     with localcontext() as context:
         context.prec = max(28, sum(len(format(v, "f")) for v in (
             row.quantity, row.unit_price, row.fee, candidate.quantity, candidate.unit_price)) + 2)
