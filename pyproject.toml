@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ghostfolio-boursedirect-sync"
 version = "0.0.0"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 
 [tool.setuptools]
 packages = ["ghostfolio_boursedirect_sync"]

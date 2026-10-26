@@ -16,6 +16,15 @@ synthetic data and resources owned by the invocation. CI tests use synthetic
 inputs and isolated state; they must never use broker credentials or production
 Ghostfolio.
 
+The offline job uses GitHub's Python build. The native image smoke uses the
+shipped Docker build and requires C `_decimal`. Different Decimal backends are
+accepted when both builds pass qualification. Run the full offline suite with
+both builds when qualifying a Python release. The extreme-exponent test must
+stop safely, preserve the journal and produce no output with either backend.
+CI repeats the full suite with the GitHub build. Its image smoke checks exact
+Decimal values from a real anonymized BUY with the shipped C backend. This
+smoke check does not replace the full suite during runtime qualification.
+
 ## Dependency updates
 
 GitHub's dependency graph and Dependabot alerts stay enabled. Renovate is the

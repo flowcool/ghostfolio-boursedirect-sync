@@ -10,11 +10,14 @@ test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$smoke_image_
 smoke_run=(docker run --rm --network none --read-only --cap-drop ALL
   --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777)
 "${smoke_run[@]}" --env "EXPECTED_PYTHON_VERSION=$smoke_python_version" --entrypoint python "$smoke_image_id" -I -c '
+import _decimal
 import glob
 import importlib.util
 import os
 import shutil
 import sys
+from decimal import Decimal
+assert Decimal is _decimal.Decimal
 assert sys.version_info.releaselevel == "final", sys.version
 assert ".".join(map(str, sys.version_info[:3])) == os.environ["EXPECTED_PYTHON_VERSION"], sys.version
 assert os.getuid() == 10001 and os.getgid() == 10001
