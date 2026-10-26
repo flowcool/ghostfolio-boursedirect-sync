@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
-from ghostfolio_boursedirect_sync.models import TTF, Notice, Trade
+from ghostfolio_boursedirect_sync.models import TTF, Notice, NoticeStop, Trade
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
@@ -135,6 +135,7 @@ def parse_text(text: str) -> Notice:
     if not starts:
         raise RuntimeError("notice_unreadable")
     trades = []
+    stops = []
     custody_fees = 0
     inferred_brokerages = 0
     ttf_rows: list[TTF] = []
@@ -144,8 +145,6 @@ def parse_text(text: str) -> Notice:
         header = HEADER.fullmatch(lines[index])
         custody = CUSTODY_HEADER.fullmatch(lines[index])
         ttf = TTF_HEADER.fullmatch(lines[index])
-        if header is None and custody is None and ttf is None:
-            raise RuntimeError("notice_unreadable")
         try:
             day = datetime.strptime(lines[index].strip()[:10], "%d/%m/%Y").date()
         except ValueError:
@@ -163,7 +162,26 @@ def parse_text(text: str) -> Notice:
                 raise RuntimeError("amount_check_failed")
             ttf_rows.append(TTF(day, ttf[2] or "", amount))
             continue
-        assert header is not None
+        if header is None:
+            # BD adaptation of IBKR app.py:203-208: reject the affected security.
+            # Unknown operation labels never cross the logging boundary.
+            row = lines[index].strip()[10:].strip()
+            if re.match(r"TAXE TRANSACT FINANCIERES\b", row, re.I):
+                raise RuntimeError("notice_unreadable")
+            isin = re.search(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", row)
+            operation = row[:isin.start()].strip() if isin else re.split(r"\s{2,}", row)[0]
+            if not operation or operation in {
+                "ACHAT COMPTANT", "ACHAT ETRANGER", "VENTE COMPTANT", "VENTE ETRANGER", "COUPONS",
+                "DROITS DE GARDE",
+            }:
+                raise RuntimeError("notice_unreadable")
+            division = operation == "DIVISION"
+            checked_fields(block, {"QUANTITE"} if division else set(),
+                           {"QUANTITE", "SORTIE DE", "ENTREE DE", "COURS", "BRUT", "COURTAGE",
+                            "TVA", "PX UN.BRUT", "COMMISSION", "CRED. IMPOT"})
+            stops.append(NoticeStop("share_count_change" if division else "unknown_operation",
+                                    isin[0] if isin else None))
+            continue
         kind: Literal["BUY", "SELL", "DIVIDEND"] = (
             "DIVIDEND" if header[2] == "COUPONS" else "BUY" if header[2].startswith("ACHAT") else "SELL"
         )
@@ -174,4 +192,4 @@ def parse_text(text: str) -> Notice:
                             decimal(header[4]) if kind == "DIVIDEND" else fields["COURS"],
                             Decimal(0) if kind == "DIVIDEND" else fields["COURTAGE"], kind,
                             None if kind == "DIVIDEND" else fields["COURTAGE"]))
-    return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages, tuple(ttf_rows))
+    return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages, tuple(ttf_rows), tuple(stops))

@@ -67,7 +67,6 @@ def test_coupon_uses_printed_net_and_does_not_infer_tax_from_gross():
     ("EUR PEA", "USD PEA", "notice_unreadable"),
     ("COMMISSION", "WITHHOLDING", "notice_unreadable"),
     ("FR0000000002", "", "notice_unreadable"),
-    ("COUPONS", "COUPONS ETRANGER", "notice_unreadable"),
 ])
 def test_coupon_retains_field_and_amount_guards(old, new, code):
     with pytest.raises(RuntimeError, match=f"^{code}$"):

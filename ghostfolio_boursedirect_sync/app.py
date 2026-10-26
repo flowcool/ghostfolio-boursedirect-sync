@@ -69,9 +69,23 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 log.warning("custody_fee_ignored document=%s rows=%s", document_id, notice.custody_fees)
             if notice.inferred_brokerages:
                 log.info("brokerage_zero_inferred document=%s rows=%s", document_id, notice.inferred_brokerages)
-            if notice.trades:
+            if notice.trades or notice.stops:
                 matching.append((document_id, notice))
-        if not matching:
+        # IBKR app.py:203-208 filters rejected securities before dispatch.
+        # BD stops span all selected notices, regardless of their read order.
+        done = paperless.done_document_ids(settings) if any(n.stops for _, n in matching) else set()
+        blocked: set[str] = set()
+        has_stops = False
+        for document_id, notice in matching:
+            if document_id in done:
+                continue
+            for stop in notice.stops:
+                log.error("%s document=%s", stop.code, document_id)
+                errors.add(stop.code)
+                has_stops = True
+                if stop.isin is not None:
+                    blocked.add(stop.isin)
+        if not any(t.isin not in blocked for _, n in matching for t in n.trades):
             log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
                      "unreadable_notices=%s created=0", other_accounts, unreadable)
             return int(unreadable > 0 or bool(errors))
@@ -83,7 +97,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
         # adaptation replaces the broker-symbol fallback with an ISIN lookup.
         unresolved: set[str] = set()
         for isin in sorted({trade.isin for _, notice in matching for trade in notice.trades}):
-            if isin in mapping:
+            if isin in mapping or isin in blocked:
                 continue
             symbol = ghostfolio.lookup_symbol(settings, token, isin)
             if symbol is None:
@@ -100,7 +114,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
             namespace = sync.notice_namespace(notice)
             ranks: Counter[Trade] = Counter()
             for trade in notice.trades:
-                if trade.isin in unresolved:
+                if trade.isin in unresolved or trade.isin in blocked:
                     continue
                 rank = ranks[trade]
                 ranks[trade] += 1
@@ -213,7 +227,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
             )
-        has_errors = bool(selected.errors or unreadable > 0 or unresolved
+        has_errors = bool(selected.errors or unreadable > 0 or unresolved or has_stops
                           or "ttf_attribution_failed" in errors
                           or "owned_activity_conflict" in errors)
         for row, activity in corrections:

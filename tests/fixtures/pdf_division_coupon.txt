@@ -1,0 +1,17 @@
+  COMPTE N°                      TEST ACCOUNTEUR PEA
+
+   09/07/2026           COUPONS                              FR0000000001 ANONYMIZED SECURITY                                                                                                   10,00
+
+                        QUANTITE : -250
+                        PX UN.BRUT : +0,04000                BRUT : +10,00
+                        COMMISSION : +0,00                   CRED. IMPOT : +0,00
+
+   09/07/2026           DIVISION                             FR0000000002 ANONYMIZED SECURITY
+
+                        QUANTITE : -14
+                        SORTIE DE : +14
+
+   09/07/2026           DIVISION                             FR0000000002 ANONYMIZED SECURITY
+
+                        QUANTITE : +2 800
+                        ENTREE DE : +2 800

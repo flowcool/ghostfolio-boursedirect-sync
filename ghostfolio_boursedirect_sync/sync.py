@@ -100,7 +100,7 @@ def attribute_ttf_rows(notice: Notice) -> tuple[Notice, tuple[str, ...]]:
                  or any(day == trade.date and not isin for day, isin in failed_keys)))
     )
     return Notice(notice.account_ref, trades, notice.custody_fees,
-                  notice.inferred_brokerages, ()), tuple(sorted(failed))
+                  notice.inferred_brokerages, (), notice.stops), tuple(sorted(failed))
 
 
 def _same_activity(candidate: Activity, existing: ExistingActivity) -> bool:

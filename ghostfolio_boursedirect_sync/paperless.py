@@ -32,10 +32,10 @@ def document_ids(settings: Settings) -> list[int]:
     The second query is a read-only safety check. It catches a file that keeps
     the BillCollector filename but lost the Paperless Source field.
     """
-    source_ids = _document_ids(settings, {
+    source_ids = _object_ids(settings, {
         "custom_field_query": json.dumps(["Source", "exact", "Bourse Direct"]),
     })
-    filename_ids = _document_ids(settings, {
+    filename_ids = _object_ids(settings, {
         "original_filename__istartswith": "BourseDirect_",
     })
     if set(filename_ids).difference(source_ids):
@@ -43,13 +43,33 @@ def document_ids(settings: Settings) -> list[int]:
     return source_ids
 
 
-def _document_ids(settings: Settings, filters: dict[str, str]) -> list[int]:
-    """Read every page for one Paperless filter with stable count evidence."""
+def done_document_ids(settings: Settings) -> set[int]:
+    """Paperless 2ab1ac7 filters.py:98,792: resolve a tag then filter documents.
+
+    Reuse complete pagination, configured-origin GET and source filtering.
+    A tag clears stops only; it never removes a document from the source.
+    """
+    tags = _object_ids(settings, {"name__iexact": settings.paperless_done_tag},
+                       path="/api/tags/", exact_name=settings.paperless_done_tag)
+    if not tags:
+        return set()
+    if len(tags) != 1:
+        raise RuntimeError("paperless_unreachable")
+    return set(_object_ids(settings, {
+        "custom_field_query": json.dumps(["Source", "exact", "Bourse Direct"]),
+        "tags__id__all": str(tags[0]),
+    }))
+
+
+def _object_ids(settings: Settings, filters: dict[str, str], *, path: str = "/api/documents/",
+                exact_name: str | None = None) -> list[int]:
+    """Read every page with stable count evidence; optionally match tag spelling."""
     ids: list[int] = []
+    matching: list[int] = []
     page = 1
     expected_count: int | None = None
     while True:
-        response = get(settings, "/api/documents/", {**filters, "page": page})
+        response = get(settings, path, {**filters, "page": page})
         try:
             body: object = response.json()
         except ValueError:
@@ -71,12 +91,16 @@ def _document_ids(settings: Settings, filters: dict[str, str]) -> list[int]:
             if document_id <= 0 or document_id in ids:
                 raise RuntimeError("paperless_unreachable")
             ids.append(document_id)
+            if exact_name is not None and not isinstance(row.get("name"), str):
+                raise RuntimeError("paperless_unreachable")
+            if exact_name is None or row["name"] == exact_name:
+                matching.append(document_id)
         if len(ids) > count:
             raise RuntimeError("paperless_unreachable")
         if next_page is None:
             if len(ids) != count:
                 raise RuntimeError("paperless_unreachable")
-            return ids
+            return matching
         if not rows or len(ids) >= count:
             raise RuntimeError("paperless_unreachable")
         page += 1
