@@ -4,13 +4,16 @@ The source-specific PDF extractor is the approved pdftotext -layout mechanism.
 No holder data or raw text crosses the logging boundary.
 """
 
+import logging
 import re
 import subprocess
 from datetime import datetime
-from decimal import Decimal, DecimalException, localcontext
+from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
 from ghostfolio_boursedirect_sync.models import Notice, Trade
+
+log = logging.getLogger(__name__)
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
@@ -82,7 +85,7 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
                     currency: str) -> dict[str, Decimal]:
     """BD adapter of DEGIRO sync.py:282: corroborate cash with source fields.
 
-    Unlike DEGIRO, BD requires exact gross and cash equality, without tolerance.
+    Unlike DEGIRO, BD requires exact cent-rounded gross and cash, without tolerance.
     Coupon cash is authoritative; its gross price is not a net-price formula.
     Coupon dispatch is added separately in task 4.3.
     """
@@ -90,11 +93,18 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
         fields = checked_fields(block, {"QUANTITE", "PX UN.BRUT", "BRUT", "COMMISSION"},
                                 {"CRED. IMPOT", "TVA"})
     else:
-        fields = checked_fields(block, {"QUANTITE", "COURS", "BRUT", "COURTAGE", "TVA"})
+        fields = checked_fields(block, {"QUANTITE", "COURS", "BRUT"}, {"COURTAGE", "TVA"})
+        if "TVA" not in fields:
+            raise RuntimeError("amount_check_failed" if "COURTAGE" not in fields else "notice_unreadable")
     if currency != "EUR" or not net.is_finite() or net <= 0 or fields.get("TVA", Decimal(0)) != 0:
         raise RuntimeError("amount_check_failed")
     if kind == "DIVIDEND":
         return fields
+    inferred_brokerage = "COURTAGE" not in fields
+    if inferred_brokerage:
+        if kind != "BUY" or net != fields["BRUT"]:
+            raise RuntimeError("amount_check_failed")
+        fields["COURTAGE"] = Decimal(0)
     quantity, price, gross, fee, vat = (fields[key] for key in
                                        ("QUANTITE", "COURS", "BRUT", "COURTAGE", "TVA"))
     with localcontext() as context:
@@ -102,10 +112,12 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
         if (
             (quantity <= 0 if kind == "BUY" else quantity >= 0)
             or min(price, gross) <= 0 or fee < 0
-            or quantity.copy_abs() * price != gross
+            or (quantity.copy_abs() * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) != gross
             or (gross + fee + vat if kind == "BUY" else gross - fee - vat) != net
         ):
             raise RuntimeError("amount_check_failed")
+    if inferred_brokerage:
+        log.info("brokerage_zero_inferred")
     return fields
 
 

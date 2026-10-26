@@ -1,0 +1,9 @@
+COMPTE N°: TEST ACCOUNT EUR PEA
+
+03/02/2025 ACHAT COMPTANT FR0000000002 ANONYMIZED SECURITY    37.13
+
+                        QUANTITE: 3
+                        COURS: 12.344                       BRUT: 37.03
+                        COURTAGE: 0.10                      TVA: 0.00
+
+                        Heure Execution: 12:34:56         Lieu: ANONYMIZED VENUE

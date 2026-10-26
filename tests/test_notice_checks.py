@@ -4,10 +4,14 @@ BUY uses the retained PDF text. SELL/coupon amount blocks transcribe the
 existing note-foreign-sell-anonymized-real.html and note-coupon-anonymized-real.html
 fixtures to the field layout observed in the retained PDF corpus. No financial
 values are invented for the baseline. Deliberate alterations exercise rejection.
+The rounded and omitted-brokerage fixtures extract observed real PDF rows.
+Account, date, security, venue and amounts are anonymized. The fractional-cent
+class, HALF_EVEN/HALF_UP distinction and omitted-field layout are preserved.
 These checks do not claim SELL/coupon dispatch or real-service acceptance.
 """
 
-from decimal import Decimal
+import logging
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 import pytest
@@ -91,19 +95,70 @@ def test_all_amount_types_require_eur(kind, fixture, net):
         notices.checked_amounts(kind, text, Decimal(net), "USD")
 
 
-def test_buy_equality_does_not_round_under_a_small_decimal_context():
-    from decimal import localcontext
-
+def test_cent_check_preserves_source_price_and_exact_cash_under_a_small_decimal_context():
     text = (FIXTURES / "pdf_buy.txt").read_text()
     text = text.replace("25.50", "25.50000000000000000000000000001")
-    text = text.replace("102.00", "102.00000000000000000000000000004")
-    text = text.replace("103.00", "103.00000000000000000000000000004")
     with localcontext() as context:
         context.prec = 6
         notice = notices.parse_text(text)
         assert notice.trades[0].unit_price == Decimal("25.50000000000000000000000000001")
         with pytest.raises(RuntimeError, match="^amount_check_failed$"):
-            notices.parse_text(text.replace("103.00000000000000000000000000004", "103.00"))
+            notices.parse_text(text.replace("103.00", "103.00000000000000000000000000004"))
+
+
+@pytest.mark.parametrize("fixture,kind,price", [
+    ("pdf_buy_half_cent.txt", "BUY", "12.335"),
+    ("pdf_buy_rounded.txt", "BUY", "12.344"),
+    ("pdf_sell_rounded.txt", "SELL", "12.346"),
+])
+def test_real_fractional_cent_layouts_preserve_quantity_and_price(fixture, kind, price):
+    # Extracted real trade rows; identities and amounts are anonymized. The BUY
+    # tie rounds up where HALF_EVEN would round down. No source data is rounded.
+    with localcontext() as context:
+        context.prec = 4
+        trade, = notices.parse_text((FIXTURES / fixture).read_text()).trades
+    assert (trade.type, trade.quantity, trade.unit_price, trade.fee) == (
+        kind, Decimal(3), Decimal(price), Decimal("0.10")
+    )
+
+
+def test_half_even_gross_is_rejected_even_when_cash_matches():
+    text = (FIXTURES / "pdf_buy_half_cent.txt").read_text()
+    text = text.replace("37.01", "37.00").replace("37.11", "37.10")
+    with pytest.raises(RuntimeError, match="^amount_check_failed$"):
+        notices.parse_text(text)
+
+
+def test_real_omitted_brokerage_reports_only_a_fixed_information_code(caplog):
+    text = (FIXTURES / "pdf_buy_no_brokerage.txt").read_text()
+    with caplog.at_level(logging.INFO):
+        trade, = notices.parse_text(text).trades
+    assert (trade.quantity, trade.unit_price, trade.fee) == (
+        Decimal(3), Decimal("12.34"), Decimal(0)
+    )
+    assert [(r.levelname, r.message) for r in caplog.records] == [
+        ("INFO", "brokerage_zero_inferred")
+    ]
+
+
+@pytest.mark.parametrize("old,new", [
+    ("37.02\n", "37.03\n"),
+    ("TVA: 0.00", "TVA: 0.01"),
+    ("TVA: 0.00", ""),
+    ("QUANTITE: 3", "QUANTITE: -3"),
+])
+def test_omitted_brokerage_needs_all_source_checks(old, new, caplog):
+    text = (FIXTURES / "pdf_buy_no_brokerage.txt").read_text()
+    assert old in text
+    with caplog.at_level(logging.INFO), pytest.raises(RuntimeError, match="^amount_check_failed$"):
+        notices.parse_text(text.replace(old, new, 1))
+    assert "brokerage_zero_inferred" not in caplog.text
+
+
+def test_omitted_sell_brokerage_is_never_inferred():
+    text = (FIXTURES / "pdf_sell_amounts.txt").read_text().replace("COURTAGE : +5,64", "")
+    with pytest.raises(RuntimeError, match="^amount_check_failed$"):
+        notices.checked_amounts("SELL", text, Decimal("1128.94"), "EUR")
 
 
 def test_non_pdf_bytes_are_unreadable():
