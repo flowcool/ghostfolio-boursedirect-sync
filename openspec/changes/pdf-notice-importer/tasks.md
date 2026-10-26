@@ -79,7 +79,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 2. Notice checks
 
-- [ ] 2.1 Add the amount checks (BUY, SELL and coupon) and `notice_unreadable`
+- [x] 2.1 Add the amount checks (BUY, SELL and coupon) and `notice_unreadable`
   with the block of all writes, with offline tests from altered anonymized
   text. Compare HALF_UP(abs(quantity) * source price, EUR 0.01) exactly to BRUT.
   Preserve source quantity/price. Infer missing COURTAGE as zero only for BUY
