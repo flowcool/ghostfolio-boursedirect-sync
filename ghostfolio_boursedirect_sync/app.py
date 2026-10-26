@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     document_id: int | None = None
+    created = 0
+    other_accounts = unreadable = duplicates = 0
     try:
         settings = config.load()
         level = os.environ.get("LOG_LEVEL", "INFO")
@@ -22,9 +24,8 @@ def main() -> int:
             raise RuntimeError("invalid_configuration LOG_LEVEL")
         # HTTP-library debug logs can include credentials. Keep their level fixed.
         log.setLevel(level)
-        if not settings.dry_run:
-            raise RuntimeError("invalid_configuration financial import is not available")
-        log.info("DRY RUN")
+        if settings.dry_run:
+            log.info("DRY RUN")
         mapping = sync.load_mapping(settings.mapping_file)
         other_accounts = 0
         unreadable = 0
@@ -83,6 +84,7 @@ def main() -> int:
                 candidates.append(activity)
                 documents.setdefault(activity.comment, document_id)
         selected = sync.select_account_activities(candidates, existing)
+        duplicates = selected.duplicates
         # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
         # BD binds originals instead of a Flex window; decimal strings stay exact.
         log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "source", "value": source}))
@@ -95,17 +97,33 @@ def main() -> int:
             log.error("%s", code)
         for activity in selected.activities:
             log.info(
-                    "[DRY RUN] document=%s date=%s type=%s symbol=%s quantity=%s "
+                    "%s document=%s date=%s type=%s symbol=%s quantity=%s "
                     "unitPrice=%s fee=%s currency=%s accountId=%s dataSource=%s comment=%s",
+                    "[DRY RUN]" if settings.dry_run else "IMPORT",
                     documents[activity.comment], activity.date, activity.type, activity.symbol,
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
             )
-        log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s "
-                 "unreadable_notices=%s created=0",
-                 len(selected.activities), selected.duplicates, other_accounts, unreadable)
-        return int(bool(selected.errors) or unreadable > 0 or bool(unresolved))
+        has_errors = bool(selected.errors or unreadable > 0 or unresolved)
+        blocking = has_errors if settings.dry_run else (unreadable > 0 or (has_errors and not selected.activities))
+        if blocking:
+            log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
+                     len(selected.activities) if settings.dry_run else 0, selected.duplicates, other_accounts, unreadable)
+            return 1
+        if settings.dry_run:
+            log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
+                     len(selected.activities), selected.duplicates, other_accounts, unreadable)
+            return 0
+        # Confirm each row before a later SELL can depend on its quantity.
+        for activity in selected.activities:
+            ghostfolio.import_activities(settings, token, [activity])
+            created += 1
+        log.info("Summary: simulated=0 duplicates=%s other_account_notices=%s unreadable_notices=%s created=%s",
+                 selected.duplicates, other_accounts, unreadable, created)
+        return int(has_errors)
     except RuntimeError as exc:
         # Package RuntimeErrors contain fixed codes/field names only.
         log.error("%s document=%s", exc, document_id)
+        log.info("Summary: simulated=0 duplicates=%s other_account_notices=%s unreadable_notices=%s created=%s",
+                 duplicates, other_accounts, unreadable, created)
         return 1

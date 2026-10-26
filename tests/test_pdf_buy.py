@@ -24,7 +24,7 @@ from ghostfolio_boursedirect_sync import (
     paperless,
     sync,
 )
-from ghostfolio_boursedirect_sync.models import ActivityIndex
+from ghostfolio_boursedirect_sync.models import Activity, ActivityIndex
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pdf_buy.txt"
 
@@ -151,9 +151,10 @@ def test_debug_preview_keeps_exact_decimal_and_original_source(settings, monkeyp
 
 def test_writes_remain_unavailable(settings, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "0")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [])
     monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected POST")))
     monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected GET")))
-    assert app.main() == 1
+    assert app.main() == 0
 
 
 @pytest.mark.parametrize("items,expected,reason", [
@@ -360,3 +361,97 @@ def test_paperless_filename_without_source_stops_before_pdf(settings, monkeypatc
     with pytest.raises(RuntimeError, match="^source_field_missing$"):
         paperless.document_ids(settings)
     assert len(get.call_args_list) == 2
+
+
+def test_real_import_posts_whitelisted_activity_and_confirms_exact_readback(settings, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "0")
+    settings = config.load()
+    activity = Activity("target", "EXAMPLE.PA", "2025-02-03T00:00:00+00:00", Decimal("4"), Decimal("25.50"), Decimal("1"), "BD#v3#TESTACCOUNT:BUY:proof")
+    row = {"id": "created", "accountId": "target", "comment": activity.comment, "type": "BUY", "date": activity.date,
+           "quantity": 4, "unitPrice": 25.5, "fee": 1, "currency": "EUR",
+           "assetProfile": {"symbol": "EXAMPLE.PA", "dataSource": "YAHOO", "currency": "EUR"}}
+    response = Mock(status_code=201)
+    read = Mock(status_code=200, content=json.dumps({"count": 1, "activities": [row]}).encode())
+    monkeypatch.setattr(requests, "post", Mock(return_value=response))
+    monkeypatch.setattr(requests, "get", Mock(return_value=read))
+    monkeypatch.setattr(ghostfolio.time, "sleep", lambda _: None)
+    ghostfolio.import_activities(settings, "offline", [activity])
+    sent = json.loads(requests.post.call_args.kwargs["data"])["activities"]
+    assert sent[0]["comment"] == activity.comment
+    assert sent[0]["quantity"] == 4 and sent[0]["unitPrice"] == 25.50
+    assert requests.post.call_args.kwargs["headers"]["Content-Type"] == "application/json"
+    assert requests.get.call_args.args == ("http://ghostfolio.test/api/v1/activities",)
+
+
+def test_real_import_refuses_missing_readback_without_resend(settings, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "0")
+    settings = config.load()
+    activity = Activity("target", "EXAMPLE.PA", "2025-02-03T00:00:00+00:00", Decimal("4"), Decimal("25.50"), Decimal("1"), "BD#v3#TESTACCOUNT:BUY:proof")
+    monkeypatch.setattr(requests, "post", Mock(return_value=Mock(status_code=201)))
+    monkeypatch.setattr(requests, "get", Mock(return_value=Mock(status_code=200, content=b'{"count":0,"activities":[]}')))
+    monkeypatch.setattr(ghostfolio.time, "sleep", lambda _: None)
+    with pytest.raises(RuntimeError, match="^import_unconfirmed$"):
+        ghostfolio.import_activities(settings, "offline", [activity])
+    assert requests.post.call_count == 1
+
+
+@pytest.mark.parametrize("outcome", ["timeout", "http_error", "duplicates", "changed", "failed_read"])
+def test_import_confirmation_handles_uncertain_results(settings, monkeypatch, outcome):
+    activity = Activity("target", "EXAMPLE.PA", "2025-02-03T00:00:00+00:00", Decimal("4"), Decimal("25.50"), Decimal("1"), "BD#v3#TESTACCOUNT:BUY:proof")
+    row = {"id": "created", "accountId": "target", "comment": activity.comment, "type": "BUY", "date": activity.date,
+           "quantity": 4, "unitPrice": 25.5, "fee": 1, "currency": "EUR",
+           "assetProfile": {"symbol": "EXAMPLE.PA", "dataSource": "YAHOO", "currency": "EUR"}}
+    rows = [row, {**row, "id": "copy"}] if outcome == "duplicates" else [row]
+    if outcome == "changed":
+        row["quantity"] = 5
+    post = Mock(side_effect=requests.Timeout()) if outcome == "timeout" else Mock(return_value=Mock(status_code=500 if outcome == "http_error" else 201))
+    get = Mock(side_effect=requests.ConnectionError()) if outcome == "failed_read" else Mock(return_value=Mock(status_code=200, content=json.dumps({"count": len(rows), "activities": rows}).encode()))
+    sleep = Mock()
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(requests, "get", get)
+    monkeypatch.setattr(ghostfolio.time, "sleep", sleep)
+    if outcome in ("timeout", "http_error"):
+        ghostfolio.import_activities(settings, "offline", [activity])
+        sleep.assert_called_once_with(5)
+    else:
+        with pytest.raises(RuntimeError, match="^import_unconfirmed$"):
+            ghostfolio.import_activities(settings, "offline", [activity])
+    post.assert_called_once()
+    get.assert_called_once()
+
+
+@pytest.mark.parametrize("mode", ["success", "mixed", "unreadable", "unconfirmed"])
+def test_real_notice_import_summary_and_exit(settings, monkeypatch, caplog, mode):
+    monkeypatch.setenv("DRY_RUN", "0")
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [1, 2] if mode in ("mixed", "unreadable") else [1])
+    monkeypatch.setattr(paperless, "original_pdf", lambda _, doc: str(doc).encode())
+    monkeypatch.setattr(notices, "extract_text", lambda pdf: (
+        "invalid notice" if mode == "unreadable" and pdf == b"2" else
+        FIXTURE.read_text().replace("FR0000120271", "FR0000000002") if pdf == b"2" else FIXTURE.read_text()))
+    monkeypatch.setattr(ghostfolio, "lookup_symbol", lambda *_: None)
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    persisted = []
+
+    def post(*args, **kwargs):
+        for activity in json.loads(kwargs["data"])["activities"]:
+            persisted.append({**activity, "id": "created", "assetProfile": {
+                "symbol": activity["symbol"], "dataSource": "YAHOO", "currency": "EUR"}})
+        return Mock(status_code=201)
+
+    def get(*args, **kwargs):
+        rows = [] if mode == "unconfirmed" else persisted
+        return Mock(status_code=200, content=json.dumps({"count": len(rows), "activities": rows}).encode())
+
+    monkeypatch.setattr(requests, "post", Mock(side_effect=post))
+    monkeypatch.setattr(requests, "get", Mock(side_effect=get))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == (0 if mode == "success" else 1)
+    assert "[DRY RUN]" not in caplog.text
+    assert "created=0" in caplog.text if mode in ("unconfirmed", "unreadable") else "created=1" in caplog.text
+    assert sum("Summary:" in record.message for record in caplog.records) == 1
+    if mode == "unreadable":
+        requests.post.assert_not_called()
+    else:
+        requests.post.assert_called_once()
