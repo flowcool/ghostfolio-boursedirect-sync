@@ -1,6 +1,6 @@
 """Read target accounts. Adapted from pinned ibkr ghostfolio.py:116,189.
 
-Only token exchange uses POST. No financial write exists in this task.
+Token exchange and the guarded activity import use POST.
 """
 
 import json
@@ -259,17 +259,22 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
             "currency": activity.currency,
             "dataSource": activity.data_source,
             "date": activity.date,
-            "fee": str(activity.fee),
-            "quantity": str(activity.quantity),
+            "fee": activity.fee,
+            "quantity": activity.quantity,
             "symbol": activity.symbol,
             "type": activity.type,
-            "unitPrice": str(activity.unit_price),
+            "unitPrice": activity.unit_price,
         })
+    # Decimal values remain JSON numbers. The marker replacement avoids binary
+    # float conversion while keeping Ghostfolio DTO validation numeric.
+    encoded = json.dumps(payload_rows, default=lambda value: f"__DECIMAL__{value}__", separators=(",", ":"))
+    encoded = re.sub(r'"__DECIMAL__(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
     try:
         response = requests.post(
             f"{settings.ghost_host}/api/v1/import",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"activities": payload_rows}, timeout=(10, 120), allow_redirects=False,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            data='{"activities":' + encoded + "}",
+            timeout=(10, 120), allow_redirects=False,
         )
     except requests.RequestException:
         raise RuntimeError("import_unconfirmed") from None

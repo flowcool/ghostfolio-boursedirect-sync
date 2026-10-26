@@ -376,9 +376,10 @@ def test_real_import_posts_whitelisted_activity_and_confirms_exact_readback(sett
     monkeypatch.setattr(requests, "get", Mock(return_value=read))
     monkeypatch.setattr(ghostfolio.time, "sleep", lambda _: None)
     ghostfolio.import_activities(settings, "offline", [activity])
-    sent = requests.post.call_args.kwargs["json"]["activities"]
+    sent = json.loads(requests.post.call_args.kwargs["data"])["activities"]
     assert sent[0]["comment"] == activity.comment
-    assert sent[0]["quantity"] == "4" and sent[0]["unitPrice"] == "25.50"
+    assert sent[0]["quantity"] == 4 and sent[0]["unitPrice"] == 25.50
+    assert requests.post.call_args.kwargs["headers"]["Content-Type"] == "application/json"
     assert requests.get.call_args.args == ("http://ghostfolio.test/api/v1/activities",)
 
 
