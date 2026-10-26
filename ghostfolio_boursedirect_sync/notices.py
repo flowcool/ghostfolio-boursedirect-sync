@@ -166,6 +166,8 @@ def parse_text(text: str) -> Notice:
             # BD adaptation of IBKR app.py:203-208: reject the affected security.
             # Unknown operation labels never cross the logging boundary.
             row = lines[index].strip()[10:].strip()
+            if re.match(r"TAXE TRANSACT FINANCIERES\b", row, re.I):
+                raise RuntimeError("notice_unreadable")
             isin = re.search(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", row)
             operation = row[:isin.start()].strip() if isin else re.split(r"\s{2,}", row)[0]
             if not operation or operation in {

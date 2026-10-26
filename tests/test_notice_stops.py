@@ -265,3 +265,20 @@ def test_usd_dividend_is_not_an_exact_match_for_a_eur_coupon():
     selected = sync.select_account_activities([coupon], ledger)
     assert selected.activities == ()
     assert selected.duplicates == 0 and selected.errors == ("possible_duplicate",)
+
+
+@pytest.mark.parametrize("tax_row", [
+    "03/02/2025 TAXE TRANSACT FINANCIERES 0,31",
+    "03/02/2025 taxe transact financieres 0,31",
+    "03/02/2025 TAXE TRANSACT FINANCIERES  invalid",
+])
+def test_malformed_known_ttf_blocks_all_writes(tax_row, monkeypatch, caplog):
+    # Explicit malformed-row alteration of the real anonymized BUY text.
+    # This is a parser regression, not evidence for a real TTF notice.
+    text = (FIXTURES / "pdf_buy.txt").read_text() + "\n" + tax_row + "\n"
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(text)
+    code, resolved, written = run_notices(monkeypatch, {1: text}, dry_run=False)
+    assert code == 1 and resolved == written == []
+    assert "notice_unreadable document=1" in caplog.text
+    assert "unknown_operation" not in caplog.text
