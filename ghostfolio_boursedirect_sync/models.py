@@ -79,6 +79,7 @@ class ExistingActivity:
     isin: str | None
     active: bool
     tags: tuple[str, ...] = ()
+    comment_is_null: bool = False
 
 
 @dataclass(frozen=True)

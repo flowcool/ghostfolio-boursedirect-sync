@@ -7,6 +7,7 @@ FAILURE_CODES = frozenset({
     "owned_activity_conflict", "possible_duplicate", "invalid_identity",
     "sell_exceeds_holding", "share_count_change", "unknown_operation",
     "future_activity", "import_unconfirmed", "ghostfolio_auth_failed",
+    "ttf_attribution_failed",
     "ghostfolio_unreachable", "unhandled_error",
 })
 

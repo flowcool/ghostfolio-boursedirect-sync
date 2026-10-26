@@ -108,6 +108,7 @@ def index_existing_activities(data: object, *, now: datetime | None = None) -> A
     for raw in raw_rows:
         if not isinstance(raw, dict):
             raise RuntimeError("activities_unavailable")
+        comment_is_null = raw.get("comment") is None
         comment = raw.get("comment")
         if comment is None:
             comment = ""
@@ -151,6 +152,7 @@ def index_existing_activities(data: object, *, now: datetime | None = None) -> A
             currency, symbol, source, comment, isin,
             eligible and day <= instant and source == "YAHOO",
             tuple(tag["id"] for tag in raw_tags),
+            comment_is_null,
         )
         rows.append(row)
         if owned:
@@ -330,7 +332,8 @@ def correct_activity_fee(
     payload: dict[str, object] = {
         "id": existing.id, "accountId": existing.account_id,
         "currency": existing.currency, "date": existing.date.isoformat(),
-        "type": existing.type, "comment": existing.comment,
+        "type": existing.type,
+        "comment": None if existing.comment_is_null else existing.comment,
         "symbol": existing.symbol, "dataSource": existing.data_source,
         "quantity": existing.quantity, "unitPrice": existing.unit_price,
         "fee": new_fee, "tags": list(existing.tags),
@@ -358,7 +361,7 @@ def correct_activity_fee(
     matches = [row for row in confirmed.rows
                if row.id == existing.id and row.comment == existing.comment]
     comment_matches = [row for row in confirmed.rows if row.comment == existing.comment]
-    if len(matches) != 1 or len(comment_matches) != 1:
+    if len(matches) != 1 or (existing.comment and len(comment_matches) != 1):
         raise RuntimeError("import_unconfirmed")
     row = matches[0]
     if (row.account_id != existing.account_id or row.comment != existing.comment
