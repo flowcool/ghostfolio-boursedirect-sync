@@ -12,7 +12,8 @@ chmod 0750 config
 chmod 0640 config/mappings.yaml
 ```
 
-Other host users cannot read the file. The container mount remains read only.
+Only the owner and members of group `10001` can read the file. The container
+mount remains read only.
 
 The file must contain `symbol_mapping`. Use an ISIN as each key and a verified
 EUR Yahoo ticker as its value. See [mappings.example.yaml](mappings.example.yaml).
