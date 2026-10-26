@@ -5,3 +5,5 @@
 !pyproject.toml
 !ghostfolio_boursedirect_sync/
 !ghostfolio_boursedirect_sync/*.py
+!boursedirect_to_ghostfolio.py
+!requirements-daily.txt

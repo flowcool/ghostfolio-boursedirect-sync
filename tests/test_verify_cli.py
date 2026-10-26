@@ -288,13 +288,20 @@ def test_decimal_rendering_boundary_and_exact_difference(monkeypatch):
     assert output().read_bytes() == before
 
 
-def test_unrepresentable_scientific_exponent_has_safe_cli_error(capsys, caplog):
+def test_extreme_scientific_exponent_has_safe_cli_error(capsys, caplog):
     setup()
+    journal_before = Path('inputs/journal.yaml').read_bytes()
     p = Path('inputs/snapshot.json')
     raw = p.read_text()
     first = json.loads(raw)['activities'][0]['fee']
     p.write_text(raw.replace('"fee": ' + str(first), '"fee": 1e9999999999999999999999999999', 1))
     assert bd.main(['verify', '--config', 'inputs/verify.yaml', '--input-root', 'inputs', '--max-bytes', '100000']) == 1
     assert capsys.readouterr().out == ''
-    assert 'INVALID_REMOTE_ACTIVITY_JSON' in caplog.text
+    # C Decimal rejects this exponent at parsing; pure Python Decimal can
+    # represent it, then the bounded renderer rejects its size. Both stop safely.
+    assert any(code in caplog.text for code in (
+        'INVALID_REMOTE_ACTIVITY_JSON', 'VERIFICATION_DECIMAL_LIMIT_EXCEEDED',
+    ))
     assert '9999999999' not in caplog.text
+    assert Path('inputs/journal.yaml').read_bytes() == journal_before
+    assert not output().exists()

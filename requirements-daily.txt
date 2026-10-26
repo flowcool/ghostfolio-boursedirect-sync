@@ -1,0 +1,5 @@
+# Retained legacy preview only. The native package does not use HTML parsing.
+-r requirements.txt
+beautifulsoup4==4.15.0
+soupsieve==2.10
+typing_extensions==4.16.0

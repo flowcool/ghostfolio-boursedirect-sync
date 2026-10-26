@@ -3,7 +3,9 @@ schema: spec-driven
 context: |
   Community Docker connector: Bourse Direct (PEA, PEA-PME) activities -> Ghostfolio.
   Docker-first, every setting through ENV, unattended run with `docker compose up -d`.
-  Python 3.14, functional style, typed application package ghostfolio_boursedirect_sync.
+  Follow the latest qualified stable Python, Node and base-image releases.
+  Keep exact pins, renewed image digests, compatibility tests, security scans and review.
+  Functional style, typed application package ghostfolio_boursedirect_sync.
   Strict mypy and Ruff; frozen dataclasses and typed dictionaries describe data only.
   Money and position decisions use Decimal. Application Python totals at most 2500 lines.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:

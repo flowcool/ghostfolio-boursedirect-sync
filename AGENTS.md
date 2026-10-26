@@ -113,10 +113,14 @@ voice, no internal jargon.
 
 ## Code
 
-The target is the installed Python 3.14 package `ghostfolio_boursedirect_sync`.
+The target is the installed Python package `ghostfolio_boursedirect_sync`.
 Docker runs `python -m ghostfolio_boursedirect_sync`. Use typed module-level
 functions. Frozen dataclasses and typed dictionaries describe data only.
 Application code passes strict mypy and Ruff; tests keep relaxed typing.
+Follow the latest stable Python, Node and base-image releases without version
+ceilings. Renovate proposes updates. Keep image digests and Action SHAs for
+reproducible checks. Integrate updates after compatibility tests, security scans
+and the required review. Keep Python CI and the native image on the same release.
 Keep `Decimal` for money and position decisions when adapting ibkr code.
 See
 [python conventions](.claude/rules/python-conventions.md),

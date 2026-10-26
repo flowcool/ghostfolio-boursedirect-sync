@@ -16,6 +16,15 @@ synthetic data and resources owned by the invocation. CI tests use synthetic
 inputs and isolated state; they must never use broker credentials or production
 Ghostfolio.
 
+The offline job uses GitHub's Python build. The native image smoke uses the
+shipped Docker build and requires C `_decimal`. Different Decimal backends are
+accepted when both builds pass qualification. Run the full offline suite with
+both builds when qualifying a Python release. The extreme-exponent test must
+stop safely, preserve the journal and produce no output with either backend.
+CI repeats the full suite with the GitHub build. Its image smoke checks exact
+Decimal values from a real anonymized BUY with the shipped C backend. This
+smoke check does not replace the full suite during runtime qualification.
+
 ## Dependency updates
 
 GitHub's dependency graph and Dependabot alerts stay enabled. Renovate is the
@@ -28,12 +37,14 @@ releases wait 14 days; GitHub Actions wait 3 days.
 Container base image updates wait 3 days. Minor, patch and digest updates are
 grouped by ecosystem; major updates stay separate and require Dependency
 Dashboard approval. Exact Python/npm versions, Action commit SHAs and existing
-image digests stay pinned. Python stays on 3.13, the connector image on Node 22
-and CI on Node 20. Docker tag
-suffixes retain the base distribution. Compose references are local builds or
-separately qualified lab pins, so the docker-compose manager is excluded; the
-qualification-only vault Dockerfile is also excluded. Browser and Bitwarden
-downloads remain checksum-qualified manually.
+image digests stay pinned for reproducible checks. Follow the latest stable
+Python, Node and base-image releases without version ceilings. Renovate proposes
+updates; tests, security scans and required review gate integration. Python CI
+and the native image use the same release. Node follows stable Current releases
+as well as LTS releases. Docker tag suffixes retain the selected image variant.
+Compose references are local builds or separately qualified lab pins, so the
+docker-compose manager is excluded; the qualification-only vault Dockerfile is
+also excluded. Browser and Bitwarden downloads remain checksum-qualified manually.
 
 Dependabot security updates remain enabled in repository settings. Renovate's
 `vulnerabilityAlerts` and `osvVulnerabilityAlerts` are disabled, so Dependabot

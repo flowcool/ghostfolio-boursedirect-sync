@@ -10,7 +10,7 @@ Read its pinned source and coverage before each task. Preserve applicable
 protections and tests, and record reasons for BD adaptations before coding.
 Review later source updates separately. Do not mark a coverage row complete
 until its BD scenario passes.
-Use the installed Python 3.14 package `ghostfolio_boursedirect_sync`, with typed
+Use the installed Python package `ghostfolio_boursedirect_sync`, with typed
 functions and data records. Pass strict mypy and Ruff as well as each task's
 offline tests. Preserve Decimal and all BD spec rules when adapting source code.
 These checks accompany each code task; they are not separate tooling tasks.
@@ -38,7 +38,7 @@ publication. Keep the existing real-PDF and first-write authorization gates.
   no `BW_` variable. Verify `.venv/bin/python -m ruff check ghostfolio_boursedirect_sync`,
   `.venv/bin/python -m mypy --strict ghostfolio_boursedirect_sync` and
   `.venv/bin/python -m pytest -q`.
-  Adapt CI to install and check the new Python 3.14 package and image.
+  Adapt CI to install and check the new Python package and image.
   Update or retire only the legacy checks and jobs that require the removed
   browser or vault runtime. Keep security coverage for the new runtime.
   Keep the remaining legacy tests runnable until task 1.3. Install their

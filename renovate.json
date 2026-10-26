@@ -93,34 +93,16 @@
       "dependencyDashboardApproval": true
     },
     {
-      "matchPackageNames": [
-        "python"
-      ],
-      "allowedVersions": ">=3.13 <3.14"
+      "description": "Review Python image and CI updates together.",
+      "matchManagers": ["dockerfile", "github-actions"],
+      "matchPackageNames": ["python", "actions/python-versions"],
+      "groupName": "Python runtime"
     },
     {
-      "description": "Keep the approved Python 3.14 runtime and CI series.",
-      "matchPackageNames": ["python"],
-      "matchFileNames": ["Dockerfile", ".github/workflows/offline-tests.yml", ".github/workflows/release-image.yml"],
-      "allowedVersions": "/^3\\.14(?:\\.|-|$)/"
-    },
-    {
-      "matchManagers": [
-        "dockerfile"
-      ],
-      "matchPackageNames": [
-        "node"
-      ],
-      "allowedVersions": ">=22 <23"
-    },
-    {
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchPackageNames": [
-        "node"
-      ],
-      "allowedVersions": ">=20 <21"
+      "description": "Follow stable Node releases, including the Current series.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["actions/node-versions"],
+      "versioning": "npm"
     },
     {
       "matchManagers": [

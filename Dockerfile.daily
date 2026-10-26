@@ -1,11 +1,11 @@
-FROM python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+FROM python:3.15.1-slim@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/work
 WORKDIR /opt/app
-COPY requirements.txt ./
-RUN python -m pip install --no-cache-dir -r requirements.txt \
+COPY requirements.txt requirements-daily.txt ./
+RUN python -m pip install --no-cache-dir -r requirements-daily.txt \
     && python -m pip uninstall -y pip
 COPY boursedirect_to_ghostfolio.py ./
-RUN mkdir -m 700 /work && chown 1000:1000 /work
+RUN mkdir -p /work && chmod 0700 /work && chown 1000:1000 /work
 WORKDIR /work
 USER 1000:1000
 ENTRYPOINT ["python", "/opt/app/boursedirect_to_ghostfolio.py", "daily-preview"]

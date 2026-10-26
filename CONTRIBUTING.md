@@ -10,9 +10,11 @@ boundaries.
 
 ## Development setup
 
-Use a Linux AMD64 host with Python 3.13, Node.js 20, Docker Engine and Docker
-Compose v2. The public synthetic checks need Python and Node.js dependencies;
-they do not require Docker, broker credentials, a vault, or a Ghostfolio server.
+Use a Linux AMD64 host with Docker Engine and Docker Compose v2. Use the Python
+and Node.js releases selected in `.github/workflows/offline-tests.yml`. Follow
+qualified stable releases without version ceilings. The public synthetic checks
+need Python and Node.js dependencies. They do not require Docker, broker
+credentials, a vault, or a Ghostfolio server.
 The container image build itself requires Docker and network access to fetch its
 pinned base image and dependencies.
 
