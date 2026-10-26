@@ -4,6 +4,7 @@ API envelopes follow pinned IBKR ghostfolio.py:208,259. All HTTP is mocked.
 """
 
 import json
+import re
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -298,6 +299,39 @@ def test_row_namespace_ignores_rendering_and_retains_multiplicity():
     reformatted = notices.parse_text(FIXTURE.read_text().replace("25.50", "25.500"))
     assert sync.notice_namespace(notice) == sync.notice_namespace(reformatted)
     assert sync.notice_namespace(notice) != sync.notice_namespace(replace(notice, trades=notice.trades * 2))
+
+
+def test_empty_execution_venue_preserves_source_identity():
+    # Retained notices have a labelled execution time and an empty Lieu field.
+    text = FIXTURE.read_text()
+    altered = text.replace("Lieu: DEUTSCHER KASSENVEREIN GRUPPE DEUTSC", "Lieu:")
+    notice = notices.parse_text(altered)
+    value = sync.activity(notice.trades[0], {notice.trades[0].isin: "EXAMPLE.PA"},
+                          "target", notice.account_ref, sync.notice_namespace(notice), 0)
+    assert value == proposed()
+
+
+def test_page_counter_preserves_notice_rows_and_multiplicity():
+    text = FIXTURE.read_text()
+    row = text[text.index("   03/02/2025"):]
+    plain = notices.parse_text(text + "\n" + row)
+    paged = notices.parse_text("1/2\n" + text + "\f2/2\n" + row + "\f")
+    assert paged == plain
+    assert sync.notice_namespace(paged) == sync.notice_namespace(plain)
+    assert len(paged.trades) == 2
+
+
+def test_page_counter_shape_inside_a_row_is_not_ignored():
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(FIXTURE.read_text() + "\n2/2\n")
+
+
+def test_coupon_without_isin_is_not_identified_by_security_name():
+    text = (FIXTURE.parent / "pdf_coupon.txt").read_text()
+    altered = re.sub(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", "", text)
+    assert altered != text
+    with pytest.raises(RuntimeError, match="^notice_unreadable$"):
+        notices.parse_text(altered)
 
 
 def test_identical_real_notice_rows_keep_two_identities_and_deduplicate_copies():

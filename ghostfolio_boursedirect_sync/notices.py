@@ -67,7 +67,7 @@ def checked_fields(block: str, required: set[str], optional: set[str] | None = N
         if not line.strip() or FOOTER.fullmatch(line):
             continue
         if re.fullmatch(
-            r"\s*Heure Execution:\s*\d{2}:\d{2}:\d{2}\s+Lieu:\s*.+", line
+            r"\s*Heure Execution:\s*\d{2}:\d{2}:\d{2}\s+Lieu:.*", line
         ):
             continue
         if re.fullmatch(rf"\s*(?:{FIELD}\s*)+", line) is None:
@@ -121,6 +121,10 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
 
 def parse_text(text: str) -> Notice:
     """Read the labelled identifier; EUR and account type are separate metadata."""
+    # Observed pdftotext pages start with n/N. Remove only that page furniture,
+    # before row blocks are formed; an unknown line inside a row still fails.
+    text = "\n".join(re.sub(r"\A[ \t\r\n]*[0-9]+/[0-9]+[ \t]*(?:\r?\n|\Z)", "", page)
+                     for page in text.split("\f"))
     account_lines = [line for line in text.splitlines() if re.search(r"\bCOMPTE\b", line, re.I)]
     labels = re.findall(r"\bCOMPTE\s+N[°º]", text, re.I)
     if len(labels) != 1 or len(account_lines) != 1:
