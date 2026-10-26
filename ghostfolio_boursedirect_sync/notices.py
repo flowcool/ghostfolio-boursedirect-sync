@@ -4,7 +4,6 @@ The source-specific PDF extractor is the approved pdftotext -layout mechanism.
 No holder data or raw text crosses the logging boundary.
 """
 
-import logging
 import re
 import subprocess
 from datetime import datetime
@@ -12,8 +11,6 @@ from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
 from ghostfolio_boursedirect_sync.models import Notice, Trade
-
-log = logging.getLogger(__name__)
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
@@ -116,8 +113,6 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
             or (gross + fee + vat if kind == "BUY" else gross - fee - vat) != net
         ):
             raise RuntimeError("amount_check_failed")
-    if inferred_brokerage:
-        log.info("brokerage_zero_inferred")
     return fields
 
 
@@ -138,6 +133,7 @@ def parse_text(text: str) -> Notice:
         raise RuntimeError("notice_unreadable")
     trades = []
     custody_fees = 0
+    inferred_brokerages = 0
     for rank, index in enumerate(starts):
         end = starts[rank + 1] if rank + 1 < len(starts) else len(lines)
         block = "\n".join(lines[index + 1:end])
@@ -157,6 +153,7 @@ def parse_text(text: str) -> Notice:
         assert header is not None
         kind: Literal["BUY", "SELL"] = "BUY" if header[2] == "ACHAT" else "SELL"
         fields = checked_amounts(kind, block, decimal(header[4]), "EUR")
+        inferred_brokerages += int(re.search(r"\bCOURTAGE\s*:", block) is None)
         trades.append(Trade(day, header[3], fields["QUANTITE"].copy_abs(), fields["COURS"],
                             fields["COURTAGE"], kind))
-    return Notice(account_ref, tuple(trades), custody_fees)
+    return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages)

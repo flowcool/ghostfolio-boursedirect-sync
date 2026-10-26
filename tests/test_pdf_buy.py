@@ -481,3 +481,24 @@ def test_real_notice_import_summary_and_exit(settings, monkeypatch, caplog, mode
         requests.post.assert_not_called()
     else:
         requests.post.assert_called_once()
+
+
+@pytest.mark.parametrize("other_account", [False, True])
+def test_zero_brokerage_information_follows_account_filter(settings, monkeypatch, caplog, other_account):
+    text = (FIXTURE.parent / "pdf_buy_no_brokerage.txt").read_text()
+    if other_account:
+        text = text.replace("TEST ACCOUNT", "OTHER ACCOUNT")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [123])
+    monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
+    monkeypatch.setattr(notices, "extract_text", lambda _: text)
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000000002": "EXAMPLE.PA"})
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected HTTP")))
+    monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected write")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 0
+    messages = [r.message for r in caplog.records if "brokerage_zero_inferred" in r.message]
+    assert messages == ([] if other_account else ["brokerage_zero_inferred document=123 rows=1"])
+    requests.post.assert_not_called()

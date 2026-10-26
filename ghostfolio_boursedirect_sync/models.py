@@ -35,6 +35,7 @@ class Notice:
     account_ref: str
     trades: tuple[Trade, ...]
     custody_fees: int = 0
+    inferred_brokerages: int = 0
 
 
 @dataclass(frozen=True)

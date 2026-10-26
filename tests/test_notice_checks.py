@@ -129,16 +129,16 @@ def test_half_even_gross_is_rejected_even_when_cash_matches():
         notices.parse_text(text)
 
 
-def test_real_omitted_brokerage_reports_only_a_fixed_information_code(caplog):
+def test_real_omitted_brokerage_retains_an_information_count(caplog):
     text = (FIXTURES / "pdf_buy_no_brokerage.txt").read_text()
     with caplog.at_level(logging.INFO):
-        trade, = notices.parse_text(text).trades
+        notice = notices.parse_text(text)
+        trade, = notice.trades
     assert (trade.quantity, trade.unit_price, trade.fee) == (
         Decimal(3), Decimal("12.34"), Decimal(0)
     )
-    assert [(r.levelname, r.message) for r in caplog.records] == [
-        ("INFO", "brokerage_zero_inferred")
-    ]
+    assert notice.inferred_brokerages == 1
+    assert not caplog.records
 
 
 @pytest.mark.parametrize("old,new", [
