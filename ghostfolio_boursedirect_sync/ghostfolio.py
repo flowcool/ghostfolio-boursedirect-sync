@@ -267,7 +267,7 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
         })
     # Decimal values remain JSON numbers. The marker replacement avoids binary
     # float conversion while keeping Ghostfolio DTO validation numeric.
-    encoded = json.dumps(payload_rows, default=lambda value: f"__DECIMAL__{value}__", separators=(",", ":"))
+    encoded = json.dumps(payload_rows, default=lambda value: f"__DECIMAL__{value:f}__", separators=(",", ":"))
     encoded = re.sub(r'"__DECIMAL__(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
     uncertain = False
     try:
@@ -279,8 +279,8 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
         )
     except requests.RequestException:
         uncertain = True
-    if not uncertain and not 200 <= response.status_code < 300:
-        raise RuntimeError(f"import_failed HTTP {response.status_code}")
+    if not uncertain:
+        uncertain = not 200 <= response.status_code < 300
     # Only an uncertain POST gets a delayed confirmation read. Never resend.
     if uncertain:
         time.sleep(5)
