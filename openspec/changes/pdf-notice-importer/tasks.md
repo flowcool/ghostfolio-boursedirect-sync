@@ -143,17 +143,22 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 ## 6. Import, notification and schedule
 
 - [ ] 6.1 Add the import with `DRY_RUN=0`, the strict readback
-  (`import_unconfirmed`), the summary line and the exit codes. This is the
-  writer qualification in the shared labs. The complete join owns the first
-  production write and its separately validated operation plan. Qualify the
-  image in the existing infra empty/golden lab. Infra owns the BD launch/evidence
+  (`import_unconfirmed`), the summary line and the exit codes. This task
+  qualifies writes in the shared labs. The first production write needs a
+  separate operator-approved `Operation plan:` under
+  [AGENTS.md](../../../AGENTS.md), Method, Operation beads. Qualify the image
+  in the existing infra empty/golden lab. Infra owns the BD launch/evidence
   adaptation; retain its target checks, snapshots, credential isolation and
   stop verification. Prove first creation, duplicate rerun, mixed legacy rows,
   chronological sells, exact readback and uncertain-result stop. Add charged
   TTF attribution within source account/notice/date/ISIN; ambiguity suspends
   affected BUYs with `ttf_attribution_failed`, without blocking independent rows.
   Verify "Attributed TTF" from retained notice rows. For "Ambiguous TTF",
-  use the unobserved-error exception above when no original exists.
+  apply the rule above for an error case absent from the complete available
+  archive. Commit an offline application regression for a derived two-BUY
+  same-day ambiguous-TTF case. Assert
+  `ttf_attribution_failed`, exit 1 and zero POST/PUT calls with network forbidden.
+  Label its data as derived; do not claim a real financial observation.
   Implement the approved fee-only correction for exactly one matching BUY
   whose fee is brokerage alone. Preserve all other fields and logical identity.
   Verify "Existing brokerage-only BUY", already-correct no-op, other-value

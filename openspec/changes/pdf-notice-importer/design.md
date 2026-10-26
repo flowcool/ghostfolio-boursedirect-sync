@@ -2,9 +2,9 @@
 
 ## Source and coverage
 
-Continue v1. Adopt complete applicable IBKR v3.0.0 core at
+Adopt all applicable IBKR v3.0.0 core at
 `403b4ccf13dcce076c2dc4c08633905c96c1a898`; review later updates separately.
-References below use `ghostfolio_ibkr_sync/`.
+Paths: `ghostfolio_ibkr_sync/`.
 
 | Mechanism | Source | Tasks |
 | --- | --- | --- |
@@ -22,9 +22,9 @@ References below use `ghostfolio_ibkr_sync/`.
 Use Paperless originals/search (`docs/api.md:121` at `2b00cf6`),
 `pdftotext -layout` and observed notice labels instead of Flex.
 Check source accounts before target selection. Require one active target.
-Use typed functions/data records, strict mypy/Ruff and at most 2500 application
+Use typed functions/data records, strict mypy/Ruff and <=2500 application
 lines. No shared library/projection. Keep Decimal, EUR and UTC row dates.
-Align CI/runtime; pin qualified stable digests.
+Align CI/runtime. Follow latest stable runtimes; pin digests and verify compatibility/security.
 
 BD v3 keys retain normalized source rows and multiplicity, excluding metadata.
 Preserve current identities during fee correction; never derive identity from
@@ -35,7 +35,8 @@ through independent minimum-cost groups; stable dates/comments/IDs break ties.
 Remove source copies and invalid/future/occupied rows before assignment.
 Use chronological selection, SELL first on ties, confirmed holdings only.
 
-Apply the spec's HALF_UP, omitted-brokerage and TTF rules. The fee-only update is the approved BD exception to additive import.
+Apply the spec's HALF_UP, omitted-brokerage and TTF rules. The fee-only update
+is the approved BD exception to additive import, not a generic repair path.
 Verify the exact version's update endpoint/payload.
 After every write, require complete exact readback; after uncertainty wait five
 seconds before GET. Never resend. Failed confirmation stops writes.
@@ -51,4 +52,4 @@ Qualify one image in empty/golden scenarios, including correction/idempotence.
 Paperless integration remains separate. Publish only on GO.
 Absent archive error cases need no new original. Regressions verify logs and
 protection; they do not prove real financial observations.
-Revert commits for rollback; retain accepted financial state.
+Revert commits; retain accepted financial state.

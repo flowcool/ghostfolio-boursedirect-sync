@@ -53,7 +53,8 @@ work-tracker IDs.
   and report.
 - **Done = the scenario replayed for real.** Put the command and its output in
   the closing note. Green unit tests alone are not done. Apply the
-  unobserved-error exception below. Keep review evidence in the owning bead.
+  rule below for an error case absent from the complete available archive.
+  Keep review evidence in the owning bead.
   A decision bead never delivers code.
 - **Tests:** offline pytest, one real anonymized notice for each operation type
   and each observed error code. After the complete available archive is checked,
