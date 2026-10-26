@@ -28,6 +28,14 @@ class Trade:
     unit_price: Decimal
     fee: Decimal
     type: Literal["BUY", "SELL", "DIVIDEND"] = "BUY"
+    brokerage: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class TTF:
+    date: date
+    isin: str
+    amount: Decimal
 
 
 @dataclass(frozen=True)
@@ -36,6 +44,7 @@ class Notice:
     trades: tuple[Trade, ...]
     custody_fees: int = 0
     inferred_brokerages: int = 0
+    ttf_rows: tuple[TTF, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,7 @@ class Activity:
     currency: str = "EUR"
     data_source: str = "YAHOO"
     isin: str | None = None
+    brokerage: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +78,8 @@ class ExistingActivity:
     comment: str
     isin: str | None
     active: bool
+    tags: tuple[str, ...] = ()
+    comment_is_null: bool = False
 
 
 @dataclass(frozen=True)
