@@ -6,7 +6,9 @@ Only token exchange uses POST. No financial write exists in this task.
 import json
 import logging
 import re
+import time
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal, localcontext
 from typing import cast
@@ -14,6 +16,7 @@ from typing import cast
 import requests
 
 from ghostfolio_boursedirect_sync.models import (
+    Activity,
     ActivityIndex,
     ExistingActivity,
     Settings,
@@ -237,6 +240,60 @@ def exchange_token(settings: Settings) -> str:
         raise RuntimeError("invalid_configuration Ghostfolio authentication")
     return token
 
+
+
+def import_activities(settings: Settings, token: str, activities: Sequence[Activity]) -> None:
+    """Create activities, then confirm every row with one complete read.
+
+    A successful POST is not proof of persistence. Any transport, HTTP or
+    readback uncertainty stops this run. The caller must not resend.
+    """
+    rows = list(activities)
+    if not rows:
+        return
+    payload_rows: list[dict[str, object]] = []
+    for activity in rows:
+        payload_rows.append({
+            "accountId": activity.account_id,
+            "comment": activity.comment,
+            "currency": activity.currency,
+            "dataSource": activity.data_source,
+            "date": activity.date,
+            "fee": str(activity.fee),
+            "quantity": str(activity.quantity),
+            "symbol": activity.symbol,
+            "type": activity.type,
+            "unitPrice": str(activity.unit_price),
+        })
+    try:
+        response = requests.post(
+            f"{settings.ghost_host}/api/v1/import",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"activities": payload_rows}, timeout=(10, 120), allow_redirects=False,
+        )
+    except requests.RequestException:
+        raise RuntimeError("import_unconfirmed") from None
+    if not 200 <= response.status_code < 300:
+        raise RuntimeError(f"import_failed HTTP {response.status_code}")
+    # Ghostfolio may commit asynchronously. One bounded confirmation read is
+    # allowed; a missing row remains uncertain and is never retried here.
+    time.sleep(5)
+    confirmed = read_activities(settings, token)
+    by_comment = {row.comment: row for row in confirmed.rows}
+    for activity in rows:
+        row = by_comment.get(activity.comment)
+        if row is None or not (
+            row.account_id == activity.account_id
+            and row.type == activity.type
+            and row.symbol == activity.symbol
+            and row.data_source == activity.data_source
+            and row.currency == activity.currency
+            and row.quantity == activity.quantity
+            and row.unit_price == activity.unit_price
+            and row.fee == activity.fee
+            and row.date == activity_instant(activity.date)
+        ):
+            raise RuntimeError("import_unconfirmed")
 
 def find_account(settings: Settings, token: str) -> str:
     try:

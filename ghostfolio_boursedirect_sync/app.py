@@ -22,9 +22,8 @@ def main() -> int:
             raise RuntimeError("invalid_configuration LOG_LEVEL")
         # HTTP-library debug logs can include credentials. Keep their level fixed.
         log.setLevel(level)
-        if not settings.dry_run:
-            raise RuntimeError("invalid_configuration financial import is not available")
-        log.info("DRY RUN")
+        if settings.dry_run:
+            log.info("DRY RUN")
         mapping = sync.load_mapping(settings.mapping_file)
         other_accounts = 0
         unreadable = 0
@@ -101,10 +100,18 @@ def main() -> int:
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
             )
-        log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s "
-                 "unreadable_notices=%s created=0",
-                 len(selected.activities), selected.duplicates, other_accounts, unreadable)
-        return int(bool(selected.errors) or unreadable > 0 or bool(unresolved))
+        if selected.errors or unreadable > 0 or unresolved:
+            log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
+                     len(selected.activities) if settings.dry_run else 0, selected.duplicates, other_accounts, unreadable)
+            return 1
+        if settings.dry_run:
+            log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
+                     len(selected.activities), selected.duplicates, other_accounts, unreadable)
+            return 0
+        ghostfolio.import_activities(settings, token, selected.activities)
+        log.info("Summary: simulated=0 duplicates=%s other_account_notices=%s unreadable_notices=%s created=%s",
+                 selected.duplicates, other_accounts, unreadable, len(selected.activities))
+        return 0
     except RuntimeError as exc:
         # Package RuntimeErrors contain fixed codes/field names only.
         log.error("%s document=%s", exc, document_id)

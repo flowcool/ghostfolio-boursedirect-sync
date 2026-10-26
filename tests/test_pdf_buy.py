@@ -24,7 +24,7 @@ from ghostfolio_boursedirect_sync import (
     paperless,
     sync,
 )
-from ghostfolio_boursedirect_sync.models import ActivityIndex
+from ghostfolio_boursedirect_sync.models import Activity, ActivityIndex
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pdf_buy.txt"
 
@@ -151,9 +151,10 @@ def test_debug_preview_keeps_exact_decimal_and_original_source(settings, monkeyp
 
 def test_writes_remain_unavailable(settings, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "0")
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [])
     monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected POST")))
     monkeypatch.setattr(requests, "get", Mock(side_effect=AssertionError("unexpected GET")))
-    assert app.main() == 1
+    assert app.main() == 0
 
 
 @pytest.mark.parametrize("items,expected,reason", [
@@ -360,3 +361,34 @@ def test_paperless_filename_without_source_stops_before_pdf(settings, monkeypatc
     with pytest.raises(RuntimeError, match="^source_field_missing$"):
         paperless.document_ids(settings)
     assert len(get.call_args_list) == 2
+
+
+def test_real_import_posts_whitelisted_activity_and_confirms_exact_readback(settings, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "0")
+    settings = config.load()
+    activity = Activity("target", "EXAMPLE.PA", "2025-02-03T00:00:00+00:00", Decimal("4"), Decimal("25.50"), Decimal("1"), "BD#v3#TESTACCOUNT:BUY:proof")
+    row = {"id": "created", "accountId": "target", "comment": activity.comment, "type": "BUY", "date": activity.date,
+           "quantity": 4, "unitPrice": 25.5, "fee": 1, "currency": "EUR",
+           "assetProfile": {"symbol": "EXAMPLE.PA", "dataSource": "YAHOO", "currency": "EUR"}}
+    response = Mock(status_code=201)
+    read = Mock(status_code=200, content=json.dumps({"count": 1, "activities": [row]}).encode())
+    monkeypatch.setattr(requests, "post", Mock(return_value=response))
+    monkeypatch.setattr(requests, "get", Mock(return_value=read))
+    monkeypatch.setattr(ghostfolio.time, "sleep", lambda _: None)
+    ghostfolio.import_activities(settings, "offline", [activity])
+    sent = requests.post.call_args.kwargs["json"]["activities"]
+    assert sent[0]["comment"] == activity.comment
+    assert sent[0]["quantity"] == "4" and sent[0]["unitPrice"] == "25.50"
+    assert requests.get.call_args.args == ("http://ghostfolio.test/api/v1/activities",)
+
+
+def test_real_import_refuses_missing_readback_without_resend(settings, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "0")
+    settings = config.load()
+    activity = Activity("target", "EXAMPLE.PA", "2025-02-03T00:00:00+00:00", Decimal("4"), Decimal("25.50"), Decimal("1"), "BD#v3#TESTACCOUNT:BUY:proof")
+    monkeypatch.setattr(requests, "post", Mock(return_value=Mock(status_code=201)))
+    monkeypatch.setattr(requests, "get", Mock(return_value=Mock(status_code=200, content=b'{"count":0,"activities":[]}')))
+    monkeypatch.setattr(ghostfolio.time, "sleep", lambda _: None)
+    with pytest.raises(RuntimeError, match="^import_unconfirmed$"):
+        ghostfolio.import_activities(settings, "offline", [activity])
+    assert requests.post.call_count == 1
