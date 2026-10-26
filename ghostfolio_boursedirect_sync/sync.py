@@ -108,10 +108,22 @@ def _manual_rows(
         if not _same_security(candidate, row):
             continue
         distance = abs((row.date.date() - candidate_day.date()).days)
-        if distance > 2:
+        if distance > (3 if candidate.type == "DIVIDEND" else 2):
             continue
         matches.append((distance, row))
     return matches
+
+
+def _manual_exact(candidate: Activity, row: ExistingActivity) -> bool:
+    """BD net-cash adaptation of pinned IBKR sync.py:718; no float tolerance."""
+    if candidate.type != "DIVIDEND":
+        return row.quantity == candidate.quantity and row.unit_price == candidate.unit_price
+    if row.currency != candidate.currency:
+        return False
+    with localcontext() as context:
+        context.prec = max(28, sum(len(format(v, "f")) for v in (
+            row.quantity, row.unit_price, row.fee, candidate.quantity, candidate.unit_price)) + 2)
+        return row.quantity * row.unit_price - row.fee == candidate.quantity * candidate.unit_price
 
 
 def _manual_assignment(
@@ -119,7 +131,7 @@ def _manual_assignment(
 ) -> dict[int, str]:
     """Solve independent groups separately; only exact shared rows connect them."""
     exact = [[(distance, row) for distance, row in group
-              if row.quantity == candidate.quantity and row.unit_price == candidate.unit_price]
+              if _manual_exact(candidate, row)]
              for candidate, group in zip(candidates, matches, strict=True)]
     by_row: dict[str, list[int]] = {}
     for i, group in enumerate(exact):
@@ -176,7 +188,7 @@ def _assign_manual_component(
         graph[i].append((0, 0))
         residual.add((0, i))
         for distance, row in sorted(group, key=lambda item: (item[0], item[1].date, item[1].id)):
-            if row.quantity != candidates[i - 1].quantity or row.unit_price != candidates[i - 1].unit_price:
+            if not _manual_exact(candidates[i - 1], row):
                 continue
             target = row_nodes[row.id]
             graph[i].append((target, distance))

@@ -27,7 +27,7 @@ class Trade:
     quantity: Decimal
     unit_price: Decimal
     fee: Decimal
-    type: Literal["BUY", "SELL"] = "BUY"
+    type: Literal["BUY", "SELL", "DIVIDEND"] = "BUY"
 
 
 @dataclass(frozen=True)

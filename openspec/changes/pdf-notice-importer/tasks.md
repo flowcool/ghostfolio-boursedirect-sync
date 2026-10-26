@@ -118,7 +118,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   notice with a custody fee".
   Use Decimal and chronological rows, with SELL first on equal dates.
   When writes are enabled in task 6.1, only confirmed buys can support sells.
-- [ ] 4.3 Add COUPONS rows and the dividend match (exact `BD#`, or 3 days and
+- [x] 4.3 Add COUPONS rows and the dividend match (exact `BD#`, or 3 days and
   same net amount without `BD#`, else `possible_duplicate`). Verify the scenarios "Real coupon in
   simulation" and "Coupon already in Ghostfolio".
   Keep quantity 1, net unit price and fee 0. Do not copy Flex action partition,

@@ -14,7 +14,7 @@ from ghostfolio_boursedirect_sync.models import Notice, Trade
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
-    rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+(ACHAT|VENTE) (?:ETRANGER|COMPTANT)\s+"
+    rf"^\s*(\d{{2}}/\d{{2}}/\d{{4}})\s+(ACHAT (?:ETRANGER|COMPTANT)|VENTE (?:ETRANGER|COMPTANT)|COUPONS)\s+"
     rf"([A-Z]{{2}}[A-Z0-9]{{9}}[0-9])\s+.+?\s{{2,}}({NUMBER})\s*$"
 )
 CUSTODY_HEADER = re.compile(
@@ -84,7 +84,6 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
 
     Unlike DEGIRO, BD requires exact cent-rounded gross and cash, without tolerance.
     Coupon cash is authoritative; its gross price is not a net-price formula.
-    Coupon dispatch is added separately in task 4.3.
     """
     if kind == "DIVIDEND":
         fields = checked_fields(block, {"QUANTITE", "PX UN.BRUT", "BRUT", "COMMISSION"},
@@ -151,9 +150,13 @@ def parse_text(text: str) -> Notice:
             custody_fees += 1
             continue
         assert header is not None
-        kind: Literal["BUY", "SELL"] = "BUY" if header[2] == "ACHAT" else "SELL"
+        kind: Literal["BUY", "SELL", "DIVIDEND"] = (
+            "DIVIDEND" if header[2] == "COUPONS" else "BUY" if header[2].startswith("ACHAT") else "SELL"
+        )
         fields = checked_amounts(kind, block, decimal(header[4]), "EUR")
-        inferred_brokerages += int(re.search(r"\bCOURTAGE\s*:", block) is None)
-        trades.append(Trade(day, header[3], fields["QUANTITE"].copy_abs(), fields["COURS"],
-                            fields["COURTAGE"], kind))
+        inferred_brokerages += int(kind == "BUY" and re.search(r"\bCOURTAGE\s*:", block) is None)
+        trades.append(Trade(day, header[3],
+                            Decimal(1) if kind == "DIVIDEND" else fields["QUANTITE"].copy_abs(),
+                            decimal(header[4]) if kind == "DIVIDEND" else fields["COURS"],
+                            Decimal(0) if kind == "DIVIDEND" else fields["COURTAGE"], kind))
     return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages)
