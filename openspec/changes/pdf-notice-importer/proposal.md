@@ -32,8 +32,8 @@ Sources: saved real notices and a statement. Originals stay private.
 | Other label, with ISIN | PDF notice | Stop on security |
 | Other label, no ISIN | Not seen | Not imported, reported |
 
-Retained PEA notices cover January–October 2026. Other account types and
-transfer forms remain unverified.
+Retained notices cover October 2025–October 2026. Absent error cases keep
+logged errors/protections; no new original is required. Other sources remain unverified.
 
 ## Non-goals
 

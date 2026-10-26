@@ -4,7 +4,8 @@
 
 This README describes the v1 candidate on this branch. Its implemented features
 do not establish complete runtime acceptance. The rules below are the accepted
-target; TTF handling and fee correction still need implementation and proof.
+target. TTF handling and fee correction are implemented. Final-image and
+Paperless acceptance remain separate requirements.
 The published **v0.1.1 is a legacy preview only**. It does not import activities
 or provide the v1 unattended service.
 
@@ -121,7 +122,8 @@ Missing COURTAGE means zero only with explicit TVA zero and Debit equal to BRUT.
 The connector reports that exception. Other amount differences reject the row.
 
 Charged TTF belongs in BUY fees with brokerage. It needs exactly one BUY in the
-same source account, notice, date and ISIN. Ambiguity suspends the affected BUYs;
+same source account, notice, date and ISIN. Ambiguity logs
+`ttf_attribution_failed` and suspends the affected BUYs;
 independent operations continue. The connector never estimates tax from a rate.
 Ghostfolio net performance includes fees. Its average price excludes fees; it
 is not a fiscal cost basis.
@@ -135,7 +137,8 @@ reported without correction. An uncertain result stops writes without resend.
 The connector never deletes activities.
 
 Custody fees are ignored with `custody_fee_ignored`. The done tag clears only
-`share_count_change` and `unknown_operation` for that document. Other rows stay
+`share_count_change` and `unknown_operation` for that document. A share-count
+change logs an error and blocks the affected security. Other rows stay
 subject to their normal checks.
 
 ## Development checks
@@ -147,7 +150,10 @@ subject to their normal checks.
 ```
 
 The retained fixtures contain anonymized text from real Bourse Direct notices.
-Private originals and runtime state stay outside Git.
+Private originals and runtime state stay outside Git. An error case absent
+from the complete available archive does not require another original for
+delivery. Explicit derived-data regressions check its error log and protection.
+They do not establish a real financial observation.
 
 Qualification uses saved real PDFs with the installed candidate and the existing
 Infra empty and golden labs. This proves financial behavior without broker or

@@ -3,7 +3,10 @@
 Each task is one bead, one branch and one PR. "Run" and notice documents
 are defined in the spec. Reuse retained real PDFs for offline and
 lab acceptance before Paperless integration is available. Tests use anonymized
-text of real PDFs only. Paperless is read only; no task writes to it.
+text of real PDFs. For an error case absent from the complete available archive,
+verify the logged code, exit and write protection with explicit derived-data
+regressions. No original for that absent case is required. Never alter original
+PDFs or claim a real financial observation. Paperless is read only.
 
 Adopt the complete applicable IBKR v3.0.0 core mapped in design.md.
 Read its pinned source and coverage before each task. Preserve applicable
@@ -79,7 +82,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 2. Notice checks
 
-- [ ] 2.1 Add the amount checks (BUY, SELL and coupon) and `notice_unreadable`
+- [x] 2.1 Add the amount checks (BUY, SELL and coupon) and `notice_unreadable`
   with the block of all writes, with offline tests from altered anonymized
   text. Compare HALF_UP(abs(quantity) * source price, EUR 0.01) exactly to BRUT.
   Preserve source quantity/price. Infer missing COURTAGE as zero only for BUY
@@ -126,29 +129,31 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 5. Stops
 
-- [ ] 5.1 Add `share_count_change`, `unknown_operation` and the
+- [x] 5.1 Add `share_count_change`, `unknown_operation` and the
   `PAPERLESS_DONE_TAG` check. Verify the scenario "Division and coupon in one
   notice".
-- [ ] 5.2 Align README and guidance with the accepted TTF/fee policy.
+- [x] 5.2 Align README and guidance with the accepted TTF/fee policy.
   State that main describes an unqualified, unpublished v1 candidate and
   v0.1.1 is preview-only. Explain brokerage plus charged TTF, fee-exclusive
   average price, and the exact fee-only correction. Explain that the done tag
   clears only blocking rows. Verify "Stop cleared" through task 5.1 evidence.
-  Documentation delivery alone does not complete that runtime scenario.
+  Task 5.1 owns that runtime proof. This documentation task references it;
+  it does not own a second runtime gate.
 
 ## 6. Import, notification and schedule
 
 - [ ] 6.1 Add the import with `DRY_RUN=0`, the strict readback
   (`import_unconfirmed`), the summary line and the exit codes. This is the
-  first production Ghostfolio write: it needs an operation plan that Florent
-  validated. Before production writes, qualify the candidate image digest in
-  the existing infra empty/golden lab. Infra owns the BD launch/evidence
+  writer qualification in the shared labs. The complete join owns the first
+  production write and its separately validated operation plan. Qualify the
+  image in the existing infra empty/golden lab. Infra owns the BD launch/evidence
   adaptation; retain its target checks, snapshots, credential isolation and
   stop verification. Prove first creation, duplicate rerun, mixed legacy rows,
   chronological sells, exact readback and uncertain-result stop. Add charged
   TTF attribution within source account/notice/date/ISIN; ambiguity suspends
   affected BUYs with `ttf_attribution_failed`, without blocking independent rows.
-  Verify "Attributed TTF" and "Ambiguous TTF" from retained notice rows.
+  Verify "Attributed TTF" from retained notice rows. For "Ambiguous TTF",
+  use the unobserved-error exception above when no original exists.
   Implement the approved fee-only correction for exactly one matching BUY
   whose fee is brokerage alone. Preserve all other fields and logical identity.
   Verify "Existing brokerage-only BUY", already-correct no-op, other-value
