@@ -105,7 +105,7 @@ def test_manual_dividend_net_subtracts_only_explicit_existing_fee(price, fee, du
 
 
 @pytest.mark.parametrize("changes", [
-    {"currency": "USD"}, {"accountId": "other"}, {"type": "BUY"},
+    {"accountId": "other"}, {"type": "BUY"},
     {"isDraft": True}, {"assetProfile": {"symbol": "OTHER.PA", "dataSource": "YAHOO"}},
 ])
 def test_ineligible_or_unrelated_row_is_not_a_coupon_match(changes):
@@ -113,6 +113,13 @@ def test_ineligible_or_unrelated_row_is_not_a_coupon_match(changes):
     result = sync.select_account_activities([candidate], ledger(candidate, **changes))
     assert result.activities == (candidate,)
     assert result.duplicates == 0 and result.errors == ()
+
+
+def test_nearby_dividend_in_another_currency_requires_review():
+    candidate = coupon_activity()
+    result = sync.select_account_activities([candidate], ledger(candidate, currency="USD"))
+    assert result.activities == () and result.duplicates == 0
+    assert result.errors == ("possible_duplicate",)
 
 
 @pytest.mark.parametrize("changed", [False, True])

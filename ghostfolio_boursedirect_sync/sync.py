@@ -105,8 +105,6 @@ def _manual_rows(
             continue
         if row.type != candidate.type or row.data_source != candidate.data_source:
             continue
-        if candidate.type == "DIVIDEND" and row.currency != candidate.currency:
-            continue
         if not _same_security(candidate, row):
             continue
         distance = abs((row.date.date() - candidate_day.date()).days)
@@ -120,6 +118,8 @@ def _manual_exact(candidate: Activity, row: ExistingActivity) -> bool:
     """BD net-cash adaptation of pinned IBKR sync.py:718; no float tolerance."""
     if candidate.type != "DIVIDEND":
         return row.quantity == candidate.quantity and row.unit_price == candidate.unit_price
+    if row.currency != candidate.currency:
+        return False
     with localcontext() as context:
         context.prec = max(28, sum(len(format(v, "f")) for v in (
             row.quantity, row.unit_price, row.fee, candidate.quantity, candidate.unit_price)) + 2)
