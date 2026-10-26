@@ -35,31 +35,6 @@ reviews:
     - "**/*"
     - "renovate.json"
   path_instructions:
-    - path: "collector/**/*.mjs"
-      instructions: >-
-        The broker callback-only controller accepts trusted injected callbacks;
-        it is not a sandbox for arbitrary same-process callers. The native
-        composition validates branded handles and binds the durable consumer
-        internally, rejecting replacement consume callbacks. Verify each
-        implementation against its own boundary. Distinguish an implementation
-        defect from a proposed change to the approved trust model; still report
-        concrete violations of that model and unsafe call sites.
-    - path: "boursedirect_to_ghostfolio.py"
-      instructions: >-
-        Untrusted broker HTML and operator YAML: fail closed with fixed error
-        codes, never guess encodings, dates or decimals. Check exact Decimal
-        handling, stable ledger identities and idempotence across partial
-        imports and restarts, journal/lock/atomic-write behavior, exact wire
-        bytes and numeric preservation, and that no token, session bearer,
-        account identifier or document text reaches logs, errors or artifacts.
-        Any network code must keep an exact HTTPS origin allowlist, reject
-        redirects and never write without a durable uncertain-intent fence.
-        State and output paths must not silently depend on the working directory.
-    - path: "scripts/disposable_acceptance.py"
-      instructions: >-
-        Opt-in disposable lab only. It must never accept a production endpoint
-        or credential, must own and verify every Docker resource it creates,
-        and must clean up independently of scenario failures.
     - path: "scripts/label_pr_release.py"
       instructions: >-
         CI helper run by a pull_request_target workflow with a write token: it
