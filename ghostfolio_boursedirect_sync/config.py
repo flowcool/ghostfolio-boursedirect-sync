@@ -1,6 +1,7 @@
 """ENV-only configuration, adapted from pinned ibkr config.py:62-142."""
 
 import json
+import logging
 import os
 import re
 from typing import TypedDict
@@ -111,8 +112,14 @@ def load_notification_config() -> NotificationConfigDict | None:
         return None
     try:
         import apprise
-        notifier = apprise.Apprise()
-        if not all(notifier.add(url) for url in urls) or len(notifier) > APPRISE_URLS_MAX:
+        previous_disable = logging.root.manager.disable
+        logging.disable(logging.CRITICAL)
+        try:
+            notifier = apprise.Apprise()
+            valid = all(notifier.add(url) for url in urls) and len(notifier) <= APPRISE_URLS_MAX
+        finally:
+            logging.disable(previous_disable)
+        if not valid:
             raise RuntimeError("invalid_configuration APPRISE_URLS")
     except ImportError:
         raise RuntimeError("invalid_configuration APPRISE_URLS") from None

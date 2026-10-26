@@ -109,6 +109,14 @@ def test_invalid_notification_settings_stop_before_service_access(monkeypatch, c
     assert "created=0" in caplog.text
 
 
+def test_invalid_destination_does_not_log_its_secret(monkeypatch, caplog):
+    monkeypatch.setenv("APPRISE_URLS", '["discord//123456/SECRET-CANARY"]')
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(RuntimeError, match="^invalid_configuration APPRISE_URLS$"):
+            config.load_notification_config()
+    assert "SECRET-CANARY" not in caplog.text
+
+
 def test_unknown_failure_text_is_replaced_by_fixed_code():
     assert outcome.failure_summary({"secret holder account", "unresolved_security"}) == (
         "Run failed: unhandled_error, unresolved_security.")
