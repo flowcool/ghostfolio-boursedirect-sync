@@ -1,5 +1,5 @@
 services:
-  boursedirect-sync:
+  importer:
     networks: [ghostfolio]
 networks:
   ghostfolio:

@@ -30,8 +30,6 @@ def minimal_release_tree(root, tag):
         "compose.ghostfolio.yaml": "services: {}\n",
         ".github/BUILD.md": "# Build\n",
         "config/README.md": "# Config\n",
-        "collector/browser-seccomp.json": "{}\n",
-        "collector/licenses/playwright-LICENSE": "third party\n",
         "docs/releases/" + tag + ".md": "# Release\n",
     }
     for name, content in files.items():
@@ -48,12 +46,10 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         "LICENSE": "license\n",
         "README.md": "# Operator bundle\n```yaml\nimage: ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:" + "b" * 64 + "\n```\n[Build source](Dockerfile)\n[Bundle docs](docs/)\n[Source scripts](scripts/)\n",
         "Dockerfile": "FROM scratch\n",
-        "compose.yaml": "services:\n  bitwarden:\n    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0}\n",
-        "compose.ghostfolio.yaml": "services:\n  bitwarden:\n    networks: [ghostfolio]\n",
+        "compose.yaml": "services:\n  importer:\n    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0}\n",
+        "compose.ghostfolio.yaml": "services:\n  importer:\n    networks: [ghostfolio]\n",
         ".github/BUILD.md": "# Build\n",
         "config/README.md": "# Config\n",
-        "collector/browser-seccomp.json": "{}\n",
-        "collector/licenses/playwright-LICENSE": "third party\n",
         "docs/README.md": "# Docs\n",
         "docs/assets/readme-banner.svg": "<svg/>\n",
         "docs/releases/v1.2.3.md": "# Release\n",
@@ -79,7 +75,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         content = {name.split("/", 1)[1]: archive.extractfile(name).read() for name in members}
 
     prefix = "ghostfolio-boursedirect-sync-v1.2.3/"
-    assert prefix + "collector/browser-seccomp.json" in members
+    assert not any(name.startswith(prefix + "collector/") for name in members)
     assert prefix + "docs/assets/readme-banner.svg" in members
     assert prefix + "docs/releases/v1.2.3.md" in members
     assert prefix + "config/mappings.yaml" not in members

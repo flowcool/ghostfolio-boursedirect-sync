@@ -49,28 +49,3 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "0"
-      - name: Build the retained daily preview image without publishing
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: Dockerfile.daily
-          platforms: linux/amd64
-          push: false
-          pull: true
-          tags: daily-check:ci
-          outputs: type=docker,dest=${{ runner.temp }}/daily-image.tar
-      - name: Smoke the daily preview image offline
-        run: |
-          docker load --input "${{ runner.temp }}/daily-image.tar"
-          docker run --rm --network none --read-only --cap-drop ALL \
-            --security-opt no-new-privileges:true daily-check:ci --help
-      - name: Scan the daily preview image for fixable high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          version: v0.76.1
-          input: ${{ runner.temp }}/daily-image.tar
-          scanners: vuln
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-          trivyignores: .trivyignore

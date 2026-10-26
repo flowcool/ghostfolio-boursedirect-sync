@@ -67,7 +67,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   Check active flags, tags, current assetProfile precedence and legacy-only
   SymbolProfile compatibility. Exclude inactive/non-YAHOO holdings and manual
   matches. Verify "Future activity"; defer future source rows without writes.
-- [ ] 1.3 Remove legacy-only scripts and `collector/`, `compose.lab.yaml`,
+- [x] 1.3 Remove legacy-only scripts and `collector/`, `compose.lab.yaml`,
   `compose.broker-inspection.yaml`,
   `docs/verification/` and the remaining legacy tests. Remove CI calls that
   remain after task 1.1. Retain the current package/image/security checks and

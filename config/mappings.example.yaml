@@ -1,5 +1,4 @@
-# Copy to private mappings.yaml. An empty mapping enables automatic resolution.
-{}
-# To override an unresolved or ambiguous ISIN, replace {} with entries such as:
-# FR0000000002: {symbol: VERIFIED.PA, currency: EUR}
-# The example ISIN and symbol are synthetic; verify your own Yahoo EUR listing.
+# Copy to private mappings.yaml and set MAPPING_FILE=/config/mappings.yaml.
+# Verify each EUR Yahoo ticker. These values are synthetic.
+symbol_mapping:
+  FR0000000002: VERIFIED.PA

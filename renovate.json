@@ -6,13 +6,9 @@
   ],
   "enabledManagers": [
     "pip_requirements",
-    "npm",
     "github-actions",
     "dockerfile",
     "custom.regex"
-  ],
-  "ignorePaths": [
-    "collector/lab/vault.Dockerfile"
   ],
   "timezone": "Europe/Zurich",
   "schedule": [
@@ -25,8 +21,7 @@
   "packageRules": [
     {
       "matchManagers": [
-        "pip_requirements",
-        "npm"
+        "pip_requirements"
       ],
       "minimumReleaseAge": "14 days"
     },
@@ -51,16 +46,6 @@
         "patch"
       ],
       "groupName": "Python minor and patch"
-    },
-    {
-      "matchManagers": [
-        "npm"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch"
-      ],
-      "groupName": "Collector minor and patch"
     },
     {
       "matchManagers": [
@@ -97,21 +82,6 @@
       "matchManagers": ["dockerfile", "github-actions"],
       "matchPackageNames": ["python", "actions/python-versions"],
       "groupName": "Python runtime"
-    },
-    {
-      "description": "Follow stable Node releases, including the Current series.",
-      "matchManagers": ["github-actions"],
-      "matchPackageNames": ["actions/node-versions"],
-      "versioning": "npm"
-    },
-    {
-      "matchManagers": [
-        "npm"
-      ],
-      "matchDepTypes": [
-        "engines"
-      ],
-      "enabled": false
     },
     {
       "description": "Own image: after a stable release, bump the README pin; automerge only when required checks pass (tests/test_image_pins.py guards consistency).",
