@@ -1,8 +1,7 @@
 # Bourse Direct to Ghostfolio
 
 This Docker connector reads Bourse Direct operation notices from Paperless.
-It proposes BUY activities for one active Ghostfolio account.
-Later tasks add SELL, coupon, notification and schedule support.
+It reads BUY, SELL and coupon activities for one active Ghostfolio account.
 
 The connector reads Paperless only. It has no Bourse Direct login and no vault
 access. BillCollector downloads and publishes the notices.
@@ -41,11 +40,11 @@ Existing release checks keep this stable image reference:
 | `PAPERLESS_TOKEN` | yes | Read-only Paperless token |
 | `PAPERLESS_DONE_TAG` | no | Tag name, default `ghostfolio-done` |
 | `MAPPING_FILE` | no | Read-only YAML mapping file; empty allows no override |
-| `DRY_RUN` | no | Absent or `1` simulates; `0` enables the later writer |
-| `TZ` | no | Container timezone for later scheduling |
-| `CRON` | no | Later schedule; empty runs once |
-| `APPRISE_URLS` | no | Later failure notification destinations |
-| `APPRISE_TIMEOUT` | no | Later notification timeout in seconds |
+| `DRY_RUN` | no | Absent or `1` simulates; `0` enables imports |
+| `TZ` | no | Container timezone for scheduling; activity dates stay UTC |
+| `CRON` | no | Five numeric schedule fields; empty runs once |
+| `APPRISE_URLS` | no | JSON list of Apprise destination URLs; empty or `[]` disables delivery |
+| `APPRISE_TIMEOUT` | no | Notification deadline in seconds, from 1 to 30; default 10 |
 | `LOG_LEVEL` | no | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` |
 
 The connector rejects redirects before it sends a credential. It uses a
@@ -116,3 +115,30 @@ All selection is offline after the reads. Money uses exact `Decimal` values.
 
 The retained fixtures contain anonymized text from real Bourse Direct notices.
 Private originals and runtime state stay outside Git.
+
+## Failure notifications
+
+With `DRY_RUN=0`, a failed run sends one notification when `APPRISE_URLS` is set.
+The message contains fixed error codes. It contains no account data or secrets.
+For example, set `APPRISE_URLS='["json://notification-service/hook"]'`.
+
+Simulation never sends a notification, including failures and invalid settings.
+Successful runs stay silent. Notification delivery uses a separate process.
+The deadline covers process startup and delivery. On expiry, the process stops.
+A timed-out notification can still arrive. The connector does not retry it.
+Invalid notification settings disable delivery and show a fixed warning.
+Delivery failure does not change the import exit code.
+
+## Schedule
+
+Leave `CRON` empty to run once. Set `CRON='0 6 * * *'` to run daily at 06:00.
+Start the scheduled service with `docker compose up -d`.
+Use `TZ` to select the schedule timezone. Source activity dates stay at midnight UTC.
+The connector accepts five numeric fields with `*`, `/`, `,` and `-`.
+It rejects invalid schedules with `Invalid CRON` and exit code 1.
+It rejects names, macros, extra fields and shell commands.
+
+## Notice copies
+
+Keep notice copies in Paperless; paperless-gpt can process those copies independently.
+The connector reads original PDFs and never changes Paperless documents.

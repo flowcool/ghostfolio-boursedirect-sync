@@ -1,7 +1,10 @@
 """ENV-only configuration, adapted from pinned ibkr config.py:62-142."""
 
+import json
+import logging
 import os
 import re
+from typing import TypedDict
 from urllib.parse import urlsplit
 
 from ghostfolio_boursedirect_sync.models import Settings
@@ -67,3 +70,45 @@ def load() -> Settings:
         paperless_done_tag=done_tag,
         dry_run=mode != "0",
     )
+
+
+NOTIFY_PAYLOAD_MAX = 32 * 1024
+APPRISE_URLS_MAX = 10
+APPRISE_URL_MAX_LEN = 2048
+APPRISE_TIMEOUT_DEFAULT = 10
+APPRISE_TIMEOUT_MAX = 30
+
+
+class NotificationConfigDict(TypedDict):
+    urls: list[str]
+    timeout: int
+
+
+def load_notification_config() -> NotificationConfigDict | None:
+    """Parse APPRISE_URLS and APPRISE_TIMEOUT; None means notifications are off.
+
+    APPRISE_URLS is a JSON list of Apprise URL strings (blank or [] = off);
+    APPRISE_TIMEOUT an integer number of seconds, 1..30 (default 10).  Never
+    raises: invalid settings only disable delivery, with a fixed warning since
+    the values carry destination credentials.
+    """
+    raw = os.environ.get("APPRISE_URLS", "")
+    if not raw.strip():
+        return None
+    try:
+        urls = json.loads(raw) if len(raw) <= NOTIFY_PAYLOAD_MAX else None
+    except ValueError:
+        urls = None
+    raw_timeout = os.environ.get("APPRISE_TIMEOUT", "").strip()
+    timeout = APPRISE_TIMEOUT_DEFAULT
+    if raw_timeout:
+        timeout = int(raw_timeout) if re.fullmatch(r"[0-9]{1,2}", raw_timeout) else 0
+    if (not isinstance(urls, list) or len(urls) > APPRISE_URLS_MAX
+            or not all(isinstance(u, str) and u.strip() and len(u) <= APPRISE_URL_MAX_LEN
+                       for u in urls)
+            or not 1 <= timeout <= APPRISE_TIMEOUT_MAX):
+        logging.getLogger(__name__).warning("APPRISE_URLS or APPRISE_TIMEOUT is invalid: failure notifications disabled")
+        return None
+    if not urls:
+        return None
+    return {"urls": urls, "timeout": timeout}
