@@ -2,7 +2,7 @@
 
 ## Why
 
-Import Paperless notices into Ghostfolio. Adopt complete applicable IBKR v3.0.0 core.
+Import Paperless notices into Ghostfolio. Adopt all applicable IBKR v3.0.0 core.
 
 ## What changes
 
@@ -32,8 +32,9 @@ Sources: saved real notices and a statement. Originals stay private.
 | Other label, with ISIN | PDF notice | Stop on security |
 | Other label, no ISIN | Not seen | Not imported, reported |
 
-Retained notices cover October 2025–October 2026. Absent error cases keep
-logged errors/protections; no new original is required. Other sources remain unverified.
+PEA notices cover October 2025–October 2026. Absent error cases keep
+logged errors and protections; no new original is required. Other account types
+and transfer forms remain unverified.
 
 ## Non-goals
 
@@ -58,6 +59,6 @@ None.
 ## Impact
 
 Package, image, Compose, README and tests. Reuse IBKR checks and Infra labs.
-Continue the current v1. Correct only an exact existing BUY whose fee is
+Correct only an exact existing BUY whose fee is
 brokerage alone. Preserve all other fields; confirm the charged TTF correction.
 Rollback: revert commits; retain accepted financial state.
