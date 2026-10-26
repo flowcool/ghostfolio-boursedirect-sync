@@ -33,7 +33,7 @@ def test_broken_link(tmp_path, name):
     assert docs.check_docs(tmp_path) == ["broken local link in " + name + ": missing.md"]
 
 
-@pytest.mark.parametrize("failed_stage", ["docs", "pytest", "npm", "git", "staged", ""])
+@pytest.mark.parametrize("failed_stage", ["docs", "pytest", "git", "staged", ""])
 def test_verification_stops_at_failed_stage(tmp_path, failed_stage):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -44,7 +44,7 @@ def test_verification_stops_at_failed_stage(tmp_path, failed_stage):
     python.chmod(0o755)
     binaries = tmp_path / "bin"
     binaries.mkdir()
-    for stage in ["npm", "git"]:
+    for stage in ["git"]:
         stub = binaries / stage
         stub.write_text("#!/bin/bash\nstage=" + stage + "\nif [[ $stage == git && $2 == --cached ]]; then stage=staged; fi\nprintf '%s\\n' \"$stage\" >> \"$CHECK_LOG\"\nif [[ $FAILED_STAGE == $stage ]]; then exit 17; fi\n")
         stub.chmod(0o755)
@@ -53,6 +53,6 @@ def test_verification_stops_at_failed_stage(tmp_path, failed_stage):
                CHECK_LOG=str(log), FAILED_STAGE=failed_stage)
     result = subprocess.run(["/bin/bash", str(scripts / "verify-local.sh")], env=env, capture_output=True)
     assert result.returncode == (17 if failed_stage else 0)
-    stages = ["docs", "pytest", "npm", "git", "staged"]
+    stages = ["docs", "pytest", "git", "staged"]
     expected = stages[:stages.index(failed_stage) + 1] if failed_stage else stages
     assert log.read_text().splitlines() == expected

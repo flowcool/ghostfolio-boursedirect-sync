@@ -16,7 +16,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Connector release/image digest from Compose or IMAGE_DIGEST, CPU architecture (uname -m), Docker and Compose versions. For a source checkout, also give Python and Node.js versions.
+      description: Connector release/image digest from Compose or IMAGE_DIGEST, CPU architecture (uname -m), Docker and Compose versions. For a source checkout, also give Python version.
     validations:
       required: true
   - type: dropdown

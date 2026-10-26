@@ -1,5 +1,11 @@
 # Releasing
 
+This page describes retained publication tooling. It does not establish v1
+release readiness. The current v1 Compose builds from source. Stable release
+preparation must provide its qualified image reference before packaging; the
+packager rejects a Compose file without that reference. Publication requires
+separate authorization.
+
 Releases are produced from a reviewed version tag. A tag push starts the
 `release-image.yml` workflow, which builds the `linux/amd64` image, scans it, and
 runs its offline smoke check before publishing. On success, it publishes the
@@ -16,11 +22,10 @@ version to `latest` after confirming that it is still the latest stable release.
 
 The public README starts from the published image and a copyable Compose definition;
 archive extraction is optional. Keep its Compose example identical to the canonical
-`compose.yaml`, and keep the host seccomp download reference and checksum matched to
-the qualified profile. Update the image pin and operator instructions together.
+`compose.yaml`. Update the image pin and operator instructions together.
 
-The optional user archive contains the Compose files and required browser seccomp profile,
-third-party license text, example environment file, mapping guide, README,
+The optional user archive contains the Compose files, example environment file,
+mapping guide, README,
 CONTRIBUTING, CHANGELOG, LICENSE, and tracked documentation. It does not contain
 the application source, Docker build context, or local build override. The image
 reference is pinned to the release version and the pushed image's SHA256 digest
@@ -56,8 +61,8 @@ Keep artifact corrections in a new version; never replace published assets.
 
 1. Update the changelog, release notes, versioned image reference and release
    documentation together.
-2. Review the final diff and confirm the source connection, account binding,
-   preview-only and credential-handling claims against the implementation.
+2. Review the final diff and confirm the Paperless source, account selection,
+   simulation and credential-handling claims against the implementation.
 3. Require final-head CI and review. The release workflow must build, scan and
    smoke-check the AMD64 image from the pushed tag before publishing the image.
 4. Push the approved `vX.Y.Z` tag. Wait for the workflow to publish the versioned

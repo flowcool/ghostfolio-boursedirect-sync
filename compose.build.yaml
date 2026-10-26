@@ -1,4 +1,4 @@
 services:
-  boursedirect-sync:
+  importer:
     build: .
     image: ghostfolio-boursedirect-sync:local

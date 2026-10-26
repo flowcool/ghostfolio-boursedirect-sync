@@ -2,25 +2,22 @@
 
 ## Pull request checks
 
-Every pull request runs the versioned offline Python and Node.js suites, the
+Every pull request runs the versioned offline Python suite, the
 documentation catalogue and local-link check, and a whitespace check. The
 container workflow builds, smoke-checks and scans the native connector image for
-AMD64 only without publishing it; a separate AMD64 build and scan covers the saved-input
-preview image. CodeQL analyzes Python and JavaScript, and Dependency Review blocks
+AMD64 only without publishing it. CodeQL analyzes Python, and Dependency Review blocks
 new moderate-or-higher dependency findings, including development dependencies.
 All workflows use read-only repository access unless a specific job needs a
 narrower permission grant.
 
-The opt-in disposable acceptance lab is not run by CI. It uses local Docker,
-synthetic data and resources owned by the invocation. CI tests use synthetic
-inputs and isolated state; they must never use broker credentials or production
-Ghostfolio.
+CI tests use anonymized notice text, mocked requests and isolated state. They
+never use broker credentials or production Ghostfolio. Shared lab tooling stays
+in Infra. The importer has no broker collector, browser or vault client.
 
 The offline job uses GitHub's Python build. The native image smoke uses the
 shipped Docker build and requires C `_decimal`. Different Decimal backends are
 accepted when both builds pass qualification. Run the full offline suite with
-both builds when qualifying a Python release. The extreme-exponent test must
-stop safely, preserve the journal and produce no output with either backend.
+both builds when qualifying a Python release.
 CI repeats the full suite with the GitHub build. Its image smoke checks exact
 Decimal values from a real anonymized BUY with the shipped C backend. This
 smoke check does not replace the full suite during runtime qualification.
@@ -32,25 +29,24 @@ ordinary update PR author, configured in [`renovate.json`](../renovate.json).
 Dependabot version PR limits are zero; this does not disable security PRs.
 
 Ordinary updates run before 9am on Monday in Europe/Zurich. Renovate opens at
-most three concurrent pull requests and two per hour. Python and collector npm
+most three concurrent pull requests and two per hour. Python
 releases wait 14 days; GitHub Actions wait 3 days.
 Container base image updates wait 3 days. Minor, patch and digest updates are
 grouped by ecosystem; major updates stay separate and require Dependency
-Dashboard approval. Exact Python/npm versions, Action commit SHAs and existing
+Dashboard approval. Exact Python versions, Action commit SHAs and existing
 image digests stay pinned for reproducible checks. Follow the latest stable
 Python, Node and base-image releases without version ceilings. Renovate proposes
 updates; tests, security scans and required review gate integration. Python CI
-and the native image use the same release. Node follows stable Current releases
-as well as LTS releases. Docker tag suffixes retain the selected image variant.
-Compose references are local builds or separately qualified lab pins, so the
-docker-compose manager is excluded; the qualification-only vault Dockerfile is
-also excluded. Browser and Bitwarden downloads remain checksum-qualified manually.
+and the native image use the same release. Docker tag suffixes retain the
+selected image variant.
+Compose references are local builds, so the docker-compose manager is excluded.
+The collector npm manifests and browser/vault download watches are removed.
 
 Dependabot security updates remain enabled in repository settings. Renovate's
 `vulnerabilityAlerts` and `osvVulnerabilityAlerts` are disabled, so Dependabot
 remains the security update PR author while Renovate handles ordinary updates.
 Dependabot version PR limits are zero; this does not disable security PRs. All
-merges remain manual. Existing CI and final-head CodeRabbit review requirements
+merges remain manual. Existing CI and final-head Pullfrog review requirements
 still apply; review filters include `renovate.json`.
 
 Validate repository configuration with the official validator (Node 24.11+):
@@ -73,8 +69,7 @@ The release archive pins the matching image version **and SHA256 digest**. After
 the checked image is pushed, the workflow reads its repository digest to generate
 the archive and `IMAGE_DIGEST`; `SHA256SUMS` covers both downloadable files. The
 archive includes the required Compose files,
-browser seccomp profile, example environment file, configuration guide,
-third-party license text and tracked documentation. It excludes application
+example environment file, configuration guide and tracked documentation. It excludes application
 source and local build inputs.
 
 See the [release procedure](../docs/operations/releasing.md) for the operator
