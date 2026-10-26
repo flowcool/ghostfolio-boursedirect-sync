@@ -61,6 +61,19 @@ for smoke_cron in bad '60 * * * *' '* * * * * *' '* * * * *; id' '@daily'; do
   [[ "$smoke_output" == *'Summary: simulated=0'* ]]
   [[ "$smoke_output" != *'Failure notification'* ]]
 done
+# Force a real write denial after the temporary-path allocator returns.
+smoke_status=0
+smoke_output=$("${smoke_run[@]}" --env 'CRON=* * * * *' --env DRY_RUN=1 \
+  --entrypoint bash "$smoke_image_id" -c '
+mktemp() { printf "%s\n" /proc/bd-denied-crontab; }
+export -f mktemp
+exec /app/entrypoint.sh
+' 2>&1) || smoke_status=$?
+test "$smoke_status" -eq 1
+[[ "$smoke_output" == *'Could not write runtime crontab'* ]]
+[[ "$smoke_output" == *'invalid_configuration CRON'* ]]
+[[ "$smoke_output" == *'Summary: simulated=0'* ]]
+[[ "$smoke_output" != *'Failure notification'* ]]
 # The real isolated worker must dispatch without loading settings or starting a run.
 smoke_status=0
 smoke_output=$(printf 'invalid payload' | "${smoke_run[@]}" -i --entrypoint python \
