@@ -85,6 +85,7 @@ def test_success_stays_silent(monkeypatch):
 @pytest.mark.parametrize("mode", ["0", "1"])
 @pytest.mark.parametrize("field,value", [
     ("APPRISE_URLS", "private invalid destination"),
+    ("APPRISE_URLS", '["not-an-apprise-url"]'),
     ("APPRISE_TIMEOUT", "0"),
     ("APPRISE_TIMEOUT", "31"),
 ])

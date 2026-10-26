@@ -109,4 +109,11 @@ def load_notification_config() -> NotificationConfigDict | None:
         raise RuntimeError("invalid_configuration APPRISE_URLS")
     if not urls:
         return None
+    try:
+        import apprise
+        notifier = apprise.Apprise()
+        if not all(notifier.add(url) for url in urls) or len(notifier) > APPRISE_URLS_MAX:
+            raise RuntimeError("invalid_configuration APPRISE_URLS")
+    except ImportError:
+        raise RuntimeError("invalid_configuration APPRISE_URLS") from None
     return {"urls": urls, "timeout": timeout}
