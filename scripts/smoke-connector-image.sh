@@ -57,6 +57,9 @@ for smoke_cron in bad '60 * * * *' '* * * * * *' '* * * * *; id' '@daily'; do
   smoke_output=$("${smoke_run[@]}" --env "CRON=$smoke_cron" "$smoke_image_id" 2>&1) || smoke_status=$?
   test "$smoke_status" -eq 1
   [[ "$smoke_output" == *'Invalid CRON'* ]]
+  [[ "$smoke_output" == *'invalid_configuration CRON'* ]]
+  [[ "$smoke_output" == *'Summary: simulated=0'* ]]
+  [[ "$smoke_output" != *'Failure notification'* ]]
 done
 # The real isolated worker must dispatch without loading settings or starting a run.
 smoke_status=0
@@ -66,6 +69,9 @@ test "$smoke_status" -eq 10
 test -z "$smoke_output"
 # Real Apprise delivery stays inside this network-isolated container.
 "${smoke_run[@]}" --entrypoint python "$smoke_image_id" -I -c '
+import json
+import os
+import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from ghostfolio_boursedirect_sync import notify, outcome
@@ -86,9 +92,23 @@ status = notify.send_notification(
     notify.NOTIFY_TITLE, outcome.failure_summary({"unresolved_security"}))
 assert status == "sent", status
 thread.join(timeout=2)
-server.server_close()
 assert len(received) == 1 and b"unresolved_security" in received[0]
 print("Installed isolated Apprise delivery passed")
+for cron in ("bad", "60 * * * *"):
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    result = subprocess.run(["/app/entrypoint.sh"], capture_output=True, timeout=20,
+        env={**os.environ, "CRON": cron, "DRY_RUN": "0",
+             "APPRISE_URLS": json.dumps([f"json://127.0.0.1:{server.server_port}/hook"])})
+    thread.join(timeout=2)
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    assert b"Invalid CRON" in output and b"Failure notification sent" in output, output
+    assert output.count(b"Summary:") == 1, output
+assert len(received) == 3
+assert all(b"invalid_configuration" in body for body in received[1:])
+server.server_close()
+print("Installed invalid CRON finalization and notification passed")
 '
 # A real minute tick must reach the installed program's configuration gate.
 # Stop only this owned offline container. Retain its logs before removal.
