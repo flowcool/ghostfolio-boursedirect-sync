@@ -21,10 +21,10 @@ The default mode is simulation. It prints each proposed activity and sends no
 Ghostfolio write. Set `DRY_RUN=0` only after the separate write acceptance is
 complete.
 
-The container uses Python 3.14 and `pdftotext`. It has no browser, Node or
-vault client. Paperless documents must have the custom field `Source` with the
-exact value `Bourse Direct`. A filename starting with `BourseDirect_` without
-that field stops the run with `source_field_missing`.
+The container uses the latest qualified stable Python release and `pdftotext`.
+It has no browser, Node or vault client. Paperless documents must have the custom
+field `Source` with the exact value `Bourse Direct`. A filename starting with
+`BourseDirect_` without that field stops the run with `source_field_missing`.
 
 Existing release checks keep this stable image reference:
 `ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.1@sha256:486cc5ef8b3dde9e65b2b502789b65c9d956acb4ea03e3e2544c316d2bbef231`.

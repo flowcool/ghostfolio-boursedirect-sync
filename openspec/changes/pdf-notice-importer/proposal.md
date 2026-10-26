@@ -62,6 +62,6 @@ None.
 
 ## Impact
 
-Typed Python 3.14 package, image, `compose.yaml`, README and
+Typed Python package, image, `compose.yaml`, README and
 tests. Reuse IBKR image, CI and release checks, and the existing infra lab.
 Replace the legacy runtime. Rollback: revert commits; retain imports.

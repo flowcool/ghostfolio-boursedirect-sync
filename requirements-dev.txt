@@ -1,14 +1,10 @@
--r requirements.txt
+-r requirements-daily.txt
 pytest==9.1.1
 iniconfig==2.3.1
 packaging==26.3
 pluggy==1.6.0
 pygments==2.21.0
-ruff==0.16.10
+ruff==0.17.0
 mypy==2.4.0
 types-requests==2.33.0.20260906
 types-PyYAML==6.0.12.20260906
-# Legacy tests stay until their separate removal task.
-beautifulsoup4==4.15.0
-soupsieve==2.10
-typing_extensions==4.16.0

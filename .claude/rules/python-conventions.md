@@ -11,4 +11,4 @@ globs: ["*.py"]
 - Tests: `pytest` in `tests/` (offline, pure functions, requests mocked; dev-only deps in `requirements-dev.txt`, never in the image). A logic change ships with a test from real anonymized notice text. Run the relevant tests before committing a logic change.
 - Use module-level functions. Frozen dataclasses and typed dictionaries describe settings, financial records and external JSON. Keep behavior in functions.
 - Keep `Decimal` for money and position decisions. Adapt ibkr float comparisons to the exact BD contract.
-- With Python 3.14, run `.venv/bin/python -m ruff check ghostfolio_boursedirect_sync`, `.venv/bin/python -m mypy --strict ghostfolio_boursedirect_sync` and the relevant offline pytest checks after logic changes. Docs-only changes need no runtime tests.
+- Use the Python release selected by the native image and CI. Run `.venv/bin/python -m ruff check ghostfolio_boursedirect_sync`, `.venv/bin/python -m mypy --strict ghostfolio_boursedirect_sync` and the relevant offline pytest checks after logic changes. Docs-only changes need no runtime tests.

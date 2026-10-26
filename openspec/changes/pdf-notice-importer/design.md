@@ -9,6 +9,11 @@ Modules: `app`, `config`, `models`, `ghostfolio`, `sync`, `outcome`, `notify`.
 Typed functions, data records, strict mypy, Ruff; 2 500 application lines.
 No shared library/projection.
 
+Follow the latest stable Python, Node and base-image releases without version
+ceilings (approved 2026-10-26). Align Python CI and the native image. Retain
+image digests, dependency pins, compatibility checks, security scans and head
+review before integration. This replaces the earlier Python 3.14 target.
+
 ## Coverage
 
 References bind pinned IBKR mechanisms to BD tasks. Preserve applicable tests.

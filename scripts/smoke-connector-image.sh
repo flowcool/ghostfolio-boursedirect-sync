@@ -3,17 +3,20 @@
 # Offline image checks only. No credentials, network or persistent mounts.
 set -euo pipefail
 test "$#" = 1
+smoke_python_version=$(sed -nE 's/^FROM python:([0-9]+\.[0-9]+\.[0-9]+)-.*/\1/p' "$(dirname "$0")/../Dockerfile")
+test -n "$smoke_python_version"
 smoke_image_id=$(docker image inspect --format '{{.Id}}' "$1")
 test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$smoke_image_id")" = linux/amd64
 smoke_run=(docker run --rm --network none --read-only --cap-drop ALL
   --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777)
-"${smoke_run[@]}" --entrypoint python "$smoke_image_id" -I -c '
+"${smoke_run[@]}" --env "EXPECTED_PYTHON_VERSION=$smoke_python_version" --entrypoint python "$smoke_image_id" -I -c '
 import glob
 import importlib.util
 import os
 import shutil
 import sys
-assert sys.version_info[:2] == (3, 14), sys.version
+assert sys.version_info.releaselevel == "final", sys.version
+assert ".".join(map(str, sys.version_info[:3])) == os.environ["EXPECTED_PYTHON_VERSION"], sys.version
 assert os.getuid() == 10001 and os.getgid() == 10001
 assert importlib.util.find_spec("pip") is None
 spec = importlib.util.find_spec("ghostfolio_boursedirect_sync")
@@ -23,7 +26,7 @@ assert shutil.which("pdftotext") is not None
 assert all(shutil.which(name) is None for name in
     ("node", "npm", "bw", "chromium", "google-chrome", "chrome-headless-shell"))
 assert not os.path.exists("/opt/chrome-headless-shell-linux64")
-print("Installed Python 3.14 package and PDF runtime passed")
+print("Installed stable Python package and PDF runtime passed")
 '
 # Replay the real anonymized BUY layout through the installed parser.
 smoke_fixture=$(realpath "$(dirname "$0")/../tests/fixtures/pdf_buy.txt")
