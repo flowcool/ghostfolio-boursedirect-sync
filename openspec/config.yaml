@@ -28,6 +28,9 @@ context: |
   short sentences, one idea per sentence, active voice, no internal jargon or invented labels.
   The operator must be able to validate each artifact without reading code.
   A changed decision is applied to proposal, specs, design and tasks before commit.
+  An error case absent from the complete available archive needs no new original.
+  Verify its logged error and write protection with explicit derived-data regressions.
+  Never alter original PDFs or claim a real financial observation for that case.
 
 rules:
   proposal:

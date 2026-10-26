@@ -52,10 +52,15 @@ work-tracker IDs.
   next bead in the same session. Budget about 150 tool calls; above that, stop
   and report.
 - **Done = the scenario replayed for real.** Put the command and its output in
-  the closing note. Green unit tests are not done. Keep review evidence in the
-  owning bead. A decision bead never delivers code.
+  the closing note. Green unit tests alone are not done. Apply the
+  unobserved-error exception below. Keep review evidence in the owning bead.
+  A decision bead never delivers code.
 - **Tests:** offline pytest, one real anonymized notice for each operation type
-  and each error code. No synthetic protocol proofs. No tests for docs or CI.
+  and each observed error code. After the complete available archive is checked,
+  an absent error case does not block delivery. Keep its logged error, exit code
+  and write protection. Verify these with explicit derived-data regressions;
+  never claim a real financial observation or alter an original PDF.
+  No synthetic protocol proofs. No tests for docs or CI.
 - **Review:** follow the invoked implementation skill. When it requires
   `code-review`, run independent Standards and Spec subagents before the PR.
   Fix actionable findings and record both reports in the owning bead. Apply
@@ -140,8 +145,8 @@ and the required review. Keep Python CI and the native image on the same release
 Keep `Decimal` for money and position decisions when adapting ibkr code.
 See
 [python conventions](.claude/rules/python-conventions.md),
-[security rules](.claude/rules/security.md). The legacy code stays in place
-until the rebuild replaces it.
+[security rules](.claude/rules/security.md). The legacy implementation remains
+in Git at `legacy-wip`.
 
 ## Shared Ghostfolio labs
 

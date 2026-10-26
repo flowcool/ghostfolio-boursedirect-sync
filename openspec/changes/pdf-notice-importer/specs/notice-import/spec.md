@@ -145,7 +145,7 @@ their occurrence rank. Copies of the same notice SHALL not add activities.
 
 A TAXE TRANSACT FINANCIERES row SHALL add its charged amount to exactly one BUY
 in the same source account, notice, date and ISIN. Never estimate or allocate
-tax. Ambiguity SHALL suspend affected BUYs with `ttf_attribution_failed`;
+tax. Ambiguity SHALL log `ttf_attribution_failed` and suspend affected BUYs;
 independent operations SHALL continue.
 
 #### Scenario: Attributed TTF
@@ -225,7 +225,7 @@ A DROITS DE GARDE row SHALL get code `custody_fee_ignored`, without import or ex
 
 ### Requirement: Stop on a share-count change
 
-DIVISION SHALL give `share_count_change`; unknown operations SHALL give
+DIVISION SHALL log `share_count_change`; unknown operations SHALL log
 `unknown_operation`. Either with ISIN SHALL block that security across all
 notices. Other securities SHALL continue. `PAPERLESS_DONE_TAG` SHALL clear
 these codes for that document only; other rows stay importable.

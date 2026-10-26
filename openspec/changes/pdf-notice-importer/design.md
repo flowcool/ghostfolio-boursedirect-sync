@@ -24,7 +24,7 @@ Use Paperless originals/search (`docs/api.md:121` at `2b00cf6`),
 Check source accounts before target selection. Require one active target.
 Use typed functions/data records, strict mypy/Ruff and at most 2500 application
 lines. No shared library/projection. Keep Decimal, EUR and UTC row dates.
-Align CI/runtime. Follow latest stable runtimes; pin digests and verify compatibility/security.
+Align CI/runtime; pin qualified stable digests.
 
 BD v3 keys retain normalized source rows and multiplicity, excluding metadata.
 Preserve current identities during fee correction; never derive identity from
@@ -35,9 +35,8 @@ through independent minimum-cost groups; stable dates/comments/IDs break ties.
 Remove source copies and invalid/future/occupied rows before assignment.
 Use chronological selection, SELL first on ties, confirmed holdings only.
 
-Apply the spec's HALF_UP, omitted-brokerage and TTF rules. The fee-only update
-is an approved BD exception to additive import, not a new generic repair path.
-Verify its endpoint/payload against the exact Ghostfolio version before coding.
+Apply the spec's HALF_UP, omitted-brokerage and TTF rules. The fee-only update is the approved BD exception to additive import.
+Verify the exact version's update endpoint/payload.
 After every write, require complete exact readback; after uncertainty wait five
 seconds before GET. Never resend. Failed confirmation stops writes.
 Validate APPRISE before service access; invalid values stop without values.
@@ -49,5 +48,7 @@ Adapt the existing Infra BD adapter. Feed retained PDFs to the installed
 candidate without fake Paperless. Use real lab HTTP and permanent lab authority.
 Reserve instances, isolate credentials, retain evidence and verify final stop.
 Qualify one image in empty/golden scenarios, including correction/idempotence.
-Paperless integration remains separate. Publish that image only on GO.
+Paperless integration remains separate. Publish only on GO.
+Absent archive error cases need no new original. Regressions verify logs and
+protection; they do not prove real financial observations.
 Revert commits for rollback; retain accepted financial state.
