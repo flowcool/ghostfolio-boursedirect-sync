@@ -6,7 +6,7 @@ test "$#" = 1
 smoke_python_version=$(sed -nE 's/^FROM python:([0-9]+\.[0-9]+\.[0-9]+)-.*/\1/p' "$(dirname "$0")/../Dockerfile")
 test -n "$smoke_python_version"
 smoke_image_id=$(docker image inspect --format '{{.Id}}' "$1")
-test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$smoke_image_id")" = linux/amd64
+test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$smoke_image_id")" = linux/$(docker version --format '{{.Server.Arch}}')
 smoke_run=(docker run --rm --network none --read-only --cap-drop ALL
   --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777)
 "${smoke_run[@]}" --env "EXPECTED_PYTHON_VERSION=$smoke_python_version" --entrypoint python "$smoke_image_id" -I -c '

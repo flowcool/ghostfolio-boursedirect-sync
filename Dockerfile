@@ -34,7 +34,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && pip uninstall -y pip
 
 ARG APP_VERSION=dev
-ENV APP_VERSION=${APP_VERSION}
+ARG APP_REVISION=unknown
+ENV APP_VERSION=${APP_VERSION} APP_REVISION=${APP_REVISION}
 COPY entrypoint.sh .
 RUN chmod 0555 /app /app/entrypoint.sh \
     && chmod 0444 /app/requirements.txt \

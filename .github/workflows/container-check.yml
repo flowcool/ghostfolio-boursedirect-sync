@@ -7,7 +7,14 @@ permissions:
   contents: read
 jobs:
   container-check:
-    runs-on: ubuntu-latest
+    name: container-check (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, arch: amd64}
+          - {runner: ubuntu-24.04-arm, arch: arm64}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -18,12 +25,12 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
           push: false
           pull: true
           tags: sync-check:ci
           outputs: type=docker,dest=${{ runner.temp }}/image.tar
-      - name: Smoke the actual AMD64 connector image offline
+      - name: Smoke the native connector image offline
         run: |
           docker load --input "${{ runner.temp }}/image.tar"
           bash scripts/smoke-connector-image.sh sync-check:ci

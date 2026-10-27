@@ -5,7 +5,7 @@
 Every pull request runs the versioned offline Python suite, the
 documentation catalogue and local-link check, and a whitespace check. The
 container workflow builds, smoke-checks and scans the native connector image for
-AMD64 only without publishing it. CodeQL analyzes Python, and Dependency Review blocks
+AMD64 and ARM64 without publishing it. CodeQL analyzes Python, and Dependency Review blocks
 new moderate-or-higher dependency findings, including development dependencies.
 All workflows use read-only repository access unless a specific job needs a
 narrower permission grant.
@@ -55,27 +55,29 @@ Validate repository configuration with the official validator (Node 24.11+):
 npx --yes --package renovate -- renovate-config-validator --strict
 ```
 
-## Tagged release
+## Qualified release
 
-Pushing a version tag starts `release-image.yml`. The release job builds the
-AMD64 container, scans it, and runs an offline smoke check. Only after those
-checks pass does it publish the versioned image to GHCR and create a
-GitHub draft release with the Compose archive and `SHA256SUMS`. An operator then
-verifies an anonymous pull of the versioned image and publishes the draft;
-the publication event promotes that same version to `latest`. A new GHCR package defaults to private and may need its visibility changed to public in
-package settings before it can be pulled anonymously; see GitHub's
-[container registry visibility guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
-The release archive pins the matching image version **and SHA256 digest**. After
-the checked image is pushed, the workflow reads its repository digest to generate
-the archive and `IMAGE_DIGEST`; `SHA256SUMS` covers both downloadable files. The
-archive includes the required Compose files,
-example environment file, configuration guide and tracked documentation. It excludes application
-source and local build inputs.
+`Prepare release candidate image` runs manually on `main`. It uploads native
+AMD64 and ARM64 candidates by digest. It scans and smoke-checks those exact
+images, then assembles and signs their index. Each native candidate builds once.
+No stable version or `latest` changes during preparation.
 
-See the [release procedure](../docs/operations/releasing.md) for the operator
-checklist and the [v0.1.0 notes](../docs/releases/v0.1.0.md) for the initial
-supported product scope. The normal Compose file uses the published image;
-`compose.build.yaml` is only for a local source checkout.
+After both Infra labs qualify that exact index and end stopped, attach the
+bounded `lab-qualification.json` to a prepared stable GitHub release. Require
+operator approval before publishing. A tag push alone does not publish.
+The release workflow verifies the signature, source, native identity and both
+lab receipts. It copies the exact index to `X.Y.Z` and reads back its digest.
+It updates and verifies `latest` only for the current stable release.
+No RC channel or rebuild is required. A failed publication stops for inspection.
+
+The publication workflow retains the digest-pinned operator archive,
+`IMAGE_DIGEST` and `SHA256SUMS`. It verifies the index and both native digests
+against the qualified record before packaging. Source Compose retains its local
+build; bundled Compose uses the qualified image. The archive includes public
+configuration examples and tracked docs, plus the public GitHub release notes.
+It excludes application source, build context and private files.
+See the [release procedure](../docs/operations/releasing.md) for candidate
+failure recovery, registry visibility and the operator checklist.
 
 ## Release notes and automation
 

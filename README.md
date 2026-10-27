@@ -9,6 +9,26 @@ Paperless acceptance remain separate requirements.
 The published **v0.1.1 is a legacy preview only**. It does not import activities
 or provide the v1 unattended service.
 
+Release preparation follows the IBKR release chain. Run the manual
+`Prepare release candidate image` workflow on `main` with the intended
+`vX.Y.Z` version. It builds `amd64` and `arm64` once. It checks each native
+image, then signs the candidate index. This step writes candidate images to
+GHCR. It does not publish a stable version or change `latest`.
+
+Qualify that exact index in the empty and golden labs. Keep the
+`candidate-image.json` artifact. Add `labs.empty` and `labs.golden` to its
+record. Each entry must contain `status: PASS`, `cleanup: stopped`, and the
+`evidence_sha256` of its retained proof. Attach the completed record as
+`lab-qualification.json` to the prepared stable GitHub release. Tag the exact
+candidate source commit. Publish the release only after operator approval.
+The release workflow checks the record and signature, then copies the exact
+index to the version tag. It changes `latest` only for the current stable
+release. It verifies both tags by digest. It never rebuilds the image.
+No RC channel is required. A failed or partial publication stops the workflow;
+inspect retained evidence before recovery. Never overwrite a version tag.
+The release keeps the digest-pinned Compose archive, `IMAGE_DIGEST` and
+`SHA256SUMS`. See the [release procedure](docs/operations/releasing.md).
+
 This Docker connector reads Bourse Direct operation notices from Paperless.
 It reads BUY, SELL and coupon activities for one active Ghostfolio account.
 
