@@ -83,9 +83,9 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
     assert prefix + "tmp/receipt.json" not in members
     assert prefix + "scripts/import.py" not in members
     assert prefix + "docs/archive/secret.md" not in members
-    assert b"v1.2.3" in content["compose.yaml"]
+    assert b":1.2.3@sha256:" in content["compose.yaml"]
     assert b"v0.1.0" not in content["compose.yaml"]
-    reference = "ghcr.io/flowcool/ghostfolio-boursedirect-sync:v1.2.3@" + DIGEST
+    reference = "ghcr.io/flowcool/ghostfolio-boursedirect-sync:1.2.3@" + DIGEST
     assert reference.encode() in content["compose.yaml"]
     assert reference.encode() in content["README.md"]
     assert b"v0.1.0" not in content["README.md"]
@@ -243,3 +243,33 @@ def test_release_cli_requires_registry_identity_proof_before_artifact_creation(t
     else:
         package.main()
     assert output.exists() is (mode == "complete")
+
+
+def test_multiarch_bundle_uses_exact_qualified_index_and_public_notes(tmp_path):
+    native = {"amd64": "sha256:" + "b" * 64, "arm64": "sha256:" + "c" * 64}
+    index = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json",
+             "manifests": [{"platform": {"os": "linux", "architecture": arch}, "digest": digest}
+                           for arch, digest in native.items()]}
+    raw = json.dumps(index).encode()
+    digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+    record = {"repository": "flowcool/ghostfolio-boursedirect-sync", "tag": "v1.0.0",
+              "digest": digest, "native": native}
+    package.verify_qualified_index(raw, digest, record, "v1.0.0")
+    with pytest.raises(ValueError):
+        package.verify_qualified_index(raw + b"\n", digest, record, "v1.0.0")
+    changed = {**record, "native": {**native, "arm64": "sha256:" + "d" * 64}}
+    with pytest.raises(ValueError):
+        package.verify_qualified_index(raw, digest, changed, "v1.0.0")
+    root = tmp_path / "repo"
+    minimal_release_tree(root, "v1.0.0")
+    source = b"services:\n  importer:\n    build: .\n"
+    (root / "compose.yaml").write_bytes(source)
+    (root / "docs/releases/v1.0.0.md").unlink()
+    archive, _ = create_bundle(root, "v1.0.0", tmp_path / "dist", [], digest,
+                               release_notes=b"# Public GitHub release\n")
+    with tarfile.open(archive) as bundle:
+        compose = bundle.extractfile("ghostfolio-boursedirect-sync-v1.0.0/compose.yaml").read()
+        assert b"build:" not in compose
+        assert image_reference("v1.0.0", digest).encode() in compose
+        assert bundle.extractfile("ghostfolio-boursedirect-sync-v1.0.0/docs/releases/v1.0.0.md").read() == b"# Public GitHub release\n"
+    assert (root / "compose.yaml").read_bytes() == source

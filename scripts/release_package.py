@@ -31,7 +31,7 @@ SAFE_DOC_SUFFIXES = {".md", ".json", ".svg", ".yaml", ".yml"}
 RELEASE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 INLINE_LINK = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)]+)\)")
 IMAGE_REFERENCE = re.compile(
-    r"ghcr\.io/flowcool/ghostfolio-boursedirect-sync:v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"ghcr\.io/flowcool/ghostfolio-boursedirect-sync:v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     r"(?:@sha256:[0-9a-f]{64})?"
 )
 IMAGE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -77,7 +77,29 @@ def image_reference(tag, image_digest):
     require_stable_tag(tag)
     if not IMAGE_DIGEST.fullmatch(image_digest):
         raise ValueError("image digest must be sha256 followed by 64 lowercase hexadecimal digits")
-    return IMAGE_PREFIX + tag + "@" + image_digest
+    return IMAGE_PREFIX + tag[1:] + "@" + image_digest
+
+
+def verify_qualified_index(raw, image_digest, record, tag):
+    """Bind the bundle to the exact index already checked by promotion."""
+    if (not IMAGE_DIGEST.fullmatch(image_digest)
+            or "sha256:" + hashlib.sha256(raw).hexdigest() != image_digest
+            or record.get("digest") != image_digest or record.get("tag") != tag
+            or record.get("repository") != "flowcool/ghostfolio-boursedirect-sync"):
+        raise ValueError("qualified index identity differs")
+    index = json.loads(raw)
+    native = record.get("native")
+    if (not isinstance(index, dict) or index.get("schemaVersion") != 2
+            or index.get("mediaType") not in ("application/vnd.oci.image.index.v1+json",
+                                             "application/vnd.docker.distribution.manifest.list.v2+json")
+            or not isinstance(native, dict) or set(native) != {"amd64", "arm64"}):
+        raise ValueError("qualified native manifests are required")
+    for arch, digest in native.items():
+        entries = [entry.get("digest") for entry in index.get("manifests", [])
+                   if entry.get("platform", {}).get("os") == "linux"
+                   and entry.get("platform", {}).get("architecture") == arch]
+        if not IMAGE_DIGEST.fullmatch(digest) or entries != [digest]:
+            raise ValueError("qualified native manifest differs")
 
 
 def verify_pushed_manifest(raw, image_digest, checked_image_id):
@@ -100,6 +122,11 @@ def render_compose(data, tag, image_digest):
     text = data.decode("utf-8")
     replacement = image_reference(tag, image_digest)
     rendered, count = IMAGE_REFERENCE.subn(replacement, text)
+    if count == 0 and not re.search(r"^\s*image:", text, re.MULTILINE):
+        # Keep source Compose unchanged. The operator bundle runs the exact
+        # qualified image, using the existing bundle rendering mechanism.
+        rendered, count = re.subn(r"^( +)build: \. *$", r"\1image: " + replacement,
+                                 text, flags=re.MULTILINE)
     if count != 1:
         raise ValueError("compose.yaml must contain exactly one canonical release image")
     return rendered.encode("utf-8")
@@ -137,32 +164,34 @@ def rewrite_markdown_links(name, data, included, root, tag):
     return INLINE_LINK.sub(replace, text).encode("utf-8")
 
 
-def bundle_entries(root, tag, tracked_paths):
+def bundle_entries(root, tag, tracked_paths, release_notes=None):
     require_stable_tag(tag)
     release_note = "docs/releases/" + tag + ".md"
     paths = public_paths(root, tracked_paths)
     if release_note not in paths:
         paths.append(release_note)
         paths.sort()
-    if release_note not in paths or not (root / release_note).is_file() or (root / release_note).is_symlink():
+    if release_notes is None and (not (root / release_note).is_file() or (root / release_note).is_symlink()):
         raise ValueError("required release notes are missing: " + release_note)
 
     included = set(paths)
     entries = {}
     for name in paths:
+        if name == release_note and release_notes is not None:
+            entries[name] = release_notes
+            continue
         source = root / name
         data = source.read_bytes()
         if name.lower().endswith(".md"):
             data = rewrite_markdown_links(name, data, included, root, tag)
         entries[name] = data
-    if len(IMAGE_REFERENCE.findall(entries["compose.yaml"].decode("utf-8"))) != 1:
-        raise ValueError("compose.yaml must contain exactly one canonical release image")
+    render_compose(entries["compose.yaml"], tag, "sha256:" + "0" * 64)
     return entries
 
 
-def create_bundle(root, tag, output_dir, tracked_paths, image_digest):
+def create_bundle(root, tag, output_dir, tracked_paths, image_digest, release_notes=None):
     reference = image_reference(tag, image_digest)
-    entries = bundle_entries(root, tag, tracked_paths)
+    entries = bundle_entries(root, tag, tracked_paths, release_notes)
     entries["compose.yaml"] = render_compose(entries["compose.yaml"], tag, image_digest)
     entries["README.md"] = IMAGE_REFERENCE.sub(reference, entries["README.md"].decode("utf-8")).encode("utf-8")
     entries["IMAGE_DIGEST"] = (reference + "\n").encode("utf-8")
@@ -202,6 +231,8 @@ def main():
     parser.add_argument("--image-digest", help="digest of the exact pushed, scanned image")
     parser.add_argument("--image-manifest", type=Path, help="raw digest-addressed registry manifest")
     parser.add_argument("--checked-image-id", help="local image ID retained before scan/smoke")
+    parser.add_argument("--qualification", type=Path, help="record already verified by promotion")
+    parser.add_argument("--release-notes", type=Path, help="public GitHub release body")
     parser.add_argument("--check-only", action="store_true", help="validate public inputs without creating artifacts")
     args = parser.parse_args()
     try:
@@ -210,16 +241,22 @@ def main():
         verify_tag_checkout(root, args.tag)
         if args.check_only:
             if any(value is not None for value in (
-                    args.image_digest, args.output_dir, args.image_manifest, args.checked_image_id)):
+                    args.image_digest, args.output_dir, args.image_manifest, args.checked_image_id, args.qualification)):
                 raise ValueError("--check-only cannot be combined with artifact output options")
-            bundle_entries(root, args.tag, tracked_docs(root))
+            bundle_entries(root, args.tag, tracked_docs(root),
+                           args.release_notes.read_bytes() if args.release_notes else None)
             print("Release inputs verified; no artifacts created.")
             return
         if any(value is None for value in (
-                args.output_dir, args.image_digest, args.image_manifest, args.checked_image_id)):
-            raise ValueError("artifact output requires --output-dir, --image-digest, --image-manifest and --checked-image-id")
-        verify_pushed_manifest(args.image_manifest.read_bytes(), args.image_digest, args.checked_image_id)
-        archive, sums = create_bundle(root, args.tag, args.output_dir, tracked_docs(root), args.image_digest)
+                args.output_dir, args.image_digest, args.image_manifest)) or bool(args.checked_image_id) == bool(args.qualification):
+            raise ValueError("artifact output requires --output-dir, --image-digest, --image-manifest and exactly one identity proof")
+        if args.qualification:
+            verify_qualified_index(args.image_manifest.read_bytes(), args.image_digest,
+                                   json.loads(args.qualification.read_bytes()), args.tag)
+        else:
+            verify_pushed_manifest(args.image_manifest.read_bytes(), args.image_digest, args.checked_image_id)
+        archive, sums = create_bundle(root, args.tag, args.output_dir, tracked_docs(root), args.image_digest,
+                                     args.release_notes.read_bytes() if args.release_notes else None)
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
         parser.error(str(error))
     print(archive)

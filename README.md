@@ -26,6 +26,8 @@ index to the version tag. It changes `latest` only for the current stable
 release. It verifies both tags by digest. It never rebuilds the image.
 No RC channel is required. A failed or partial publication stops the workflow;
 inspect retained evidence before recovery. Never overwrite a version tag.
+The release keeps the digest-pinned Compose archive, `IMAGE_DIGEST` and
+`SHA256SUMS`. See the [release procedure](docs/operations/releasing.md).
 
 This Docker connector reads Bourse Direct operation notices from Paperless.
 It reads BUY, SELL and coupon activities for one active Ghostfolio account.

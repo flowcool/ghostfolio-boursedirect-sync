@@ -72,6 +72,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.15.1"
+      - run: pip install -r requirements.txt
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Generate OCI metadata from the validated release identity
         id: meta
@@ -114,6 +115,7 @@ jobs:
       - name: Gate fixable high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.1
           image-ref: bd-release:check
           scanners: vuln
           severity: HIGH,CRITICAL
@@ -125,6 +127,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.1
           image-ref: bd-release:check
           scanners: vuln
           severity: HIGH,CRITICAL
@@ -186,7 +189,7 @@ jobs:
       - name: Sign the verified manifest keylessly and check the signature
         run: |
           digest=$(cat release-manifest-digest.txt)
-          # The candidate index exists. Retry signing only; never rebuild.
+          # Retry signing in this step only. A failed job must not be rerun.
           for attempt in 1 2 3; do
             cosign sign --yes "$IMAGE@$digest" && break
             [ "$attempt" = 3 ] && exit 1

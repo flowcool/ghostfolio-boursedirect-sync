@@ -1,84 +1,67 @@
 # Releasing
 
-This page describes retained publication tooling. It does not establish v1
-release readiness. The current v1 Compose builds from source. Stable release
-preparation must provide its qualified image reference before packaging; the
-packager rejects a Compose file without that reference. Publication requires
-separate authorization.
+Release preparation and stable publication are separate actions. Neither action
+establishes product readiness. Require the relevant service acceptance first.
+No GitHub workflow writes financial activities to Ghostfolio.
 
-Releases are produced from a reviewed version tag. A tag push starts the
-`release-image.yml` workflow, which builds the `linux/amd64` image, scans it, and
-runs its offline smoke check before publishing. On success, it publishes the
-versioned GHCR image, then creates a GitHub draft release
-with the Compose user archive, `IMAGE_DIGEST`, and `SHA256SUMS` attached. A failed earlier
-stage must not leave a release that appears ready to operators.
+## Prepare and qualify
 
-Before publishing the draft, verify that the versioned image can be pulled from
-GHCR anonymously. GitHub's first publication of a package defaults to private;
-for the first release, make the package public in its package settings before
-the anonymous-pull check. Only then publish the draft release. The publication event promotes the checked
-version to `latest` after confirming that it is still the latest stable release. See GitHub's
-[container registry visibility guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+1. Review the final source and require green CI and the completed Pullfrog review.
+2. Run `Prepare release candidate image` on `main` with the intended `vX.Y.Z`.
+   This uploads each native candidate by digest, with SBOM and provenance.
+   It checks native AMD64 and ARM64 runtime and security. It builds each once.
+3. Download the `candidate-image` artifact. It records the exact source commit,
+   signed index digest and both checked native manifest digests.
+4. Use the existing Infra labs to qualify that exact index in empty and golden
+   scenarios. Retain proof and verify that both owned labs are stopped.
+5. Add `labs.empty` and `labs.golden` to `candidate-image.json`. Each entry needs
+   `status: PASS`, `cleanup: stopped` and the retained proof's `evidence_sha256`.
+   Save the result as `lab-qualification.json`. Never reuse another image's proof.
 
-The public README starts from the published image and a copyable Compose definition;
-archive extraction is optional. Keep its Compose example identical to the canonical
-`compose.yaml`. Update the image pin and operator instructions together.
+No RC channel is required. Candidate names use `candidate-X.Y.Z-<full-commit>`.
+A candidate name is immutable. The signing step can retry transient signing
+failures within its original job. If that job fails after index creation, stop.
+Do not rerun it or rebuild automatically. Retain the index and Action logs.
+There is no automatic recovery command. A new candidate needs a new source
+commit and new qualification. An approved manual recovery can reuse retained
+bytes only after exact registry and signature checks.
 
-The optional user archive contains the Compose files, example environment file,
-mapping guide, README,
-CONTRIBUTING, CHANGELOG, LICENSE, and tracked documentation. It does not contain
-the application source, Docker build context, or local build override. The image
-reference is pinned to the release version and the pushed image's SHA256 digest
-in the bundled default Compose file and the copied README image example. `IMAGE_DIGEST` contains that exact reference
-inside the archive and as a separate release asset. `SHA256SUMS` covers the archive
-and the separate reference file. The workflow validates public inputs before
-building, then packages only after the scanned/smoked image is pushed and its
-repository digest is available. Existing published archives are never rewritten.
-Before packaging, the workflow verifies that the raw registry manifest hashes to
-that digest and its `config.digest` equals the local image ID retained before the
-scan. The tag must still identify that same checked local image before push. This
-binds the published manifest to the scanned/smoked image without confusing a local
-image ID with a registry digest. See Docker's
-[registry manifest inspection](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/).
+## Publish on approval
 
-## Release notes
+Prepare a GitHub draft release for the intended `vX.Y.Z`. Its tag must identify
+the exact qualified source commit. Attach `lab-qualification.json`. Write clear
+operator notes and use GitHub's generated changelog with `.github/release.yml`.
+Existing `docs/releases/` notes remain historical source documents. The new
+bundle takes its release notes from the public GitHub release body.
 
-Use the same two-part release format as the DEGIRO connector: concise operator
-notes from `docs/releases/vX.Y.Z.md`, followed by GitHub's generated changelog.
-Start the notes with `# vX.Y.Z — Short operator benefit`; the workflow uses that
-heading as the public release title.
-The workflow converts local documentation links to absolute URLs at the release
-version and uses `gh release create --generate-notes --notes-file` to prepend the
-operator notes. `.github/release.yml` groups merged PRs by the labels assigned by
-`pr-release-labels.yml`; keep these categories and label names aligned across the
-connector repositories. GitHub adds PR/author links and the full comparison link.
-No additional GitHub repository setting is needed for this notes format.
+Before publication, verify an anonymous pull of the candidate's exact digest.
+A new GHCR package can default to private. Set its visibility to public when
+needed. See [GitHub's registry visibility guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
-Editing a published release's prose does not change its image, tag or assets.
-Keep artifact corrections in a new version; never replace published assets.
+Publish the draft only after explicit operator approval. A tag push alone runs
+no release publication. `release-image.yml` checks source ancestry, authenticated
+version absence, the bounded qualification record, signature, native manifests
+and runtime/OCI identity. It copies the qualified index to `X.Y.Z`. It changes
+`latest` only when this release is the current stable release. It reads back
+both tags and requires the same exact index digest. It never rebuilds.
 
-## Release checklist
+## Operator bundle
 
-1. Update the changelog, release notes, versioned image reference and release
-   documentation together.
-2. Review the final diff and confirm the Paperless source, account selection,
-   simulation and credential-handling claims against the implementation.
-3. Require final-head CI and review. The release workflow must build, scan and
-   smoke-check the AMD64 image from the pushed tag before publishing the image.
-4. Push the approved `vX.Y.Z` tag. Wait for the workflow to publish the versioned
-   image tag and attach the digest-pinned archive, `IMAGE_DIGEST` and checksums to
-   a draft release.
-5. For a new GHCR package, set package visibility to public. Verify an anonymous
-   pull using the exact reference in `IMAGE_DIGEST`, then publish the GitHub draft release. Confirm the
-   publication workflow promotes that version to `latest`.
-6. Download the archive and checksum file from the published release, verify
-   them with `sha256sum -c SHA256SUMS`, and inspect the extracted Compose files
-   and documentation links. Confirm Compose and both copies of `IMAGE_DIGEST`
-   contain the same repository/version/digest reference. Digest pinning establishes
-   content identity; it does not sign or attest the publisher.
+The publication workflow retains the deterministic Compose archive,
+`IMAGE_DIGEST` and `SHA256SUMS`. The archive uses the exact qualified multiarch
+index. It contains public Compose/configuration examples and tracked docs.
+It excludes application source, build context and private files. Source Compose
+keeps its local build. Bundled Compose replaces that build with the version and
+digest-pinned image. The archive's release notes come from the public release.
 
-The first product release is documented in [v0.1.0 notes](../releases/v0.1.0.md).
-The source checkout's [build guarantees](../../.github/BUILD.md) describe the
-checks that run before release. Roll back a bad release by publishing a corrected
-version; retain prior versioned images and artifacts for users who need to return
-to them.
+Before packaging, require the raw index hash and both native manifest digests
+to match the qualification record already verified by promotion. The image tag
+is `X.Y.Z`; the GitHub release tag is `vX.Y.Z`. `SHA256SUMS` covers the archive
+and the separate `IMAGE_DIGEST`. Verify downloaded assets with
+`sha256sum -c SHA256SUMS`. Compare the bundled and separate image references.
+
+Never replace published assets or overwrite an existing version tag. A failed
+write or readback stops publication. It can leave a partial release. Inspect
+Action logs and registry state before any recovery. Keep prior images and proof.
+Fix a released defect with a new version. Runtime rollback does not undo
+financial activities. See the [build guarantees](../../.github/BUILD.md).

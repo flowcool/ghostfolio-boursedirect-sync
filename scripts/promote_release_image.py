@@ -78,7 +78,13 @@ def plan():
                   f"repos/{repository}/releases/assets/{assets[0]['id']}")
     if len(data) > 16384:
         raise RuntimeError("Qualification record is too large")
-    return tag, version, qualification(json.loads(data, object_pairs_hook=unique_object), repository, tag, commit)
+    record = qualification(json.loads(data, object_pairs_hook=unique_object), repository, tag, commit)
+    notes = release.get("body")
+    if not isinstance(notes, str) or not notes.strip() or len(notes.encode()) > 131072:
+        raise RuntimeError("Bounded public release notes are required")
+    Path("release-notes.md").write_text(notes, encoding="utf-8")
+    Path("release-qualification.json").write_text(json.dumps(record, indent=2) + "\n")
+    return tag, version, record
 
 
 def same_digest(reference, expected):
@@ -111,6 +117,8 @@ def promote(selected, progress):
     subprocess.run([sys.executable, "scripts/release_image.py", "--registry"], check=True, timeout=120)
     if plan() != selected:
         raise RuntimeError("Qualification changed during verification")
+    subprocess.run([sys.executable, "scripts/release_package.py", "--tag", tag,
+                    "--check-only", "--release-notes", "release-notes.md"], check=True, timeout=60)
     progress["phase"] = "version write and readback"
     progress["publication_attempted"] = True
     subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", image + ":" + version, source],
