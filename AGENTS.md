@@ -72,7 +72,9 @@ work-tracker IDs.
   remark, including cleanup outside inline threads. Record the outcome and
   reviewed SHA. A green status alone is insufficient. After a new commit,
   repeat this review gate before running `pr-ship`.
-- **Git:** one branch and one PR per bead. Merge when CI is green and Pullfrog
+- **Git:** one branch and one PR per change. Sub-items (beads), steps and review
+  fixes are commits in that PR; never open separate or stacked PRs for them.
+  Merge when CI is green and Pullfrog
   finished its review of the head commit, or on Florent's explicit go. A PR that
   changes only `openspec/`, `docs/` or `*.md` needs CI green only. Open the PR
   yourself, then run `~/.agents/bin/pr-ship <n> --repo
