@@ -142,7 +142,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 6. Import, notification and schedule
 
-- [ ] 6.1 Add the import with `DRY_RUN=0`, the strict readback
+- [x] 6.1 Add the import with `DRY_RUN=0`, the strict readback
   (`import_unconfirmed`), the summary line and the exit codes. This task
   qualifies writes in the shared labs. The first production write needs a
   separate operator-approved `Operation plan:` under
