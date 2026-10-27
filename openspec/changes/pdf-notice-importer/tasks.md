@@ -98,7 +98,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 4. Sells, coupons and duplicates
 
-- [ ] 4.1 For each real PDF type used, record whether it shows a broker notice
+- [x] 4.1 For each real PDF type used, record whether it shows a broker notice
   reference. Add the `BD#v3#` comment with that reference as the document
   namespace, or sorted normalized notice rows when absent. Preserve multiplicity;
   exclude file metadata and formatting. Verify "Regenerated notice" from the
