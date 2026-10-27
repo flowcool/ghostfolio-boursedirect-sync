@@ -1,12 +1,15 @@
 name: Offline tests
 
 on:
+  # Runs on every PR (it also checks documentation links); no re-run after merge.
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
+
+concurrency:
+  group: offline-tests-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   tests:
