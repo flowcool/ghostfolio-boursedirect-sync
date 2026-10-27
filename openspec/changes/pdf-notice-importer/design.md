@@ -53,3 +53,21 @@ Paperless integration remains separate. Publish only on GO.
 Absent archive error cases need no new original. Regressions verify logs and
 protection; they do not prove real financial observations.
 Revert commits; retain accepted financial state.
+
+## Release tooling source
+
+Review IBKR release tooling separately at
+`97161032d5239fd9e2bed72d1bac9d358c722c58`.
+Reuse `release_image.py:17,25,89`, `verify_release_image.py:15,53`,
+`promote_release_image.py:28,98,105` and `release-image.yml:10,79,130,240`.
+IBKR v3.3.0 promotion run `40505817589` copied the signed qualified index;
+its native build jobs were skipped. The later metadata/identity change has
+CI evidence, not a released-image receipt.
+
+Approved BD adaptation: build each native candidate once, export by digest,
+check the pulled exact digest, then assemble and sign its index. Qualify that
+index in both existing labs. A stable release carries `lab-qualification.json`.
+It replaces the IBKR preceding-RC asset; no RC channel is required.
+Promotion verifies the same identity, native digests, lab results and signature.
+It copies the index and verifies version/latest digests. Never rebuild after
+qualification. A changed image needs new qualification. Publication retains GO.

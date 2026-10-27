@@ -1,0 +1,210 @@
+# Adapted from IBKR 9716103 release-image.yml. Build once, qualify, then promote.
+name: Prepare release candidate image
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Intended stable version (vX.Y.Z); no stable publication
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-image
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tag: ${{ inputs.tag }}
+      app_version: ${{ steps.identity.outputs.version }}
+      revision: ${{ steps.identity.outputs.revision }}
+      candidate: ${{ steps.identity.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.1"
+      - run: pip install -r requirements.txt
+      - id: identity
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/prepare_release_image.py --tag "$RELEASE_TAG"
+      - name: Check the exact source before building the candidate
+        run: |
+          pip install -r requirements-dev.txt
+          pip install --no-deps .
+          python -m ruff check ghostfolio_boursedirect_sync
+          python -m mypy --strict ghostfolio_boursedirect_sync
+          python -m pytest tests -q
+          pip-audit
+
+  native-image:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, arch: amd64}
+          - {runner: ubuntu-24.04-arm, arch: arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+      RELEASE_APP_VERSION: ${{ needs.preflight.outputs.app_version }}
+      RELEASE_REVISION: ${{ needs.preflight.outputs.revision }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.1"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Generate OCI metadata from the validated release identity
+        id: meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=raw,value=${{ env.RELEASE_APP_VERSION }}
+          flavor: latest=false
+      - name: Fix build timestamps to the release commit
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build once by digest, with SBOM and provenance; no stable tag
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            APP_VERSION=${{ env.RELEASE_APP_VERSION }}
+            APP_REVISION=${{ env.RELEASE_REVISION }}
+            SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.RELEASE_REVISION }}
+            org.opencontainers.image.version=${{ env.RELEASE_APP_VERSION }}
+      - name: Load the exact native candidate for isolated checks
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          docker pull --platform linux/${{ matrix.arch }} "$IMAGE@$IMAGE_DIGEST"
+          docker tag "$IMAGE@$IMAGE_DIGEST" bd-release:check
+      - name: Gate fixable high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: bd-release:check
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-files: /usr/local/bin/supercronic
+          trivyignores: .trivyignore
+      - name: Advisory scan including scheduler
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: bd-release:check
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+      - name: Check isolated read-only runtime modes and container logs
+        run: bash scripts/smoke-connector-image.sh bd-release:check
+      - name: Verify publication uses the validated image configuration
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          python scripts/verify_release_image.py --image "$IMAGE" --digest "$IMAGE_DIGEST" --arch "$ARCH"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digests/*.txt
+          if-no-files-found: error
+
+  manifest:
+    needs: [preflight, native-image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.preflight.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.1"
+      - run: pip install -r requirements.txt
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: digests
+          pattern: digest-*
+          merge-multiple: true
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Recheck single-publication version guard
+        run: python scripts/prepare_release_image.py --tag "$RELEASE_TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assemble version manifest and verify both checked architectures
+        run: python scripts/verify_release_image.py --image "$IMAGE" --assemble "$RELEASE_VERSION"
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the verified manifest keylessly and check the signature
+        run: |
+          digest=$(cat release-manifest-digest.txt)
+          # The candidate index exists. Retry signing only; never rebuild.
+          for attempt in 1 2 3; do
+            cosign sign --yes "$IMAGE@$digest" && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep $((attempt * 20))
+          done
+          cosign verify \
+            --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$IMAGE@$digest" > /dev/null
+          echo "Signed and verified $RELEASE_TAG ($digest)"
+      - name: Record exact candidate identity for lab qualification
+        run: python scripts/prepare_release_image.py --tag "$RELEASE_TAG" --receipt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: candidate-image
+          path: |
+            candidate-image.json
+            release-manifest.json
+            release-manifest-digest.txt
+          if-no-files-found: warn
