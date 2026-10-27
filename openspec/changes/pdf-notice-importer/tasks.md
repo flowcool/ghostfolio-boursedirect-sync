@@ -98,7 +98,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 4. Sells, coupons and duplicates
 
-- [ ] 4.1 For each real PDF type used, record whether it shows a broker notice
+- [x] 4.1 For each real PDF type used, record whether it shows a broker notice
   reference. Add the `BD#v3#` comment with that reference as the document
   namespace, or sorted normalized notice rows when absent. Preserve multiplicity;
   exclude file metadata and formatting. Verify "Regenerated notice" from the
@@ -115,7 +115,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   before writes. Verify "Invalid identity" and "Moved identity". Index occupied
   BD identities across visible accounts, including inactive rows. Only the target
   account supports manual matches and holdings. Independent rows continue.
-- [ ] 4.2 Add SELL rows, the sell guard on the running position and
+- [x] 4.2 Add SELL rows, the sell guard on the running position and
   `custody_fee_ignored`, with an offline test (two sells that together exceed
   the position). Verify the scenarios "Sell without a position" and "Sell
   notice with a custody fee".
