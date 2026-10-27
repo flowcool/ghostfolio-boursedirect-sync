@@ -115,7 +115,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   before writes. Verify "Invalid identity" and "Moved identity". Index occupied
   BD identities across visible accounts, including inactive rows. Only the target
   account supports manual matches and holdings. Independent rows continue.
-- [ ] 4.2 Add SELL rows, the sell guard on the running position and
+- [x] 4.2 Add SELL rows, the sell guard on the running position and
   `custody_fee_ignored`, with an offline test (two sells that together exceed
   the position). Verify the scenarios "Sell without a position" and "Sell
   notice with a custody fee".
