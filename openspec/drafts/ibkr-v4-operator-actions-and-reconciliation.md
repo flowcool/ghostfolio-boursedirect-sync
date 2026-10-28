@@ -10,6 +10,9 @@ Source behavior: IBKR
 [`clarify-operator-actions`](https://github.com/flowcool/ghostfolio-ibkr-sync/blob/e78bf215b1c3a4cf32e6e9bd2990ef13d38324c2/openspec/changes/archive/2026-10-27-clarify-operator-actions/specs/connector-runtime/spec.md)
 and
 [`activity-reconciliation`](https://github.com/flowcool/ghostfolio-ibkr-sync/blob/e78bf215b1c3a4cf32e6e9bd2990ef13d38324c2/openspec/specs/activity-reconciliation/spec.md).
+These contracts were delivered by
+[IBKR PR #322](https://github.com/flowcool/ghostfolio-ibkr-sync/pull/322) and
+[IBKR PR #328](https://github.com/flowcool/ghostfolio-ibkr-sync/pull/328).
 Apply these behaviors to Bourse Direct PDF evidence. Do not assume that Flex
 fields or currency conversions exist in notices.
 
@@ -66,25 +69,31 @@ for BUY/SELL and three days for DIVIDEND. A threshold match is not exact
 identity. A coupon correction needs separate proof that its PDF net amount
 supports the proposed Ghostfolio representation.
 
+An exact source notice may support a correction of comment, business date,
+unit price or fee. It must preserve account, operation type, security, BUY/SELL
+quantity and every unrelated field. A coupon correction must use its validated
+net credit and fixed Ghostfolio quantity of one; it cannot infer a missing
+payment from proximity. A legacy `BD#v1` or `BD#v2` comment may migrate only
+when the current source account and activity establish unique ownership.
+Otherwise, the affected proposal remains manual and makes no automatic write.
+
 Each accepted update keeps an exact before/after record and requires exact
 readback. An uncertain result stops further financial writes and is not sent
 again automatically. Start with at most one activity update per connector run,
-shared by manual approvals and automatic corrections. A later run uses fresh
-source and destination evidence.
+shared by manual approvals, automatic corrections and the existing TTF fee-only
+correction. A later run uses fresh source and destination evidence.
 
-## Decisions before promotion
+## BD validation before promotion
 
-1. Which current BD conflicts need an action notification, including when the
-   run exits successfully? Preserve informational custody-fee messages.
-2. Which BD fields can a general correction change? Retain the approved TTF
-   fee-only case. Do not infer a date, price or coupon amount from
-   proximity alone.
-3. Can a verified legacy `BD#v1` or `BD#v2` reference receive a comment-only
-   migration? Define account ownership and collision proof first.
-4. Does the EUR source prove every gross and date comparison above? Exclude a
-   correction type when the original notice cannot prove it.
-5. Should the existing TTF fee-only update share the one-update budget? The
-   recommended answer is yes, after exact candidate qualification.
+- Map each current BD error and hold to the IBKR action categories. Keep
+  informational custody-fee messages out of action reminders.
+- Prove every eligible field from an original PDF and a complete destination
+  activity read. Refuse incomplete account, security, date or amount evidence.
+- Prove legacy reference ownership and collisions against the current BD
+  comment generations. Refuse uncertain migration.
+- Prove the EUR profile limits, exact quantities, local dates, TTF correction
+  budget and coupon representation on retained originals. Keep unsupported
+  shapes manual.
 
 Keep Paperless read only, broker login outside this connector, simulation on by
 default, no deletion, exact readback and no automatic resend.
