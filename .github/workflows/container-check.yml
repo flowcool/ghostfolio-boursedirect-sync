@@ -1,10 +1,18 @@
 name: Native connector image
 on:
+  # Not a required check: documentation-only PRs skip it; main is checked on
+  # the PR before merge (no re-run after merge).
   pull_request:
-  push:
-    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "openspec/**"
+      - "**/*.md"
 permissions:
   contents: read
+concurrency:
+  group: container-check-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   container-check:
     name: container-check (${{ matrix.arch }})
