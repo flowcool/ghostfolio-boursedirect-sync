@@ -23,9 +23,8 @@ State whether AI assisted this change and what the author verified.
 
 ## Review
 
-Follow the invoked skill for pre-PR review. Record independent Standards and
-Spec reports when `code-review` applies. Add the security note when
-`security-review` applies. Pullfrog reviews the final code head.
+Pullfrog is the only reviewer. Add the security note when `security-review`
+applies. Record the lab gate proof when AGENTS.md requires it.
 
 - [ ] Merge `main` into the branch before the first push.
 - [ ] Require a completed Pullfrog review of the final code head and green CI.
