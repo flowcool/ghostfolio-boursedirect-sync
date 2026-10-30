@@ -6,8 +6,11 @@ The published image passed 19 financial scenarios in the empty and golden labs.
 Real Paperless acceptance passed the default BUY simulation, source error checks
 and one failure notification to an isolated local receiver. The Paperless checks
 sent no financial request. The default mode remains simulation.
-Automatic BillCollector collection and the first production import still need
-separate acceptance and operator approval.
+BillCollector has delivered original notices to Paperless through its daemon.
+The first approved production import and its immediate repeat passed.
+The repeat added no activity. Scheduled production imports still need setup.
+Infra owns production host files and scheduled-service deployment.
+A production financial write requires operator approval.
 **v0.1.1 is a legacy preview only**. It does not import activities or provide
 the v1 unattended service.
 
@@ -35,7 +38,11 @@ This Docker connector reads Bourse Direct operation notices from Paperless.
 It reads BUY, SELL and coupon activities for one active Ghostfolio account.
 
 The connector reads Paperless only. It has no Bourse Direct login and no vault
-access. BillCollector downloads and publishes the notices.
+access. `billcollector-recipes` owns the provider recipe. BillCollector owns
+the engine, broker login and vault access. Infra deploys collection and the
+Paperless delivery workflow.
+Use the BillCollector [runtime contract](docs/upstreams.md#billcollector-acquisition) to prepare
+Paperless delivery and verify each archived original.
 
 ## Quick start
 

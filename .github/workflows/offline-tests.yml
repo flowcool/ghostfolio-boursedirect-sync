@@ -1,7 +1,7 @@
 name: Offline tests
 
 on:
-  # Runs on every PR (it also checks documentation links); no re-run after merge.
+  # Documentation checks run on every PR. Application checks run on code changes.
   pull_request:
 
 permissions:
@@ -12,7 +12,26 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  scope:
+    uses: ./.github/workflows/pr-scope.yml
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify documentation local links
+        run: python3 scripts/check-docs.py
+      - name: Check whitespace
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: git diff --check "$BASE...$HEAD"
   tests:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -31,16 +50,5 @@ jobs:
         run: |
           python -m ruff check ghostfolio_boursedirect_sync
           python -m mypy --strict ghostfolio_boursedirect_sync
-      - name: Verify documentation local links
-        run: python scripts/check-docs.py
       - name: Verify versioned offline tests
         run: python -m pytest tests -q
-      - name: Check whitespace
-        env:
-          REVIEW_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          if [ "$REVIEW_BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
-            REVIEW_BASE_SHA=$(git hash-object -t tree /dev/null)
-          fi
-          git diff --check "$REVIEW_BASE_SHA" "$REVIEW_HEAD_SHA"

@@ -1,4 +1,48 @@
-# Ghostfolio release watch
+# Upstream references
+
+## BillCollector acquisition
+
+`billcollector-recipes` owns the provider recipe and its portal qualification.
+BillCollector owns the engine, broker login, vault and generic delivery.
+Infra owns deployment, task configuration and the Paperless workflow.
+The importer reads the archived originals through a read-only Paperless token.
+The fork and public upstream have separate delivery and acceptance records.
+
+For the fork daemon, start with the
+[Infra runtime contract](https://github.com/flowcool/BillCollector/blob/886eba1e065b3cbb5b598aa9957364aea03aa913/doc/INFRA_RUNTIME_CONTRACT.md)
+and the [Bourse Direct guide](https://github.com/flowcool/BillCollector/blob/886eba1e065b3cbb5b598aa9957364aea03aa913/doc/BOURSE_DIRECT.md).
+These references describe the reviewed source snapshot of 30 October 2026.
+Resolve the deployed revision from its operation record before a live action.
+
+The daemon publishes to the global `download_dir` with an empty consumer
+registry. Paperless consumes the files. Its workflow sets owner, reader rights
+and the exact custom field `Source=Bourse Direct`. Verify those fields and the
+original SHA-256 in Paperless. A successful collector run or a `consumed`
+download row proves local publication only. Keep the database and hidden
+publication journal together for recovery.
+
+The fork supports native Download All and Download incremental on one task.
+Both Bourse Direct actions read offered PDFs before revision comparison.
+A known source key alone cannot establish that a notice has not changed.
+Keep the exact image, recipe and mounted schema in each qualification receipt.
+Provider harnesses that inject credentials do not qualify the daemon's vault
+transport, scheduling or Paperless delivery.
+
+Public upstream integrated opt-in notice identity in
+[PR #41](https://github.com/s-t-e-f-a-n/BillCollector/pull/41), closed after
+mirror integration at `e83c8e2`. Its
+[notice contract](https://github.com/s-t-e-f-a-n/BillCollector/blob/e83c8e2031a6f96bbce9c6834bb3a8930c348c5b/doc/NOTICE_IDENTITY.md)
+assigns repeat suppression to the collector. It scopes identity by task and
+source, then compares a versioned PDF graph digest. Originals stay unchanged.
+This integration does not resolve the separate archive-receipt interface or
+prove the public Bourse Direct recipe. Read the maintainer's closing comment;
+an upstream PR closed without a merge can contain an accepted contribution.
+
+Review source changes separately from image publication and deployment.
+Upstream integration alone does not qualify a changed fork image or a live run.
+Retain independent financial acceptance for the importer.
+
+## Ghostfolio release watch
 
 The destination API is monitored through official releases from
 `ghostfolio/ghostfolio`. The daily workflow runs at 07:17 UTC on `main` and can

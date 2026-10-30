@@ -14,8 +14,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The branch rules require a CodeQL result for every PR, including docs.
+  scope:
+    uses: ./.github/workflows/pr-scope.yml
   analyze:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -29,3 +32,8 @@ jobs:
         with:
           languages: python
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          output: sarif-results
+          wait-for-processing: true
+      - name: Enforce CodeQL error and security thresholds
+        run: python3 .github/scripts/check-codeql.py sarif-results

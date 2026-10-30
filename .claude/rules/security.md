@@ -20,5 +20,8 @@
 - Apply the `security-review` skill to changes that handle credentials,
   authentication, notice parsing or new external HTTP calls. Add a short
   security note to the PR. Require Pullfrog's completed review of the final
-  code head before merge. Skill-based pre-PR subagent reviews are additional
-  checks. A change of this file or of spec text only is a docs-only PR.
+  code head before merge. Pullfrog is the only PR reviewer; do not run
+  pre-PR review subagents. A change of this file or of spec text only is a docs-only PR.
+  Such a PR runs only local-link and whitespace checks. It skips application
+  tests, image builds and scans, dependency review and CodeQL. Code PRs keep all
+  applicable checks and the current CodeQL severity thresholds.

@@ -1,0 +1,47 @@
+name: PR file scope
+
+on:
+  workflow_call:
+    outputs:
+      code:
+        description: Run code checks unless the PR changes documentation only.
+        value: ${{ jobs.files.outputs.code }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Same scope as IBKR docker-publish.yml:30. Empty or uncertain scope runs code checks.
+  files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import subprocess
+          from pathlib import Path
+          code = True
+          if os.environ['BASE'] and os.environ['HEAD']:
+              changed = subprocess.check_output([
+                  'git', 'diff', '--name-only', '--no-renames', '-z',
+                  os.environ['BASE'] + '...' + os.environ['HEAD'],
+              ]).split(b'\0')
+              paths = [p.decode('utf-8', errors='surrogateescape') for p in changed if p]
+              code = not paths or any(
+                  not (p.startswith(('docs/', 'openspec/')) or p.endswith('.md'))
+                  for p in paths
+              )
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write(f"code={str(code).lower()}\n")
+          PYTHON

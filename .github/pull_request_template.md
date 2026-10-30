@@ -33,6 +33,8 @@ applies. Record the lab gate proof when AGENTS.md requires it.
       reviewed head SHA. Repeat after each new commit.
 
 Run `pr-ship` from the main session after these review checks. Keep publication
-and live-write authority separate. Docs-only PRs require green CI.
+and live-write authority separate. Docs-only PRs require local-link and whitespace checks only. They do not run
+application tests, image builds or scans, dependency review or CodeQL. Code PRs
+retain those checks, including CodeQL errors and medium-or-higher security findings.
 
 Review evidence: <!-- completed review URL and reviewed commit SHA -->
