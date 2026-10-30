@@ -94,8 +94,9 @@ work-tracker IDs.
 
 ## Budgets
 
-- The application package has 2 500 lines or fewer across all its Python files.
-  This replaces the main-file limit. Tests and packaging metadata are excluded.
+- Application code has no line-count budget. Reuse the applicable IBKR module
+  boundaries and typed functions. Keep review, reconciliation, transport and
+  orchestration in their own modules; do not compress them into one file.
 - Reuse the existing infrastructure lab. A dedicated BD test container is
   permitted in principle (Florent, 2026-10-22). Its exact target, commands and
   writes use the permanent lab authority below. Keep lab tooling in infra.
@@ -131,6 +132,9 @@ voice, no internal jargon.
 
 ## Durable work state
 
+- For the proposed IBKR v4 behavior, read
+  [operator-actions-and-reconciliation](openspec/changes/operator-actions-and-reconciliation/proposal.md).
+  It awaits contract approval; the current published contract remains above.
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
 - Rebuild epic: "v1 rebuild (option B)". Include completed work with
   `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.
