@@ -41,7 +41,7 @@ The connector reads Paperless only. It has no Bourse Direct login and no vault
 access. `billcollector-recipes` owns the provider recipe. BillCollector owns
 the engine, broker login and vault access. Infra deploys collection and the
 Paperless delivery workflow.
-Use its [runtime contract](docs/upstreams.md#billcollector-acquisition) to prepare
+Use the BillCollector [runtime contract](docs/upstreams.md#billcollector-acquisition) to prepare
 Paperless delivery and verify each archived original.
 
 ## Quick start
