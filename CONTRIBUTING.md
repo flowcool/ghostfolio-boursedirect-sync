@@ -57,7 +57,10 @@ stop-on-uncertainty behavior. Follow the approved OpenSpec for behavior changes.
 CI checks the typed package, the retained offline suite, documentation links,
 whitespace, the native image and dependency security. Pullfrog reviews the final
 code head. It is the only PR reviewer; no pre-PR review subagents are required.
-Documentation-only PRs need green CI. Changes to financial logic, identity,
+Documentation-only PRs run only local-link and whitespace checks. They skip
+application tests, images, dependency review and CodeQL. Code PRs retain these
+checks. The required `analyze` job blocks CodeQL errors and security findings
+with severity medium or higher. Changes to financial logic, identity,
 deduplication, authentication, transport, writes, journal/state, major dependencies
 or the base image need empty and golden lab proof on the exact PR image before
 merge. Reserve shared labs and stop them after use. Every release needs the same

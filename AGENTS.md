@@ -116,7 +116,10 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
   fixes are commits in that PR; never open separate or stacked PRs for them.
   Merge when CI is green and Pullfrog
   finished its review of the head commit, or on Florent's explicit go. A PR that
-  changes only `openspec/`, `docs/` or `*.md` needs CI green only. Open the PR
+  changes only `openspec/`, `docs/` or `*.md` runs only local-link and whitespace checks.
+  Do not run application tests, image builds or scans, dependency review or CodeQL
+  for such a PR. Code PRs retain those checks and the current CodeQL error and
+  medium-or-higher security thresholds. The required `analyze` job enforces them. Open the PR
   yourself, then run `~/.agents/bin/pr-ship <n> --repo
   flowcool/ghostfolio-boursedirect-sync` in one call, never a `sleep` loop: it
   waits, merges on `ready` and hands back any other verdict (exit 2: re-run).
