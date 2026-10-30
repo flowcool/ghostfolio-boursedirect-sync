@@ -6,8 +6,9 @@ The published image passed 19 financial scenarios in the empty and golden labs.
 Real Paperless acceptance passed the default BUY simulation, source error checks
 and one failure notification to an isolated local receiver. The Paperless checks
 sent no financial request. The default mode remains simulation.
-Automatic BillCollector collection and the first production import still need
-separate acceptance and operator approval.
+BillCollector has delivered original notices to Paperless through its daemon.
+The first production Ghostfolio import and its repeat remain separate acceptance
+steps. A production financial write requires operator approval.
 **v0.1.1 is a legacy preview only**. It does not import activities or provide
 the v1 unattended service.
 
@@ -36,6 +37,8 @@ It reads BUY, SELL and coupon activities for one active Ghostfolio account.
 
 The connector reads Paperless only. It has no Bourse Direct login and no vault
 access. BillCollector downloads and publishes the notices.
+Use its [runtime contract](docs/upstreams.md#billcollector-acquisition) to prepare
+Paperless delivery and verify each archived original.
 
 ## Quick start
 
