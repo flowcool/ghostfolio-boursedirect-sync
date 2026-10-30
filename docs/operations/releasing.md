@@ -3,6 +3,8 @@
 Release preparation and stable publication are separate actions. Neither action
 establishes product readiness. Require the relevant service acceptance first.
 No GitHub workflow writes financial activities to Ghostfolio.
+This project delivers the qualified release and proof. Infra owns production
+image pins, deployment, host/NAS files, schedules, backup and monitoring.
 
 ## Prepare and qualify
 

@@ -1,4 +1,5 @@
 # Repository instructions
 
-Read [AGENTS.md](AGENTS.md). It owns the product goal, the fast-track working
-mode and the safety invariants. The active OpenSpec change is the only spec.
+Read [AGENTS.md](AGENTS.md). It owns product boundaries, the working method and safety invariants.
+`openspec/specs/notice-import/spec.md` describes released behavior. Read a proposed
+change for its planned scope; implement only after contract approval.

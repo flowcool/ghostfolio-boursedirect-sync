@@ -2,7 +2,9 @@
 
 ## BillCollector acquisition
 
-BillCollector owns broker login, vault access and original PDF acquisition.
+`billcollector-recipes` owns the provider recipe and its portal qualification.
+BillCollector owns the engine, broker login, vault and generic delivery.
+Infra owns deployment, task configuration and the Paperless workflow.
 The importer reads the archived originals through a read-only Paperless token.
 The fork and public upstream have separate delivery and acceptance records.
 

@@ -11,5 +11,7 @@ The published v1 reads Bourse Direct PDF notices from Paperless. Start with the
 - [Changelog](../CHANGELOG.md): published version history.
 
 Historical release notes describe their original versions. The removed broker
-collector and laboratory procedures remain in Git history. BillCollector owns
-broker acquisition. The v1 importer has no broker login or vault access.
+collector and laboratory procedures remain in Git history. Provider recipes
+belong to `billcollector-recipes`; BillCollector owns the engine and broker/vault
+access. Infra owns production deployment and Paperless delivery. The importer
+has no broker login or vault access.
