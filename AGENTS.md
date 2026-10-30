@@ -13,7 +13,7 @@ approved in the current spec.
 Keep public files free of personal hosts, paths, account identifiers and private
 work-tracker IDs.
 
-## v1 rebuild (option B)
+## Product scope (v1, released)
 
 - The v1 adopts the complete applicable common core from ibkr v3.0.0
   (Florent, 2026-10-22). Follow its modules and typed functions; classes describe
@@ -24,10 +24,10 @@ work-tracker IDs.
   automatic core projection.
   The previous work stays in Git (tag `legacy-wip`). v0.1.1 is a preview-only
   legacy release.
-- Track A (first priority): BillCollector downloads the notices with Playwright,
-  in the flowcool fork, and publishes them to Paperless. BillCollector owns the
-  Bourse Direct login and the vault access.
-- Track B (in parallel): an importer reads the PDF notices ("avis d'opéré")
+- Collection is outside this project. `billcollector-recipes` owns the Bourse
+  Direct recipe, `BillCollector` owns the engine, the broker login and the vault
+  access, and Infra deploys the collector and the Paperless delivery.
+- This project owns the importer. It reads the PDF notices ("avis d'opéré")
   from Paperless, read only.
 - The connector imports only what Ghostfolio shows exactly: buy, sell, coupon.
   It stops on a security for each operation that changes the number of shares.
@@ -38,6 +38,46 @@ work-tracker IDs.
   [notice-import](openspec/specs/notice-import/spec.md). Completed changes under
   `openspec/changes/archive/` are history only.
 
+## Project boundaries (Florent 2026-10-30)
+
+Each scope has one owner agent. Work only in the repositories and runtime of
+your own project. This project: `ghostfolio-boursedirect-sync`.
+
+| Beads `project` | Agent | Owns |
+| --- | --- | --- |
+| `infra` | Claude, `~/claude_project/infra` | Production deployment (Komodo, GitOps `flowcool/mylittlemess`), image and catalog pins, schedules, collector task configuration, hosts and NAS outside the labs, Paperless configuration and permissions, SOPS secrets, backup, monitoring. |
+| `BillCollector` | Codex | The engine only (`flowcool/BillCollector`): generic actions, scheduler, vault and TOTP, throttles, delivery, recipe schema, engine contract, upstream engine contributions. |
+| `billcollector-recipes` | Codex | Every provider recipe end to end (`flowcool/billcollector-recipes`): portal exploration, selectors, history window, qualification on the exact engine revision, catalog release, upstream recipe contributions. |
+| `ghostfolio-ibkr-sync`, `ghostfolio-degiro-sync`, `ghostfolio-boursedirect-sync` | Codex | Connector code, spec, lab tests, PRs and releases. The Ghostfolio financial operation, under Florent's GO. |
+
+- **Routing.** For a need in another scope, search the open issues of the owner
+  first. If no issue covers it, create one with
+  `--metadata '{"project":"<owner>"}'`, the evidence, the exact need and its
+  acceptance. Link it `related` to your issue. Never edit, deploy or test the
+  code or runtime of another project.
+- **Usual routes.** Portal, selector or history window: `billcollector-recipes`.
+  Missing engine action, throttle, vault or delivery defect: `BillCollector`.
+  Deployment, pin, schedule, task configuration, Komodo stack, NAS file,
+  Paperless workflow or permission: `infra`. Importer behavior: the connector.
+- **Release boundary.** A development project stops at a qualified release: an
+  immutable image digest or catalog tag, with its proof. Infra deploys it.
+- **Labs: free use on agentvm.** Create, configure, reset, restart, redeploy and
+  scratch lab stacks under `stacks/a/` (Komodo server `a`). To add your own
+  lab, open a `flowcool/mylittlemess` PR limited to `stacks/a/<lab>/` and its
+  `komodo/sync.toml` entry; merge it on green CI. Separate authority remains for
+  production, a login to a real broker or portal (Florent GO per provider),
+  production secrets in a lab, and removal of proof. Reserve a shared lab and
+  stop it after use (Infra runbook `docs/runbooks/ghostfolio-lab.md`).
+- **Lab gate before merge.** Test the PR image in the lab before merge when the
+  PR changes financial logic, deduplication or activity identity, Ghostfolio
+  authentication, transport or writes, the state or journal format, a recipe,
+  or a major dependency or base image. Connectors run the empty and golden
+  Ghostfolio labs. Recipes and the engine run an isolated collector lab with
+  synthetic fixtures. Other PRs need CI only.
+- **Lab gate at release.** Every release passes the same lab scenarios on its
+  exact digest. Promote that digest without a rebuild. Reuse the pre-merge proof
+  when the digest is identical.
+
 ## Method (same as ibkr)
 
 - **Spec first.** No code without an OpenSpec change that Florent approved. A
@@ -45,14 +85,15 @@ work-tracker IDs.
   never internal mechanisms. Do not specify recovery tools, lab tools, release
   process or docs layout. When reality is different from the spec, stop and
   report. Do not change the spec silently.
-- **No bead before the spec.** After approval: one epic for the change and one
-  bead per task. Each bead gives the spec path, requirement, scenario,
-  acceptance command and files to touch.
-- **One bead = one fresh session.** Claim, implement, prove, close, stop. The
-  implementation beads may proceed offline before an upstream source or live
-  acceptance gate is available. Keep those gates separate and do not start the
-  next bead in the same session. Budget about 150 tool calls; above that, stop
-  and report.
+- **OpenSpec to work items.** After approval: one parent item for the change
+  and one implementation item that lists all tasks (spec path, requirement,
+  scenario, acceptance command, files to touch per task). `tasks.md` tracks the
+  tasks; a task ticks its box in a commit, not in a new item. A task that needs
+  an operation or a decision keeps its own item.
+- **Continue authorized work.** Continue through the approved implementation,
+  review and release preparation in the same session. Reuse the owning item and
+  valid evidence. Split work only for an independent deliverable, a repository
+  boundary or a new authorization. Hand off only with a concrete reason.
 - **Done = the scenario replayed for real.** Put the command and its output in
   the closing note. Green unit tests alone are not done. Apply the
   rule below for an error case absent from the complete available archive.
@@ -64,11 +105,8 @@ work-tracker IDs.
   and write protection. Verify these with explicit derived-data regressions;
   never claim a real financial observation or alter an original PDF.
   No synthetic protocol proofs. No tests for docs or CI.
-- **Review:** follow the invoked implementation skill. When it requires
-  `code-review`, run independent Standards and Spec subagents before the PR.
-  Fix actionable findings and record both reports in the owning bead. Apply
-  `security-review` when its trigger matches the change. This pre-PR review
-  does not replace Pullfrog's review of the final PR head.
+- **Review:** Pullfrog is the only reviewer. No pre-PR review subagents.
+  Apply `security-review` when its trigger matches the change.
   Before every code merge, wait for Pullfrog's complete review of the latest
   head. Read its general review body and all comment threads. Address each
   remark, including cleanup outside inline threads. Record the outcome and
@@ -84,10 +122,11 @@ work-tracker IDs.
   waits, merges on `ready` and hands back any other verdict (exit 2: re-run).
   Fix or answer each actionable comment, then re-run. Run the PR lifecycle in
   the main session. Publication and live-write authority remain separate.
-- **Operation beads.** A bead that acts on real state (Ghostfolio write, NAS)
-  runs only from an `Operation plan:` in its design that Florent validated. In
+- **Operation beads.** A bead that acts on real state (production Ghostfolio
+  write) runs only from an `Operation plan:` in its design that Florent validated. In
   this repository, the production gate is the first production Ghostfolio write. A
   failed or uncertain step: record it and stop.
+  Production host or NAS files for this service belong to Infra.
 - **Ask Florent only for:** a Bourse Direct fact missing from the spec, a
   production Ghostfolio write, a scope change. One question at a time, in plain French,
   with your recommendation.
@@ -96,10 +135,8 @@ work-tracker IDs.
 
 - The application package has 2 500 lines or fewer across all its Python files.
   This replaces the main-file limit. Tests and packaging metadata are excluded.
-- Reuse the existing infrastructure lab. A dedicated BD test container is
-  permitted in principle (Florent, 2026-10-22). Its exact target, commands and
-  writes use the permanent lab authority below. Keep lab tooling in infra.
-  No separate lab or new compose file without approval.
+- Use the labs under the Project boundaries rules above. A dedicated BD test
+  container is allowed as an agentvm lab.
 - Build the candidate image once. Require empty and golden lab scenarios to
   pass on its digest. Publish that exact image without rebuilding. No mandatory
   RC channel. Reuse applicable IBKR checks. Publication and production writes
