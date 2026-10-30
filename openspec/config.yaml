@@ -7,7 +7,8 @@ context: |
   Keep exact pins, renewed image digests, compatibility tests, security scans and review.
   Functional style, typed application package ghostfolio_boursedirect_sync.
   Strict mypy and Ruff; frozen dataclasses and typed dictionaries describe data only.
-  Money and position decisions use Decimal. Application Python totals at most 2500 lines.
+  Money and position decisions use Decimal. Application code has no line-count budget.
+  Reuse applicable IBKR module boundaries; do not compress the application into one file.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
   BD exception: only the exact BUY fee correction defined in the active spec.

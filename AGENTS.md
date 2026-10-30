@@ -133,8 +133,9 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
 
 ## Budgets
 
-- The application package has 2 500 lines or fewer across all its Python files.
-  This replaces the main-file limit. Tests and packaging metadata are excluded.
+- Application code has no line-count budget. Reuse the applicable IBKR module
+  boundaries and typed functions. Keep review, reconciliation, transport and
+  orchestration in their own modules; do not compress them into one file.
 - Use the labs under the Project boundaries rules above. A dedicated BD test
   container is allowed as an agentvm lab.
 - Build the candidate image once. Require empty and golden lab scenarios to
@@ -168,6 +169,9 @@ voice, no internal jargon.
 
 ## Durable work state
 
+- For the proposed IBKR v4 behavior, read
+  [operator-actions-and-reconciliation](openspec/changes/operator-actions-and-reconciliation/proposal.md).
+  It awaits contract approval; the current published contract remains above.
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
 - Rebuild epic: "v1 rebuild (option B)". Include completed work with
   `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.
