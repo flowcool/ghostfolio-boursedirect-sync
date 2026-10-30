@@ -7,8 +7,9 @@ Real Paperless acceptance passed the default BUY simulation, source error checks
 and one failure notification to an isolated local receiver. The Paperless checks
 sent no financial request. The default mode remains simulation.
 BillCollector has delivered original notices to Paperless through its daemon.
-The first production Ghostfolio import and its repeat remain separate acceptance
-steps. A production financial write requires operator approval.
+The first approved production import and its immediate repeat passed.
+The repeat added no activity. Scheduled production imports still need setup.
+A production financial write requires operator approval.
 **v0.1.1 is a legacy preview only**. It does not import activities or provide
 the v1 unattended service.
 
