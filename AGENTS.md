@@ -8,18 +8,19 @@ unattended with `docker compose up -d`. The target contract is the sibling fork
 `../ghostfolio-ibkr-sync`: `CRON`, `DRY_RUN` on by default, `APPRISE_URLS`,
 additive and deduplicated import. Before you add a mechanism, cite the line of
 ibkr or degiro that does the same thing. If no sibling line exists, stop and ask, except for BD adaptations already
-approved in the active spec.
+approved in the current spec.
 
 Keep public files free of personal hosts, paths, account identifiers and private
 work-tracker IDs.
 
-## Current plan: v1 rebuild (option B)
+## v1 rebuild (option B)
 
 - The v1 adopts the complete applicable common core from ibkr v3.0.0
   (Florent, 2026-10-22). Follow its modules and typed functions; classes describe
-  data. Before coding, read the active design for the source commit, coverage
-  and BD adaptations. Cover every applicable implemented runtime and release
-  requirement. Review later source updates separately. No shared library or
+  data. Before coding, read the
+  [archived design](openspec/changes/archive/2026-10-30-pdf-notice-importer/design.md)
+  for the source commit, coverage and BD adaptations. Cover every applicable
+  implemented runtime and release requirement. Review later source updates separately. No shared library or
   automatic core projection.
   The previous work stays in Git (tag `legacy-wip`). v0.1.1 is a preview-only
   legacy release.
@@ -32,9 +33,10 @@ work-tracker IDs.
   It stops on a security for each operation that changes the number of shares.
   It adds actually charged TTF to one BUY in the same source account, notice,
   date and ISIN. Ambiguity suspends affected BUYs. It ignores custody fees
-  and shows a message. Follow the active spec for fee-only corrections.
-- The only spec is the active OpenSpec change under `openspec/changes/`. The
-  archived change `2026-10-14-unattended-notice-import` is history only.
+  and shows a message. Follow the current spec for fee-only corrections.
+- The current behavior contract is
+  [notice-import](openspec/specs/notice-import/spec.md). Completed changes under
+  `openspec/changes/archive/` are history only.
 
 ## Method (same as ibkr)
 
@@ -120,7 +122,7 @@ voice, no internal jargon.
 - Paperless is read only. The importer never writes to Paperless.
 - Personal data stays off Git: `inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`.
 - Ghostfolio: `DRY_RUN=1` by default. Add new activities; never delete. The only
-  update is the approved BUY fee-only correction in the active spec. Preserve
+  update is the approved BUY fee-only correction in the current spec. Preserve
   every other field and logical identity. Confirm exact readback; stop on
   uncertainty without resend. Production writes need Florent's go. Shared labs
   use their permanent authority below.
@@ -130,8 +132,8 @@ voice, no internal jargon.
 ## Durable work state
 
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
-- Root epic: "v1 rebuild (option B)". Find it with
-  `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic`.
+- Rebuild epic: "v1 rebuild (option B)". Include completed work with
+  `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.
 - Private pointers (bead IDs, decision document) live in `CLAUDE.local.md`,
   which Git ignores.
 

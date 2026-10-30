@@ -24,7 +24,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
 
 ## 1. First real BUY in simulation
 
-- [ ] 1.1 Gate the real BUY PDF first. Confirm that it has exactly one labelled
+- [x] 1.1 Gate the real BUY PDF first. Confirm that it has exactly one labelled
   account field. Remove spaces once and require full equality with
   `BD_ACCOUNT_REF`. Measure `QUANTITE x COURS - BRUT` exactly and report the
   result. Apply task 2.1 rounding when the product has fractional cents.
@@ -52,7 +52,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   Run the run command without `DRY_RUN` for each configured
   account service. With the real BUY PDF as the only notice document, it shows
   `DRY RUN`, one BUY line and exit code 0.
-- [ ] 1.2 Add the settings checks, `paperless_auth_failed`,
+- [x] 1.2 Add the settings checks, `paperless_auth_failed`,
   `paperless_unreachable`, `source_field_missing`, the exact single Ghostfolio
   account match and the other-account count. Add the README quick start and
   settings table. The README and `compose.yaml` show one service per Bourse
@@ -146,7 +146,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   (`import_unconfirmed`), the summary line and the exit codes. This task
   qualifies writes in the shared labs. The first production write needs a
   separate operator-approved `Operation plan:` under
-  [AGENTS.md](../../../AGENTS.md), Method, Operation beads. Qualify the image
+  [AGENTS.md](../../../../AGENTS.md), Method, Operation beads. Qualify the image
   in the existing infra empty/golden lab. Infra owns the BD launch/evidence
   adaptation; retain its target checks, snapshots, credential isolation and
   stop verification. Prove first creation, duplicate rerun, mixed legacy rows,
@@ -182,7 +182,7 @@ authority. Saved-PDF lab acceptance does not prove Paperless integration.
   with DRY_RUN=0 and prove zero POSTs. Until then, DRY_RUN=0 refuses before HTTP.
   Adapt the separate accepted-state function and structured preview evidence.
   Preserve exact Decimal values in the full preview and readback.
-- [ ] 6.2 Add the failure notification and `CRON`, with the README sections and
+- [x] 6.2 Add the failure notification and `CRON`, with the README sections and
   one README line on the notice copies in Paperless and paperless-gpt. Verify
   the scenarios "Failure notification" and "Invalid schedule".
   Adapt the isolated notification worker and validated numeric CRON mechanism.
