@@ -8,8 +8,10 @@ IBKR v4.0.0. The accepted v1 contract is now archived.
 
 ## What Changes
 
+- Require review of delivered IBKR and BD code, tests and proof before implementation.
+
 - Report success, success with required action, or failure. Repeat unresolved
-  action notifications, including simulation. Keep clean runs silent.
+  action notifications, including simulation. Keep clean runs silent. Preserve v1 failure exit codes.
 - Add optional persistent review with exact values, decisions and rejected pairs.
 - Add `off`, `conservative`, `balanced` and `permissive` correction profiles.
   Default to `off`. Require unique source/target pairs and validated PDF evidence.

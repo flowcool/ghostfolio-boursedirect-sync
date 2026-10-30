@@ -2,52 +2,50 @@
 
 ## Context
 
-See proposal.md. This is a proposed contract, not approval to change financial
-behavior. BD already uses a Python package with separate modules. There is no
-line-count budget. Preserve these boundaries and extend them as IBKR does.
-
-## Goals / Non-Goals
-
-Reuse qualified IBKR functions and typed records. Keep the PDF parser, EUR
-Decimal arithmetic and existing transport. Add no shared library or framework.
+See proposal.md. BD already has separate modules. Keep IBKR module boundaries,
+typed functions, exact Decimal transport and PDF parsing. No line-count budget,
+shared library or framework.
 
 ## Decisions
 
-Pin sibling `ghostfolio-ibkr-sync` at
-`e78bf215b1c3a4cf32e6e9bd2990ef13d38324c2`. All source paths below are
-inside `ghostfolio_ibkr_sync/`.
+Before code changes, compare delivered IBKR and BD commits, tests and retained
+proof. Record requirement, both file/function/line references, evidence,
+reuse/adaptation/gap, reason and acceptance command in the owning work item.
+Missing evidence or contradictions block affected work.
 
-| Part | Source mechanism | BD target |
+Pin IBKR behavior at `e78bf215b1c3a4cf32e6e9bd2990ef13d38324c2` and BD at
+`76a1d67e124317db2e03fd0ae3a8e41f188a62de`. IBKR main
+`9d558189cf5089f90e45cb48862f4c529fad946b` adds guidance only.
+Source paths below are under `ghostfolio_ibkr_sync/`.
+
+| Part | Reused source | BD target |
 | --- | --- | --- |
-| Review and bound decisions | `activity_review.py:open_review`, `refresh_proposals`, `approved_proposals` | `activity_review.py`, `models.py` |
-| Safe persistence | `safe_path`, `atomic_bytes`, `publish_review` in that file | Same review module |
-| Association and limits | `activity_reconciliation.py:date_eligible`, `gross_within_limits`, `group_diagnosis` | `activity_reconciliation.py`, existing `sync.py` |
-| Single update and recovery | `activity_review.py:process_review`, `validate_journal`, `recovery_read` | Review module; existing `app.py`, `ghostfolio.py` |
-| Required actions | `outcome.py:record_action`, `log_operational_result` | Existing `outcome.py`, `notify.py` |
-| Settings | `config.py` review/profile settings | Existing `config.py` |
+| Bound review | `activity_review.py:open_review`, `refresh_proposals`, `approved_proposals` | `activity_review.py`, `models.py` |
+| Persistence | Same file: `safe_path`, `atomic_bytes`, `publish_review` | Review module |
+| Pairing/limits | `activity_reconciliation.py:date_eligible`, `gross_within_limits`, `group_diagnosis` | `activity_reconciliation.py`, `sync.py` |
+| Execution/recovery | `activity_review.py:process_review`, `validate_journal`, `recovery_read` | Review module, `app.py`, `ghostfolio.py` |
+| Actions/settings | `outcome.py:record_action`, `log_operational_result`; `config.py` | Existing corresponding modules, `notify.py` |
 
-Use schema-3 review and companion evidence/journal files, owner-only directory
-0700 and files 0600, verified explicitly. Reuse lock, atomic replacement,
-durable pre-write journal and evidence-bound choices. Preserve full before/after
-values. Reuse BD's Decimal payload/readback functions through one whitelisted
-update path; retire the separate TTF executor.
+Use schema-3 review, companion evidence/journal, locks and atomic durable writes.
+Verify directory 0700/files 0600 explicitly. Retain complete raw API rows for
+before/after preservation, not only BD's reduced activity index. Whitelist PUT
+fields; keep Decimal encoding and exact full-field readback. Retire separate TTF
+execution. Add explicit `ttf` selection/journal authority, including exact unowned
+BUYs without `yes`; preserve their complete comment byte-for-byte.
 
-Adapt source events to validated PDF rows. Keep canonical UTC midnight;
-local-date matching requires explicit TZ. Omit Flex currency conversion,
-floating-point residue allowances and corporate-action execution. Legacy
-hash inputs can be absent; hold these cases instead of inventing ownership.
+Adapt `process_review`: absent TZ must not force preview or disable recovery
+under profile off. Adapt `date_eligible`: PDF printed date is already a calendar
+date; convert only destination instants to TZ. Write canonical midnight UTC.
+Keep unchanged legacy/unowned duplicates in both modes; do not manufacture an
+unresolvable migration action. Migration needs reproducible ownership.
 
-## Risks / Trade-offs
+Pass existing security holds to review selection. Validate notes with the
+sibling identity reader. Omit Flex FX/residue and corporate-action execution.
 
-Source divergence → preserve applicable sibling modules and typed function
-boundaries; adapt only the documented PDF/EUR differences. Review source drift
-separately. Do not combine responsibilities to reduce line count.
-Permission or evidence drift → refuse writes. Recovery files contain private
-financial evidence → mount outside Git and protect their complete directory.
+## Risks and Migration
 
-## Migration Plan
-
-Keep profiles off by default. Document the newly required TTF persistence.
-Qualify exact candidate in the existing lab. Publication and production remain
-separate gates. Before runtime rollback, settle every pending request with exact
-readback and retain evidence; the old runtime cannot enforce the new journal.
+Private evidence requires a protected persistent mount. Missing/changed recovery
+evidence stops writes. Qualify the exact candidate digest in existing labs,
+including the one-update execution policy. Retain containers and proof.
+Publication/production keep separate gates. Settle pending requests and retain
+evidence before rollback: the old runtime cannot enforce the new journal.
