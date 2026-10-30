@@ -1,13 +1,15 @@
 # Bourse Direct to Ghostfolio
 
-**Status: v1 candidate. Not qualified and not published.**
+**Status: v1.0.0 published and qualified in the shared labs.**
 
-This README describes the v1 candidate on this branch. Its implemented features
-do not establish complete runtime acceptance. The rules below are the accepted
-target. TTF handling and fee correction are implemented. Final-image and
-Paperless acceptance remain separate requirements.
-The published **v0.1.1 is a legacy preview only**. It does not import activities
-or provide the v1 unattended service.
+The published image passed 19 financial scenarios in the empty and golden labs.
+Real Paperless acceptance passed the default BUY simulation, source error checks
+and one failure notification to an isolated local receiver. The Paperless checks
+sent no financial request. The default mode remains simulation.
+Automatic BillCollector collection and the first production import still need
+separate acceptance and operator approval.
+**v0.1.1 is a legacy preview only**. It does not import activities or provide
+the v1 unattended service.
 
 Release preparation follows the IBKR release chain. Run the manual
 `Prepare release candidate image` workflow on `main` with the intended
