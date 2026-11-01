@@ -14,7 +14,14 @@ from pathlib import Path
 
 import pytest
 
-from ghostfolio_boursedirect_sync import app, config, ghostfolio, notices, paperless, sync
+from ghostfolio_boursedirect_sync import (
+    app,
+    config,
+    ghostfolio,
+    notices,
+    paperless,
+    sync,
+)
 from ghostfolio_boursedirect_sync.models import ActivityIndex, Settings
 
 FIXTURES = Path(__file__).parent / "fixtures"

@@ -1,7 +1,7 @@
 """Offline check: README image pins name one stable release, so Renovate bumps them together."""
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pytest
 
