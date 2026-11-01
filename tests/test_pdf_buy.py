@@ -556,3 +556,34 @@ def test_off_profile_keeps_manual_authority_without_timezone(settings, monkeypat
     result = config.load()
     assert result.activity_reconciliation == "off"
     assert result.activity_review_file == "/private/review.yaml"
+
+
+def test_moved_owned_identity_remains_failure_with_review(settings, tmp_path, monkeypatch, caplog):
+    from dataclasses import replace
+
+    from test_activity_review import sample
+
+    from ghostfolio_boursedirect_sync import activity_review
+
+    row, event, events = sample()
+    row["accountId"] = "other-account"
+    monkeypatch.setattr(config, "load", lambda: replace(settings, activity_review_file=str(tmp_path / "review.yaml")))
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [1])
+    monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"retained-original")
+    monkeypatch.setattr(notices, "extract_text", lambda _: FIXTURE.read_text())
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ActivityIndex((), {}, {}))
+    monkeypatch.setattr(activity_review, "source_events", lambda *_: events)
+    monkeypatch.setattr(activity_review, "snapshot_rows", lambda _: [row])
+    put = Mock(side_effect=AssertionError("unexpected PUT"))
+    post = Mock(side_effect=AssertionError("unexpected POST"))
+    monkeypatch.setattr(requests, "put", put)
+    monkeypatch.setattr(requests, "post", post)
+    caplog.set_level(logging.INFO)
+    assert app.main() == 1
+    assert "owned_activity_conflict" in caplog.text
+    assert "review_evidence" not in caplog.text
+    put.assert_not_called()
+    post.assert_not_called()

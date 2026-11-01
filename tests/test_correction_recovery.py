@@ -249,3 +249,36 @@ def test_nullable_currency_uses_profile_and_preserves_stored_null(settings, tmp_
         sender.assert_called_once()
     finally:
         review.close_review(state)
+
+
+@pytest.mark.parametrize("boundary", [1, 2, 3])
+@pytest.mark.parametrize("initial", [True, False])
+def test_journal_publication_crash_recovers_only_exact_generation(tmp_path, monkeypatch, boundary, initial):
+    path = tmp_path / "review.yaml"
+    state = review.open_review(str(path), [])
+    review.publish_review(state, {"version": 1, "proposals": {}})
+    if not initial:
+        review.publish_journal(state)
+    old = state["journal_original"]
+    state["journal"] = {"version": 2, "entries": {}}
+    native = review.atomic_bytes
+    calls = 0
+    def interrupted(target, data):
+        nonlocal calls
+        calls += 1
+        result = native(target, data)
+        if calls == boundary:
+            raise RuntimeError("simulated process death after durable replace")
+        return result
+    monkeypatch.setattr(review, "atomic_bytes", interrupted)
+    with pytest.raises(RuntimeError, match="process death"):
+        review.publish_journal(state)
+    review.close_review(state)
+    monkeypatch.setattr(review, "atomic_bytes", native)
+    recovered = review.open_review(str(path), [])
+    try:
+        assert recovered["journal_original"] == old if boundary == 1 else recovered["journal"]["version"] == 2
+        review.publish_journal(recovered)
+        assert "pending journal sha256" not in recovered["evidence"]
+    finally:
+        review.close_review(recovered)

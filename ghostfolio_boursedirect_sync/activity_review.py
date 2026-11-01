@@ -223,7 +223,7 @@ def decode_compact(document: dict[str, Any], evidence: dict[str, Any] | None) ->
     if (set(document) != {"version", "generation", "summary", "groups", "consistent", *SECTIONS}
             or any(not isinstance(document[name], dict) for name in ("summary", "groups", "consistent", *SECTIONS))):
         raise RuntimeError("Invalid compact review schema")
-    if (not evidence or set(evidence) - {"journal sha256"} != {"version", "current", "previous", "aliases", "rebuild cooldown"}
+    if (not evidence or set(evidence) - {"journal sha256", "pending journal sha256"} != {"version", "current", "previous", "aliases", "rebuild cooldown"}
             or evidence["version"] != 1 or not isinstance(evidence["aliases"], dict)):
         raise RuntimeError("Missing or invalid private review state")
     matched = None
@@ -282,12 +282,14 @@ def open_review(filename: str, input_files: Sequence[str], *, rebuild: bool = Fa
         state_original = file_bytes(state_path)
         evidence: dict[str, Any] = read_yaml(state_original) if state_original is not None and not rebuild else {
             "version": 1, "current": None, "previous": None, "aliases": {}, "rebuild cooldown": 0}
-        if state_original is not None and not rebuild and set(evidence) - {"journal sha256"} != {
+        if state_original is not None and not rebuild and set(evidence) - {"journal sha256", "pending journal sha256"} != {
                 "version", "current", "previous", "aliases", "rebuild cooldown"}:
             raise RuntimeError("Invalid private review state")
         bound_journal = evidence.get("journal sha256")
-        if bound_journal is not None and (journal_original is None
-                or sha256(journal_original).hexdigest() != bound_journal):
+        pending_journal = evidence.get("pending journal sha256")
+        observed_journal = sha256(journal_original).hexdigest() if journal_original is not None else None
+        if (bound_journal is not None or pending_journal is not None) and observed_journal not in (
+                bound_journal, pending_journal if pending_journal is not None else bound_journal):
             raise RuntimeError("Review journal missing or changed; retain recovery evidence")
         if original is None and state_original is not None and not rebuild:
             raise RuntimeError("Review view missing with existing private state")
@@ -369,13 +371,18 @@ def publish_review(state: ReviewState, document: dict[str, Any]) -> None:
 
 def publish_journal(state: ReviewState) -> None:
     assert_unchanged(state)
-    journal_bytes = atomic_yaml(state["journal_path"], state["journal"])
-    state["journal_original"] = journal_bytes
-    # Bind the companion journal to retained source/decision evidence. Removing
-    # or replacing it with valid empty YAML must not make a pending PUT new work.
-    state["evidence"] = {**state["evidence"],
-                         "journal sha256": sha256(journal_bytes).hexdigest()}
-    state["state_original"] = atomic_yaml(state["state_path"], state["evidence"])
+    # Stage the exact successor hash before replacing the journal. A crash at
+    # either boundary accepts only the bound predecessor or exact successor.
+    journal_bytes = yaml.safe_dump(state["journal"], sort_keys=False, allow_unicode=True).encode()
+    digest = sha256(journal_bytes).hexdigest()
+    evidence = {**state["evidence"], "pending journal sha256": digest}
+    state["state_original"] = atomic_yaml(state["state_path"], evidence)
+    state["evidence"] = evidence
+    state["journal_original"] = atomic_bytes(state["journal_path"], journal_bytes)
+    evidence = {key: value for key, value in evidence.items() if key != "pending journal sha256"}
+    evidence["journal sha256"] = digest
+    state["state_original"] = atomic_yaml(state["state_path"], evidence)
+    state["evidence"] = evidence
 
 
 def plain(value: Any) -> Any:
@@ -747,7 +754,8 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                         or asset.get("symbol") != source["symbol"] or asset.get("dataSource") != "YAHOO"
                         or (asset.get("isin") and event["isin"] and asset["isin"] != event["isin"])
                         or (source["type"] != "DIVIDEND" and numeric(current["quantity"]) != numeric(source["quantity"]))):
-                    raise RuntimeError("Immutable activity fields or ISIN conflict")
+                    raise RuntimeError("owned_activity_conflict" if reason == "exact reference"
+                                       else "Immutable activity fields or ISIN conflict")
                 if instant(current["date"]) > datetime.now(UTC):
                     raise RuntimeError("Future destination activity")
                 if (reason != "exact reference" and not legacy_trade and not legacy_dividend
@@ -788,6 +796,8 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                     satisfied.add(event_id)
                     continue
             except (RuntimeError, ValueError, OverflowError, UnicodeError) as exc:
+                if str(exc) == "owned_activity_conflict":
+                    raise
                 actionable, status = False, str(exc)
                 changes = sorted(REPLACED) if not current else changes
             binding = fingerprint([event, current, occupied])
@@ -1131,7 +1141,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
     remaining_previous = {key: item for key, item in original.items()
                           if (key, item["review revision"]) not in consumed}
     refreshed, held = refresh(remaining_previous, snapshot_rows(config))
-    apply_source_holds(config, refreshed, snapshot_rows(config))
+    apply_source_holds(config, refreshed)
     for event_id, event in events.items():
         if event_id in unresolved_events | recovered_events or any(item["source event"] == event_id for item in refreshed.values()):
             continue
@@ -1180,7 +1190,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
         assert_unchanged(state)
         fresh_rows = snapshot_rows(config)
         fresh, _ = refresh(refreshed, fresh_rows)
-        apply_source_holds(config, fresh, fresh_rows)
+        apply_source_holds(config, fresh)
         current = fresh.get(item["key"])
         fresh_selection, fresh_conflicts = selected_proposals(fresh)
         blocked |= fresh_conflicts
@@ -1237,7 +1247,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
     # Rediscover new context and release reassigned alternatives after confirmed PUTs.
     if not simulated and executed:
         refreshed, _ = refresh(refreshed, snapshot_rows(config))
-    apply_source_holds(config, refreshed, snapshot_rows(config))
+    apply_source_holds(config, refreshed)
     deferred, conflicts = selected_proposals(refreshed)
     blocked |= conflicts
     counts["automatic work deferred"] = len({item["source event"] for item in deferred
@@ -1274,8 +1284,7 @@ def proposal_authority(item: dict[str, Any]) -> str:
     return "ttf" if item.get("ttf eligible") else "manual" if item["approve"] == "yes" else str(item["profile"])
 
 
-def apply_source_holds(config: dict[str, Any], proposals: dict[str, Any],
-                       rows: list[dict[str, Any]]) -> None:
+def apply_source_holds(config: dict[str, Any], proposals: dict[str, Any]) -> None:
     for item in proposals.values():
         if item["source event"] in config.get("_held_events", set()):
             item.update(actionable=False, **{"automatic eligible": False, "status": "Source security hold"})

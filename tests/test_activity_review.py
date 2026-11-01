@@ -86,10 +86,14 @@ def test_manual_yes_cannot_approve_immutable_or_conflicting_fields(change):
         with pytest.raises(RuntimeError, match="invalid_identity"):
             review.refresh_proposals({}, events, [row], {"TESTACCOUNT": "target"})
         return
+    with pytest.raises(RuntimeError, match="owned_activity_conflict"):
+        review.refresh_proposals({}, events, [row], {"TESTACCOUNT": "target"})
+    # A nearby unowned row stays a blocked review proposal, never executable.
+    row["comment"] = "Manual note"
     proposals, held = review.refresh_proposals({}, events, [row], {"TESTACCOUNT": "target"})
-    item = next(iter(proposals.values()))
-    assert not item["actionable"]
-    assert event.comment in held
+    if proposals:
+        assert not next(iter(proposals.values()))["actionable"]
+        assert event.comment in held
 
 
 def test_unchanged_unowned_duplicate_does_not_require_migration():

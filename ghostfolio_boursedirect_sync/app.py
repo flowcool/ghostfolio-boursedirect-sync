@@ -157,7 +157,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                     existing = ghostfolio.read_activities(settings, token)
             except (OSError, ValueError, RuntimeError) as exc:
                 code = str(exc).split()[0] if str(exc).split() else "review_unavailable"
-                if code not in ("import_unconfirmed", "activities_unavailable", "invalid_identity"):
+                if code not in ("import_unconfirmed", "activities_unavailable", "invalid_identity", "owned_activity_conflict"):
                     code = "review_unavailable"
                 raise RuntimeError(code) from None
         elif not settings.activity_review_file:
