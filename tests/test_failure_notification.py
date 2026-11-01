@@ -50,17 +50,18 @@ def test_unresolved_real_buy_notifies_once_without_changing_exit(monkeypatch, ca
     assert "private destination" not in caplog.text
 
 
-@pytest.mark.parametrize("mode", [None, "1", "bad", "false", ""])
-@pytest.mark.parametrize("destinations", ["invalid private destination", '["json://notify.invalid/hook"]'])
-def test_simulation_or_invalid_mode_never_notifies(monkeypatch, mode, destinations):
+@pytest.mark.parametrize("mode", [None, "1", "0"])
+def test_persistent_failure_notifies_once_each_run_including_simulation(monkeypatch, mode):
     failure_run(monkeypatch)
     if mode is not None:
         monkeypatch.setenv("DRY_RUN", mode)
-    monkeypatch.setenv("APPRISE_URLS", destinations)
-    sender = Mock(side_effect=AssertionError("must stay silent"))
+    monkeypatch.setenv("APPRISE_URLS", '["json://notify.invalid/hook"]')
+    sender = Mock(return_value="sent")
     monkeypatch.setattr(notify, "send_notification", sender)
     assert app.main() == 1
-    sender.assert_not_called()
+    assert app.main() == 1
+    assert sender.call_count == 2
+    assert all(call.args[2] == "Run failed: unresolved_security." for call in sender.call_args_list)
 
 
 def test_config_failure_can_notify_without_disclosing_value(monkeypatch):
@@ -167,7 +168,7 @@ def test_invalid_schedule_uses_configuration_finalizer(monkeypatch, caplog, mode
     with caplog.at_level(logging.INFO):
         assert app.main(invalid_schedule=True) == 1
     loader.assert_not_called()
-    assert sender.call_count == int(mode == "0")
+    assert sender.call_count == 1
     if mode == "0":
         assert sender.call_args.args[2] == "Run failed: invalid_configuration."
     assert caplog.text.count("Summary:") == 1

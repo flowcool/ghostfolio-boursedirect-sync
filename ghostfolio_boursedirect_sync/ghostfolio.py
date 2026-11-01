@@ -9,6 +9,7 @@ import re
 import time
 from collections import defaultdict
 from collections.abc import Sequence
+from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal, localcontext
 from typing import cast
@@ -57,11 +58,16 @@ def parse_identity(comment: str, kind: str) -> bool:
     """IBKR ghostfolio.py:76; BD v1/v2 remain legacy manual-match evidence."""
     if not comment.startswith("BD#v"):
         return False
-    if re.fullmatch(r"BD#v1#[A-Za-z0-9-]+#[0-9a-f]{64}", comment):
+    marker, separator, notes = comment.partition("\n\n")
+    if ("\n" in marker or "\r" in comment
+            or (separator and (not notes or notes.startswith("\n")
+                               or re.search(r"(?m)^BD#", notes)))):
+        raise RuntimeError("invalid_identity")
+    if re.fullmatch(r"BD#v1#[A-Za-z0-9-]+#[0-9a-f]{64}", marker):
         return False
-    if re.fullmatch(r"BD#v2#[0-9a-f]{64}#[0-9a-f]{64}", comment):
+    if re.fullmatch(r"BD#v2#[0-9a-f]{64}#[0-9a-f]{64}", marker):
         return False
-    match = re.fullmatch(r"BD#v3#[A-Za-z0-9]+:(BUY|SELL|DIVIDEND):[A-Za-z0-9._-]+", comment)
+    match = re.fullmatch(r"BD#v3#[A-Za-z0-9]+:(BUY|SELL|DIVIDEND):[A-Za-z0-9._-]+", marker)
     if match is None or match[1] != kind:
         raise RuntimeError("invalid_identity")
     return True
@@ -156,7 +162,7 @@ def index_existing_activities(data: object, *, now: datetime | None = None) -> A
         )
         rows.append(row)
         if owned:
-            identities[comment].append(row)
+            identities[comment.split("\n", 1)[0]].append(row)
         if row.active and kind in ("BUY", "SELL"):
             key = (account_id, symbol)
             previous = positions[key]
@@ -165,7 +171,7 @@ def index_existing_activities(data: object, *, now: datetime | None = None) -> A
                                            for v in (previous, row.quantity)) + 2)
                 positions[key] = previous + (-row.quantity if kind == "SELL" else row.quantity)
     return ActivityIndex(tuple(rows), {key: tuple(value) for key, value in identities.items()},
-                         dict(positions))
+                         dict(positions), tuple(deepcopy(raw_rows)))
 
 
 def read_activities(settings: Settings, token: str) -> ActivityIndex:
@@ -251,6 +257,20 @@ def exchange_token(settings: Settings) -> str:
 
 
 
+def decimal_json(payload: object) -> str:
+    """Keep exact JSON numbers without treating a retained note as a number.
+
+    Reuse the v1 marker mechanism, selecting a marker absent from string data.
+    """
+    marker = "__DECIMAL__"
+    strings = json.dumps(payload, default=str, allow_nan=False)
+    while marker in strings:
+        marker = "_" + marker
+    encoded = json.dumps(payload, default=lambda number: f"{marker}{number:f}__",
+                         separators=(",", ":"), allow_nan=False)
+    return re.sub(r'"' + re.escape(marker) + r'(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
+
+
 def import_activities(settings: Settings, token: str, activities: Sequence[Activity]) -> None:
     """Create activities, then confirm every row with one complete read.
 
@@ -276,8 +296,7 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
         })
     # Decimal values remain JSON numbers. The marker replacement avoids binary
     # float conversion while keeping Ghostfolio DTO validation numeric.
-    encoded = json.dumps(payload_rows, default=lambda value: f"__DECIMAL__{value:f}__", separators=(",", ":"))
-    encoded = re.sub(r'"__DECIMAL__(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
+    encoded = decimal_json(payload_rows)
     uncertain = False
     try:
         response = requests.post(
@@ -319,59 +338,27 @@ def import_activities(settings: Settings, token: str, activities: Sequence[Activ
             raise RuntimeError("import_unconfirmed")
 
 
-def correct_activity_fee(
-    settings: Settings, token: str, existing: ExistingActivity, new_fee: Decimal,
-) -> None:
-    """Update one owned BUY fee through Ghostfolio's UpdateOrderDto.
-
-    The PUT repeats the complete activity identity and financial fields because
-    Ghostfolio validates the full DTO. Only ``fee`` differs from the read row.
-    """
+def update_reviewed_activity(settings: Settings, token: str, payload: dict[str, object]) -> None:
+    """One request only. Caller durably journals before this whitelisted PUT."""
     if settings.dry_run:
-        raise RuntimeError("invalid_configuration fee correction in simulation")
-    payload: dict[str, object] = {
-        "id": existing.id, "accountId": existing.account_id,
-        "currency": existing.currency, "date": existing.date.isoformat(),
-        "type": existing.type,
-        "comment": None if existing.comment_is_null else existing.comment,
-        "symbol": existing.symbol, "dataSource": existing.data_source,
-        "quantity": existing.quantity, "unitPrice": existing.unit_price,
-        "fee": new_fee, "tags": list(existing.tags),
-    }
-    encoded = json.dumps(payload, default=lambda value: f"__DECIMAL__{value:f}__",
-                         separators=(",", ":"))
-    encoded = re.sub(r'"__DECIMAL__(-?[0-9]+(?:\.[0-9]+)?)__"', r"\1", encoded)
-    uncertain = False
+        raise RuntimeError("invalid_configuration correction in simulation")
+    expected = {"id", "accountId", "currency", "date", "type", "comment", "symbol", "dataSource",
+                "quantity", "unitPrice", "fee", "tags"}
+    if set(payload) != expected or not isinstance(payload["id"], str):
+        raise RuntimeError("review_unavailable")
+    encoded = decimal_json(payload)
     try:
         response = requests.put(
-            f"{settings.ghost_host}/api/v1/activities/{quote(existing.id, safe='')}",
+            f"{settings.ghost_host}/api/v1/activities/{quote(payload['id'], safe='')}",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             data=encoded, timeout=(10, 120), allow_redirects=False,
         )
     except requests.RequestException:
-        uncertain = True
-    if not uncertain:
-        uncertain = not 200 <= response.status_code < 300
-    if uncertain:
-        time.sleep(5)
-    try:
-        confirmed = read_activities(settings, token)
-    except RuntimeError:
         raise RuntimeError("import_unconfirmed") from None
-    matches = [row for row in confirmed.rows
-               if row.id == existing.id and row.comment == existing.comment]
-    comment_matches = [row for row in confirmed.rows if row.comment == existing.comment]
-    if len(matches) != 1 or (existing.comment and len(comment_matches) != 1):
+    if not 200 <= response.status_code < 300:
         raise RuntimeError("import_unconfirmed")
-    row = matches[0]
-    if (row.account_id != existing.account_id or row.comment != existing.comment
-            or row.symbol != existing.symbol or row.data_source != existing.data_source
-            or row.isin != existing.isin
-            or row.date != existing.date or row.type != existing.type
-            or row.quantity != existing.quantity or row.unit_price != existing.unit_price
-            or row.currency != existing.currency or row.fee != new_fee
-            or row.tags != existing.tags):
-        raise RuntimeError("import_unconfirmed")
+
+
 def find_account(settings: Settings, token: str) -> str:
     try:
         response = requests.get(

@@ -6,11 +6,19 @@ No holder data or raw text crosses the logging boundary.
 
 import re
 import subprocess
+from collections import Counter
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import Literal
 
-from ghostfolio_boursedirect_sync.models import TTF, Notice, NoticeStop, Trade
+from ghostfolio_boursedirect_sync.models import (
+    TTF,
+    LegacyNoticeEvidence,
+    Notice,
+    NoticeStop,
+    Trade,
+)
+from ghostfolio_boursedirect_sync.sync import canonical_decimal
 
 NUMBER = r"[+-]?(?:[1-9][0-9]{0,2}(?: [0-9]{3})+|[0-9]+)(?:[,.][0-9]+)?"
 HEADER = re.compile(
@@ -25,7 +33,7 @@ TTF_HEADER = re.compile(
     re.I,
 )
 ACCOUNT = re.compile(
-    r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(?:PEA-PME|PEA)\b", re.I
+    r"\bCOMPTE\s+N[°º]\s*:?\s*([A-Z0-9 ]+?)EUR\s*(PEA-PME|PEA)\b", re.I
 )
 FIELD = rf"([A-Z][A-Z .]*?)\s*:\s*({NUMBER})"
 FOOTER = re.compile(
@@ -119,6 +127,42 @@ def checked_amounts(kind: Literal["BUY", "SELL", "DIVIDEND"], block: str, net: D
     return fields
 
 
+def legacy_evidence(account: str, kind: str, day: str, isin: str, block: str,
+                    fields: dict[str, Decimal], net: Decimal,
+                    occurrences: Counter[tuple[tuple[str, str], ...]]) -> LegacyNoticeEvidence | None:
+    """Reproduce legacy-wip parse_contract_note/notice_identity inputs only.
+
+    A PDF is sufficient only when every legacy hash input is explicit and its
+    old amount rules pass. Historical ledger/v1 inputs remain unavailable.
+    """
+    if not account:
+        return None
+    source = {"kind": "COUPON" if kind == "DIVIDEND" else kind,
+              "date": day, "isin": isin, "quantity": canonical_decimal(fields["QUANTITE"]),
+              "debit": canonical_decimal(net if kind == "BUY" else Decimal(0)),
+              "credit": canonical_decimal(Decimal(0) if kind == "BUY" else net)}
+    if kind == "DIVIDEND":
+        if fields["QUANTITE"] >= 0:
+            return None
+    else:
+        executions = re.findall(r"Heure Execution:\s*([0-9]{2}:[0-9]{2}:[0-9]{2})\s+Lieu:", block)
+        if len(executions) != 1 or re.search(r"\bCOURTAGE\s*:", block) is None:
+            return None
+        try:
+            datetime.strptime(executions[0], "%H:%M:%S")
+        except ValueError:
+            return None
+        with localcontext() as context:
+            context.prec = max(28, sum(len(format(value, "f")) for value in fields.values()) + 8)
+            if abs(fields["QUANTITE"]) * fields["COURS"] != fields["BRUT"]:
+                return None
+        source.update(execution_time=executions[0], unit_price=canonical_decimal(fields["COURS"]),
+                      brokerage=canonical_decimal(fields["COURTAGE"]), vat=canonical_decimal(fields["TVA"]))
+    signature = tuple(sorted(source.items()))
+    occurrences[signature] += 1
+    return LegacyNoticeEvidence(account, signature, occurrences[signature])
+
+
 def parse_text(text: str) -> Notice:
     """Read the labelled identifier; EUR and account type are separate metadata."""
     # Observed pdftotext pages start with n/N. Remove only that page furniture,
@@ -133,6 +177,11 @@ def parse_text(text: str) -> Notice:
     if match is None:
         raise RuntimeError("notice_unreadable")
     account_ref = match[1].replace(" ", "")
+    # The old config admitted a contiguous identifier followed by PEA/PEA-PME.
+    # Never guess how historical HTML normalized spaces inside an identifier.
+    legacy_account = (f"{account_ref} {match[2].upper()}"
+                      if match[1].strip() == account_ref else "")
+    legacy_occurrences: Counter[tuple[tuple[str, str], ...]] = Counter()
     lines = text.splitlines()
     starts = [index for index, line in enumerate(lines)
               if re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line)]
@@ -195,5 +244,7 @@ def parse_text(text: str) -> Notice:
                             Decimal(1) if kind == "DIVIDEND" else fields["QUANTITE"].copy_abs(),
                             decimal(header[4]) if kind == "DIVIDEND" else fields["COURS"],
                             Decimal(0) if kind == "DIVIDEND" else fields["COURTAGE"], kind,
-                            None if kind == "DIVIDEND" else fields["COURTAGE"]))
+                            None if kind == "DIVIDEND" else fields["COURTAGE"],
+                            legacy_evidence(legacy_account, kind, day.isoformat(), header[3], block,
+                                            fields, decimal(header[4]), legacy_occurrences)))
     return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages, tuple(ttf_rows), tuple(stops))

@@ -172,9 +172,10 @@ voice, no internal jargon.
 
 ## Durable work state
 
-- For the proposed IBKR v4 behavior, read
+- For the approved IBKR v4 behavior, read
   [operator-actions-and-reconciliation](openspec/changes/operator-actions-and-reconciliation/proposal.md).
-  It awaits contract approval; the current published contract remains above.
+  Its contract is approved. Implementation and qualification remain pending;
+  the current published contract remains above.
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
 - Rebuild epic: "v1 rebuild (option B)". Include completed work with
   `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.

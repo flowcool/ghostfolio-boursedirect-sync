@@ -6,6 +6,7 @@ import os
 import re
 from typing import TypedDict
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ghostfolio_boursedirect_sync.models import Settings
 
@@ -60,6 +61,18 @@ def load() -> Settings:
     done_tag = os.environ.get("PAPERLESS_DONE_TAG", "ghostfolio-done").strip()
     if not done_tag or any(ord(c) < 32 or ord(c) == 127 for c in done_tag):
         raise RuntimeError("invalid_configuration PAPERLESS_DONE_TAG")
+    review_file = os.environ.get("ACTIVITY_REVIEW_FILE", "")
+    profile = os.environ.get("ACTIVITY_RECONCILIATION", "off")
+    if profile not in ("off", "conservative", "balanced", "permissive"):
+        raise RuntimeError("invalid_configuration ACTIVITY_RECONCILIATION")
+    if profile != "off" and not review_file:
+        raise RuntimeError("invalid_configuration ACTIVITY_REVIEW_FILE")
+    timezone = os.environ.get("TZ", "")
+    if timezone or profile != "off":
+        try:
+            ZoneInfo(timezone)
+        except (ValueError, ZoneInfoNotFoundError):
+            raise RuntimeError("invalid_configuration TZ") from None
     return Settings(
         ghost_host=validate_origin(required("GHOST_HOST"), "GHOST_HOST"),
         ghost_account_name=required("GHOST_ACCOUNT_NAME"),
@@ -71,6 +84,9 @@ def load() -> Settings:
         mapping_file=os.environ.get("MAPPING_FILE", ""),
         paperless_done_tag=done_tag,
         dry_run=mode != "0",
+        activity_review_file=review_file,
+        activity_reconciliation=profile,
+        timezone=timezone,
     )
 
 

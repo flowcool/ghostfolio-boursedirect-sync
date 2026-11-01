@@ -529,3 +529,30 @@ def test_zero_brokerage_information_follows_account_filter(settings, monkeypatch
     messages = [r.message for r in caplog.records if "brokerage_zero_inferred" in r.message]
     assert messages == ([] if other_account else ["brokerage_zero_inferred document=123 rows=1"])
     requests.post.assert_not_called()
+
+
+@pytest.mark.parametrize("profile", ["unknown", "", "Balanced"])
+def test_invalid_reconciliation_stops_before_source(settings, monkeypatch, profile):
+    monkeypatch.setenv("ACTIVITY_RECONCILIATION", profile)
+    with pytest.raises(RuntimeError, match="invalid_configuration ACTIVITY_RECONCILIATION"):
+        config.load()
+
+
+def test_review_profile_requires_private_file_and_explicit_zone(settings, monkeypatch):
+    monkeypatch.setenv("ACTIVITY_RECONCILIATION", "balanced")
+    with pytest.raises(RuntimeError, match="invalid_configuration ACTIVITY_REVIEW_FILE"):
+        config.load()
+    monkeypatch.setenv("ACTIVITY_REVIEW_FILE", "/private/review.yaml")
+    monkeypatch.delenv("TZ", raising=False)
+    with pytest.raises(RuntimeError, match="invalid_configuration TZ"):
+        config.load()
+    monkeypatch.setenv("TZ", "Europe/Zurich")
+    assert config.load().activity_reconciliation == "balanced"
+
+
+def test_off_profile_keeps_manual_authority_without_timezone(settings, monkeypatch):
+    monkeypatch.delenv("TZ", raising=False)
+    monkeypatch.setenv("ACTIVITY_REVIEW_FILE", "/private/review.yaml")
+    result = config.load()
+    assert result.activity_reconciliation == "off"
+    assert result.activity_review_file == "/private/review.yaml"

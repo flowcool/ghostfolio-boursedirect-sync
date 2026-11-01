@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal, localcontext
 from heapq import heappop, heappush
@@ -69,8 +70,20 @@ def activity(trade: Trade, mapping: dict[str, str], account_id: str, source_acco
         quantity=trade.quantity, unit_price=trade.unit_price, fee=trade.fee,
         comment=f"BD#v3#{source_account}:{trade.type}:{namespace}.{key}",
         isin=trade.isin, type=trade.type,
-        brokerage=trade.brokerage,
+        brokerage=trade.brokerage, legacy=trade.legacy,
     )
+
+
+def legacy_notice_identity(activity: Activity) -> str | None:
+    """Exact legacy-wip:4243 notice_identity; never infer a historical v1 hash."""
+    evidence = activity.legacy
+    if evidence is None:
+        return None
+    namespace = hashlib.sha256(json.dumps([evidence.account_ref, activity.account_id],
+                                         separators=(",", ":")).encode()).hexdigest()
+    basis = json.dumps(dict(evidence.fields), sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256((basis + ":" + str(evidence.occurrence)).encode()).hexdigest()
+    return f"BD#v2#{namespace}#{digest}"
 
 
 def attribute_ttf_rows(notice: Notice) -> tuple[Notice, tuple[str, ...]]:
@@ -90,10 +103,8 @@ def attribute_ttf_rows(notice: Notice) -> tuple[Notice, tuple[str, ...]]:
             key = (tax.date, tax.isin)
             additions[key] = additions.get(key, Decimal(0)) + tax.amount
     trades = tuple(
-        Trade(trade.date, trade.isin, trade.quantity, trade.unit_price,
-              trade.fee + (additions.get((trade.date, trade.isin), Decimal(0))
-                           if trade.type == "BUY" else Decimal(0)),
-              trade.type, trade.brokerage)
+        replace(trade, fee=trade.fee + (additions.get((trade.date, trade.isin), Decimal(0))
+                                      if trade.type == "BUY" else Decimal(0)))
         for trade in notice.trades
         if not (trade.type == "BUY" and
                 ((trade.date, trade.isin) in failed_keys
@@ -326,3 +337,19 @@ def select_account_activities(
             positions[key] = remaining
         guarded.append(candidate)
     return Selection(tuple(guarded), duplicates, tuple(errors))
+
+
+def ttf_correction_matches(candidate: Activity, existing: ActivityIndex) -> bool:
+    """The approved exact TTF predicate, without a separate correction executor."""
+    if (candidate.type != "BUY" or candidate.brokerage is None or candidate.fee <= candidate.brokerage
+            or activity_instant(candidate.date) > datetime.now(UTC)):
+        return False
+    occupied = existing.identities.get(candidate.comment, ())
+    matches = [row for row in existing.rows if row.active and row.account_id == candidate.account_id
+        and row.type == "BUY" and row.date == activity_instant(candidate.date)
+        and row.symbol == candidate.symbol and row.data_source == "YAHOO" and row.currency == "EUR"
+        and row.quantity == candidate.quantity and row.unit_price == candidate.unit_price
+        and row.fee == candidate.brokerage
+        and (candidate.isin is None or row.isin is None or row.isin == candidate.isin)
+        and (row.id == occupied[0].id if len(occupied) == 1 else not row.comment.startswith("BD#v3#"))]
+    return len(matches) == 1

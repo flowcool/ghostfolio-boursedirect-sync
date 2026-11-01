@@ -51,7 +51,8 @@ Use one Compose service for one Bourse Direct account. Copy `.env.example` to
 
 ```sh
 chmod 600 .env
-docker compose run --rm -T importer; echo "exit=$?"
+sudo install -d -m 0700 -o 10001 -g 10001 review
+docker compose run -T --no-deps importer; echo "exit=$?"
 ```
 
 The default mode is simulation. It prints each proposed activity and sends no
@@ -79,7 +80,10 @@ The published legacy preview has this immutable image reference:
 | `PAPERLESS_DONE_TAG` | no | Tag name, default `ghostfolio-done` |
 | `MAPPING_FILE` | no | Read-only YAML mapping file; empty allows no override |
 | `DRY_RUN` | no | Absent or `1` simulates; `0` enables imports |
-| `TZ` | no | Container timezone for scheduling; activity dates stay UTC |
+| `TZ` | for a non-off profile | Explicit IANA timezone for destination date comparison and scheduling; source dates stay UTC |
+| `ACTIVITY_REVIEW_FILE` | no | Private writable YAML path inside the container, for example `/review/activities.yaml` |
+| `ACTIVITY_RECONCILIATION` | no | `off` by default; or `conservative`, `balanced`, `permissive` |
+| `ACTIVITY_REVIEW_DIRECTORY` | Compose only | Host directory mounted at `/review`; default `./review` |
 | `CRON` | no | Five numeric schedule fields; empty runs once |
 | `APPRISE_URLS` | no | JSON list of Apprise destination URLs; empty or `[]` disables delivery |
 | `APPRISE_TIMEOUT` | no | Notification deadline in seconds, from 1 to 30; default 10 |
@@ -133,7 +137,8 @@ Then run the connector again. A missing or invalid file stops the run with
 
 ## Ghostfolio evidence
 
-Before selection, the connector reads the complete activity list once. The
+Before selection, the connector reads the complete activity list.
+Review and correction recovery require fresh complete reads. The
 reported count must equal the number of rows. Invalid, masked or incomplete
 profiles stop with `activities_unavailable`.
 
@@ -141,7 +146,7 @@ The current `assetProfile` takes precedence over the legacy `SymbolProfile`.
 Draft, excluded, future and non-YAHOO rows do not support holdings. Their
 identities remain occupied for duplicate protection.
 
-All selection is offline after the reads. Money uses exact `Decimal` values.
+Selection uses the acquired evidence. Correction dispatch revalidates that evidence. Money uses exact `Decimal` values.
 
 ## Amounts and fees
 
@@ -165,10 +170,80 @@ confirm the result. An already-correct fee is a no-op. Other differences are
 reported without correction. An uncertain result stops writes without resend.
 The connector never deletes activities.
 
+Corrections now require `ACTIVITY_REVIEW_FILE`, including with profile `off`.
+Without it, an eligible TTF correction reports `review_evidence` and holds that
+BUY. Independent imports can continue. This changes the v1 fee-correction setup.
+
 Custody fees are ignored with `custody_fee_ignored`. The done tag clears only
 `share_count_change` and `unknown_operation` for that document. A share-count
 change logs an error and blocks the affected security. Other rows stay
 subject to their normal checks.
+
+## Operator review and reconciliation
+
+The reconciliation implementation is under qualification. The published v1
+image does not contain this interface. Use the candidate only in an isolated lab until its native checks pass.
+
+Set `ACTIVITY_REVIEW_FILE=/review/activities.yaml` to retain proposals and
+recovery evidence. The container runs as UID/GID `10001`. The parent directory
+must already exist, belong to that user and have mode `0700`. Review files and
+companions require mode `0600`. Keep the entire directory between runs. The
+connector rejects links, input overlap, unsafe permissions and concurrent edits
+with `review_unavailable` before financial writes. Paperless stays read only.
+
+The YAML contains `reference_updates`, `activity_corrections`, groups and
+conforming rows. Read the exact before and after values. Edit only the proposal's
+`decision` between runs:
+
+```yaml
+decision: yes
+```
+
+Only literal `yes` approves an eligible proposal already present with unchanged
+evidence. `true` does not approve it. Use `decision: reject` to reject a pair.
+A changed source, destination or association clears stale consent. A cleared
+choice does not immediately acquire automatic authority. A blocked proposal
+remains blocked after `yes`. Held events cannot become new imports.
+
+Corrections preserve the activity ID, owner, account, security, type, EUR,
+tags and notes. BUY and SELL quantities stay unchanged. A coupon uses quantity
+`1` and the validated net credit as price. The connector never merges, splits
+or deletes activities. Groups and total amounts are diagnostic evidence only.
+Conflicting ISINs and competing candidates hold the related events.
+
+Profile `off` permits manual review, dedicated TTF corrections and pending
+recovery without `TZ`. Other profiles require a review file and explicit IANA
+`TZ`. Profiles never create a manual `yes`.
+
+| Profile | Maximum gross difference | Maximum source-relative difference | Maximum date distance |
+| --- | --- | --- | --- |
+| `conservative` | 0 EUR | 0 | 0 days; recognized unique reference required |
+| `balanced` | 0.01 EUR | 0.1% | 0 days |
+| `permissive` | 1 EUR | 1% | 2 days for BUY/SELL; 3 for coupons |
+
+Both amount limits must pass. Gross means exact quantity times price, without
+fees. Fees require separate source validation. No exchange-rate or floating
+point exception applies. Date comparison keeps the printed source day and uses
+the destination day in `TZ`. Writes use the printed date at midnight UTC.
+Eligible pairs outside a profile limit remain available for manual review.
+
+Legacy comments require reproducible event and account inputs before migration.
+An eligible migration changes only the identity line and preserves notes after
+a blank separator. Financial differences are evaluated on a later run. Missing
+historical inputs report `review_evidence`; `yes` cannot replace them. Unchanged
+legacy and manual duplicates do not require migration.
+
+Manual, profile, migration and TTF work share a limit of one correction per run.
+The oldest eligible proposal goes first, with a stable order for ties. Deferred
+choices remain in the file. New imports have no correction-budget limit.
+Simulation shows `would correct` and sends no financial request.
+
+Before a correction, the connector saves the exact request, before and after
+values, and authority. It sends one PUT and checks all changed and preserved
+fields. An uncertain result holds all writes to that account across restarts.
+The connector does not resend the PUT. Only an exact readback settles it.
+Simulation and profile changes cannot settle pending real work. Keep the review
+file and its companion evidence; removing them is not a recovery procedure.
 
 ## Development checks
 
@@ -190,14 +265,21 @@ Paperless access. It still uses real Ghostfolio lab requests. Paperless service
 integration is a separate gate. Both scenarios must pass on the same candidate
 image before release. Lab tooling stays in Infra.
 
-## Failure notifications
+## Outcomes and notifications
 
-With `DRY_RUN=0`, a failed run sends one notification when `APPRISE_URLS` is set.
+The run reports `success`, `success with user action required`, or `failure`.
+`review_approval` and `review_evidence` require action but keep exit code 0.
+`review_unavailable` is a failure with exit code 1. Other existing failures
+retain exit code 1. Custody fees and inferred zero brokerage are information.
+The summary separates imports, simulations, duplicates, conforming rows,
+corrections, migrations, holds and deferred work. Counts can overlap.
+
+A failed run or required action sends at most one notification when
+`APPRISE_URLS` is set, including in simulation.
 The message contains fixed error codes. It contains no account data or secrets.
 For example, set `APPRISE_URLS='["json://notification-service/hook"]'`.
 
-Simulation never sends a notification, including failures and invalid settings.
-Successful runs stay silent. Notification delivery uses a separate process.
+Unresolved actions repeat on later runs. Clean runs stay silent. Notification delivery uses a separate process.
 The deadline covers process startup and delivery. On expiry, the process stops.
 A timed-out notification can still arrive. The connector does not retry it.
 Invalid notification settings stop before service access with `invalid_configuration`.

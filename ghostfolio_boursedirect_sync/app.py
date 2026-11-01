@@ -5,9 +5,10 @@ import json
 import logging
 import os
 from collections import Counter
-from datetime import UTC, datetime
+from dataclasses import replace
 
 from ghostfolio_boursedirect_sync import (
+    activity_review,
     config,
     ghostfolio,
     notices,
@@ -18,7 +19,6 @@ from ghostfolio_boursedirect_sync import (
 )
 from ghostfolio_boursedirect_sync.models import (
     Activity,
-    ExistingActivity,
     Notice,
     Trade,
 )
@@ -30,8 +30,11 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     document_id: int | None = None
     created = 0
+    held: set[str] = set()
+    review_counts: dict[str, int] = {}
     corrected = 0
     other_accounts = unreadable = duplicates = 0
+    review_state: activity_review.ReviewState | None = None
     try:
         if invalid_schedule:
             raise RuntimeError("invalid_configuration CRON")
@@ -86,7 +89,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 has_stops = True
                 if stop.isin is not None:
                     blocked.add(stop.isin)
-        if not any(t.isin not in blocked for _, n in matching for t in n.trades):
+        if not any(t.isin not in blocked for _, n in matching for t in n.trades) and not settings.activity_review_file:
             log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
                      "unreadable_notices=%s created=0", other_accounts, unreadable)
             return int(unreadable > 0 or bool(errors))
@@ -111,6 +114,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 mapping[isin] = symbol
         candidates: list[Activity] = []
         documents: dict[str, int] = {}
+        source_documents: dict[str, set[int]] = {}
         for document_id, notice in matching:
             namespace = sync.notice_namespace(notice)
             ranks: Counter[Trade] = Counter()
@@ -122,101 +126,57 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 activity = sync.activity(trade, mapping, account_id, settings.bd_account_ref, namespace, rank)
                 candidates.append(activity)
                 documents.setdefault(activity.comment, document_id)
-        corrections: list[tuple[ExistingActivity, Activity]] = []
-        correction_groups: dict[str, list[tuple[ExistingActivity, Activity]]] = {}
-        reserved_existing_ids: set[str] = set()
-        eligible: list[Activity] = []
-        correction_duplicates = 0
-        unique_candidates: list[Activity] = []
-        seen_comments: set[str] = set()
+                source_documents.setdefault(activity.comment, set()).add(document_id)
+        # Resolve source copies before review. Conflicting identical identities fail closed.
+        unique: dict[str, Activity] = {}
         for candidate in candidates:
-            if candidate.comment in seen_comments:
-                correction_duplicates += 1
-                continue
-            seen_comments.add(candidate.comment)
-            unique_candidates.append(candidate)
-        for candidate in unique_candidates:
-            # Task 4.1 owns ordinary matching. Fee correction must not consume
-            # an exact-day manual row before maximum one-to-one assignment.
-            if (candidate.type != "BUY" or candidate.brokerage is None
-                    or candidate.fee == candidate.brokerage
-                    or ghostfolio.activity_instant(candidate.date) > datetime.now(UTC)):
-                eligible.append(candidate)
-                continue
-            occupied = existing.identities.get(candidate.comment, ())
-            if len(occupied) > 1 or any(
-                    row.account_id != candidate.account_id for row in occupied):
-                errors.add("owned_activity_conflict")
-                log.error("owned_activity_conflict")
-                continue
-            if occupied:
-                owned = occupied[0]
-                if (owned.date != ghostfolio.activity_instant(candidate.date)
-                        or owned.type != candidate.type or owned.symbol != candidate.symbol
-                        or owned.data_source != candidate.data_source
-                        or owned.currency != candidate.currency
-                        or owned.quantity != candidate.quantity
-                        or owned.unit_price != candidate.unit_price):
-                    errors.add("owned_activity_conflict")
-                    log.error("owned_activity_conflict")
-                    continue
-            matches = [row for row in existing.rows
-                       if row.active and row.account_id == candidate.account_id and row.type == "BUY"
-                       and row.date == ghostfolio.activity_instant(candidate.date)
-                       and row.symbol == candidate.symbol and row.quantity == candidate.quantity
-                       and row.unit_price == candidate.unit_price and row.currency == candidate.currency
-                       and (row.id == occupied[0].id if occupied
-                            else not row.comment.startswith("BD#v3#"))
-                       and (candidate.isin is None or row.isin is None or row.isin == candidate.isin)]
-            if occupied and not any(row.id == occupied[0].id for row in matches):
-                errors.add("owned_activity_conflict")
-                log.error("owned_activity_conflict")
-                continue
-            if occupied:
-                matches = [occupied[0]]
-            if len(matches) != 1:
-                eligible.append(candidate)
-                continue
-            row = matches[0]
-            if row.fee == candidate.fee:
-                eligible.append(candidate)
-            elif row.fee == candidate.brokerage:
-                if row.id in reserved_existing_ids:
-                    errors.add("owned_activity_conflict")
-                    log.error("owned_activity_conflict")
-                else:
-                    correction_groups.setdefault(row.id, []).append((row, candidate))
-            else:
-                errors.add("owned_activity_conflict")
-                log.error("owned_activity_conflict")
-        for group in correction_groups.values():
-            if len(group) == 1:
-                corrections.extend(group)
-                reserved_existing_ids.add(group[0][0].id)
-            elif all(item[1] == group[0][1] for item in group[1:]):
-                corrections.append(group[0])
-                correction_duplicates += len(group) - 1
-                reserved_existing_ids.add(group[0][0].id)
-            else:
-                errors.add("owned_activity_conflict")
-                log.error("owned_activity_conflict")
+            previous = unique.get(candidate.comment)
+            if previous is not None and previous != candidate:
+                raise RuntimeError("owned_activity_conflict")
+            if previous is not None and previous.legacy != candidate.legacy:
+                candidate = replace(candidate, legacy=None)
+            unique[candidate.comment] = candidate
+        source_duplicates = len(candidates) - len(unique)
+        log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "source", "value": source}))
+        if settings.activity_review_file and not unreadable:
+            try:
+                review_state = activity_review.open_review(
+                    settings.activity_review_file, [settings.mapping_file] if settings.mapping_file else [])
+                evidence = {candidate.comment: [entry for entry in source
+                            if entry["id"] in source_documents[candidate.comment]] for candidate in unique.values()}
+                events = activity_review.source_events(list(unique.values()), settings.bd_account_ref, evidence)
+                result = activity_review.process_review(review_state, settings, token, events, account_id=account_id)
+                errors.update(result.codes)
+                held = result.held
+                corrected = result.corrected
+                review_counts = result.counts
+                if result.blocked_accounts:
+                    raise RuntimeError("import_unconfirmed")
+                # Corrections can change holdings context. Never select imports on stale evidence.
+                if corrected:
+                    existing = ghostfolio.read_activities(settings, token)
+            except (OSError, ValueError, RuntimeError) as exc:
+                code = str(exc).split()[0] if str(exc).split() else "review_unavailable"
+                if code not in ("import_unconfirmed", "activities_unavailable", "invalid_identity"):
+                    code = "review_unavailable"
+                raise RuntimeError(code) from None
+        elif not settings.activity_review_file:
+            for candidate in unique.values():
+                if sync.ttf_correction_matches(candidate, existing):
+                    held.add(candidate.comment)
+                    errors.add("review_evidence")
+                    log.warning("review_evidence scope=%s; BUY held; configure ACTIVITY_REVIEW_FILE "
+                                "to retain correction evidence; independent imports continue", candidate.comment)
+        eligible = [candidate for candidate in unique.values() if candidate.comment not in held]
         selected = sync.select_account_activities(
-            eligible, existing, reserved_existing_ids=reserved_existing_ids)
-        duplicates = selected.duplicates + correction_duplicates
+            eligible, existing)
+        duplicates = selected.duplicates + source_duplicates
         # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
         # BD binds originals instead of a Flex window; decimal strings stay exact.
-        log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "source", "value": source}))
         preview: list[dict[str, object]] = [{"accountId": a.account_id, "symbol": a.symbol, "date": a.date,
              "quantity": str(a.quantity), "unitPrice": str(a.unit_price), "fee": str(a.fee),
              "currency": a.currency, "type": a.type, "dataSource": a.data_source,
              "comment": a.comment} for a in selected.activities]
-        preview.extend({"id": row.id, "comment": row.comment, "oldFee": str(row.fee),
-                        "fee": str(activity.fee), "accountId": row.account_id,
-                        "symbol": row.symbol, "date": row.date.isoformat(),
-                        "type": row.type, "quantity": str(row.quantity),
-                        "unitPrice": str(row.unit_price), "currency": row.currency,
-                        "dataSource": row.data_source, "correction": True}
-                       for row, activity in corrections)
         log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "preview", "value": preview}))
         for code in selected.errors:
             errors.add(code)
@@ -233,23 +193,16 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
         has_errors = bool(selected.errors or unreadable > 0 or unresolved or has_stops
                           or "ttf_attribution_failed" in errors
                           or "owned_activity_conflict" in errors)
-        for row, activity in corrections:
-            log.info("%s fee_correction id=%s fee=%s->%s comment=%s",
-                     "[DRY RUN]" if settings.dry_run else "IMPORT",
-                     row.id, row.fee, activity.fee, row.comment)
-        blocking = has_errors if settings.dry_run else (unreadable > 0 or (has_errors and not selected.activities and not corrections))
+        blocking = has_errors if settings.dry_run else (unreadable > 0 or (has_errors and not selected.activities))
         if blocking:
             log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities) if settings.dry_run else 0, selected.duplicates, other_accounts, unreadable)
             return 1
         if settings.dry_run:
             log.info("Summary: simulated=%s duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=0",
-                     len(selected.activities), duplicates, len(corrections), other_accounts, unreadable)
+                     len(selected.activities), duplicates, review_counts.get("would correct", 0), other_accounts, unreadable)
             return 0
-        # Confirm each row before a later SELL can depend on its quantity.
-        for row, activity in corrections:
-            ghostfolio.correct_activity_fee(settings, token, row, activity.fee)
-            corrected += 1
+        # The review path has already used the single shared update budget.
         for activity in selected.activities:
             ghostfolio.import_activities(settings, token, [activity])
             created += 1
@@ -265,23 +218,34 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
         log.info("Summary: simulated=0 duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=%s",
                  duplicates, corrected, other_accounts, unreadable, created)
         return 1
+    finally:
+        log.info("Review summary: conforming=%s corrections=%s migrations=%s held=%s deferred=%s "
+                 "would_correct=%s counts_available=%s counts_can_overlap=yes",
+                 review_counts.get("already consistent", 0), corrected,
+                 review_counts.get("reference migrations", 0), len(held),
+                 review_counts.get("automatic work deferred", 0), review_counts.get("would correct", 0),
+                 bool(review_counts))
+        if review_state is not None:
+            activity_review.close_review(review_state)
 
 
 def main(*, invalid_schedule: bool = False) -> int:
-    """Finalize once; BD simulation never loads notification settings (IBKR app.py:441)."""
+    """Finalize once, including simulation (IBKR app.py:584)."""
     errors: set[str] = set()
     code = run_sync(errors, invalid_schedule=invalid_schedule)
-    if code == 0 or os.environ.get("DRY_RUN", "1") != "0":
+    code = int(bool(code or errors & outcome.FAILURE_CODES))
+    outcome.log_operational_result(errors, code)
+    if not errors:
         return code
     try:
         settings = config.load_notification_config()
         if settings is None:
             return code
-        status = notify.send_notification(settings, notify.NOTIFY_TITLE, outcome.failure_summary(errors))
+        status = notify.send_notification(settings, notify.NOTIFY_TITLE, outcome.notification_summary(errors))
         if status == "sent":
             log.info("Failure notification sent")
         elif status == "timeout":
-            log.warning("Failure notification timed out (it may still arrive; not retried)")
+            log.warning("Failure notification unconfirmed (timeout; not retried)")
         else:
             log.warning("Failure notification not delivered")
     except Exception:

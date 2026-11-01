@@ -1,7 +1,7 @@
 # Tasks
 
-This checklist is proposed. Start implementation only after contract approval.
-Reuse one change branch and PR. Create one parent and one implementation item only after approval.
+The contract is approved. Keep implementation and qualification in the owning work item.
+Reuse one change branch and PR.
 Paths below are relative to `ghostfolio_boursedirect_sync/`, unless stated.
 Each slice must retain its native-run proof and relevant regression results.
 Keep DRY_RUN=1 throughout slices 1–3; no correction executor is qualified yet.
@@ -20,7 +20,7 @@ create another lab or release tool.
 
 ## 0. Review delivered work
 
-- [ ] 0.1 Review the exact delivered implementations before code changes. Requirement: Review delivered implementations; Scenario: Missing review. Compare the pinned IBKR commit and BD commit `76a1d67e124317db2e03fd0ae3a8e41f188a62de`, their complete applicable runtime/release mechanisms, tests and retained acceptance proofs. Record a coverage table in the owning work item with requirement, IBKR file/function/line, BD file/function/line, existing evidence, reuse/adaptation/gap, reason and candidate acceptance command. Include settings/startup, source validation, identity/deduplication, amounts/TTF, holdings, review/profiles, updates/recovery, outcomes/notifications, Docker and release checks. Check newer source commits separately. Acceptance: every applicable requirement has both source references or an explicit absence, a justified disposition and a runnable check; unresolved contradictions stop affected implementation. Store review evidence in Beads, not a new repository report. Commands: `git show <recorded-commit>:<path>` and the table's acceptance commands; reading code alone is not financial acceptance. The following BUY simulation remains the first code task.
+- [x] 0.1 Review the exact delivered implementations before code changes. Requirement: Review delivered implementations; Scenario: Missing review. Compare the pinned IBKR commit and BD commit `76a1d67e124317db2e03fd0ae3a8e41f188a62de`, their complete applicable runtime/release mechanisms, tests and retained acceptance proofs. Record a coverage table in the owning work item with requirement, IBKR file/function/line, BD file/function/line, existing evidence, reuse/adaptation/gap, reason and candidate acceptance command. Include settings/startup, source validation, identity/deduplication, amounts/TTF, holdings, review/profiles, updates/recovery, outcomes/notifications, Docker and release checks. Check newer source commits separately. Acceptance: every applicable requirement has both source references or an explicit absence, a justified disposition and a runnable check; unresolved contradictions stop affected implementation. Store review evidence in Beads, not a new repository report. Commands: `git show <recorded-commit>:<path>` and the table's acceptance commands; reading code alone is not financial acceptance. The following BUY simulation remains the first code task.
 
 ## 1. Startup and visible outcomes
 
