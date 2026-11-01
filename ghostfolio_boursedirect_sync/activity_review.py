@@ -739,14 +739,9 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
             try:
                 current = values_of(row)
                 proposed = {**current, **proposed}
-                proposed["comment"] = replacement_comment(row, event)
-                diagnostics = {field: {"current": current[field], "source": proposed[field]}
-                               for field in changed_fields(current, proposed)}
                 legacy_trade = marker_of(row) in event["legacy"] and event["values"]["type"] != "DIVIDEND"
                 legacy_dividend = (marker_of(row) in event["legacy"] and event["values"]["type"] == "DIVIDEND"
                                    and (event["legacy safe"] or (event_id, row["id"]) in migration_pairs))
-                if legacy_trade or legacy_dividend:
-                    proposed = {**current, "comment": proposed["comment"]}
                 source = event["values"]
                 asset = profile(row)
                 if (row.get("accountId") != event["destination account"]
@@ -760,8 +755,15 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                     raise RuntimeError("Future destination activity")
                 if (reason != "exact reference" and not legacy_trade and not legacy_dividend
                         and all(numeric(current[key]) == numeric(proposed[key]) for key in NUMBERS)):
+                    # Approved BD duplicate contract, reusing sync._manual_exact:
+                    # unchanged legacy values need no authority to replace a hash.
                     satisfied.add(event_id)
                     continue
+                proposed["comment"] = replacement_comment(row, event)
+                diagnostics = {field: {"current": current[field], "source": proposed[field]}
+                               for field in changed_fields(current, proposed)}
+                if legacy_trade or legacy_dividend:
+                    proposed = {**current, "comment": proposed["comment"]}
                 reference = marker_of(row)
                 if reference and reference.startswith(("BD#v1#", "BD#v2#")) and reference not in event["legacy"]:
                     raise RuntimeError("Missing reproducible legacy identity inputs")

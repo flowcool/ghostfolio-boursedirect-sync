@@ -96,9 +96,14 @@ def test_manual_yes_cannot_approve_immutable_or_conflicting_fields(change):
         assert event.comment in held
 
 
-def test_unchanged_unowned_duplicate_does_not_require_migration():
+@pytest.mark.parametrize("comment", [
+    "Manual note",
+    "BD#v1#unknown-import#" + "a" * 64 + "\n\nKeep historical notes",
+    "BD#v2#" + "a" * 64 + "#" + "b" * 64,
+])
+def test_unchanged_unowned_duplicate_does_not_require_migration(comment):
     row, event, events = sample()
-    row.update(comment="Manual note", fee=1)
+    row.update(comment=comment, fee=1)
     proposals, held = review.refresh_proposals({}, events, [row], {"TESTACCOUNT": "target"})
     assert proposals == {}
     assert held == set()
@@ -185,5 +190,9 @@ def test_legacy_migration_requires_reproducible_pdf_hash_inputs():
                                   missing.account_ref, sync.notice_namespace(missing), 0)
     missing_events = review.source_events([missing_event], missing.account_ref, {})
     assert missing_events[missing_event.comment]["legacy"] == []
+    unchanged, held = review.refresh_proposals({}, missing_events, [row], {"TESTACCOUNT": "target"})
+    assert unchanged == {} and held == set()
+    # Different financial values still require reproducible correction evidence.
+    row["fee"] = 3
     blocked, _ = review.refresh_proposals({}, missing_events, [row], {"TESTACCOUNT": "target"})
     assert not next(iter(blocked.values()))["actionable"]
