@@ -487,6 +487,14 @@ def numeric(value: Any) -> Decimal:
     return result
 
 
+def effective_currency(row: Mapping[str, Any]) -> str:
+    """Reuse BD index fallback; Ghostfolio 3.96 stores redundant currency as null."""
+    currency = row.get("currency") or profile(row).get("currency")
+    if not isinstance(currency, str) or not currency.strip():
+        raise RuntimeError("Missing activity currency evidence")
+    return currency
+
+
 def values_of(row: dict[str, Any]) -> dict[str, Any]:
     """Stable activity-owned evidence from the pinned Order/getActivities schema.
 
@@ -506,6 +514,8 @@ def values_of(row: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("Unproven update tag identities")
     result["tags"] = [{"id": tag_id} for tag_id in sorted(tag["id"] for tag in tags)]
     result["symbol"] = asset.get("symbol")
+    result["currency"] = effective_currency(row)
+    result["stored currency"] = row.get("stored currency", row.get("currency"))
     for key in NUMBERS:
         result[key] = plain(numeric(row.get(key)))
     result["date"] = instant(result["date"]).isoformat()
@@ -583,7 +593,7 @@ def candidate_reason(row: dict[str, Any], event: dict[str, Any], exact_exists: b
         return None
     source, asset = event["values"], profile(row)
     if (row.get("accountId") != event["destination account"] or row.get("type") != source["type"]
-            or row.get("currency") != "EUR" or not activity_is_active(row)
+            or effective_currency(row) != "EUR" or not activity_is_active(row)
             or asset.get("dataSource") != "YAHOO"
             or not (asset.get("symbol") == source["symbol"] or
                     (event["isin"] and asset.get("isin") == event["isin"]))):
@@ -613,7 +623,7 @@ def automatic_pairs(events: dict[str, dict[str, Any]], rows: list[dict[str, Any]
                         or row.get("type") != source["type"] or not activity_is_active(row)
                         or asset.get("dataSource") != "YAHOO"
                         or asset.get("symbol") != source["symbol"]
-                        or reconciliation_rules.denomination(row.get("currency", ""))[0]
+                        or reconciliation_rules.denomination(effective_currency(row))[0]
                            != reconciliation_rules.denomination(source["currency"])[0]
                         or (asset.get("isin") and event["isin"] and asset["isin"] != event["isin"])
                         or (reference and reference.startswith("BD#v3#") and reference != event_id)):
@@ -733,7 +743,7 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                 source = event["values"]
                 asset = profile(row)
                 if (row.get("accountId") != event["destination account"]
-                        or row.get("type") != source["type"] or row.get("currency") != "EUR"
+                        or row.get("type") != source["type"] or effective_currency(row) != "EUR"
                         or asset.get("symbol") != source["symbol"] or asset.get("dataSource") != "YAHOO"
                         or (asset.get("isin") and event["isin"] and asset["isin"] != event["isin"])
                         or (source["type"] != "DIVIDEND" and numeric(current["quantity"]) != numeric(source["quantity"]))):
@@ -914,8 +924,10 @@ def selected_proposals(proposals: dict[str, Any]) -> tuple[list[dict[str, Any]],
 
 def expected_row(row: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     after = deepcopy(row)
+    if effective_currency(row) != payload["currency"]:
+        raise RuntimeError("Changed activity currency is forbidden")
     for key in REPLACED:
-        if key != "symbol":
+        if key not in ("symbol", "currency"):
             after[key] = payload[key]
     # A different security profile has unknown derived metadata until qualified.
     # Do not invent its id, currency, provider metadata or background effects.
@@ -944,11 +956,11 @@ def row_matches(row: dict[str, Any], evidence: dict[str, Any]) -> bool:
 
 
 # Reuse the single-update budget from pinned IBKR activity_review.py:971.
-# The canonical Infra runbook admits this destination's full-update/background
-# mechanism. The BD candidate still requires its own exact-image lab proof.
+# Review of Ghostfolio 3.96.0 at 2f21c255 confirms the same update/event/queue
+# mechanism and nullable stored currency. The BD image still needs lab proof.
 # No environment setting can increase or bypass this limit.
 QUALIFIED_EXECUTION: tuple[str, int, float] | None = (
-    "ghostfolio/ghostfolio@sha256:e5724d034def0e308c0089d3622711f2f643254870227e383f71f0b368f33489",
+    "ghostfolio/ghostfolio@sha256:97b9dd2e8b07610bfa383480b911065f7497070f53c302c037ab8a1b596ccae5",
     1,
     0.0,
 )

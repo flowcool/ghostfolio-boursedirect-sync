@@ -15,7 +15,7 @@ from test_pdf_buy import settings as settings
 from ghostfolio_boursedirect_sync import activity_review as review
 
 
-def transport(monkeypatch, row, on_put=None):
+def transport(monkeypatch, row, on_put=None, *, normalize_currency=False):
     rows = [deepcopy(row)]
     def get(*args, **kwargs):
         return Mock(status_code=200, content=json.dumps({"count": len(rows), "activities": rows},
@@ -26,7 +26,8 @@ def transport(monkeypatch, row, on_put=None):
             on_put(payload)
         target = next(row for row in rows if row["id"] == payload["id"])
         for key in ("date", "quantity", "unitPrice", "fee", "comment", "type", "currency"):
-            target[key] = payload[key]
+            target[key] = (None if normalize_currency and key == "currency"
+                           and payload[key] == target["assetProfile"].get("currency") else payload[key])
         return Mock(status_code=200)
     sender = Mock(side_effect=put)
     monkeypatch.setattr(requests, "get", get)
@@ -230,3 +231,21 @@ def test_missing_or_replaced_journal_cannot_release_uncertain_request(settings, 
     with pytest.raises(RuntimeError, match="journal"):
         review.open_review(str(path), [])
     sender.assert_called_once()
+
+
+def test_nullable_currency_uses_profile_and_preserves_stored_null(settings, tmp_path, monkeypatch):
+    """Ghostfolio 3.96.0 source migration removes redundant Order.currency."""
+    row, event, events = sample()
+    row["currency"] = None
+    row["assetProfile"]["currency"] = "EUR"
+    rows, sender = transport(monkeypatch, row, normalize_currency=True)
+    state = review.open_review(str(tmp_path / "review.yaml"), [])
+    try:
+        result = review.process_review(state, replace(settings, dry_run=False,
+            activity_reconciliation="conservative", timezone="Europe/Paris"), "token", events)
+        assert result.corrected == 1
+        assert rows[0]["currency"] is None
+        assert rows[0]["fee"] == 1
+        sender.assert_called_once()
+    finally:
+        review.close_review(state)
