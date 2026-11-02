@@ -7,8 +7,14 @@ import tarfile
 import pytest
 
 from scripts import release_package as package
-from scripts.release_package import bundle_entries, create_bundle, image_reference, render_compose, require_stable_tag, verify_pushed_manifest
-
+from scripts.release_package import (
+    bundle_entries,
+    create_bundle,
+    image_reference,
+    render_compose,
+    require_stable_tag,
+    verify_pushed_manifest,
+)
 
 DIGEST = "sha256:" + "a" * 64
 

@@ -21,11 +21,18 @@ services:
       APPRISE_URLS: ${APPRISE_URLS:-}
       APPRISE_TIMEOUT: ${APPRISE_TIMEOUT:-10}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ACTIVITY_REVIEW_FILE: ${ACTIVITY_REVIEW_FILE:-}
+      ACTIVITY_RECONCILIATION: ${ACTIVITY_RECONCILIATION:-off}
       MAPPING_FILE: ${MAPPING_FILE:-}
     networks:
       - ghostfolio
     volumes:
       - ./config:/config:ro
+      - type: bind
+        source: ${ACTIVITY_REVIEW_DIRECTORY:-./review}
+        target: /review
+        bind:
+          create_host_path: false
 
 networks:
   ghostfolio:

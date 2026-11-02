@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,16 @@ class Settings:
     mapping_file: str
     paperless_done_tag: str
     dry_run: bool
+    activity_review_file: str = ""
+    activity_reconciliation: str = "off"
+    timezone: str = ""
+
+
+@dataclass(frozen=True)
+class LegacyNoticeEvidence:
+    account_ref: str
+    fields: tuple[tuple[str, str], ...]
+    occurrence: int
 
 
 @dataclass(frozen=True)
@@ -29,6 +39,7 @@ class Trade:
     fee: Decimal
     type: Literal["BUY", "SELL", "DIVIDEND"] = "BUY"
     brokerage: Decimal | None = None
+    legacy: LegacyNoticeEvidence | None = field(default=None, compare=False, hash=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -68,6 +79,7 @@ class Activity:
     data_source: str = "YAHOO"
     isin: str | None = None
     brokerage: Decimal | None = None
+    legacy: LegacyNoticeEvidence | None = field(default=None, compare=False, hash=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -94,6 +106,7 @@ class ActivityIndex:
     rows: tuple[ExistingActivity, ...]
     identities: dict[str, tuple[ExistingActivity, ...]]
     positions: dict[tuple[str, str], Decimal]
+    raw_rows: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -101,3 +114,13 @@ class Selection:
     activities: tuple[Activity, ...]
     duplicates: int
     errors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReviewResult:
+    held: set[str]
+    blocked_accounts: set[str]
+    corrected: int
+    migrations: int
+    codes: set[str]
+    counts: dict[str, int]

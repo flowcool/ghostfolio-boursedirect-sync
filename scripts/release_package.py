@@ -6,12 +6,11 @@ import gzip
 import hashlib
 import io
 import json
-from pathlib import Path, PurePosixPath
 import posixpath
 import re
 import subprocess
 import tarfile
-
+from pathlib import Path, PurePosixPath
 
 IMAGE_PREFIX = "ghcr.io/flowcool/ghostfolio-boursedirect-sync:"
 SAFE_ROOT_FILES = (

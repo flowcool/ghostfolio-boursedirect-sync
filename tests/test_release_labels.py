@@ -3,8 +3,8 @@
 import importlib.util
 import json
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -59,7 +59,7 @@ def test_hostile_pr_title_stays_data_and_never_reaches_shell_or_github_files(tmp
     monkeypatch.setenv("GITHUB_REPOSITORY", "synthetic/repo")
     monkeypatch.setenv("GITHUB_TOKEN", "SYNTHETIC_TOKEN")
     destinations = [tmp_path / "env", tmp_path / "output"]
-    for variable, path in zip(("GITHUB_ENV", "GITHUB_OUTPUT"), destinations):
+    for variable, path in zip(("GITHUB_ENV", "GITHUB_OUTPUT"), destinations, strict=True):
         path.write_bytes(b"unchanged\n")
         monkeypatch.setenv(variable, str(path))
 

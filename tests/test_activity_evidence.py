@@ -414,3 +414,19 @@ def test_invalid_source_stops_before_target_authentication(monkeypatch, caplog):
     assert app.main() == 1
     assert post.call_count == 0
     assert "notice_unreadable" in caplog.text
+
+
+
+def test_owned_identity_with_notes_remains_duplicate_without_review():
+    row = existing_row(comment=proposed().comment + "\n\nPrivate note")
+    ledger = index(row)
+    result = sync.select_account_activities([proposed()], ledger, now=NOW)
+    assert result.duplicates == 1
+    assert result.activities == ()
+    assert ledger.raw_rows[0]["comment"].endswith("Private note")
+
+
+@pytest.mark.parametrize("suffix", ["\nnotes", "\n\n", "\n\n\nnotes", "\n\nBD#v3#X:BUY:other", "\r\nnotes"])
+def test_reserved_notes_cannot_hide_another_identity(suffix):
+    with pytest.raises(RuntimeError, match="invalid_identity"):
+        index(existing_row(comment=proposed().comment + suffix))

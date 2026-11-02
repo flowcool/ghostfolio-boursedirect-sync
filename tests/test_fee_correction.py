@@ -97,50 +97,29 @@ def existing_row(fee: Decimal = Decimal("1")) -> dict[str, object]:
     }
 
 
-def test_fee_correction_put_changes_only_fee_and_confirms_full_row(monkeypatch):
-    current = existing_row()
-    updated = existing_row(Decimal("1.30"))
-    get = Mock(return_value=Mock(status_code=200,
-                                 content=json.dumps({"count": 1, "activities": [updated]},
-                                                    default=lambda value: float(value)).encode()))
+
+@pytest.mark.parametrize("note", ["Manual note", "__DECIMAL__1__", "___DECIMAL__1__"])
+def test_review_update_sends_exact_decimals_once(monkeypatch, note):
+    payload = {"id": "activity-1", "accountId": "account-1", "currency": "EUR",
+               "date": "2026-01-02T00:00:00Z", "type": "BUY", "comment": note,
+               "symbol": "EXAMPLE.PA", "dataSource": "YAHOO", "quantity": Decimal("4"),
+               "unitPrice": Decimal("25.1234567890123456789"), "fee": Decimal("1.30"), "tags": []}
     put = Mock(return_value=Mock(status_code=200))
-    monkeypatch.setattr(requests, "get", get)
     monkeypatch.setattr(requests, "put", put)
-    row = ghostfolio.index_existing_activities({"count": 1, "activities": [current]}).rows[0]
-    ghostfolio.correct_activity_fee(settings(), "token", row, Decimal("1.30"))
-    payload = json.loads(put.call_args.kwargs["data"])
-    assert Decimal(str(payload["fee"])) == Decimal("1.3")
-    assert payload["quantity"] == Decimal("4") and payload["unitPrice"] == Decimal("25")
-    assert payload["comment"] == current["comment"] and payload["id"] == current["id"]
-    assert get.call_count == 1
-
-
-def test_fee_correction_uncertainty_never_retries_put(monkeypatch):
-    current = existing_row()
-    get = Mock(return_value=Mock(status_code=200,
-                                 content=json.dumps({"count": 1, "activities": [current]},
-                                                    default=lambda value: float(value)).encode()))
-    put = Mock(side_effect=requests.Timeout())
-    sleep = Mock()
-    monkeypatch.setattr(requests, "get", get)
-    monkeypatch.setattr(requests, "put", put)
-    monkeypatch.setattr(ghostfolio.time, "sleep", sleep)
-    row = ghostfolio.index_existing_activities({"count": 1, "activities": [current]}).rows[0]
-    with pytest.raises(RuntimeError, match="^import_unconfirmed$"):
-        ghostfolio.correct_activity_fee(settings(), "token", row, Decimal("1.30"))
+    ghostfolio.update_reviewed_activity(settings(), "token", payload)
+    sent = json.loads(put.call_args.kwargs["data"], parse_float=Decimal)
+    assert sent == payload
     put.assert_called_once()
-    get.assert_called_once()
-    sleep.assert_called_once_with(5)
+    assert put.call_args.kwargs["allow_redirects"] is False
 
 
-def test_fee_correction_rejects_partial_duplicate_comment_readback(monkeypatch):
-    current = existing_row()
-    duplicate = {**existing_row(Decimal("1.30")), "id": "activity-2"}
-    get = Mock(return_value=Mock(status_code=200, content=json.dumps(
-        {"count": 2, "activities": [current, duplicate]},
-        default=lambda value: float(value)).encode()))
-    monkeypatch.setattr(requests, "get", get)
-    monkeypatch.setattr(requests, "put", Mock(return_value=Mock(status_code=200)))
-    row = ghostfolio.index_existing_activities({"count": 1, "activities": [current]}).rows[0]
+def test_review_update_timeout_never_resends(monkeypatch):
+    payload = {"id": "activity-1", "accountId": "account-1", "currency": "EUR",
+               "date": "2026-01-02T00:00:00Z", "type": "BUY", "comment": "Manual note",
+               "symbol": "EXAMPLE.PA", "dataSource": "YAHOO", "quantity": Decimal("4"),
+               "unitPrice": Decimal("25"), "fee": Decimal("1.30"), "tags": []}
+    put = Mock(side_effect=requests.Timeout())
+    monkeypatch.setattr(requests, "put", put)
     with pytest.raises(RuntimeError, match="^import_unconfirmed$"):
-        ghostfolio.correct_activity_fee(settings(), "token", row, Decimal("1.30"))
+        ghostfolio.update_reviewed_activity(settings(), "token", payload)
+    put.assert_called_once()
