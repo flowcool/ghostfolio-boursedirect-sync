@@ -1,8 +1,8 @@
 # Selectively adapted from the approved ibkr package image.
-FROM python:3.15.1-slim@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51
+FROM python:3.15.2-slim@sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0
 
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils tzdata \
+RUN apt-get update && apt-get install -y --no-install-recommends apt libapt-pkg7.0 poppler-utils tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Install supercronic for cron support.
