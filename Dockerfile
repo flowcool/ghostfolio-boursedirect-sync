@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils t
 # Renovate tracks SUPERCRONIC_VERSION. Update both sums with each version;
 # stale sums fail the build. Reuses DEGIRO renovate.json:100 regex management.
 ARG SUPERCRONIC_VERSION=v0.2.51
-ARG SUPERCRONIC_SHA256SUM_amd64=a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1
-ARG SUPERCRONIC_SHA256SUM_arm64=02aa0cb229ba09050cba6638059dadb9eedc2276632ea43d6a57a2f8c1629dd5
+ARG SUPERCRONIC_SHA256SUM_amd64=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
+ARG SUPERCRONIC_SHA256SUM_arm64=4ae22576a78223d8ccdf5f3b3660a5cbb5288416bf0ca96afc4a36d195932b94
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLO "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" && \
