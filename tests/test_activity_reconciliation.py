@@ -19,15 +19,15 @@ def test_both_exact_gross_limits_must_pass(name, source, target, allowed):
 
 
 @pytest.mark.parametrize("zone,target,allowed", [
-    ("America/New_York", "2025-02-04T00:00:00Z", False),
-    ("America/New_York", "2025-02-03T00:00:00Z", True),
+    ("America/New_York", "2025-02-04T00:00:00Z", True),
+    ("America/New_York", "2025-02-03T00:00:00Z", False),
     ("Pacific/Auckland", "2025-02-02T12:00:00Z", True),
     ("Pacific/Auckland", "2025-02-03T12:00:00Z", False),
 ])
-def test_canonical_payment_day_compares_in_configured_timezone(zone, target, allowed):
+def test_pdf_day_is_not_shifted_through_timezone(zone, target, allowed):
     ok, context = rules.date_eligible("balanced", "2025-02-03T00:00:00Z", target, "BUY", zone)
     assert ok is allowed
-    assert context["source local date"] == ("2025-02-02" if zone == "America/New_York" else "2025-02-03")
+    assert context["source local date"] == "2025-02-03"
 
 
 @pytest.mark.parametrize("kind,distance,allowed", [("BUY", 2, True), ("BUY", 3, False),

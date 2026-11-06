@@ -599,7 +599,7 @@ def manual_history_kind(row: dict[str, Any], event: dict[str, Any], timezone: st
                     (event["isin"] and asset.get("isin") == event["isin"]))
             or (asset.get("isin") and event["isin"] and asset["isin"] != event["isin"])):
         return None
-    _, context = reconciliation_rules.date_eligible("permissive", source["date"], row["date"], source["type"], timezone)
+    _, context = reconciliation_rules.date_eligible("permissive", source["date"], row["date"], source["type"], timezone, local_source=True)
     if "calendar distance" not in context:
         return None
     distance = int(context["calendar distance"])
@@ -624,6 +624,35 @@ def manual_history_pairs(events: dict[str, dict[str, Any]], rows: list[dict[str,
             if reason:
                 pairs[event_id, row["id"]] = reason
     return pairs
+
+
+def mutually_unique(pair: tuple[str, str], pairs: Mapping[tuple[str, str], object]) -> bool:
+    return (sum(key[0] == pair[0] for key in pairs) == 1
+            and sum(key[1] == pair[1] for key in pairs) == 1)
+
+
+def manual_history_holds(events: dict[str, dict[str, Any]], rows: list[dict[str, Any]],
+                         timezone: str) -> set[str]:
+    """Keep unreviewed differences out of additive import; unchanged rows stay duplicates."""
+    held: set[str] = set()
+    pairs = manual_history_pairs(events, rows, timezone)
+    for event_id, row_id in pairs:
+        source = events[event_id]["values"]
+        if source["type"] == "DIVIDEND" and not mutually_unique((event_id, row_id), pairs):
+            held.add(event_id)
+            continue
+        row = next(row for row in rows if row["id"] == row_id)
+        conforming = numeric(row["fee"]) == numeric(source["fee"])
+        if source["type"] == "DIVIDEND":
+            _, context = reconciliation_rules.date_eligible(
+                "permissive", source["date"], row["date"], source["type"], timezone, local_source=True)
+            conforming = (conforming and all(numeric(row[field]) == numeric(source[field])
+                          for field in ("quantity", "unitPrice"))
+                          and effective_currency(row) == source["currency"]
+                          and context.get("calendar distance") == "0")
+        if not conforming:
+            held.add(event_id)
+    return held
 
 
 def candidate_reason(row: dict[str, Any], event: dict[str, Any], exact_exists: bool,
@@ -804,8 +833,8 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                 if reason == "manual fee hypothesis":
                     proposed = {**current, "fee": source["fee"]}
                 _, date_context = reconciliation_rules.date_eligible(
-                    "permissive", source["date"], current["date"], source["type"], timezone)
-                if date_context.get("calendar distance") == "0":
+                    "permissive", source["date"], current["date"], source["type"], timezone, local_source=True)
+                if manual and date_context.get("calendar distance") == "0":
                     proposed["date"] = current["date"]
                 diagnostics = {field: {"current": current[field], "source": proposed[field]}
                                for field in changed_fields(current, proposed)}
@@ -839,8 +868,7 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                 if marker_of(row) in event["legacy"] and not legacy_trade and not legacy_dividend:
                     raise RuntimeError("legacy aggregate cannot identify one action")
                 changes = changed_fields(current, proposed)
-                if manual and (sum(pair[0] == event_id for pair in manual_pairs) != 1
-                               or sum(pair[1] == row["id"] for pair in manual_pairs) != 1):
+                if manual and not mutually_unique((event_id, row["id"]), manual_pairs):
                     raise RuntimeError("Competing manual source or destination candidates")
                 if not changes and (marker_of(row) == event_id or manual):
                     if event_id in (held_events or set()):
@@ -1241,7 +1269,8 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
             log.info("DRY RUN would correct activity %s; authority=%s; fields=%s", item["activity id"],
                      proposal_authority(item), item["changed fields"])
             continue
-        if executed and delay:
+        if delay and (executed or recovered_events or any(
+                entry["status"] == "confirmed" for entry in state["journal"]["entries"].values())):
             time.sleep(delay)
         assert_unchanged(state)
         fresh_rows = snapshot_rows(config)

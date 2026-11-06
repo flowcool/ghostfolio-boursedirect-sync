@@ -10,7 +10,6 @@ from pathlib import Path
 
 import yaml
 
-from ghostfolio_boursedirect_sync.activity_reconciliation import date_eligible
 from ghostfolio_boursedirect_sync.ghostfolio import activity_instant, parse_identity
 from ghostfolio_boursedirect_sync.models import (
     Activity,
@@ -115,12 +114,11 @@ def attribute_ttf_rows(notice: Notice) -> tuple[Notice, tuple[str, ...]]:
                   notice.inferred_brokerages, (), notice.stops), tuple(sorted(failed))
 
 
-def _same_activity(candidate: Activity, existing: ExistingActivity, timezone: str | None = None) -> bool:
+def _same_activity(candidate: Activity, existing: ExistingActivity) -> bool:
     """Compare all Ghostfolio fields that define an owned activity."""
     return (
         existing.account_id == candidate.account_id
-        and (existing.date == activity_instant(candidate.date) if timezone is None else
-             date_eligible("balanced", candidate.date, existing.date.isoformat(), candidate.type, timezone)[0])
+        and existing.date == activity_instant(candidate.date)
         and existing.type == candidate.type
         and existing.symbol == candidate.symbol
         and existing.data_source == candidate.data_source
@@ -294,7 +292,7 @@ def _assign_manual_component(
 
 def select_account_activities(
     candidates: list[Activity], existing: ActivityIndex, *, now: datetime | None = None,
-    reserved_existing_ids: set[str] | None = None, timezone: str = "UTC",
+    reserved_existing_ids: set[str] | None = None,
 ) -> Selection:
     """IBKR app.py:234: isolated selection with BD exact manual assignment."""
     instant = now or datetime.now(UTC)
@@ -318,7 +316,7 @@ def select_account_activities(
             continue
         occupied = existing.identities.get(candidate.comment, ())
         if occupied:
-            if len(occupied) == 1 and _same_activity(candidate, occupied[0], timezone):
+            if len(occupied) == 1 and _same_activity(candidate, occupied[0]):
                 duplicates += 1
             else:
                 errors.append("owned_activity_conflict")

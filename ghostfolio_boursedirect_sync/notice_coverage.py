@@ -79,21 +79,21 @@ def report(matching: list[tuple[int, Notice]], mapping: dict[str, str], account:
             classification = "unresolved association"
         else:
             row = candidates[0]
-            _, context = rules.date_eligible("permissive", event.date, row.date.isoformat(), event.type, timezone)
+            _, context = rules.date_eligible("permissive", event.date, row.date.isoformat(), event.type, timezone, local_source=True)
             same_day = context.get("calendar distance") == "0"
             identical = (row.currency == event.currency and row.quantity == event.quantity
                          and row.unit_price == event.unit_price and row.fee == event.fee)
-            if (row.data_source != event.data_source
+            if (row.account_id != account or not row.active or row.type != event.type
+                    or row.data_source != event.data_source
                     or not sync._same_security(event, row)
                     or (row.isin and event.isin and row.isin != event.isin)):
                 classification = "unresolved association"
             elif not exact and not legacy and not nearby and aliases:
                 classification = "unresolved association"
             elif identical and same_day and (bool(exact) or (key, row.id) not in manual
-                    or (sum(pair[0] == key for pair in manual) == 1
-                        and sum(pair[1] == row.id for pair in manual) == 1)):
+                    or review.mutually_unique((key, row.id), manual)):
                 classification = "conforming"
-            elif (key, row.id) in manual and sum(pair[0] == key for pair in manual) == 1 and sum(pair[1] == row.id for pair in manual) == 1:
+            elif (key, row.id) in manual and review.mutually_unique((key, row.id), manual):
                 classification = "correction candidate"
             else:
                 classification = "unresolved association"

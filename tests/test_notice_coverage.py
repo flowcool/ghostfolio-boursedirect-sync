@@ -205,3 +205,26 @@ def test_owned_ttf_holds_count_each_source_event(settings, monkeypatch):
     assert app.run_sync(codes, actions=actions) == 0
     assert codes == {"review_evidence"}
     assert len(actions["review_evidence"]) == 2
+
+
+@pytest.mark.parametrize("damage", ["other-account", "draft", "wrong-type"])
+def test_exact_identity_cannot_certify_an_ineligible_destination(damage):
+    """Real notice text; destination eligibility states are derived."""
+    row, event, _ = sample()
+    source = notices.parse_text((Path(__file__).parent / "fixtures/pdf_buy.txt").read_text())
+    event = sync.activity(source.trades[0], {source.trades[0].isin: event.symbol}, "target",
+                          source.account_ref, sync.notice_namespace(source), 0)
+    row.update(comment=event.comment, fee=event.fee)
+    if damage == "other-account":
+        row["accountId"] = "other"
+    elif damage == "draft":
+        row["isDraft"] = True
+    else:
+        row["type"] = "SELL"
+        row["comment"] = ""
+    index = ghostfolio.index_existing_activities({"count": 1, "activities": [row]})
+    codes = set()
+    counts = notice_coverage.report([(1, source)], {source.trades[0].isin: event.symbol},
+                                    "target", index, codes, {}, "UTC")
+    assert "conforming" not in counts
+    assert "correction candidate" not in counts

@@ -224,8 +224,10 @@ recovery without `TZ`. Other profiles require a review file and explicit IANA
 
 Both amount limits must pass. Gross means exact quantity times price, without
 fees. Fees require separate source validation. No exchange-rate or floating
-point exception applies. Compare the canonical source and destination instants
-by calendar day in `TZ`. A stored instant on the same local day stays unchanged.
+point exception applies. Profiles compare the printed source date with the
+destination calendar day in `TZ`. Manual notice proposals compare canonical
+source and destination instants by calendar day in `TZ`. A stored manual
+instant on the same local day stays unchanged.
 New source dates and required date replacements use the printed date at midnight UTC.
 West of UTC, midnight UTC can display on the previous local day. `TZ` must
 match the Ghostfolio server timezone. It does not convert stored history.

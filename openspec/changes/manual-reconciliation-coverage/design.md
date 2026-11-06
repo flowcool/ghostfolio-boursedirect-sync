@@ -52,7 +52,8 @@ the exact BD candidate in the integrated empty/golden lab acceptance. A new
 release raises D when the lab margin no longer passes. D=120 replaces D=28
 after the measured 69.230-second chain failed the previous qualification.
 
-Compare canonical source and stored dates by calendar day in configured `TZ`.
+For manual notice proposals, compare canonical source and stored dates by
+calendar day in configured `TZ`. Keep existing profile date rules.
 Use the printed coupon payment day at 00:00 UTC. Preserve a stored instant on
 the same local day; do not propose a date change for its intraday difference.
 

@@ -136,6 +136,25 @@ def test_manual_fee_execution_chain_readback_pacing_and_restart(settings, tmp_pa
         assert sleeps == ([] if uncertain else [120.0])
         review.process_review(state, replace(settings, dry_run=False), "token", events)
         assert sender.call_count == (1 if uncertain else 2)
+        if uncertain:
+            # Derived exact settlement; a new process must pace unsent work.
+            import json
+            sent = json.loads(sender.call_args.kwargs["data"], parse_float=Decimal)
+            next(row for row in rows if row["id"] == sent["id"])["fee"] = sent["fee"]
+            review.close_review(state)
+            state = review.open_review(str(path), [])
+            def settle_later(*args, **kwargs):
+                assert sleeps == [120.0]
+                payload = json.loads(kwargs["data"], parse_float=Decimal)
+                assert payload["id"] != sent["id"]
+                target = next(row for row in rows if row["id"] == payload["id"])
+                for field in ("date", "quantity", "unitPrice", "fee", "comment", "type", "currency"):
+                    target[field] = payload[field]
+                return Mock(status_code=200)
+            sender.side_effect = settle_later
+            recovered = review.process_review(state, replace(settings, dry_run=False), "token", events)
+            assert not recovered.blocked_accounts
+            assert sender.call_count == 2
     finally:
         review.close_review(state)
 
@@ -187,3 +206,12 @@ def test_four_real_coupon_transcriptions_with_derived_manual_states(
         sender.assert_called_once()
     finally:
         review.close_review(state)
+
+
+def test_missing_review_holds_ambiguous_conforming_coupons():
+    """Derived association: two distinct source payments share one existing target."""
+    event, row, _ = coupon_case(days=0)
+    row.update(date=event.date, quantity=event.quantity, unitPrice=event.unit_price, fee=event.fee)
+    other = replace(event, comment=event.comment + "x")
+    events = review.source_events([event, other], "TESTACCOUNT", {})
+    assert review.manual_history_holds(events, [row], "UTC") == {event.comment, other.comment}

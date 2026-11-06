@@ -10,7 +10,6 @@ from pathlib import Path
 
 from ghostfolio_boursedirect_sync import (
     action_notifications,
-    activity_reconciliation,
     activity_review,
     config,
     ghostfolio,
@@ -180,24 +179,12 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 raise RuntimeError(code) from None
         elif not settings.activity_review_file:
             events = activity_review.source_events(list(unique.values()), settings.bd_account_ref, {})
-            pairs = activity_review.manual_history_pairs(events, list(existing.raw_rows), settings.timezone or "UTC")
-            # Without review, exact conforming manual rows remain ordinary duplicates.
-            # Differences and wide-window coupons must never become new imports.
-            for event_id, row_id in pairs:
-                row = next(row for row in existing.raw_rows if row["id"] == row_id)
-                candidate = unique[event_id]
-                _, date_context = activity_reconciliation.date_eligible(
-                    "permissive", candidate.date, row["date"], candidate.type, settings.timezone or "UTC")
-                conforming = (all(activity_review.numeric(row[field]) == getattr(candidate, attr)
-                              for field, attr in (("quantity", "quantity"), ("unitPrice", "unit_price"), ("fee", "fee")))
-                              and activity_review.effective_currency(row) == candidate.currency
-                              and date_context.get("calendar distance") == "0")
-                if candidate.type != "DIVIDEND":
-                    conforming = activity_review.numeric(row["fee"]) == candidate.fee
-                if not conforming:
-                    held.add(event_id)
-                    errors.add("review_evidence")
-                    actions.setdefault("review_evidence", set()).add(event_id)
+            manual_held = activity_review.manual_history_holds(
+                events, list(existing.raw_rows), settings.timezone or "UTC")
+            held.update(manual_held)
+            if manual_held:
+                errors.add("review_evidence")
+                actions.setdefault("review_evidence", set()).update(manual_held)
             for candidate in unique.values():
                 if sync.ttf_correction_matches(candidate, existing):
                     held.add(candidate.comment)
@@ -212,8 +199,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 actions.setdefault("review_evidence", set()).add(candidate.comment)
                 log.warning("review_evidence scope=%s; unverified symbol association; inspect mapping; no write", candidate.comment)
         eligible = [candidate for candidate in unique.values() if candidate.comment not in held]
-        selected = sync.select_account_activities(
-            eligible, existing, timezone=settings.timezone or "UTC")
+        selected = sync.select_account_activities(eligible, existing)
         duplicates = selected.duplicates + source_duplicates
         # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
         # BD binds originals instead of a Flex window; decimal strings stay exact.
