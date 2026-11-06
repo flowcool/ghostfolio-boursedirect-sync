@@ -239,8 +239,9 @@ legacy and manual duplicates do not require migration.
 
 Manual, profile, migration and TTF work execute all eligible corrections in one
 run. The oldest eligible proposal goes first, with a stable order for ties.
-Each next PUT waits at least 28 seconds after the previous confirmed correction.
-Exact readback must pass before the next PUT. No ENV setting changes this delay
+Each next PUT waits at least 120 seconds after the previous confirmed correction.
+Exact readback must pass before the next PUT. A new release raises D when the
+lab margin no longer passes. No ENV setting changes this delay
 or adds a count cap. Later approvals stay in the file if uncertainty stops the run.
 Simulation shows `would correct` and sends no financial request.
 

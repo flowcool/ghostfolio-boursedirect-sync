@@ -1028,7 +1028,7 @@ def row_matches(row: dict[str, Any], evidence: dict[str, Any]) -> bool:
 
 # IBKR 23cb762 activity-correction-review: qualified uncapped sequential budget.
 # Exact candidate acceptance must qualify this delay in both native BD labs.
-QUALIFIED_EXECUTION: tuple[str, int | None, float] | None = ("bd-sequential-v1", None, 28.0)
+QUALIFIED_EXECUTION: tuple[str, int | None, float] | None = ("bd-sequential-v1", None, 120.0)
 RECOVERY_WAITS = (0, 2, 5, 10)
 
 

@@ -157,7 +157,8 @@ def test_manual_yes_without_timezone_survives_restart_and_preserves_tags(setting
 
 @pytest.mark.parametrize("profile", ["conservative", "balanced", "permissive"])
 def test_profile_uncapped_budget_and_no_resend_after_restart(settings, tmp_path, monkeypatch, profile):
-    monkeypatch.setattr(review.time, "sleep", lambda _: None)
+    sleeps = []
+    monkeypatch.setattr(review.time, "sleep", sleeps.append)
     row, event, events = sample()
     other = replace(event, date="2025-02-04T00:00:00+00:00", comment=event.comment[:-1] + "a")
     events.update(review.source_events([other], "TESTACCOUNT", {other.comment: [{"sha256": "b" * 64}]}))
@@ -170,6 +171,7 @@ def test_profile_uncapped_budget_and_no_resend_after_restart(settings, tmp_path,
         result = review.process_review(state, configured, "token", events)
         assert result.corrected == 2
         assert sender.call_count == 2
+        assert sleeps == [120.0]
         assert result.counts["automatic work deferred"] == 0
     finally:
         review.close_review(state)

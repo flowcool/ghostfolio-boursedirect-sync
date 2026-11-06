@@ -50,6 +50,14 @@ resolution. Preserve full private findings each run. Omit identifiers/securities
 - **WHEN** failure/action persists
 - **THEN** `Failure notification sent` on delivery; otherwise failed/unconfirmed.
 
+### Requirement: Bounded corrections and durable uncertainty
+
+Manual/profile/migration/TTF updates SHALL execute all eligible corrections in one run; new imports remain uncapped. Choose oldest eligible work, stable ties. Wait at least D=120 seconds after each confirmed correction before the next PUT. Qualify D in the BD lab. A new release SHALL raise D when the lab margin no longer passes. Keep later approvals after uncertainty. Simulation SHALL show `would correct`. Persist before/after/authority before updating; require exact changed/preserved-field readback. Uncertainty SHALL hold all account writes across restarts without resend. Only exact confirmation SHALL settle pending work; old/missing/changed/unavailable evidence, simulation, profile changes or file removal SHALL NOT settle it.
+
+#### Scenario: Restart
+- **WHEN** resumes an uncertain correction
+- **THEN** it retains the hold until exact confirmation without retry or double counting.
+
 ## ADDED Requirements
 
 ### Requirement: Reviewed manual history corrections
@@ -69,9 +77,10 @@ source holds, unavailable evidence or nonunique pairs SHALL prevent correction.
 Preserve ID, owner, account, security, type, tags and the complete comment.
 Never merge, split, delete or create a replacement. Apply every eligible manual,
 profile and comment correction in one run, in stable order, without a count cap.
-Wait at least 28 seconds after each confirmed correction before the next PUT.
+Wait at least 120 seconds after each confirmed correction before the next PUT.
 Require exact readback before each next PUT. Qualify this fixed delay in the BD
-lab. Simulation previews all corrections. First uncertainty stops all later
+lab. A new release SHALL raise D when the lab margin no longer passes.
+Simulation previews all corrections. First uncertainty stops all later
 financial writes, preserves later approvals and retains the journal across
 restart. Restart never resends. Changed evidence
 SHALL clear approval. Only exact readback SHALL confirm; never resend.

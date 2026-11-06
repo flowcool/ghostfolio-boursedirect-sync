@@ -256,7 +256,7 @@ Both limits SHALL pass: exact positive quantity×price gross, excluding fees; so
 
 ### Requirement: Bounded corrections and durable uncertainty
 
-Manual/profile/migration/TTF updates SHALL share one correction per run; new imports remain uncapped. Choose oldest eligible work, stable ties. Keep deferred choices. Simulation SHALL show `would correct`. Persist before/after/authority before updating; require exact changed/preserved-field readback. Uncertainty SHALL hold all account writes across restarts without resend. Only exact confirmation SHALL settle pending work; old/missing/changed/unavailable evidence, simulation, profile changes or file removal SHALL NOT settle it.
+Manual/profile/migration/TTF updates SHALL execute all eligible corrections in one run; new imports remain uncapped. Choose oldest eligible work, stable ties. Wait at least D=120 seconds after each confirmed correction before the next PUT. Qualify D in the BD lab. A new release SHALL raise D when the lab margin no longer passes. Keep later approvals after uncertainty. Simulation SHALL show `would correct`. Persist before/after/authority before updating; require exact changed/preserved-field readback. Uncertainty SHALL hold all account writes across restarts without resend. Only exact confirmation SHALL settle pending work; old/missing/changed/unavailable evidence, simulation, profile changes or file removal SHALL NOT settle it.
 
 #### Scenario: Restart
 - **WHEN** resumes an uncertain correction
