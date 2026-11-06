@@ -172,11 +172,14 @@ voice, no internal jargon.
 
 ## Durable work state
 
-- For the approved IBKR v4 behavior, read
-  [operator-actions-and-reconciliation](openspec/changes/operator-actions-and-reconciliation/proposal.md).
-  Use its [tasks](openspec/changes/operator-actions-and-reconciliation/tasks.md)
-  for implementation coverage. The current published contract remains above until
-  a qualified release adopts this change.
+- Released v2 reconciliation behavior is in
+  [notice-import](openspec/specs/notice-import/spec.md).
+  The completed [v2 change](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/proposal.md)
+  and its [tasks](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/tasks.md)
+  record implementation history.
+- Proposed manual corrections and notice coverage are in
+  [manual-reconciliation-coverage](openspec/changes/manual-reconciliation-coverage/proposal.md).
+  This proposal requires Florent's approval before implementation.
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
 - Rebuild epic: "v1 rebuild (option B)". Include completed work with
   `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.
