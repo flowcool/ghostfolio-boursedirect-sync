@@ -163,3 +163,15 @@ def test_interval_trade_changes_before_and_after_backfill(caplog):
             ghostfolio.index_existing_activities({"count": 2, "activities": rows}), set(), {}, "UTC")
     assert counts == {"conforming": 2}
     assert caplog.text.count("unexplained_change=0") == 2
+
+
+def test_conflicting_isin_under_same_symbol_is_uncertain_not_absent():
+    row, event, _ = sample()
+    source = notices.parse_text((Path(__file__).parent / "fixtures/pdf_buy.txt").read_text())
+    row.update(comment="manual")
+    row["assetProfile"]["isin"] = "FR9999999999"
+    index = ghostfolio.index_existing_activities({"count": 1, "activities": [row]})
+    codes = set()
+    counts = notice_coverage.report([(1, source)], {source.trades[0].isin: event.symbol}, "target", index, codes, {}, "UTC")
+    assert counts == {"unresolved association": 1, "unverifiable positions": 1}
+    assert codes == {"coverage_unverifiable"}

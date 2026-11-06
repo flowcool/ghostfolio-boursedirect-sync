@@ -66,7 +66,6 @@ def report(matching: list[tuple[int, Notice]], mapping: dict[str, str], account:
             codes.add("future_activity")
         nearby = [row for row in existing.rows if row.account_id == account and row.active
                   and row.type == event.type and sync._same_security(event, row)
-                  and (not row.isin or not event.isin or row.isin == event.isin)
                   and abs((row.date.astimezone(zone).date() - review.instant(event.date).astimezone(zone).date()).days)
                   <= (31 if event.type == "DIVIDEND" else 2)
                   and not row.comment.startswith("BD#v3#")]
@@ -84,7 +83,11 @@ def report(matching: list[tuple[int, Notice]], mapping: dict[str, str], account:
             same_day = context.get("calendar distance") == "0"
             identical = (row.currency == event.currency and row.quantity == event.quantity
                          and row.unit_price == event.unit_price and row.fee == event.fee)
-            if not exact and not legacy and not nearby and aliases:
+            if (row.data_source != event.data_source
+                    or not sync._same_security(event, row)
+                    or (row.isin and event.isin and row.isin != event.isin)):
+                classification = "unresolved association"
+            elif not exact and not legacy and not nearby and aliases:
                 classification = "unresolved association"
             elif identical and same_day and (bool(exact) or (key, row.id) not in manual
                     or (sum(pair[0] == key for pair in manual) == 1
