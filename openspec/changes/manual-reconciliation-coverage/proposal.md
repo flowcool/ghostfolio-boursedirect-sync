@@ -10,13 +10,14 @@ or propose a duplicate payment. It also lacks a full notice coverage report.
 
 - Reuse v2 `ACTIVITY_REVIEW_FILE` and `ACTIVITY_RECONCILIATION`.
   Add manual fee-only BUY/SELL proposals and notice-net DIVIDEND proposals.
-  Require file approval, the existing journal and exact readback.
+  Require file approval, the existing journal and exact readback. Apply all
+  approved corrections sequentially with the qualified IBKR fixed delay.
 - Search manual coupons within 31 calendar days, inclusively, in either direction.
   Require a unique pair. This does not prove payment identity.
   Permit explicit replacement of a wrong coupon currency with notice EUR.
   Never derive an exchange rate.
 - Add `NOTICE_COVERAGE=1`. Report absent supported rows, uncertain matches and
-  position changes unexplained by available notices. Send existing redacted alerts.
+  position changes unexplained by available notices. Send grouped redacted alerts with a seven-day reminder.
   This mode makes no financial writes, even with `DRY_RUN=0`.
 - Keep already corrected history unchanged. Never delete or create a replacement
   activity to make a correction.

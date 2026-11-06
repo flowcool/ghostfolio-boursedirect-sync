@@ -37,7 +37,14 @@ Report `success`, `success with user action required`, or `failure` at INFO/WARN
 | 0, information | `custody_fee_ignored`, `brokerage_zero_inferred` |
 | 1, failure | `invalid_configuration`, `invalid_mapping`, `paperless_auth_failed`, `paperless_unreachable`, `source_field_missing`, `notice_unreadable`, `amount_check_failed`, `activities_unavailable`, `unresolved_security`, `owned_activity_conflict`, `possible_duplicate`, `invalid_identity`, `sell_exceeds_holding`, `share_count_change`, `unknown_operation`, `future_activity`, `import_unconfirmed`, `ghostfolio_auth_failed`, `ttf_attribution_failed`, `ghostfolio_unreachable`, `unhandled_error`, `review_unavailable` |
 
-Count imports/simulations/duplicates/conforming/corrections/migrations/holds/deferred work/delivery; mark unavailable/overlapping counts. Actions SHALL state reason/scope/impact/next-step/resolution, including imported events. Apprise SHALL send at most one redacted failure/action summary/run, including simulation; repeat unresolved actions; clean runs stay silent. Omit identifiers/securities/amounts/paths/secrets. Report sent/failed/unconfirmed; never retry timeout or change financial selection/exit for delivery failure.
+Count imports/simulations/duplicates/conforming/corrections/migrations/holds/deferred work/delivery; mark unavailable/overlapping counts. Actions SHALL state reason/scope/impact/next-step/resolution, including imported events. Apprise SHALL send at most one redacted failure/action summary/run, including simulation; group by sorted reason/count pairs. Notify on first, changed or cleared groups,
+including a cleared reason with count zero. Remind unchanged groups only after
+168 hours since confirmed delivery. Same-count event replacements stay grouped.
+Failures notify each run. Clean runs without previous groups stay silent.
+Keep only private context-bound grouped delivery state beside review state.
+Missing, corrupt, unsafe or unwritable state and clock rollback leave actions
+eligible. Only confirmed delivery advances state. Failed runs cannot certify
+resolution. Preserve full private findings each run. Omit identifiers/securities/amounts/paths/secrets. Report sent/failed/unconfirmed; never retry timeout or change financial selection/exit for delivery failure.
 
 #### Scenario: Failure notification
 - **WHEN** failure/action persists
@@ -60,18 +67,23 @@ Hold pending/ambiguous source events against additive import even without a
 review file; report `review_evidence` then. Conflicting references, ISINs,
 source holds, unavailable evidence or nonunique pairs SHALL prevent correction.
 Preserve ID, owner, account, security, type, tags and the complete comment.
-Never merge, split, delete or create a replacement. Share v2's one-update budget,
-stable queue, simulation and account hold after uncertainty. Changed evidence
+Never merge, split, delete or create a replacement. Apply every eligible manual,
+profile and comment correction in one run, in stable order, without a count cap.
+Wait at least 28 seconds after each confirmed correction before the next PUT.
+Require exact readback before each next PUT. Qualify this fixed delay in the BD
+lab. Simulation previews all corrections. First uncertainty stops all later
+financial writes, preserves later approvals and retains the journal across
+restart. Restart never resends. Changed evidence
 SHALL clear approval. Only exact readback SHALL confirm; never resend.
 
 #### Scenario: Approval, restart and repeat
-- **WHEN** Run applies one approved real fee proposal, then repeats or restarts after an uncertain response
+- **WHEN** Run applies several approved real fee and coupon proposals, then repeats or restarts after an uncertain response
 - **THEN** exact completion requires no further update; uncertainty reports `import_unconfirmed` and retains all account writes on hold without resend.
 
 ### Requirement: Manual trade fee correction from the notice
 
 Require mutually unique BUY/SELL pairs in the same account/security/EUR, with
-exact side, quantity and price, within two UTC calendar days. Fees SHALL NOT
+exact side, quantity and price, within two calendar days in configured `TZ`. Fees SHALL NOT
 choose or rank matches. The validated notice fee SHALL be truth: brokerage
 plus uniquely attributed charged TTF for BUY; brokerage for SELL. Compare exact
 decimal values without tolerance. Change only fee. Already correct fees SHALL
@@ -85,22 +97,24 @@ TTF proof SHALL retain the existing hold.
 ### Requirement: Manual coupon net and date alignment
 
 Discover manual DIVIDEND candidates for the same account and resolved YAHOO
-security within 31 UTC calendar days, inclusively, in either direction.
+security within 31 calendar days in configured `TZ`, inclusively, in either direction.
 Require one source per target and one target per source across all available
 notices and destination rows. Recognized identities take precedence. A fee or
 amount similarity SHALL NOT select a pair. Several candidates SHALL stay
 blocked with `review_evidence`; no nearest-date selection.
 
 Only reviewed payment identity SHALL permit replacing date with the printed
-notice date at midnight UTC, quantity with 1, unit price with exact net EUR
+notice date at midnight UTC only when the configured `TZ` calendar day differs,
+quantity with 1, unit price with exact net EUR
 credit, and fee with 0. A wrong stored coupon currency SHALL be replaceable
 with EUR only in this displayed manual proposal. Show old currency and amount;
 do not calculate FX. Preserve the security profile and its market currency.
 Set activity currency to EUR explicitly, including with a SEK market profile.
 If the API cannot preserve the profile and exact activity values, hold the
 proposal. The 31-day window SHALL NOT expand automatic profiles or normal
-duplicate matching. Already correct notice-net coupons SHALL
-remain conforming without a new proposal.
+duplicate matching. A stored instant on the same local day SHALL stay unchanged without a date
+proposal. Already correct notice-net coupons SHALL remain conforming without
+a new proposal.
 
 #### Scenario: Four probable payments
 - **WHEN** Run reviews the real SAAB 2025-10-16, APAM 2025-12-12, RHM 2026-05-19 and DB1 2026-05-22 payments
@@ -158,7 +172,9 @@ periods outside available notices SHALL remain unverified. Never invent an
 opening BUY. Report this limitation with `coverage_unverifiable`.
 Absent supported rows SHALL give `coverage_gap`. These three codes SHALL use
 the existing action path: exit 0 unless a failure also occurs, one redacted
-Apprise summary per run, including simulation; unresolved actions repeat.
+Apprise summary per run, including simulation, under the grouped notification and seven-day reminder
+rules above. Informational limits without a concrete resolution action SHALL
+remain local information and SHALL NOT create repeated required actions.
 Alerts SHALL contain counts and next steps, without personal or financial
 details. Existing failure precedence, silent clean runs and delivery rules remain.
 
@@ -168,4 +184,5 @@ details. Existing failure precedence, silent clean runs and delivery rules remai
 
 #### Scenario: Repeated redacted alert
 - **WHEN** Run with `NOTICE_COVERAGE=1` finds a gap or unverifiable comparison twice
-- **THEN** each run produces one redacted action summary; a simultaneous unreadable-notice failure keeps exit 1. Delivery uncertainty never causes a resend or financial write.
+- **THEN** the first run sends one redacted grouped action summary; the unchanged next
+  run stays silent until seven days. Group changes or cleared reasons notify; a simultaneous unreadable-notice failure keeps exit 1. Delivery uncertainty never causes a resend or financial write.
