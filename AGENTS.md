@@ -33,7 +33,7 @@ work-tracker IDs.
   It stops on a security for each operation that changes the number of shares.
   It adds actually charged TTF to one BUY in the same source account, notice,
   date and ISIN. Ambiguity suspends affected BUYs. It ignores custody fees
-  and shows a message. Follow the current spec for fee-only corrections.
+  and shows a message. Follow the current spec and approved change for correction fields.
 - The current behavior contract is
   [notice-import](openspec/specs/notice-import/spec.md). Completed changes under
   `openspec/changes/archive/` are history only.
@@ -162,9 +162,9 @@ voice, no internal jargon.
   Never put a secret in Git, logs, Beads, tests or reports.
 - Paperless is read only. The importer never writes to Paperless.
 - Personal data stays off Git: `inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`.
-- Ghostfolio: `DRY_RUN=1` by default. Add new activities; never delete. The only
-  update is the approved BUY fee-only correction in the current spec. Preserve
-  every other field and logical identity. Confirm exact readback; stop on
+- Ghostfolio: `DRY_RUN=1` by default. Add new activities; never delete. Updates follow the current spec and the approved
+  [manual reconciliation change](openspec/changes/manual-reconciliation-coverage/specs/notice-import/spec.md).
+  Preserve every other field and logical identity. Confirm exact readback; stop on
   uncertainty without resend. Production writes need Florent's go. Shared labs
   use their permanent authority below.
 - Money: `Decimal`, exact dates, EUR. An unknown operation is skipped and

@@ -20,6 +20,9 @@ def failure_summary(codes: set[str]) -> str:
 
 # IBKR outcome.py:114,127,134; BD keeps its published failure classifications.
 ACTION_INSTRUCTIONS = {
+    "coverage_gap": "Compare the missing notice rows with Ghostfolio. Use normal guarded import only after resolving the evidence.",
+    "position_mismatch": "Compare notice and destination movements for the reported interval. Resolve the unexplained quantity difference.",
+    "coverage_unverifiable": "Inspect the named missing or conflicting evidence. Restore that proof before checking the affected interval.",
     "review_approval": "Read the exact proposal. Edit only decision to yes or reject between runs. "
                        "The related event stays held until current evidence permits it.",
     "review_evidence": "Restore the missing or conflicting source or destination proof. "

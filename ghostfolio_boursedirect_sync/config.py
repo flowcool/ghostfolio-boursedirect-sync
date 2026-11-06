@@ -43,6 +43,9 @@ def required(name: str) -> str:
 
 def load() -> Settings:
     """BD permits only the exact modes absent, 1 and 0."""
+    coverage = os.environ.get("NOTICE_COVERAGE", "0")
+    if coverage not in ("0", "1"):
+        raise RuntimeError("invalid_configuration NOTICE_COVERAGE")
     mode = os.environ.get("DRY_RUN", "1")
     if mode not in ("0", "1"):
         raise RuntimeError("invalid_configuration DRY_RUN")
@@ -87,6 +90,7 @@ def load() -> Settings:
         activity_review_file=review_file,
         activity_reconciliation=profile,
         timezone=timezone,
+        notice_coverage=coverage == "1",
     )
 
 

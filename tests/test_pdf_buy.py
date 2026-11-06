@@ -83,7 +83,9 @@ def test_simulation_maximizes_manual_matches_before_exact_day_preference(setting
     monkeypatch.setattr(requests, "post", Mock(side_effect=AssertionError("unexpected write")))
     with caplog.at_level(logging.INFO):
         assert app.main() == 0
-    assert "simulated=0 duplicates=2" in caplog.text
+    # The second source has no charged tax. Its fee difference now needs review.
+    assert f"simulated=0 duplicates={1 if charged_ttf else 2}" in caplog.text
+    assert ("review_evidence" in caplog.text) is charged_ttf
     assert "type=BUY" not in caplog.text
 
 

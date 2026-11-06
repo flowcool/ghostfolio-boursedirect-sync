@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from ghostfolio_boursedirect_sync.activity_reconciliation import date_eligible
 from ghostfolio_boursedirect_sync.ghostfolio import activity_instant, parse_identity
 from ghostfolio_boursedirect_sync.models import (
     Activity,
@@ -114,11 +115,12 @@ def attribute_ttf_rows(notice: Notice) -> tuple[Notice, tuple[str, ...]]:
                   notice.inferred_brokerages, (), notice.stops), tuple(sorted(failed))
 
 
-def _same_activity(candidate: Activity, existing: ExistingActivity) -> bool:
+def _same_activity(candidate: Activity, existing: ExistingActivity, timezone: str | None = None) -> bool:
     """Compare all Ghostfolio fields that define an owned activity."""
     return (
         existing.account_id == candidate.account_id
-        and existing.date == activity_instant(candidate.date)
+        and (existing.date == activity_instant(candidate.date) if timezone is None else
+             date_eligible("balanced", candidate.date, existing.date.isoformat(), candidate.type, timezone)[0])
         and existing.type == candidate.type
         and existing.symbol == candidate.symbol
         and existing.data_source == candidate.data_source
@@ -166,6 +168,24 @@ def _manual_exact(candidate: Activity, row: ExistingActivity) -> bool:
         context.prec = max(28, sum(len(format(v, "f")) for v in (
             row.quantity, row.unit_price, row.fee, candidate.quantity, candidate.unit_price)) + 2)
         return row.quantity * row.unit_price - row.fee == candidate.quantity * candidate.unit_price
+
+
+def unresolved_alias_rows(candidate: Activity, existing: ActivityIndex) -> list[ExistingActivity]:
+    """Cash/date agreement under an unverified symbol is uncertainty, never identity.
+
+    Approved available-notice adaptation; this cannot authorize a correction.
+    """
+    # An ISIN-shaped Yahoo fallback needs mapping verification. Equal cash
+    # under unrelated ordinary symbols must not hide an otherwise absent row.
+    if (candidate.type != "DIVIDEND" or not candidate.isin
+            or candidate.symbol.split(".", 1)[0] != candidate.isin):
+        return []
+    return [row for row in existing.rows if row.account_id == candidate.account_id
+            and row.active and row.type == "DIVIDEND" and row.data_source == "YAHOO"
+            and not row.comment.startswith("BD#v3#") and not _same_security(candidate, row)
+            and not (candidate.isin and row.isin and candidate.isin != row.isin)
+            and abs((row.date.date() - activity_instant(candidate.date).date()).days) <= 31
+            and _manual_exact(candidate, row)]
 
 
 def _manual_assignment(
@@ -274,7 +294,7 @@ def _assign_manual_component(
 
 def select_account_activities(
     candidates: list[Activity], existing: ActivityIndex, *, now: datetime | None = None,
-    reserved_existing_ids: set[str] | None = None,
+    reserved_existing_ids: set[str] | None = None, timezone: str = "UTC",
 ) -> Selection:
     """IBKR app.py:234: isolated selection with BD exact manual assignment."""
     instant = now or datetime.now(UTC)
@@ -298,7 +318,7 @@ def select_account_activities(
             continue
         occupied = existing.identities.get(candidate.comment, ())
         if occupied:
-            if len(occupied) == 1 and _same_activity(candidate, occupied[0]):
+            if len(occupied) == 1 and _same_activity(candidate, occupied[0], timezone):
                 duplicates += 1
             else:
                 errors.append("owned_activity_conflict")

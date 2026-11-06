@@ -81,6 +81,7 @@ The published legacy preview has this immutable image reference:
 | `MAPPING_FILE` | no | Read-only YAML mapping file; empty allows no override |
 | `DRY_RUN` | no | Absent or `1` simulates; `0` enables imports |
 | `TZ` | for a non-off profile | Explicit IANA timezone for destination date comparison and scheduling; source dates stay UTC |
+| `NOTICE_COVERAGE` | no | `1` reads all available notices and reports coverage; sends no financial write even with `DRY_RUN=0`; default `0` |
 | `ACTIVITY_REVIEW_FILE` | no | Private writable YAML path inside the container, for example `/review/activities.yaml` |
 | `ACTIVITY_RECONCILIATION` | no | `off` by default; or `conservative`, `balanced`, `permissive` |
 | `ACTIVITY_REVIEW_DIRECTORY` | Compose only | Host directory mounted at `/review`; default `./review` |
@@ -205,7 +206,7 @@ A changed source, destination or association clears stale consent. A cleared
 choice does not immediately acquire automatic authority. A blocked proposal
 remains blocked after `yes`. Held events cannot become new imports.
 
-Corrections preserve the activity ID, owner, account, security, type, EUR,
+Corrections preserve the activity ID, owner, account, security, type,
 tags and notes. BUY and SELL quantities stay unchanged. A coupon uses quantity
 `1` and the validated net credit as price. The connector never merges, splits
 or deletes activities. Groups and total amounts are diagnostic evidence only.
@@ -223,8 +224,11 @@ recovery without `TZ`. Other profiles require a review file and explicit IANA
 
 Both amount limits must pass. Gross means exact quantity times price, without
 fees. Fees require separate source validation. No exchange-rate or floating
-point exception applies. Date comparison keeps the printed source day and uses
-the destination day in `TZ`. Writes use the printed date at midnight UTC.
+point exception applies. Compare the canonical source and destination instants
+by calendar day in `TZ`. A stored instant on the same local day stays unchanged.
+New source dates and required date replacements use the printed date at midnight UTC.
+West of UTC, midnight UTC can display on the previous local day. `TZ` must
+match the Ghostfolio server timezone. It does not convert stored history.
 Eligible pairs outside a profile limit remain available for manual review.
 
 Legacy comments require reproducible event and account inputs before migration.
@@ -233,17 +237,56 @@ a blank separator. Financial differences are evaluated on a later run. Missing
 historical inputs report `review_evidence`; `yes` cannot replace them. Unchanged
 legacy and manual duplicates do not require migration.
 
-Manual, profile, migration and TTF work share a limit of one correction per run.
-The oldest eligible proposal goes first, with a stable order for ties. Deferred
-choices remain in the file. New imports have no correction-budget limit.
+Manual, profile, migration and TTF work execute all eligible corrections in one
+run. The oldest eligible proposal goes first, with a stable order for ties.
+Each next PUT waits at least 28 seconds after the previous confirmed correction.
+Exact readback must pass before the next PUT. No ENV setting changes this delay
+or adds a count cap. Later approvals stay in the file if uncertainty stops the run.
 Simulation shows `would correct` and sends no financial request.
 
 Before a correction, the connector saves the exact request, before and after
 values, and authority. It sends one PUT and checks all changed and preserved
-fields. An uncertain result holds all writes to that account across restarts.
+fields. An uncertain result stops all later financial writes across restarts.
 The connector does not resend the PUT. Only an exact readback settles it.
 Simulation and profile changes cannot settle pending real work. Keep the review
 file and its companion evidence; removing them is not a recovery procedure.
+
+### Manual fees and coupons
+
+A manual BUY or SELL can receive a fee-only proposal when account, security,
+quantity and price match exactly within two calendar days in `TZ`. The notice
+fee includes charged, uniquely attributed TTF for BUY. It includes brokerage
+for SELL. Fees never select a pair. Every other stored field stays unchanged.
+
+A manual coupon can match within 31 calendar days in either direction. Require
+one source per target and one target per source across all available notices.
+This is a payment hypothesis. Confirm it before setting `decision: yes`.
+The proposal shows the exact net credit in EUR, quantity `1`, fee `0` and any
+required date change. A wrong activity currency can change to EUR. The security
+profile and its market currency stay unchanged. No exchange rate is inferred.
+
+Profiles cannot approve these manual kinds. Missing review, competing pairs or
+source holds cannot authorize a write or duplicate creation. Already corrected
+rows need no further correction. The whole manual comment stays unchanged.
+
+### Available-notice coverage
+
+Set `NOTICE_COVERAGE=1` for a report with no financial POST, PUT or DELETE.
+It reads every selected Paperless page, including done-tagged originals.
+It does not open or settle the review journal. It preserves review decisions.
+This rule also applies with `DRY_RUN=0` and existing approvals or pending work.
+
+Local output shows conforming rows, correction candidates, unresolved
+associations, absent supported rows and unsupported operations. Equal notice
+copies count once. A normal import proposal alone does not prove absence.
+Uncertain aliases, normalized quantities and foreign-price representations stay
+unresolved. Unreadable originals or incomplete acquisition remain failures.
+
+Position diagnostics compare net BUY-minus-SELL quantities within the stated
+UTC interval. They describe unexplained movements, not absolute holding errors.
+Unsupported transformations make the affected comparison unverifiable.
+Notices cannot prove complete broker history. Empty periods, statement holdings
+and missing opening acquisitions remain unverified. No opening BUY is invented.
 
 ## Development checks
 
@@ -268,7 +311,10 @@ image before release. Lab tooling stays in Infra.
 ## Outcomes and notifications
 
 The run reports `success`, `success with user action required`, or `failure`.
-`review_approval` and `review_evidence` require action but keep exit code 0.
+`review_approval`, `review_evidence`, `coverage_gap` and `position_mismatch`
+require action but keep exit code 0. Missing proof with a concrete resolution
+action can report `coverage_unverifiable`. Informational history limits alone
+do not request a correction or send an alert.
 `review_unavailable` is a failure with exit code 1. Other existing failures
 retain exit code 1. Custody fees and inferred zero brokerage are information.
 The summary separates imports, simulations, duplicates, conforming rows,
@@ -279,7 +325,17 @@ A failed run or required action sends at most one notification when
 The message contains fixed error codes. It contains no account data or secrets.
 For example, set `APPRISE_URLS='["json://notification-service/hook"]'`.
 
-Unresolved actions repeat on later runs. Clean runs stay silent. Notification delivery uses a separate process.
+Action summaries group unique events by fixed reason and count. The first,
+changed or cleared group sends one summary. A cleared reason appears with count
+zero. An unchanged group sends a reminder after seven days since confirmed
+delivery. A same-count event replacement does not trigger another summary.
+Failures notify each run. Clean runs without previous actions stay silent.
+The private `.required-actions.yaml` companion beside `ACTIVITY_REVIEW_FILE`
+stores delivery counts and time only. Retain this private mount for reminders.
+Without usable persistent state, actions remain eligible each run and a fixed
+warning explains the missing state. Failed or uncertain delivery does not advance
+its clock. Failed runs cannot certify cleared actions. Full findings stay in the
+local log on every run. Notification delivery uses a separate process.
 The deadline covers process startup and delivery. On expiry, the process stops.
 A timed-out notification can still arrive. The connector does not retry it.
 Invalid notification settings stop before service access with `invalid_configuration`.

@@ -156,7 +156,8 @@ def test_manual_yes_without_timezone_survives_restart_and_preserves_tags(setting
 
 
 @pytest.mark.parametrize("profile", ["conservative", "balanced", "permissive"])
-def test_profile_one_update_budget_and_deferred_choice_survive_restart(settings, tmp_path, monkeypatch, profile):
+def test_profile_uncapped_budget_and_no_resend_after_restart(settings, tmp_path, monkeypatch, profile):
+    monkeypatch.setattr(review.time, "sleep", lambda _: None)
     row, event, events = sample()
     other = replace(event, date="2025-02-04T00:00:00+00:00", comment=event.comment[:-1] + "a")
     events.update(review.source_events([other], "TESTACCOUNT", {other.comment: [{"sha256": "b" * 64}]}))
@@ -167,15 +168,15 @@ def test_profile_one_update_budget_and_deferred_choice_survive_restart(settings,
     state = review.open_review(str(path), [])
     try:
         result = review.process_review(state, configured, "token", events)
-        assert result.corrected == 1
-        assert sender.call_count == 1
-        assert result.counts["automatic work deferred"] == 1
+        assert result.corrected == 2
+        assert sender.call_count == 2
+        assert result.counts["automatic work deferred"] == 0
     finally:
         review.close_review(state)
     state = review.open_review(str(path), [])
     try:
         repeated = review.process_review(state, configured, "token", events)
-        assert repeated.corrected == 1
+        assert repeated.corrected == 0
         assert sender.call_count == 2
         assert {Decimal(str(row["fee"])) for row in rows} == {Decimal(1)}
         clean = review.process_review(state, configured, "token", events)

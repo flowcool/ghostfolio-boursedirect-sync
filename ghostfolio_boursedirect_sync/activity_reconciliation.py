@@ -42,7 +42,7 @@ def date_eligible(name: str, source: str, target: str, kind: str,
         instants = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in (source, target)]
         if any(value.tzinfo is None for value in instants):
             return False, {"reason": "Missing source or destination timezone"}
-        dates = [instants[0].date(), instants[1].astimezone(zone).date()]
+        dates = [value.astimezone(zone).date() for value in instants]
         distance = abs((dates[1] - dates[0]).days)
         limit = (3 if kind == "DIVIDEND" else 2) if name == "permissive" else 0
         return name in LIMITS and distance <= limit, {
