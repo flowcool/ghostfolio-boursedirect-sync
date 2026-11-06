@@ -138,3 +138,52 @@ def test_manual_fee_execution_chain_readback_pacing_and_restart(settings, tmp_pa
         assert sender.call_count == (1 if uncertain else 2)
     finally:
         review.close_review(state)
+
+
+@pytest.mark.parametrize("fixture,date,currency,quantity,price,net", [
+    ("saab_b", "2025-10-06T00:00:00+00:00", "SEK", "16", "1", "1.02"),
+    ("apam", "2025-11-17T00:00:00+00:00", "EUR", "18", "0.5", "7.65"),
+    ("rhm", "2026-05-12T22:00:00+00:00", "EUR", "2", "11.5", "16.93"),
+    ("db1", "2026-05-13T22:00:00+00:00", "EUR", "2", "4.2", "6.18"),
+])
+def test_four_real_coupon_transcriptions_with_derived_manual_states(
+        fixture, date, currency, quantity, price, net, settings, tmp_path, monkeypatch):
+    """Financial lines are transcribed unchanged; account/instrument fields are anonymous.
+
+    Destination states reproduce the observed representation with synthetic IDs,
+    ownership, profile identity and comments. They are not broker observations.
+    """
+    from pathlib import Path
+
+    from ghostfolio_boursedirect_sync import notices, sync
+
+    text = (Path(__file__).parent / "fixtures" / ("pdf_coupon_review_" + fixture + ".txt")).read_text()
+    source = notices.parse_text(text)
+    event = sync.activity(source.trades[0], {"FR0000000002": "EXAMPLE.PA"}, "target",
+                          source.account_ref, sync.notice_namespace(source), 0)
+    assert event.unit_price == Decimal(net)
+    _, row, _ = coupon_case(currency)
+    row.update(date=date, quantity=Decimal(quantity), unitPrice=Decimal(price), fee=0)
+    events = review.source_events([event], "TESTACCOUNT", {})
+    rows, sender = transport(monkeypatch, row)
+    path = tmp_path / "review.yaml"
+    state = review.open_review(str(path), [])
+    try:
+        review.process_review(state, settings, "token", events)
+        item, = state["document"]["proposals"].values()
+        assert item["actionable"] and not item["automatic eligible"]
+        assert item["proposed values"]["unitPrice"] == net
+    finally:
+        review.close_review(state)
+    approve(path)
+    state = review.open_review(str(path), [])
+    try:
+        assert review.process_review(state, replace(settings, dry_run=False), "token", events).corrected == 1
+        assert rows[0]["quantity"] == 1 and rows[0]["unitPrice"] == Decimal(net)
+        assert rows[0]["fee"] == 0 and review.effective_currency(rows[0]) == "EUR"
+        assert rows[0]["assetProfile"] == row["assetProfile"]
+        assert rows[0]["comment"] == row["comment"]
+        assert review.process_review(state, replace(settings, dry_run=False), "token", events).corrected == 0
+        sender.assert_called_once()
+    finally:
+        review.close_review(state)

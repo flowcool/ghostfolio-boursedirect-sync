@@ -202,6 +202,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 if sync.ttf_correction_matches(candidate, existing):
                     held.add(candidate.comment)
                     errors.add("review_evidence")
+                    actions.setdefault("review_evidence", set()).add(candidate.comment)
                     log.warning("review_evidence scope=%s; BUY held; configure ACTIVITY_REVIEW_FILE "
                                 "to retain correction evidence; independent imports continue", candidate.comment)
         for candidate in unique.values():
@@ -299,7 +300,8 @@ def main(*, invalid_schedule: bool = False) -> int:
         summary = outcome.notification_summary(errors)
         details = [f"Action required: {reason} count={count}. {outcome.ACTION_INSTRUCTIONS[reason]}"
                    for reason, count in sorted(plan["document"]["groups"].items())]
-        details.extend(f"Action cleared: {reason} count=0." for reason in plan["cleared"])
+        if not code:
+            details.extend(f"Action cleared: {reason} count=0." for reason in plan["cleared"])
         if details:
             summary = "\n".join(([outcome.failure_summary(errors & outcome.FAILURE_CODES)] if code else []) + details)
         status = notify.send_notification(settings, notify.NOTIFY_TITLE, summary)

@@ -1245,7 +1245,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
             time.sleep(delay)
         assert_unchanged(state)
         fresh_rows = snapshot_rows(config)
-        fresh, _ = refresh(refreshed, fresh_rows)
+        fresh, held = refresh(refreshed, fresh_rows)
         apply_source_holds(config, fresh)
         current = fresh.get(item["key"])
         fresh_selection, fresh_conflicts = selected_proposals(fresh)
@@ -1302,7 +1302,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
         publish(refreshed)
     # Rediscover new context and release reassigned alternatives after confirmed PUTs.
     if not simulated and executed:
-        refreshed, _ = refresh(refreshed, snapshot_rows(config))
+        refreshed, held = refresh(refreshed, snapshot_rows(config))
     apply_source_holds(config, refreshed)
     deferred, conflicts = selected_proposals(refreshed)
     blocked |= conflicts
@@ -1324,8 +1324,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
     outcome = config.get("_outcome")
     if outcome is not None:
         outcome["reconciliation"] = dict(counts)
-    _, manual_held = refresh(refreshed, snapshot_rows(config))
-    held = {item["source event"] for item in refreshed.values() if proposal_holds(item)} | unresolved_events | manual_held
+    held = {item["source event"] for item in refreshed.values() if proposal_holds(item)} | unresolved_events | held
     config["_review_rejected"] = {}
     for item in refreshed.values():
         if item.get("rejected") and item["source event"] in events:

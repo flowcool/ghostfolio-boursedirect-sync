@@ -1,5 +1,7 @@
 """IBKR grouped delivery semantics adapted to the BD private review mount."""
 
+import os
+
 import pytest
 
 from ghostfolio_boursedirect_sync import action_notifications as grouped
@@ -52,3 +54,28 @@ def test_bad_delivery_state_keeps_actions_eligible_without_overwrite(tmp_path, m
         protected = grouped.plan_action_notification({"coverage_gap": {"x"}}, str(tmp_path / "review.yaml"),
                                                      "a" * 64, inputs=[path])
         assert protected["path"] is None
+
+
+def test_failed_run_never_announces_actions_cleared(tmp_path, monkeypatch):
+    from ghostfolio_boursedirect_sync import activity_review, app, config, notify
+
+    filename = str(tmp_path / "review.yaml")
+    monkeypatch.setenv("ACTIVITY_REVIEW_FILE", filename)
+    context = activity_review.fingerprint([os.environ.get(key, "") for key in
+        ("GHOST_HOST", "GHOST_ACCOUNT_NAME", "BD_ACCOUNT_REF", "PAPERLESS_URL")])
+    confirmed = grouped.plan_action_notification({"review_approval": {"private-event"}}, filename, context)
+    assert grouped.confirm_action_notification(confirmed)
+    before = confirmed["path"].read_bytes()
+
+    def failure(errors, **kwargs):
+        errors.add("paperless_unreachable")
+        return 1
+
+    messages = []
+    monkeypatch.setattr(app, "run_sync", failure)
+    monkeypatch.setattr(config, "load_notification_config", lambda: {"urls": ["json://notify.invalid"], "timeout": 1})
+    monkeypatch.setattr(notify, "send_notification", lambda _, title, body: messages.append(body) or "sent")
+    assert app.main() == 1
+    assert len(messages) == 1 and "paperless_unreachable" in messages[0]
+    assert "Action cleared" not in messages[0]
+    assert confirmed["path"].read_bytes() == before

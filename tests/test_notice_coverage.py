@@ -175,3 +175,33 @@ def test_conflicting_isin_under_same_symbol_is_uncertain_not_absent():
     counts = notice_coverage.report([(1, source)], {source.trades[0].isin: event.symbol}, "target", index, codes, {}, "UTC")
     assert counts == {"unresolved association": 1, "unverifiable positions": 1}
     assert codes == {"coverage_unverifiable"}
+
+
+def test_owned_ttf_holds_count_each_source_event(settings, monkeypatch):
+    text = (Path(__file__).parent / "fixtures/pdf_buy.txt").read_text()
+    originals = [text + "\n03/02/2025 TAXE TRANSACT FINANCIERES FR0000120271  0.30\n",
+                 text.replace("03/02/2025", "05/02/2025") +
+                 "\n05/02/2025 TAXE TRANSACT FINANCIERES FR0000120271  0.30\n"]
+    rows = []
+    for i, original in enumerate(originals):
+        source, failed = sync.attribute_ttf_rows(notices.parse_text(original))
+        assert not failed
+        event = sync.activity(source.trades[0], {source.trades[0].isin: "EXAMPLE.PA"}, "target",
+                              source.account_ref, sync.notice_namespace(source), 0)
+        row, _, _ = sample()
+        row.update(id=str(i), date=event.date, comment=event.comment, fee=1)
+        row["assetProfile"]["isin"] = event.isin
+        rows.append(row)
+    monkeypatch.setattr(config, "load", lambda: settings)
+    monkeypatch.setattr(paperless, "document_ids", lambda _: [0, 1])
+    monkeypatch.setattr(paperless, "original_pdf", lambda _, document: str(document).encode())
+    monkeypatch.setattr(notices, "extract_text", lambda pdf: originals[int(pdf)])
+    monkeypatch.setattr(ghostfolio, "exchange_token", lambda _: "offline")
+    monkeypatch.setattr(ghostfolio, "find_account", lambda *_: "target")
+    monkeypatch.setattr(ghostfolio, "read_activities", lambda *_: ghostfolio.index_existing_activities(
+        {"count": len(rows), "activities": rows}))
+    monkeypatch.setattr(sync, "load_mapping", lambda _: {"FR0000120271": "EXAMPLE.PA"})
+    codes, actions = set(), {}
+    assert app.run_sync(codes, actions=actions) == 0
+    assert codes == {"review_evidence"}
+    assert len(actions["review_evidence"]) == 2
