@@ -133,7 +133,7 @@ def test_manual_fee_execution_chain_readback_pacing_and_restart(settings, tmp_pa
         assert sender.call_count == (1 if uncertain else 2)
         assert result.corrected == (0 if uncertain else 2)
         assert bool(result.blocked_accounts) is uncertain
-        assert sleeps == ([] if uncertain else [120.0])
+        assert sleeps == ([] if uncertain else [150.0])
         review.process_review(state, replace(settings, dry_run=False), "token", events)
         assert sender.call_count == (1 if uncertain else 2)
         if uncertain:
@@ -144,7 +144,7 @@ def test_manual_fee_execution_chain_readback_pacing_and_restart(settings, tmp_pa
             review.close_review(state)
             state = review.open_review(str(path), [])
             def settle_later(*args, **kwargs):
-                assert sleeps == [120.0]
+                assert sleeps == [150.0]
                 payload = json.loads(kwargs["data"], parse_float=Decimal)
                 assert payload["id"] != sent["id"]
                 target = next(row for row in rows if row["id"] == payload["id"])
