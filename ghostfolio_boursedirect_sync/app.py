@@ -22,6 +22,7 @@ from ghostfolio_boursedirect_sync import (
 )
 from ghostfolio_boursedirect_sync.models import (
     Activity,
+    DocumentReference,
     Notice,
     Trade,
 )
@@ -33,7 +34,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
              actions: dict[str, set[str]] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     actions = {} if actions is None else actions
-    document_id: notice_source.DocumentReference | None = None
+    document_id: DocumentReference | None = None
     created = 0
     held: set[str] = set()
     review_counts: dict[str, int] = {}
@@ -57,7 +58,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         mapping = sync.load_mapping(settings.mapping_file)
         other_accounts = 0
         unreadable = 0
-        matching: list[tuple[notice_source.DocumentReference, Notice]] = []
+        matching: list[tuple[DocumentReference, Notice]] = []
         source: list[dict[str, int | str]] = []
         acquired = notice_source.acquire(settings)
         if acquired.snapshot is not None:
@@ -168,8 +169,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             else:
                 mapping[isin] = symbol
         candidates: list[Activity] = []
-        documents: dict[str, notice_source.DocumentReference] = {}
-        source_documents: dict[str, set[notice_source.DocumentReference]] = {}
+        documents: dict[str, DocumentReference] = {}
+        source_documents: dict[str, set[DocumentReference]] = {}
         for document_id, notice in matching:
             namespace = sync.notice_namespace(notice)
             ranks: Counter[Trade] = Counter()

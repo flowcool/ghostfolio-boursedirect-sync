@@ -539,7 +539,7 @@ changed or cleared group sends one summary. A cleared reason appears with count
 zero. An unchanged group sends a reminder after seven days since confirmed
 delivery. A same-count event replacement does not trigger another summary.
 Failures notify each run. Clean runs without previous actions stay silent.
-The private `.normal.required-actions.yaml` and `.coverage.required-actions.yaml`
+The private `<review-file>.normal.required-actions.yaml` and `<review-file>.coverage.required-actions.yaml`
 companions beside `ACTIVITY_REVIEW_FILE`
 store delivery counts and time only. Retain this private mount for reminders.
 Without usable persistent state, actions remain eligible each run and a fixed

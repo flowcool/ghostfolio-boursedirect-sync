@@ -2,6 +2,7 @@
 """Bounded current-file scan. This is not a history or secret certification."""
 
 import argparse
+import os
 import re
 import subprocess
 import tarfile
@@ -11,7 +12,6 @@ MAX_TEXT_BYTES = 1024 * 1024
 RULES = {
     "private_workspace": re.compile(r"/home/[^/\s]+/(?:claude_project|\.claude|\.codex)|~/claude_project/"),
     "private_tracker": re.compile(r"\binfra-[a-z0-9]+(?:\.[0-9]+)*\b"),
-    "personal_host": re.compile(r"\b(?:agentvm|ugreen)\b", re.I),
     "holder_field": re.compile(r"^\s*(?:titulaire|nom du titulaire|adresse du titulaire)\s*:\s*\S", re.I | re.M),
     "credential_signature": re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 }
@@ -19,9 +19,12 @@ RULES = {
 
 def scan(entries):
     findings = []
+    rules = dict(RULES)
+    private_pattern = os.environ.get("PUBLIC_PRIVACY_EXTRA_PATTERN", "")
+    if private_pattern:
+        rules["private_signature"] = re.compile(private_pattern)
     for name, data in entries:
-        # This file defines the signatures, not operational values.
-        if name == "scripts/check_public_privacy.py" or len(data) > MAX_TEXT_BYTES or b"\0" in data:
+        if len(data) > MAX_TEXT_BYTES or b"\0" in data:
             continue
         try:
             text = data.decode("utf-8")
@@ -31,7 +34,7 @@ def scan(entries):
             for line in text.splitlines():
                 if re.search(r"COMPTE\s+N[°º]", line, re.I) and "TEST ACCOUNT" not in line:
                     findings.append(f"{name}: source_account_label")
-        for code, pattern in RULES.items():
+        for code, pattern in rules.items():
             if pattern.search(text):
                 findings.append(f"{name}: {code}")
     return findings

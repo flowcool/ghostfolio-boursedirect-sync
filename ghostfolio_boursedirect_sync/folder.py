@@ -4,26 +4,12 @@ import hashlib
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 
+from ghostfolio_boursedirect_sync.models import FolderSnapshot, SourceDocument
+
 MAX_PDF_BYTES = 20 * 1024 * 1024
-
-
-@dataclass(frozen=True)
-class FolderDocument:
-    reference: str
-    pdf: bytes | None
-    code: str = ""
-
-
-@dataclass(frozen=True)
-class FolderSnapshot:
-    documents: tuple[FolderDocument, ...]
-    files: int
-    ignored: int
-    evidence: tuple[tuple[str, tuple[int, ...], str], ...]
-    root: tuple[int, ...]
 
 
 def signature(info: os.stat_result) -> tuple[int, ...]:
@@ -49,7 +35,7 @@ def open_directory(path: Path) -> int:
 
 def acquire(path: str) -> FolderSnapshot:
     """Read a bounded snapshot before dispatch; keep readable previews on bad PDFs."""
-    documents: dict[str, FolderDocument] = {}
+    documents: dict[str, SourceDocument] = {}
     evidence: list[tuple[str, tuple[int, ...], str]] = []
     files = ignored = 0
     try:
@@ -85,7 +71,9 @@ def acquire(path: str) -> FolderSnapshot:
                 if signature(after) != signature(info):
                     raise RuntimeError("notice_source_unavailable")
                 reference = "sha256:" + digest if data is not None else "unreadable:" + str(files)
-                documents.setdefault(reference, FolderDocument(reference, data, "" if data is not None else "notice_unreadable"))
+                previous = documents.get(reference)
+                documents[reference] = (SourceDocument(reference, data, digest, "" if data is not None else "notice_unreadable")
+                                        if previous is None else replace(previous, copies=previous.copies + 1))
                 evidence.append((name, signature(info), digest))
             if names != sorted(os.listdir(root)) or signature(before) != signature(os.fstat(root)):
                 raise RuntimeError("notice_source_unavailable")
@@ -119,7 +107,9 @@ def load_waivers(filename: str, notice_dir: str, review_file: str) -> tuple[tupl
                 raise ValueError
             if review_file:
                 review = Path(review_file).absolute()
-                for suffix in ("", ".state.yaml", ".journal.yaml", ".lock", ".notifications.yaml"):
+                for suffix in ("", ".state.yaml", ".journal.yaml", ".lock",
+                               ".normal.required-actions.yaml", ".coverage.required-actions.yaml",
+                               ".normal.required-actions.yaml.lock", ".coverage.required-actions.yaml.lock"):
                     target = Path(str(review) + suffix)
                     if path.resolve() == target.resolve() or (target.exists() and os.path.samefile(path, target)):
                         raise ValueError

@@ -130,3 +130,30 @@ class ReviewResult:
     migrations: int
     codes: set[str]
     counts: dict[str, int]
+
+
+DocumentReference = int | str
+
+
+@dataclass(frozen=True)
+class SourceDocument:
+    reference: DocumentReference
+    pdf: bytes | None
+    digest: str
+    code: str = ""
+    copies: int = 1
+
+
+@dataclass(frozen=True)
+class FolderSnapshot:
+    documents: tuple[SourceDocument, ...]
+    files: int
+    ignored: int
+    evidence: tuple[tuple[str, tuple[int, ...], str], ...]
+    root: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class Source:
+    documents: tuple[SourceDocument, ...]
+    snapshot: FolderSnapshot | None = None

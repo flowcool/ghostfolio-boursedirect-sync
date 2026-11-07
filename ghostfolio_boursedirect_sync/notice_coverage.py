@@ -13,8 +13,13 @@ from zoneinfo import ZoneInfo
 from ghostfolio_boursedirect_sync import activity_reconciliation as rules
 from ghostfolio_boursedirect_sync import activity_review as review
 from ghostfolio_boursedirect_sync import sync
-from ghostfolio_boursedirect_sync.models import Activity, ActivityIndex, Notice, Trade
-from ghostfolio_boursedirect_sync.notice_source import DocumentReference
+from ghostfolio_boursedirect_sync.models import (
+    Activity,
+    ActivityIndex,
+    DocumentReference,
+    Notice,
+    Trade,
+)
 
 log = logging.getLogger(__name__)
 

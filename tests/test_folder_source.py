@@ -210,7 +210,7 @@ def test_digest_waiver_clears_only_document_stop(settings, monkeypatch, tmp_path
     put.assert_not_called()
 
 
-@pytest.mark.parametrize("bad", ["malformed", "duplicate", "uppercase", "tab", "unknown_code", "oversize", "nonutf8", "missing", "link", "directory", "inside", "relative", "review_alias"])
+@pytest.mark.parametrize("bad", ["malformed", "duplicate", "uppercase", "tab", "unknown_code", "oversize", "nonutf8", "missing", "link", "directory", "inside", "relative", "review_alias", "review_companion"])
 def test_invalid_waivers_fail_before_service_access(settings, monkeypatch, tmp_path, bad):
     source, post, put = folder_cycle(settings, monkeypatch, tmp_path)
     waiver = tmp_path / "waivers.txt"
@@ -230,6 +230,10 @@ def test_invalid_waivers_fail_before_service_access(settings, monkeypatch, tmp_p
         waiver = source
     if bad == "relative":
         waiver = Path("relative")
+    if bad == "review_companion":
+        review = tmp_path / "review.yaml"
+        monkeypatch.setenv("ACTIVITY_REVIEW_FILE", str(review))
+        waiver = waiver.rename(Path(str(review) + ".normal.required-actions.yaml"))
     if bad == "review_alias":
         review = tmp_path / "review.yaml"
         os.link(waiver, review)
@@ -463,5 +467,18 @@ def test_changed_folder_before_review_dispatch_blocks_put(settings, monkeypatch,
     codes = set()
     assert app.run_sync(codes) == 1
     assert codes == {"notice_source_unavailable"}
+    post.assert_not_called()
+    put.assert_not_called()
+
+
+@pytest.mark.parametrize("row", ["unknown TAXE TRANSACT FINANCIERES  2,86", "unknown DROITS DE GARDE  1,00", "unknown DIVISION  0,00"])
+def test_undated_operation_without_isin_cannot_disappear(settings, monkeypatch, tmp_path, row):
+    source, post, put = folder_cycle(settings, monkeypatch, tmp_path, DRY_RUN=0)
+    data = (FIXTURES / "pdf_buy.txt").read_text()
+    header, body = data.split("\n", 1)
+    (source / "mixed.pdf").write_text(header + "\n" + row + "\n" + body)
+    codes = set()
+    assert app.run_sync(codes) == 1
+    assert codes == {"notice_unreadable"}
     post.assert_not_called()
     put.assert_not_called()
