@@ -71,8 +71,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             try:
                 if document.code or document.pdf is None:
                     raise RuntimeError(document.code or "notice_unreadable")
-                notice = notices.parse_text(notices.extract_text(document.pdf),
-                                            require_printed_dates=bool(settings.notice_dir))
+                notice = notices.parse_text(notices.extract_text(document.pdf))
             except RuntimeError as exc:
                 unreadable += 1
                 if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":

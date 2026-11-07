@@ -472,11 +472,20 @@ def test_changed_folder_before_review_dispatch_blocks_put(settings, monkeypatch,
 
 
 @pytest.mark.parametrize("row", ["unknown TAXE TRANSACT FINANCIERES  2,86", "unknown DROITS DE GARDE  1,00", "unknown DIVISION  0,00"])
-def test_undated_operation_without_isin_cannot_disappear(settings, monkeypatch, tmp_path, row):
+@pytest.mark.parametrize("mode", ["folder", "paperless"])
+def test_undated_operation_without_isin_cannot_disappear(settings, monkeypatch, tmp_path, row, mode):
     source, post, put = folder_cycle(settings, monkeypatch, tmp_path, DRY_RUN=0)
     data = (FIXTURES / "pdf_buy.txt").read_text()
     header, body = data.split("\n", 1)
-    (source / "mixed.pdf").write_text(header + "\n" + row + "\n" + body)
+    mixed = header + "\n" + row + "\n" + body
+    if mode == "folder":
+        (source / "mixed.pdf").write_text(mixed)
+    else:
+        monkeypatch.delenv("NOTICE_DIR")
+        monkeypatch.setenv("PAPERLESS_URL", "http://paperless.test")
+        monkeypatch.setenv("PAPERLESS_TOKEN", "offline-paperless-token")
+        monkeypatch.setattr(paperless, "document_ids", lambda _: [1])
+        monkeypatch.setattr(paperless, "original_pdf", lambda *_: mixed.encode())
     codes = set()
     assert app.run_sync(codes) == 1
     assert codes == {"notice_unreadable"}
