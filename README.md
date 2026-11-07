@@ -333,8 +333,9 @@ changed or cleared group sends one summary. A cleared reason appears with count
 zero. An unchanged group sends a reminder after seven days since confirmed
 delivery. A same-count event replacement does not trigger another summary.
 Failures notify each run. Clean runs without previous actions stay silent.
-The private `.required-actions.yaml` companion beside `ACTIVITY_REVIEW_FILE`
-stores delivery counts and time only. Retain this private mount for reminders.
+The private `.normal.required-actions.yaml` and `.coverage.required-actions.yaml`
+companions beside `ACTIVITY_REVIEW_FILE`
+store delivery counts and time only. Retain this private mount for reminders.
 Without usable persistent state, actions remain eligible each run and a fixed
 warning explains the missing state. Failed or uncertain delivery does not advance
 its clock. Failed runs cannot certify cleared actions. Normal and coverage modes keep separate delivery state and reminder clocks. Full findings stay in the
