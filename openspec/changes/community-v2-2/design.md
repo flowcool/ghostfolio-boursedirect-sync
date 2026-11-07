@@ -28,7 +28,8 @@ pins the financial mechanisms already present in BD.
 | Installation and limits | IBKR `docs/getting-started.md:14,63,79,85,127`; `README.md:73,146` |
 | Public support and history | IBKR `CONTRIBUTING.md:5–11`; `CHANGELOG.md:5` |
 
-Folder acquisition has no sibling equivalent. It is the proposed BD adaptation.
+Folder acquisition and its waiver file have no sibling equivalent. They are
+coordinator-approved BD adaptations.
 Use `NOTICE_DIR` rather than another mode variable. Reject mixed configuration
 to prevent unintended imports. Keep Paperless behavior conditional on its mode.
 
@@ -38,13 +39,31 @@ SHA-256 for folder document identity; retain `BD#v3` event identity. Never gener
 fake Paperless IDs. Check complete acquisition before dispatch. Compare acquired
 files again before writes; stop on changed evidence.
 
-Propose shallow `.pdf` selection and 20 MiB per file to bound reads. Reject links
+Use shallow `.pdf` selection and 20 MiB per file to bound reads. Reject links
 and special files. Keep review storage outside the source. Keep content evidence
 stable under rename. A source switch can invalidate consent; it cannot clear
 pending financial uncertainty.
 
-No folder waiver is safer than filename or sidecar consent. Folder stops remain
-held. Supported-row parity excludes transferring Paperless-specific waivers.
+Reuse the document-local waiver semantics in BD `app.py:108–117`. In folder
+mode, optional `NOTICE_WAIVER_FILE` supplies exact digest/code pairs. Choose
+plain UTF-8 text: each nonempty line has `sha256:<64 lowercase hex digits>`,
+one ASCII space, then `share_count_change` or `unknown_operation`. Blank lines
+are allowed. Reject duplicate pairs and all other content. Limit to 65,536 bytes.
+Read once before service access; reject malformed, missing, unreadable, oversized
+or unsafe files with `invalid_configuration`. Reject any nonempty waiver setting
+in Paperless mode. Never write this file or create completion markers.
+
+Require an absolute path outside `NOTICE_DIR` and separate from the review path.
+Reject links, non-regular files, resolved-path overlaps and existing inode aliases.
+Extend the existing review input-preservation checks in `activity_review.py:97–117`
+to protect the waiver file. A waiver clears only its matching document stop code;
+other documents, unreadable findings and financial guards remain effective.
+Unknown digests are ignored and counted. Rename preserves the digest; changed
+bytes require new consent. Paperless tags do not transfer between sources.
+
+Document user-owned recovery for a permanently unreadable notice: move it out of
+`NOTICE_DIR` and record the move. This hides it from coverage. The importer never
+moves it. Keep the no-duration-target rule until installation time is measured.
 
 ## Risks / Trade-offs
 

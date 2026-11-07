@@ -13,7 +13,8 @@ installation without changing the financial rules.
 - Identify folder documents by content hash. Keep financial event identities,
   duplicate checks, review, coverage and unreadable write blocks.
 - Use printed trade or payment dates for `IMPORT_CREATE_FROM`. An unknown
-  folder date stays unreadable and held. Add no local done marker or stop waiver.
+  folder date stays unreadable and held. Add no local done marker. Allow an
+  optional read-only `NOTICE_WAIVER_FILE` for digest-bound document stops.
 - Plan report items 2–8 as tasks only: portable released-image Compose;
   consistent examples; one current installation route; independent Paperless
   setup; security and privacy; public support; community discovery.
@@ -59,5 +60,7 @@ before installation acceptance.
 
 Future implementation touches acquisition, configuration, review evidence,
 coverage, packaging and public guidance. This PR contains planning text only.
-It authorizes no implementation, merge, release, production write or external
-announcement. The coordinator reviews the decisions before implementation.
+The coordinator approved the source limits and digest-bound waivers. Document
+user-owned removal of permanently unreadable files and its coverage loss.
+Measure installation time before setting a duration target. Implementation,
+release, production writes and external announcements remain separate steps.

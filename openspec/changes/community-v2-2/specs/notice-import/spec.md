@@ -1,8 +1,7 @@
 # notice-import delta
 
-Apply this delta with the main spec and the released manual-reconciliation
-and creation-cut-off deltas. Only source selection and folder behavior change.
-Existing financial rules remain applicable.
+Apply with the main spec and released manual-reconciliation and creation-cut-off
+deltas. Existing financial rules remain applicable.
 
 Run means `docker compose run --rm -T --no-deps -e CRON= importer` against
 the configured source and an isolated destination. Read output and exit status.
@@ -25,7 +24,8 @@ directory path. Both `PAPERLESS_URL` and `PAPERLESS_TOKEN` SHALL then be absent
 or empty. Absent or empty `NOTICE_DIR` SHALL select Paperless and require both
 Paperless settings. Both sources, neither source, invalid settings, or a
 nonunique/inactive/excluded target SHALL give `invalid_configuration`, exit 1.
-Source configuration errors SHALL stop before service access. Omit secrets.
+Configuration errors SHALL stop before service access. Omit secrets.
+Nonempty `NOTICE_WAIVER_FILE` SHALL be invalid in Paperless mode.
 
 #### Scenario: Folder without Paperless
 - **WHEN** Run has valid `NOTICE_DIR` and no Paperless settings
@@ -104,8 +104,17 @@ DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation
 With ISIN, hold that security across notices; independent securities continue.
 In Paperless mode, `PAPERLESS_DONE_TAG` SHALL waive these codes for that document
 only; other rows remain eligible. The importer SHALL never apply that tag.
-Folder mode SHALL have no done tag, sidecar waiver or completed-file move.
-`PAPERLESS_DONE_TAG`, filenames and review `yes` SHALL NOT clear folder stops.
+In folder mode, optional `NOTICE_WAIVER_FILE` SHALL be an absolute read-only
+regular UTF-8 text file, at most 65,536 bytes. Each nonempty line SHALL contain
+`sha256:<64 lowercase hex digits>`, one ASCII space, and exactly one of the two
+stop codes. Duplicate pairs or other content SHALL be invalid. Blank lines are
+allowed. Its path SHALL be outside `NOTICE_DIR` and separate from the review path.
+Links, path overlaps and inode aliases SHALL be rejected. Missing, unreadable,
+oversized or malformed files SHALL give `invalid_configuration` before service access.
+Each entry SHALL waive only that document's matching stop code, like the done tag.
+Unknown digests SHALL be ignored and counted. Other stops and guards SHALL remain.
+Filenames, timestamps, directories and review `yes` SHALL NOT waive stops.
+The importer SHALL never write this file, move notices or create done markers.
 Existing historical cut-off rules SHALL remain applicable in both modes.
 
 #### Scenario: Division and coupon in one notice
@@ -116,9 +125,21 @@ Existing historical cut-off rules SHALL remain applicable in both modes.
 - **WHEN** Run reads a Paperless notice with the configured waiver tag
 - **THEN** its stop is waived and the coupon remains subject to all other checks.
 
-#### Scenario: Renamed folder stop
-- **WHEN** Run reads the same folder DIVISION under a done-like name with review `yes`
-- **THEN** the security stays held; no file is changed or moved.
+#### Scenario: Folder waiver clears stop
+- **WHEN** Run reads a DIVISION with its exact digest and `share_count_change` waiver
+- **THEN** that stop clears; other guards still apply to the security's coupon.
+
+#### Scenario: Renamed waived file
+- **WHEN** Run reads renamed bytes with the same waived digest
+- **THEN** the matching stop stays waived.
+
+#### Scenario: Changed bytes are not waived
+- **WHEN** Run reads changed PDF bytes with only the old digest waived
+- **THEN** the stop remains; the old digest is ignored and counted.
+
+#### Scenario: Malformed waiver file
+- **WHEN** Run has malformed waiver content
+- **THEN** `invalid_configuration`, no service access, exit 1.
 
 ## ADDED Requirements
 
