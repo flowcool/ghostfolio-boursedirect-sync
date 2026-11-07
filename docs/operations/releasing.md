@@ -31,8 +31,12 @@ bytes only after exact registry and signature checks.
 ## Publish on approval
 
 Prepare a GitHub draft release for the intended `vX.Y.Z`. Its tag must identify
-the exact qualified source commit. Attach `lab-qualification.json`. Write clear
-operator notes and use GitHub's generated changelog with `.github/release.yml`.
+the exact qualified source commit. Attach `lab-qualification.json`. Build the
+operator bundle with the qualified index, qualification record and final release
+notes. Attach the Compose archive, `IMAGE_DIGEST` and `SHA256SUMS` to the draft
+too. Download all four assets and
+verify their bytes before publication. Write clear operator notes and use
+GitHub's generated changelog with `.github/release.yml`.
 Existing `docs/releases/` notes remain historical source documents. The new
 bundle takes its release notes from the public GitHub release body.
 
@@ -49,9 +53,12 @@ both tags and requires the same exact index digest. It never rebuilds.
 
 ## Operator bundle
 
-The publication workflow retains the deterministic Compose archive,
-`IMAGE_DIGEST` and `SHA256SUMS`. The archive uses the exact qualified multiarch
-index. It contains public Compose/configuration examples and tracked docs.
+Before publication, attach the deterministic Compose archive,
+`IMAGE_DIGEST` and `SHA256SUMS` to the draft. The publication workflow regenerates
+them and checks that the published bytes match before it promotes the image.
+It never uploads assets after publication. The archive uses the exact qualified
+multiarch index. It contains public Compose/configuration examples and tracked
+docs.
 It excludes application source, build context and private files. Source Compose
 keeps its local build. Bundled Compose replaces that build with the version and
 digest-pinned image. The archive's release notes come from the public release.

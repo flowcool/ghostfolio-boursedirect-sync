@@ -44,17 +44,29 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Check exact tag, main ancestry and authenticated version absence
         run: python scripts/release_image.py --registry-login --registry
-      - name: Verify lab qualification, signature and source; promote exact bytes
-        run: python scripts/promote_release_image.py --publish
-      - name: Retain the digest-pinned operator bundle
+      - name: Verify the frozen digest-pinned operator bundle
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
+          python scripts/promote_release_image.py --plan
+          digest=$(python -c 'import json; print(json.load(open("release-qualification.json"))["digest"])')
+          docker buildx imagetools inspect --raw "ghcr.io/$GITHUB_REPOSITORY@$digest" > release-manifest.json
           python scripts/release_package.py --tag "$RELEASE_TAG" --output-dir dist \
-            --image-digest "$(cat release-manifest-digest.txt)" \
+            --image-digest "$digest" \
             --image-manifest release-manifest.json --qualification release-qualification.json \
             --release-notes release-notes.md
-          gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS dist/IMAGE_DIGEST
+          # Immutable releases already contain every asset from the draft.
+          # Compare deterministic bytes. Never replace or append published assets.
+          gh release download "$RELEASE_TAG" --dir published \
+            --pattern '*.tar.gz' --pattern SHA256SUMS --pattern IMAGE_DIGEST
+          cmp dist/SHA256SUMS published/SHA256SUMS
+          cmp dist/IMAGE_DIGEST published/IMAGE_DIGEST
+          for archive in dist/*.tar.gz; do
+            cmp "$archive" "published/$(basename "$archive")"
+          done
+          (cd published && sha256sum -c SHA256SUMS)
+      - name: Verify lab qualification, signature and source; promote exact bytes
+        run: python scripts/promote_release_image.py --publish
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
