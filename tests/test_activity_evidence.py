@@ -404,7 +404,7 @@ def test_activity_read_uses_exact_wire_numbers_and_one_full_request(monkeypatch)
 
 
 def test_invalid_source_stops_before_target_authentication(monkeypatch, caplog):
-    settings = Mock(dry_run=True, mapping_file="", bd_account_ref="TESTACCOUNT")
+    settings = Mock(dry_run=True, mapping_file="", bd_account_ref="TESTACCOUNT", import_create_from=None)
     monkeypatch.setattr(app.config, "load", lambda: settings)
     monkeypatch.setattr(paperless, "document_ids", lambda _: [1])
     monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
