@@ -128,9 +128,10 @@ A timeout can still deliver. The current run does not retry it.
 
 Required actions use a separate title from failures. Resolved groups use
 `user action resolved` and include each cleared reason with count zero.
-Unchanged reason/count groups stay silent until 168 hours after confirmed
-sending. Failed runs send one failure summary and do not advance the last
-successful grouped snapshot or certify resolution. Private per-event evidence
+With valid delivery state beside `ACTIVITY_REVIEW_FILE`, unchanged reason/count
+groups stay silent until 168 hours after confirmed sending. Without that state,
+each run can repeat them. Failed runs send one failure summary and do not advance
+the last successful grouped snapshot or certify resolution. Private per-event evidence
 and financial holds remain in force.
 
 ## Foreign shares bought in EUR
