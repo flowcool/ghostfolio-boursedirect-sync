@@ -1,0 +1,147 @@
+name: Prepare immutable release assets
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Existing draft release ID with lab-qualification.json attached
+        required: true
+        type: string
+      commit:
+        description: Exact qualified source commit
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-image
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DRAFT_RELEASE_ID: ${{ inputs.release_id }}
+      SOURCE_COMMIT: ${{ inputs.commit }}
+    steps:
+      - name: Validate exact inputs
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DRAFT_RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.2"
+      - run: pip install -r requirements.txt
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Read the draft and bind its qualified source and notes
+        id: draft
+        run: |
+          python - <<'PYTHON'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from promote_release_image import qualification, unique_object
+          from release_image import STABLE_TAG
+          repo = os.environ['GITHUB_REPOSITORY'].lower()
+          release = json.loads(subprocess.check_output([
+              'gh', 'api', f"repos/{repo}/releases/{os.environ['DRAFT_RELEASE_ID']}"]))
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          tag = release['tag_name']
+          if (release['draft'] is not True or release['prerelease'] is not False
+                  or release['published_at'] is not None or not STABLE_TAG.fullmatch(tag)
+                  or release['target_commitish'] != commit or commit != os.environ['SOURCE_COMMIT']):
+              raise SystemExit('Exact qualified source and unpublished stable draft required')
+          assets = release['assets']
+          if (len(assets) != 1 or assets[0]['name'] != 'lab-qualification.json'
+                  or assets[0]['state'] != 'uploaded' or not 0 < assets[0]['size'] <= 16384):
+              raise SystemExit('Draft must contain only the bounded qualification asset')
+          raw = subprocess.check_output(['gh', 'api', '-H', 'Accept: application/octet-stream',
+              f"repos/{repo}/releases/assets/{assets[0]['id']}"])
+          record = qualification(json.loads(raw, object_pairs_hook=unique_object), repo, tag, commit)
+          notes = release.get('body')
+          if not isinstance(notes, str) or not notes.strip() or len(notes.encode()) > 131072:
+              raise SystemExit('Bounded final release notes required')
+          if len(raw) > 16384:
+              raise SystemExit('Qualification asset exceeds its bound')
+          subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'origin/main'], check=True)
+          Path('qualification-asset.json').write_bytes(raw)
+          Path('release-notes.md').write_text(notes, encoding='utf-8')
+          Path('release-qualification.json').write_text(json.dumps(record, indent=2) + '\n')
+          Path('draft-before.json').write_text(json.dumps(release, sort_keys=True))
+          ref = subprocess.run(['git', 'show-ref', '--verify', '--quiet', f'refs/tags/{tag}'])
+          if ref.returncode == 1:
+              subprocess.run(['git', 'tag', tag, commit], check=True)
+          elif ref.returncode != 0:
+              raise SystemExit('Cannot verify the release tag')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as out:
+              out.write(f"tag={tag}\ndigest={record['digest']}\n")
+          PYTHON
+      - name: Build the deterministic draft bundle without rebuilding the image
+        env:
+          RELEASE_TAG: ${{ steps.draft.outputs.tag }}
+          IMAGE_DIGEST: ${{ steps.draft.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect --raw "ghcr.io/$GITHUB_REPOSITORY@$IMAGE_DIGEST" > release-manifest.json
+          python scripts/release_package.py --tag "$RELEASE_TAG" --output-dir dist \
+            --image-digest "$IMAGE_DIGEST" --image-manifest release-manifest.json \
+            --qualification release-qualification.json --release-notes release-notes.md
+      - name: Recheck the unchanged draft before attaching assets
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > draft-current.json
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+          before = json.loads(Path('draft-before.json').read_text())
+          after = json.loads(Path('draft-current.json').read_text())
+          for key in ('id', 'tag_name', 'target_commitish', 'body', 'draft', 'prerelease', 'published_at'):
+              if before[key] != after[key]:
+                  raise SystemExit('Draft changed; stop before attaching assets')
+          fields = ('id', 'name', 'size', 'state', 'digest')
+          if [{k: a.get(k) for k in fields} for a in before['assets']] != [{k: a.get(k) for k in fields} for a in after['assets']]:
+              raise SystemExit('Draft assets changed; stop before attaching assets')
+          PYTHON
+      - name: Attach assets once and verify downloaded bytes
+        env:
+          RELEASE_TAG: ${{ steps.draft.outputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS dist/IMAGE_DIGEST
+          gh release download "$RELEASE_TAG" --dir readback
+          cmp qualification-asset.json readback/lab-qualification.json
+          cmp dist/SHA256SUMS readback/SHA256SUMS
+          cmp dist/IMAGE_DIGEST readback/IMAGE_DIGEST
+          for archive in dist/*.tar.gz; do
+            cmp "$archive" "readback/$(basename "$archive")"
+          done
+          (cd readback && sha256sum -c SHA256SUMS)
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > draft-prepared.json
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+          before = json.loads(Path('draft-before.json').read_text())
+          after = json.loads(Path('draft-prepared.json').read_text())
+          expected = {'lab-qualification.json', 'SHA256SUMS', 'IMAGE_DIGEST',
+              f"ghostfolio-boursedirect-sync-{before['tag_name']}.tar.gz"}
+          if {a['name'] for a in after['assets']} != expected or len(after['assets']) != 4:
+              raise SystemExit('Draft assets differ from the complete expected set')
+          for key in ('id', 'tag_name', 'target_commitish', 'body', 'draft', 'prerelease', 'published_at'):
+              if before[key] != after[key]:
+                  raise SystemExit('Draft changed during preparation; do not publish')
+          PYTHON
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: prepared-release-assets
+          path: |
+            dist/
+            draft-prepared.json
+            release-manifest.json
+          if-no-files-found: warn

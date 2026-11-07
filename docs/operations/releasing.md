@@ -31,8 +31,32 @@ bytes only after exact registry and signature checks.
 ## Publish on approval
 
 Prepare a GitHub draft release for the intended `vX.Y.Z`. Its tag must identify
-the exact qualified source commit. Attach `lab-qualification.json`. Write clear
-operator notes and use GitHub's generated changelog with `.github/release.yml`.
+the exact qualified source commit. Attach only `lab-qualification.json` first.
+Write the final notes and use GitHub's generated changelog with
+`.github/release.yml`. The bundle takes its notes from the draft API body,
+including its exact line endings. Do not edit the draft during preparation.
+
+Run the versioned draft producer from `main`. Set the draft ID and the full
+qualified source commit:
+
+```sh
+gh workflow run prepare-release-assets.yml --ref main \
+  -f release_id=DRAFT_ID -f commit=QUALIFIED_40_HEX_COMMIT
+```
+
+Require that run to succeed before publication. It checks the qualification,
+source and draft identity. It uses the same Ubuntu 24.04 runner, Python 3.15.2
+and package script as publication. It reads the notes from the draft API,
+generates the three operator assets, attaches them once, downloads all four
+assets, compares every byte and verifies `SHA256SUMS`. It rechecks the draft
+identity and notes. It makes no registry write and builds no image.
+
+Keep the run URL and its `prepared-release-assets` artifact. Compare the draft
+ID, commit and body with its `draft-prepared.json` before publication. Keep all
+four assets attached. A failed upload or comparison stops publication; inspect
+its retained proof. Never rerun it blindly or replace an asset. Changing the
+notes requires fresh draft preparation before publication.
+
 Existing `docs/releases/` notes remain historical source documents. The new
 bundle takes its release notes from the public GitHub release body.
 
@@ -49,15 +73,19 @@ both tags and requires the same exact index digest. It never rebuilds.
 
 ## Operator bundle
 
-The publication workflow retains the deterministic Compose archive,
-`IMAGE_DIGEST` and `SHA256SUMS`. The archive uses the exact qualified multiarch
-index. It contains public Compose/configuration examples and tracked docs.
+Before publication, attach the deterministic Compose archive,
+`IMAGE_DIGEST` and `SHA256SUMS` to the draft. The publication workflow regenerates
+them and checks that the published bytes match before it promotes the image.
+It never uploads assets after publication. The archive uses the exact qualified
+multiarch index. It contains public Compose/configuration examples and tracked
+docs.
 It excludes application source, build context and private files. Source Compose
 keeps its local build. Bundled Compose replaces that build with the version and
 digest-pinned image. The archive's release notes come from the public release.
 
 Before packaging, require the raw index hash and both native manifest digests
-to match the qualification record already verified by promotion. The image tag
+to match the qualification record. The publication workflow verifies the signature
+and native image identities before it writes an image tag. The image tag
 is `X.Y.Z`; the GitHub release tag is `vX.Y.Z`. `SHA256SUMS` covers the archive
 and the separate `IMAGE_DIGEST`. Verify downloaded assets with
 `sha256sum -c SHA256SUMS`. Compare the bundled and separate image references.
