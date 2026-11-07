@@ -83,3 +83,20 @@ An old filename does not exempt it. Mapping cannot repair an unreadable PDF.
 `Notification result: timeout, delivery unconfirmed` means the notification can
 still arrive. Do not resend automatically. A notification failure does not
 change the financial result. Keep its logs with the run's exit status.
+
+## Restart loop or repeated failure notifications
+
+`Invalid CRON` followed by repeated startup banners means the scheduled service
+keeps restarting. `restart: unless-stopped` applies to every process exit.
+Each invalid-schedule run can send its own failure notification. Stop it first:
+
+```sh
+docker compose stop importer
+```
+
+Fix the five-field numeric `CRON` in `.env`. Validate the configuration without
+printing secrets, then recreate the service with `docker compose up -d importer`.
+Do not use `up` with empty `CRON`. It repeats the one-off run, even after exit 0.
+For one run, keep the scheduled service stopped and use
+`docker compose run --rm -T --no-deps -e DRY_RUN=1 -e CRON= importer`.
+The one-off `--rm` command does not use the service restart policy.

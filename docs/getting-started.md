@@ -150,7 +150,11 @@ switching sources retain `BD#v3` financial identities. Identical bytes share a
 replace destination duplicate checks or authorize another activity.
 
 Only then set `DRY_RUN=0`, an explicit `TZ` and `CRON` in `.env`, for example
-`CRON=0 6 * * *`. Start with `docker compose up -d`. Check private logs and the
+`CRON=0 6 * * *`. Use `docker compose up -d` only with a nonempty valid `CRON`.
+The `unless-stopped` policy repeats an empty-CRON run after it exits.
+An invalid CRON can repeat failure notifications. Stop the service immediately
+with `docker compose stop importer`, fix `.env`, then recreate it. Use
+`docker compose run --rm` for one-off work. Check private logs and the
 first scheduled result. Stop the scheduled service before a manual run. Do not
 run two writers against one review directory. Reverting an image does not undo
 accepted financial activities. Restore data only through your verified recovery

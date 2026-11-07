@@ -103,8 +103,17 @@ Then run the connector again. A missing or invalid file stops the run with
 
 ## Schedule
 
-Leave `CRON` empty to run once. Set `CRON='0 6 * * *'` to run daily at 06:00.
-Start the scheduled service with `docker compose up -d`.
+Leave `CRON` empty for a one-off `docker compose run --rm` command.
+Use `docker compose up -d` only with a nonempty valid `CRON`.
+Set `CRON='0 6 * * *'` to run daily at 06:00.
+
+The service uses `restart: unless-stopped`. Docker restarts it after every exit,
+including exit 0. With empty `CRON`, `up` repeatedly runs the one-off import.
+With invalid `CRON`, it repeatedly exits and can send a failure notification on
+each restart. If logs show `Invalid CRON`, run `docker compose stop importer`.
+Correct `.env`, validate it and recreate the service with
+`docker compose up -d importer`. Use the one-off command for manual work;
+`docker compose run --rm` does not apply the service restart policy.
 Use `TZ` to select the schedule timezone. Source activity dates stay at midnight UTC.
 The connector accepts five numeric fields with `*`, `/`, `,` and `-`.
 It rejects invalid schedules with `Invalid CRON` and exit code 1.
