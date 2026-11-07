@@ -2,11 +2,19 @@
 
 ## Pull request checks
 
-Every pull request runs the versioned offline Python suite, the
-documentation catalogue and local-link check, and a whitespace check. The
-container workflow builds, smoke-checks and scans the native connector image for
-AMD64 and ARM64 without publishing it. CodeQL analyzes Python, and Dependency Review blocks
-new moderate-or-higher dependency findings, including development dependencies.
+Every pull request checks documentation links and whitespace. Code changes also
+run the versioned offline Python suite. The container workflow builds,
+smoke-checks and scans the native AMD64 image without publishing it. Both native
+architectures are built and scanned during candidate preparation. This defers
+ARM64-specific failures, including the Supercronic checksum, to that gate.
+
+CodeQL and Dependency Review run on the final PR head when a draft becomes ready.
+CodeQL blocks errors and medium-or-higher security findings. Dependency Review
+blocks new moderate-or-higher findings, including development dependencies.
+Follow the [PR procedure](../CONTRIBUTING.md#pull-requests), also for bot PRs.
+A later push needs a new draft-to-ready transition. Missing results on that head
+block merge under the existing strict required checks. Documentation-only PRs
+keep their scope exemption. Their required scope results still need this event.
 All workflows use read-only repository access unless a specific job needs a
 narrower permission grant.
 
@@ -57,16 +65,18 @@ npx --yes --package renovate -- renovate-config-validator --strict
 
 ## Qualified release
 
-`Prepare release candidate image` runs manually on `main`. It uploads native
-AMD64 and ARM64 candidates by digest. It scans and smoke-checks those exact
+`Prepare release candidate image` runs manually on `main`. Both security
+workflows must pass on its exact source before preparation starts. It uploads
+native AMD64 and ARM64 candidates by digest. It scans and smoke-checks those exact
 images, then assembles and signs their index. Each native candidate builds once.
 No stable version or `latest` changes during preparation.
 
 After both Infra labs qualify that exact index and end stopped, attach the
 bounded `lab-qualification.json` to a prepared stable GitHub release. Require
 operator approval before publishing. A tag push alone does not publish.
-The release workflow verifies the signature, source, native identity and both
-lab receipts. It copies the exact index to `X.Y.Z` and reads back its digest.
+The release workflow runs both security workflows on the release source before
+promotion. It verifies the signature, source, native identity and both lab
+receipts. It copies the exact index to `X.Y.Z` and reads back its digest.
 It updates and verifies `latest` only for the current stable release.
 No RC channel or rebuild is required. A failed publication stops for inspection.
 

@@ -1,7 +1,10 @@
 name: Dependency Review
 
 on:
+  # Keep this required check absent until the final head is ready for review.
   pull_request:
+    types: [ready_for_review]
+  workflow_call:
 
 permissions:
   contents: read
@@ -28,8 +31,9 @@ jobs:
           import os
           import subprocess
           from pathlib import Path
+          base, head = os.environ['BASE'], os.environ['HEAD']
           code = True
-          if os.environ['BASE'] and os.environ['HEAD']:
+          if base and head:
               changed = subprocess.check_output([
                   'git', 'diff', '--name-only', '--no-renames', '-z',
                   os.environ['BASE'] + '...' + os.environ['HEAD'],
@@ -40,10 +44,16 @@ jobs:
                   for p in paths
               )
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
-              output.write(f"code={str(code).lower()}\n")
+              if not base or not head:
+                  # Release callers check the exact source against its first parent.
+                  base = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+                  head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              output.write(f"code={str(code).lower()}\nbase={base}\nhead={head}\n")
           PYTHON
       - if: ${{ !cancelled() && steps.scope.outputs.code != 'false' }}
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
+          base-ref: ${{ steps.scope.outputs.base }}
+          head-ref: ${{ steps.scope.outputs.head }}
           fail-on-severity: moderate
           fail-on-scopes: runtime, development, unknown

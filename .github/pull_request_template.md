@@ -27,6 +27,9 @@ Pullfrog is the only reviewer. Add the security note when `security-review`
 applies. Record the lab gate proof when AGENTS.md requires it.
 
 - [ ] Merge `main` into the branch before the first push.
+- [ ] Open as a draft. Mark ready after the final push to run the required CodeQL
+      and Dependency Review checks. After any later push, use `gh pr ready <n> --undo`
+      then `gh pr ready <n>` again. A new head cannot merge without these results.
 - [ ] Require a completed Pullfrog review of the final code head and green CI.
 - [ ] Read the general review and all threads. Address every remark, including
       cleanup, as required by AGENTS.md, and record the review link and

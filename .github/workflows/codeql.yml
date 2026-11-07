@@ -1,8 +1,10 @@
 name: CodeQL
 
 on:
-  # main is analyzed weekly; PRs are analyzed before merge (no re-run after merge).
+  # Required on the final PR head. A later push needs a new draft -> ready transition.
   pull_request:
+    types: [ready_for_review]
+  workflow_call:
   schedule:
     - cron: "41 4 * * 1"
 
