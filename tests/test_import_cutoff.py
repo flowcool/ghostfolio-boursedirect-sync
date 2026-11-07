@@ -168,7 +168,9 @@ def test_historical_unreadable_notice_remains_in_coverage(settings, monkeypatch,
         2: (FIXTURES / "pdf_cutoff_buys.txt").read_text()}, dry_run=False, notice_coverage=True)
     monkeypatch.setattr(requests, "get", lambda *a, **kw: Mock(status_code=200, json=lambda: {"id": 1, "created": "2026-08-06"}))
     with caplog.at_level(logging.INFO):
-        assert app.run_sync(set()) == 0
+        codes = set()
+        assert app.run_sync(codes) == 1
+    assert "notice_unreadable" in codes
     assert "'unreadable': 1" in caplog.text
     assert "incomplete=True" in caplog.text
     post.assert_not_called()

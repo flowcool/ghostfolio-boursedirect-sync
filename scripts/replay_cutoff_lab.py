@@ -33,6 +33,14 @@ def same_fields(actual, expected):
     return True
 
 
+def stored_rows(index):
+    # Reuse the shared lab checker's projection. Relations and converted
+    # valuations can change without an Order write; retain all stored fields.
+    derived = {"account", "assetProfile", "SymbolProfile", "feeInAssetProfileCurrency",
+               "feeInBaseCurrency", "unitPriceInAssetProfileCurrency", "value", "valueInBaseCurrency"}
+    return {row["id"]: {key: value for key, value in row.items() if key not in derived} for row in index.raw_rows}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--capture", type=Path, required=True)
@@ -57,6 +65,10 @@ def main():
     allowed = expected["preview"]
     if len(allowed) != 2 or len(paper["source_ids"]) != 75:
         raise RuntimeError("Use the reviewed two-BUY, 75-original proof")
+    selected_ids = expected["lab_source_ids"]
+    if (not selected_ids or len(selected_ids) != len(set(selected_ids))
+            or not set(selected_ids) <= set(paper["source_ids"])):
+        raise RuntimeError("Invalid reviewed lab source selection")
     writes = []
     native = requests.sessions.Session.request
 
@@ -71,7 +83,7 @@ def main():
                 params = kwargs.get("params", {})
                 if params.get("page") != 1 or "tags__id__all" in params:
                     raise RuntimeError("Unexpected source page or tag query")
-                data = {"count": 75, "next": None, "results": [{"id": i} for i in paper["source_ids"]]}
+                data = {"count": len(selected_ids), "next": None, "results": [{"id": i} for i in selected_ids]}
                 content = json.dumps(data).encode()
             elif len(parts) in (3, 4) and parts[:2] == ["api", "documents"]:
                 document = paper["documents"][parts[2]]
@@ -115,11 +127,17 @@ def main():
     token = ghostfolio.exchange_token(settings)
     account = ghostfolio.find_account(settings, token)
     before = ghostfolio.read_activities(settings, token)
+    def cash():
+        response = requests.get(settings.ghost_host + "/api/v1/account", headers={"Authorization": f"Bearer {token}"},
+                                timeout=(10, 120), allow_redirects=False)
+        response.raise_for_status()
+        return {row["id"]: (row["currency"], Decimal(str(row["balance"]))) for row in response.json()["accounts"]}
+    before_cash = cash()
     code = app.main()
     after = ghostfolio.read_activities(settings, token)
-    before_rows = {row["id"]: row for row in before.raw_rows}
-    after_rows = {row["id"]: row for row in after.raw_rows}
-    if code or any(after_rows.get(key) != row for key, row in before_rows.items()):
+    before_rows = stored_rows(before)
+    after_rows = stored_rows(after)
+    if code or cash() != before_cash or any(after_rows.get(key) != row for key, row in before_rows.items()):
         raise RuntimeError("Cycle failed or existing activities changed")
     additions = [row for key, row in after_rows.items() if key not in before_rows]
     if len(additions) != (2 if args.phase == "apply" else 0):
@@ -136,7 +154,7 @@ def main():
             if not same_fields(actual, item):
                 raise RuntimeError("Financial readback differs")
     result = {"status": "PASS", "phase": args.phase, "exit": code, "added": len(additions),
-              "import_posts": len(writes), "baseline_preserved": True,
+              "import_posts": len(writes), "baseline_preserved": True, "cash_preserved": True,
               "before_count": len(before_rows), "after_count": len(after_rows)}
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result))

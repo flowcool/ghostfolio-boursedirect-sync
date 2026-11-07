@@ -71,6 +71,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                     day = paperless.document_date(settings, document_id)
                     if day is not None and day < cutoff:
                         excluded_documents += 1
+                        if settings.notice_coverage:
+                            errors.add("notice_unreadable")
                         log.info("Historical unreadable notice: document=%s code=notice_unreadable date=%s; "
                                  "excluded from normal writes; coverage incomplete", document_id, day)
                         continue

@@ -49,7 +49,8 @@ SHALL be a `YYYY-MM-DD` calendar date. Missing, invalid or current date SHALL
 retain the block. Filename and ingestion date SHALL NOT exempt a notice.
 Acquisition or authorization failure SHALL remain a failure. Log the exempt
 document ID and unreadable finding. Full coverage SHALL still report it as
-unreadable and incomplete. Never infer its security or financial content.
+unreadable and incomplete, with `notice_unreadable` and exit 1. Never infer its
+security or financial content.
 
 #### Scenario: Unreadable document
 - **WHEN** PDF unreadable without an exempt document date
