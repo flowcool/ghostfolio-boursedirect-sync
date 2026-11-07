@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
@@ -32,7 +33,6 @@ log = logging.getLogger(__name__)
 
 def run_sync(errors: set[str], *, invalid_schedule: bool = False,
              actions: dict[str, set[str]] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     actions = {} if actions is None else actions
     document_id: DocumentReference | None = None
     created = 0
@@ -48,11 +48,11 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             raise RuntimeError("invalid_configuration CRON")
         settings = config.load()
         cutoff = settings.import_create_from
+        log.info("Activity comparison TZ=%s; must match the Ghostfolio server TZ",
+                 settings.timezone or "UTC")
         level = os.environ.get("LOG_LEVEL", "INFO")
         if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
             raise RuntimeError("invalid_configuration LOG_LEVEL")
-        # HTTP-library debug logs can include credentials. Keep their level fixed.
-        log.setLevel(level)
         if settings.dry_run:
             log.info("DRY RUN")
         mapping = sync.load_mapping(settings.mapping_file)
@@ -83,8 +83,9 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                         log.warning("Historical unreadable notice: document=%s code=notice_unreadable date=%s; "
                                  "excluded from normal writes; coverage incomplete", document_id, day)
                         continue
-                errors.add(str(exc).split()[0] if str(exc).split() else "unhandled_error")
-                log.error("%s document=%s", exc, document_id)
+                message = outcome.redacted_failure(exc)
+                errors.add(message.split()[0])
+                log.error("%s document=%s", message, document_id)
                 blocking_unreadable += 1
                 continue
             if notice.account_ref != settings.bd_account_ref:
@@ -228,7 +229,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 if corrected:
                     existing = ghostfolio.read_activities(settings, token)
             except (OSError, ValueError, RuntimeError) as exc:
-                code = str(exc).split()[0] if str(exc).split() else "review_unavailable"
+                code = outcome.redacted_failure(exc).split()[0]
                 if code not in ("import_unconfirmed", "activities_unavailable", "invalid_identity", "owned_activity_conflict",
                                 "notice_source_unavailable", "notice_unreadable"):
                     code = "review_unavailable"
@@ -300,8 +301,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     except Exception as exc:
         # Pinned IBKR app.main catches unforeseen failures. Keep confirmed counts
         # here and omit unexpected exception text, which can contain credentials.
-        message = str(exc) if isinstance(exc, RuntimeError) else "unhandled_error"
-        errors.add(message.split()[0] if message.split() else "unhandled_error")
+        message = outcome.redacted_failure(exc)
+        errors.add(message.split()[0])
         log.error("%s document=%s", message, document_id)
         if os.environ.get("NOTICE_COVERAGE") == "1" and message in ("notice_source_unavailable", "notice_unreadable"):
             log.error("Notice coverage: incomplete=True; source acquisition failed")
@@ -323,6 +324,13 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
 
 def main(*, invalid_schedule: bool = False) -> int:
     """Finalize once, including simulation (IBKR app.py:584)."""
+    # IBKR f9a2b11 app.py:962-969 and 798-808.
+    revision = os.environ.get("APP_REVISION", "")
+    commit = revision[:12] if re.fullmatch(r"[0-9a-f]{40}", revision) else "unknown"
+    log.info("ghostfolio-boursedirect-sync version %s — commit %s",
+             os.environ.get("APP_VERSION") or "dev", commit)
+    if not os.environ.get("DRY_RUN", "").strip():
+        log.warning("DRY_RUN not set: simulation, nothing written")
     errors: set[str] = set()
     actions: dict[str, set[str]] = {}
     code = run_sync(errors, invalid_schedule=invalid_schedule, actions=actions)

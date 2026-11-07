@@ -1,9 +1,13 @@
 # Documentation map
 
-Start with the current [installation guide](../README.md#install). v2 includes
+Start with the current [installation guide](getting-started.md). v2 includes
 operator review and coverage. v2.2.0 adds optional folder input and is unreleased.
 Paperless remains supported. v0.1.1 is a legacy preview only.
 
+- [Configuration](configuration.md): ENV, Paperless, mapping, timezone and logs.
+- [Troubleshooting](troubleshooting.md): log symptoms and recovery.
+- [Upgrading](upgrading.md): tags, backups and rollback.
+- [Maintenance](maintenance.md): review, coverage and operational checks.
 - [Contributing](../CONTRIBUTING.md): source setup and offline checks.
 - [Build guarantees](../.github/BUILD.md): package, image and security checks.
 - [Release process](operations/releasing.md): retained publication tooling.

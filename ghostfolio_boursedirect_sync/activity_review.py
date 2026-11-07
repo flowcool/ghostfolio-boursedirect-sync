@@ -1395,7 +1395,7 @@ def report_review_outcome(state: ReviewState, config: dict[str, Any], proposals:
         codes.add(code)
         log.warning("%s scope=%s reason=%s; held=1; inspect ACTIVITY_REVIEW_FILE; "
                     "resolve with unchanged eligible evidence and decision; independent imports continue",
-                    code, item["source event"], item["status"])
+                    code, item["source event"], code)
 
 
 def process_review(state: ReviewState, settings: Settings, token: str,

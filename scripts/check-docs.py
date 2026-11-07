@@ -12,7 +12,7 @@ ENTRY_DOCUMENTS = ["AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md", "CH
 def check_docs(root):
     errors = []
     documents = [root / name for name in ENTRY_DOCUMENTS if (root / name).exists()]
-    documents.extend(sorted((root / "docs/agents").glob("*.md")))
+    documents = sorted(set(documents) | set((root / "docs").rglob("*.md")))
     for document in documents:
         for target in re.findall(r"\[[^]]*\]\(([^)]+)\)", document.read_text()):
             link = urlsplit(target)

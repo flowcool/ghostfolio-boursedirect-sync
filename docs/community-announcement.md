@@ -12,7 +12,7 @@ and stops writes on unreadable evidence. It holds corporate actions. It does
 not support CTO, scanned PDFs, general currency conversion or complete fiscal
 history. It has no broker login.
 
-Start with the [installation guide](../README.md#install) and the
+Start with the [installation guide](getting-started.md) and the
 [release artifacts](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases).
 Use [GitHub Issues](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues)
 for questions. Keep private PDFs, credentials and financial logs out of reports.
