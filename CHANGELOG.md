@@ -4,6 +4,11 @@ Published changes and qualified artifacts live in
 [GitHub Releases](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases).
 Older implementation history remains in Git.
 
+## Unreleased
+
+- Raise the fixed correction delay to 150 seconds. Keep the 1.5 lab margin
+  with a maximum background completion chain of 100 seconds.
+
 ## v2.2.0
 
 - Add read-only PDF folder input with content identity, unchanged financial

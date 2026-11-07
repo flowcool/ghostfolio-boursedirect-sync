@@ -171,7 +171,7 @@ def test_profile_uncapped_budget_and_no_resend_after_restart(settings, tmp_path,
         result = review.process_review(state, configured, "token", events)
         assert result.corrected == 2
         assert sender.call_count == 2
-        assert sleeps == [120.0]
+        assert sleeps == [150.0]
         assert result.counts["automatic work deferred"] == 0
     finally:
         review.close_review(state)
@@ -296,7 +296,7 @@ def test_confirmed_previous_process_retains_delay_for_unsent_work(settings, tmp_
     rows.append({**deepcopy(row), "id": "second", "date": other.date, "comment": other.comment})
     sleeps = []
     monkeypatch.setattr(review.time, "sleep", sleeps.append)
-    monkeypatch.setattr(review, "QUALIFIED_EXECUTION", ("isolated-test-admission", 1, 120.0))
+    monkeypatch.setattr(review, "QUALIFIED_EXECUTION", ("isolated-test-admission", 1, 150.0))
     configured = replace(settings, dry_run=False, activity_reconciliation="conservative", timezone="Europe/Paris")
     path = tmp_path / "review.yaml"
     state = review.open_review(str(path), [])
@@ -308,7 +308,7 @@ def test_confirmed_previous_process_retains_delay_for_unsent_work(settings, tmp_
     state = review.open_review(str(path), [])
     try:
         assert review.process_review(state, configured, "token", events).corrected == 1
-        assert sleeps == [120.0]
+        assert sleeps == [150.0]
         assert sender.call_count == 2
     finally:
         review.close_review(state)
