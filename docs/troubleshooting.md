@@ -20,7 +20,8 @@ and record the file, reason and move in your private records. Preserve the origi
 This hides the notice from coverage. It does not prove complete history. The
 importer never moves it. Old filenames and mtimes cannot exempt unreadable folder
 files. Printed dates control `IMPORT_CREATE_FROM`, including the boundary day.
-Only Paperless has the narrow older-`created` unreadable exemption described below.
+Only Paperless has the narrow older-`created` unreadable exemption described in
+[coverage rules](maintenance.md#available-notice-coverage).
 
 An optional folder waiver file uses this exact UTF-8 format:
 
