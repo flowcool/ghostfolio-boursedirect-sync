@@ -12,7 +12,7 @@ import re
 import stat
 import tempfile
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -112,7 +112,7 @@ def safe_path(path: Path, inputs: Sequence[Path]) -> None:
                 or not info.st_mode & 0o400 or not info.st_mode & 0o200):
             raise RuntimeError("Review files require private readable writable regular files")
     for source in inputs:
-        if path.resolve() == source.resolve() or (
+        if (source.is_dir() and path.resolve().is_relative_to(source.resolve())) or path.resolve() == source.resolve() or (
                 path.exists() and source.exists() and os.path.samefile(path, source)):
             raise RuntimeError("Review output overlaps an input")
 
@@ -1299,6 +1299,9 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
         if existing is not None and existing["status"] != "confirmed":
             blocked.add(account)
             continue
+        source_check = config.get("_source_check")
+        if source_check is not None:
+            source_check()
         entry = {"review revision": current["review revision"], "proposal key": item["key"], "source event": item["source event"], "destination account": account,
                  "activity id": row["id"], "host": config["ghost_host"], "binding": current["binding"],
                  "before": values_of(row), "after": after, "request": plain(wire_values(payload)),
@@ -1397,14 +1400,15 @@ def report_review_outcome(state: ReviewState, config: dict[str, Any], proposals:
 
 def process_review(state: ReviewState, settings: Settings, token: str,
                    events: dict[str, dict[str, Any]], *, account_id: str | None = None,
-                   held_events: set[str] | None = None) -> ReviewResult:
+                   held_events: set[str] | None = None,
+                   source_check: Callable[[], None] | None = None) -> ReviewResult:
     """One journalled path for manual, profile, migration and TTF corrections."""
     account = account_id or next((event["destination account"] for event in events.values()), "")
     context: dict[str, Any] = {"_settings": settings, "_token": token,
         "ghost_host": settings.ghost_host, "dry_run": settings.dry_run,
         "activity_reconciliation": settings.activity_reconciliation,
         "timezone": settings.timezone, "_codes": set(), "_held_events": held_events or set(),
-        "_outcome": {}}
+        "_outcome": {}, "_source_check": source_check}
     blocked, held = _process_review(state, context, events, {settings.bd_account_ref: account})
     counts = context["_outcome"].get("reconciliation", {})
     return ReviewResult(held, blocked, counts.get("corrected targets", 0),

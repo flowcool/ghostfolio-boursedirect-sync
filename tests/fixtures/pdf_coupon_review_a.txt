@@ -1,0 +1,7 @@
+  COMPTE N°                      TEST ACCOUNTEUR PEA
+
+   16/10/2023           COUPONS                              FR0000000002 ANONYMIZED EQUITY                    2,04
+
+                        QUANTITE : -32
+                        PX UN.BRUT : +0,07469                BRUT : +2,40
+                        COMMISSION : +0,00

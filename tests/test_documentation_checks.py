@@ -33,14 +33,14 @@ def test_broken_link(tmp_path, name):
     assert docs.check_docs(tmp_path) == ["broken local link in " + name + ": missing.md"]
 
 
-@pytest.mark.parametrize("failed_stage", ["docs", "pytest", "git", "staged", ""])
+@pytest.mark.parametrize("failed_stage", ["docs", "privacy", "pytest", "git", "staged", ""])
 def test_verification_stops_at_failed_stage(tmp_path, failed_stage):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     shutil.copyfile(ROOT / "scripts/verify-local.sh", scripts / "verify-local.sh")
     python = tmp_path / ".venv/bin/python"
     python.parent.mkdir(parents=True)
-    python.write_text("#!/bin/bash\nif [[ $1 == scripts/check-docs.py ]]; then stage=docs; else stage=pytest; fi\nprintf '%s\\n' \"$stage\" >> \"$CHECK_LOG\"\nif [[ $stage == $FAILED_STAGE ]]; then exit 17; fi\n")
+    python.write_text("#!/bin/bash\nif [[ $1 == scripts/check-docs.py ]]; then stage=docs; elif [[ $1 == scripts/check_public_privacy.py ]]; then stage=privacy; else stage=pytest; fi\nprintf '%s\\n' \"$stage\" >> \"$CHECK_LOG\"\nif [[ $stage == $FAILED_STAGE ]]; then exit 17; fi\n")
     python.chmod(0o755)
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -53,6 +53,6 @@ def test_verification_stops_at_failed_stage(tmp_path, failed_stage):
                CHECK_LOG=str(log), FAILED_STAGE=failed_stage)
     result = subprocess.run(["/bin/bash", str(scripts / "verify-local.sh")], env=env, capture_output=True)
     assert result.returncode == (17 if failed_stage else 0)
-    stages = ["docs", "pytest", "git", "staged"]
+    stages = ["docs", "privacy", "pytest", "git", "staged"]
     expected = stages[:stages.index(failed_stage) + 1] if failed_stage else stages
     assert log.read_text().splitlines() == expected

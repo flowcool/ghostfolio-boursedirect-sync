@@ -1,6 +1,5 @@
 """One simulated notice run; pinned ibkr ghostfolio.py:459 supplies the log format."""
 
-import hashlib
 import json
 import logging
 import os
@@ -14,6 +13,7 @@ from ghostfolio_boursedirect_sync import (
     config,
     ghostfolio,
     notice_coverage,
+    notice_source,
     notices,
     notify,
     outcome,
@@ -33,7 +33,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
              actions: dict[str, set[str]] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     actions = {} if actions is None else actions
-    document_id: int | None = None
+    document_id: notice_source.DocumentReference | None = None
     created = 0
     held: set[str] = set()
     review_counts: dict[str, int] = {}
@@ -57,17 +57,24 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         mapping = sync.load_mapping(settings.mapping_file)
         other_accounts = 0
         unreadable = 0
-        matching: list[tuple[int, Notice]] = []
+        matching: list[tuple[notice_source.DocumentReference, Notice]] = []
         source: list[dict[str, int | str]] = []
-        for document_id in paperless.document_ids(settings):
-            pdf = paperless.original_pdf(settings, document_id)
-            source.append({"id": document_id, "sha256": hashlib.sha256(pdf).hexdigest()})
+        acquired = notice_source.acquire(settings)
+        if acquired.snapshot is not None:
+            log.info("Folder source: source_files=%s distinct_documents=%s ignored_entries=%s",
+                     acquired.snapshot.files, len(acquired.documents), acquired.snapshot.ignored)
+        for document in acquired.documents:
+            document_id = document.reference
+            source.append({"id": document_id, "sha256": document.digest})
             # IBKR app.py:564-573 isolates source failures; BD keeps readable previews.
             try:
-                notice = notices.parse_text(notices.extract_text(pdf))
+                if document.code or document.pdf is None:
+                    raise RuntimeError(document.code or "notice_unreadable")
+                notice = notices.parse_text(notices.extract_text(document.pdf),
+                                            require_printed_dates=bool(settings.notice_dir))
             except RuntimeError as exc:
                 unreadable += 1
-                if cutoff and str(exc) == "notice_unreadable":
+                if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":
                     day = paperless.document_date(settings, document_id)
                     if day is not None and day < cutoff:
                         excluded_documents += 1
@@ -84,10 +91,10 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 other_accounts += 1
                 continue
             if cutoff:
-                excluded_rows += sum(t.date < cutoff for t in notice.trades)
+                excluded_rows += document.copies * sum(t.date < cutoff for t in notice.trades)
                 if ((notice.trades or notice.stops) and all(t.date < cutoff for t in notice.trades)
                         and all(s.date is not None and s.date < cutoff for s in notice.stops)):
-                    excluded_documents += 1
+                    excluded_documents += document.copies
             original_ttf = notice.ttf_rows
             notice, failed_ttf = sync.attribute_ttf_rows(notice)
             if failed_ttf:
@@ -105,7 +112,12 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 matching.append((document_id, notice))
         # IBKR app.py:203-208 filters rejected securities before dispatch.
         # BD stops span all selected notices, regardless of their read order.
-        done = paperless.done_document_ids(settings) if any(n.stops for _, n in matching) else set()
+        done = paperless.done_document_ids(settings) if not settings.notice_dir and any(n.stops for _, n in matching) else set()
+        waivers = set(settings.notice_waivers)
+        if settings.notice_dir:
+            known = {d.reference for d in acquired.documents}
+            log.info("Folder waivers: unknown_waiver_digests=%s",
+                     len({digest for digest, _ in waivers} - known))
         blocked: set[str] = set()
         historical_blocked: set[str] = set()
         has_stops = False
@@ -113,6 +125,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             if document_id in done:
                 continue
             for stop in notice.stops:
+                if (str(document_id), stop.code) in waivers:
+                    continue
                 if cutoff and stop.date is not None and stop.date < cutoff and not settings.notice_coverage:
                     log.warning("Historical unsupported row: code=%s document=%s date=%s", stop.code, document_id, stop.date)
                     if stop.isin is not None:
@@ -154,8 +168,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             else:
                 mapping[isin] = symbol
         candidates: list[Activity] = []
-        documents: dict[str, int] = {}
-        source_documents: dict[str, set[int]] = {}
+        documents: dict[str, notice_source.DocumentReference] = {}
+        source_documents: dict[str, set[notice_source.DocumentReference]] = {}
         for document_id, notice in matching:
             namespace = sync.notice_namespace(notice)
             ranks: Counter[Trade] = Counter()
@@ -181,6 +195,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             unique[candidate.comment] = candidate
         source_duplicates = len(candidates) - len(unique)
         log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "source", "value": source}))
+        notice_source.verify(settings, acquired)
         if settings.notice_coverage:
             notice_coverage.report(matching, mapping, account_id, existing, errors, actions,
                                    settings.timezone or "UTC", incomplete=bool(unreadable or unresolved
@@ -189,11 +204,13 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         if settings.activity_review_file and not blocking_unreadable:
             try:
                 review_state = activity_review.open_review(
-                    settings.activity_review_file, [settings.mapping_file] if settings.mapping_file else [])
+                    settings.activity_review_file, [p for p in (settings.mapping_file, settings.notice_dir,
+                        settings.notice_waiver_file) if p])
                 evidence = {candidate.comment: [entry for entry in source
                             if entry["id"] in source_documents[candidate.comment]] for candidate in unique.values()}
                 events = activity_review.source_events(list(unique.values()), settings.bd_account_ref, evidence)
-                result = activity_review.process_review(review_state, settings, token, events, account_id=account_id)
+                result = activity_review.process_review(review_state, settings, token, events, account_id=account_id,
+                                                        source_check=lambda: notice_source.verify(settings, acquired))
                 errors.update(result.codes)
                 held = result.held
                 corrected = result.corrected
@@ -212,7 +229,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                     existing = ghostfolio.read_activities(settings, token)
             except (OSError, ValueError, RuntimeError) as exc:
                 code = str(exc).split()[0] if str(exc).split() else "review_unavailable"
-                if code not in ("import_unconfirmed", "activities_unavailable", "invalid_identity", "owned_activity_conflict"):
+                if code not in ("import_unconfirmed", "activities_unavailable", "invalid_identity", "owned_activity_conflict",
+                                "notice_source_unavailable", "notice_unreadable"):
                     code = "review_unavailable"
                 raise RuntimeError(code) from None
         elif not settings.activity_review_file:
@@ -273,6 +291,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             return 0
         # Corrections have exact readback before ordinary additive imports.
         for activity in selected.activities:
+            notice_source.verify(settings, acquired)
             ghostfolio.import_activities(settings, token, [activity])
             created += 1
         log.info("Summary: simulated=0 duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=%s",
@@ -284,6 +303,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         message = str(exc) if isinstance(exc, RuntimeError) else "unhandled_error"
         errors.add(message.split()[0] if message.split() else "unhandled_error")
         log.error("%s document=%s", message, document_id)
+        if os.environ.get("NOTICE_COVERAGE") == "1" and message in ("notice_source_unavailable", "notice_unreadable"):
+            log.error("Notice coverage: incomplete=True; source acquisition failed")
         log.info("Summary: simulated=0 duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=%s",
                  duplicates, corrected, other_accounts, unreadable, created)
         return 1
@@ -311,7 +332,8 @@ def main(*, invalid_schedule: bool = False) -> int:
         if reason not in actions:
             actions[reason] = {reason}
     protected = [Path(value) for value in (os.environ.get("MAPPING_FILE", ""),
-                 os.environ.get("ACTIVITY_REVIEW_FILE", "")) if value]
+                 os.environ.get("ACTIVITY_REVIEW_FILE", ""), os.environ.get("NOTICE_DIR", ""),
+                 os.environ.get("NOTICE_WAIVER_FILE", "")) if value]
     context = activity_review.fingerprint([os.environ.get(key, "") for key in
         ("GHOST_HOST", "GHOST_ACCOUNT_NAME", "BD_ACCOUNT_REF", "PAPERLESS_URL")])
     plan = action_notifications.plan_action_notification(actions,

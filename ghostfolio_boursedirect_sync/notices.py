@@ -163,7 +163,7 @@ def legacy_evidence(account: str, kind: str, day: str, isin: str, block: str,
     return LegacyNoticeEvidence(account, signature, occurrences[signature])
 
 
-def parse_text(text: str) -> Notice:
+def parse_text(text: str, *, require_printed_dates: bool = False) -> Notice:
     """Read the labelled identifier; EUR and account type are separate metadata."""
     # Observed pdftotext pages start with n/N. Remove only that page furniture,
     # before row blocks are formed; an unknown line inside a row still fails.
@@ -183,6 +183,13 @@ def parse_text(text: str) -> Notice:
                       if match[1].strip() == account_ref else "")
     legacy_occurrences: Counter[tuple[tuple[str, str], ...]] = Counter()
     lines = text.splitlines()
+    if require_printed_dates:
+        # Folder notices have no trusted metadata date. A partial historical
+        # row must not hide an undated row in the first-page furniture.
+        for line in lines:
+            if (re.search(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", line)
+                    and re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line) is None):
+                raise RuntimeError("notice_unreadable")
     starts = [index for index, line in enumerate(lines)
               if re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line)]
     if not starts:

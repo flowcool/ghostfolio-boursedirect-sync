@@ -1,7 +1,0 @@
-  COMPTE N°                      TEST ACCOUNTEUR PEA
-
-   22/05/2026           COUPONS                              FR0000000002 ANONYMIZED EQUITY                    6,18
-
-                        QUANTITE : -2
-                        PX UN.BRUT : +3,63957                BRUT : +7,28
-                        COMMISSION : +0,00

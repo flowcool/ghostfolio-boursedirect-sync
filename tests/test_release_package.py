@@ -36,6 +36,9 @@ def minimal_release_tree(root, tag):
         "compose.ghostfolio.yaml": "services: {}\n",
         ".github/BUILD.md": "# Build\n",
         "config/README.md": "# Config\n",
+        "config/mappings.example.yaml": "symbol_mapping: {}\n",
+        "compose.folder.yaml": "services: {}\n",
+        "compose.waivers.yaml": "services: {}\n",
         "docs/releases/" + tag + ".md": "# Release\n",
     }
     for name, content in files.items():
@@ -56,6 +59,9 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         "compose.ghostfolio.yaml": "services:\n  importer:\n    networks: [ghostfolio]\n",
         ".github/BUILD.md": "# Build\n",
         "config/README.md": "# Config\n",
+        "config/mappings.example.yaml": "symbol_mapping: {}\n",
+        "compose.folder.yaml": "services: {}\n",
+        "compose.waivers.yaml": "services: {}\n",
         "docs/README.md": "# Docs\n",
         "docs/assets/readme-banner.svg": "<svg/>\n",
         "docs/releases/v1.2.3.md": "# Release\n",
@@ -84,6 +90,9 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
     assert not any(name.startswith(prefix + "collector/") for name in members)
     assert prefix + "docs/assets/readme-banner.svg" in members
     assert prefix + "docs/releases/v1.2.3.md" in members
+    assert prefix + "config/mappings.example.yaml" in members
+    assert prefix + "compose.folder.yaml" in members
+    assert prefix + "compose.waivers.yaml" in members
     assert prefix + "config/mappings.yaml" not in members
     assert prefix + ".env" not in members
     assert prefix + "tmp/receipt.json" not in members

@@ -1,19 +1,22 @@
 services:
   importer:
-    build: .
+    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:2.1.0@sha256:2949c5773dab862590a3dabbaf2bb52495d759f37c615f9cfdb72b66bbcd6c76}
+    user: "10001:10001"
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m,mode=1777
     environment:
-      GHOST_HOST: ${GHOST_HOST:?Set the internal Ghostfolio service address}
+      GHOST_HOST: ${GHOST_HOST:?Set the final Ghostfolio URL}
       GHOST_ACCESS_TOKEN: ${GHOST_ACCESS_TOKEN:-}
       GHOST_TOKEN: ${GHOST_TOKEN:-}
       GHOST_ACCOUNT_NAME: ${GHOST_ACCOUNT_NAME:?Set the target account name}
       BD_ACCOUNT_REF: ${BD_ACCOUNT_REF:?Set the source account identifier}
-      PAPERLESS_URL: ${PAPERLESS_URL:?Set the Paperless URL}
-      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:?Set the read-only Paperless token}
+      PAPERLESS_URL: ${PAPERLESS_URL:-}
+      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:-}
+      NOTICE_DIR: ${NOTICE_DIR:-}
+      NOTICE_WAIVER_FILE: ${NOTICE_WAIVER_FILE:-}
       PAPERLESS_DONE_TAG: ${PAPERLESS_DONE_TAG:-ghostfolio-done}
       DRY_RUN: ${DRY_RUN-1}
       IMPORT_CREATE_FROM: ${IMPORT_CREATE_FROM-}
@@ -26,17 +29,15 @@ services:
       ACTIVITY_REVIEW_FILE: ${ACTIVITY_REVIEW_FILE:-}
       ACTIVITY_RECONCILIATION: ${ACTIVITY_RECONCILIATION:-off}
       MAPPING_FILE: ${MAPPING_FILE:-}
-    networks:
-      - ghostfolio
     volumes:
-      - ./config:/config:ro
+      - type: bind
+        source: ./config
+        target: /config
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${ACTIVITY_REVIEW_DIRECTORY:-./review}
         target: /review
         bind:
           create_host_path: false
-
-networks:
-  ghostfolio:
-    external: true
-    name: backend_ghost

@@ -1,22 +1,38 @@
 name: Bug report
-description: Report a connector failure with fixed error codes and non-sensitive metadata.
+description: Report a failure with fixed codes and sanitized metadata.
 title: "bug: "
 body:
   - type: markdown
     attributes:
       value: |
-        Docker log retention is disabled; the attached terminal still receives fixed result/error codes.
-        Share only fixed codes, exit status, release/image digest, architecture and Docker/Compose versions.
-        Do not retry a failed broker login to collect output or remove authentication journals.
-        Never post .env, resolved Compose configuration, container inspection output, account choices,
-        credentials, private URLs, portfolio details, raw HTML, snapshots, reports or acquisition receipts.
-        Use synthetic examples for financial behavior. Report security vulnerabilities privately:
-        https://github.com/flowcool/ghostfolio-boursedirect-sync/security/advisories/new
+        Keep original PDFs, review files, full financial logs, account IDs, private URLs and credentials private.
+        Never attach .env, resolved Compose output, container inspection, snapshots or acquisition receipts.
+        The importer has no broker login. Do not delete recovery journals or resend uncertain writes.
+        Report vulnerabilities through the security policy, not a public bug report:
+        https://github.com/flowcool/ghostfolio-boursedirect-sync/security/policy
   - type: input
     id: versions
     attributes:
       label: Versions
-      description: Connector release/image digest from Compose or IMAGE_DIGEST, CPU architecture (uname -m), Docker and Compose versions. For a source checkout, also give Python version.
+      description: Connector release/image digest, Ghostfolio, Docker and Compose versions. Add Paperless version only when used.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Notice source
+      options:
+        - Read-only PDF folder
+        - Paperless-ngx
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      options:
+        - linux/amd64
+        - linux/arm64
     validations:
       required: true
   - type: dropdown
@@ -24,29 +40,29 @@ body:
     attributes:
       label: Runtime
       options:
-        - Released AMD64 Docker Compose connector
-        - Local AMD64 source build
-        - Offline saved-input preview
+        - Released Docker Compose image
+        - Local source build
+        - Offline tests
     validations:
       required: true
   - type: textarea
     id: result
     attributes:
-      label: Fixed result code and exit status
-      description: Copy only the final JSON code field and exit status (0, 1 or 2), not the full terminal transcript. Examples include SOURCE_CONNECT_REFUSED, SOURCE_PROXY_UNAVAILABLE, GHOSTFOLIO_ACCESS_REFUSED, ACCOUNT_BINDING_CONFLICT or COMMUNITY_DRY_RUN_COMPLETED. If no code appeared, say so without retrying authentication.
+      label: Fixed error code, cycle result and exit status
+      description: Share only codes such as notice_unreadable, notice_source_unavailable, unresolved_security or import_unconfirmed, plus exit 0 or 1. Exit 0 can still require user action. Say when no code appeared.
     validations:
       required: true
   - type: textarea
     id: behavior
     attributes:
       label: Expected and actual behavior
-      description: Explain what is missing or incorrect without identifying your accounts or portfolio.
+      description: Explain the failure without identifying accounts or portfolio details.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: Minimal reproduction and sanitized evidence
-      description: Describe steps already taken and synthetic examples if needed. Share fixed error codes only; retain private receipts locally. Do not attempt another broker login solely to fill this form.
+      label: Minimal sanitized reproduction
+      description: Describe existing steps and independent synthetic examples. Keep private evidence locally. Do not resend a financial request to fill this form.
     validations:
       required: true

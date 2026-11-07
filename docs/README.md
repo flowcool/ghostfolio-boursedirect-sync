@@ -1,7 +1,8 @@
 # Documentation map
 
-The published v1 reads Bourse Direct PDF notices from Paperless. Start with the
-[top-level README](../README.md). The published v0.1.1 is a legacy preview only.
+Start with the current [installation guide](../README.md#install). v2 includes
+operator review and coverage. v2.2.0 adds optional folder input and is unreleased.
+Paperless remains supported. v0.1.1 is a legacy preview only.
 
 - [Contributing](../CONTRIBUTING.md): source setup and offline checks.
 - [Build guarantees](../.github/BUILD.md): package, image and security checks.

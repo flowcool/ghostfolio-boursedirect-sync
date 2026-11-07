@@ -160,17 +160,17 @@ def test_manual_fee_execution_chain_readback_pacing_and_restart(settings, tmp_pa
 
 
 @pytest.mark.parametrize("fixture,date,currency,quantity,price,net", [
-    ("saab_b", "2025-10-06T00:00:00+00:00", "SEK", "16", "1", "1.02"),
-    ("apam", "2025-11-17T00:00:00+00:00", "EUR", "18", "0.5", "7.65"),
-    ("rhm", "2026-05-12T22:00:00+00:00", "EUR", "2", "11.5", "16.93"),
-    ("db1", "2026-05-13T22:00:00+00:00", "EUR", "2", "4.2", "6.18"),
+    ("a", "2023-10-06T00:00:00+00:00", "SEK", "32", "1", "2.04"),
+    ("b", "2023-11-17T00:00:00+00:00", "EUR", "36", "0.5", "15.3"),
+    ("c", "2024-05-12T22:00:00+00:00", "EUR", "4", "11.5", "33.86"),
+    ("d", "2024-05-13T22:00:00+00:00", "EUR", "4", "4.2", "12.36"),
 ])
-def test_four_real_coupon_transcriptions_with_derived_manual_states(
+def test_four_anonymized_coupon_layouts_with_derived_manual_states(
         fixture, date, currency, quantity, price, net, settings, tmp_path, monkeypatch):
-    """Financial lines are transcribed unchanged; account/instrument fields are anonymous.
+    """Layouts derive from retained originals; dates and financial values are changed.
 
-    Destination states reproduce the observed representation with synthetic IDs,
-    ownership, profile identity and comments. They are not broker observations.
+    The derived examples preserve payment windows, net/gross differences and
+    foreign target currency. They are not real financial observations.
     """
     from pathlib import Path
 

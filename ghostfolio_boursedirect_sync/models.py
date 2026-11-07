@@ -23,6 +23,9 @@ class Settings:
     timezone: str = ""
     notice_coverage: bool = False
     import_create_from: date | None = None
+    notice_dir: str = ""
+    notice_waiver_file: str = ""
+    notice_waivers: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

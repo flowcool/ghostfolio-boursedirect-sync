@@ -1,0 +1,9 @@
+services:
+  importer:
+    volumes:
+      - type: bind
+        source: ${NOTICE_WAIVER_PATH:?Set the host waiver file}
+        target: /notice-waivers.txt
+        read_only: true
+        bind:
+          create_host_path: false

@@ -14,11 +14,12 @@ from ghostfolio_boursedirect_sync import activity_reconciliation as rules
 from ghostfolio_boursedirect_sync import activity_review as review
 from ghostfolio_boursedirect_sync import sync
 from ghostfolio_boursedirect_sync.models import Activity, ActivityIndex, Notice, Trade
+from ghostfolio_boursedirect_sync.notice_source import DocumentReference
 
 log = logging.getLogger(__name__)
 
 
-def report(matching: list[tuple[int, Notice]], mapping: dict[str, str], account: str,
+def report(matching: list[tuple[DocumentReference, Notice]], mapping: dict[str, str], account: str,
            existing: ActivityIndex, codes: set[str], actions: dict[str, set[str]],
            timezone: str, *, incomplete: bool = False, unreadable: int = 0) -> dict[str, int]:
     """Keep every supported logical row, including rows a sell guard would hold."""
@@ -27,7 +28,7 @@ def report(matching: list[tuple[int, Notice]], mapping: dict[str, str], account:
     if unreadable:
         counts["unreadable"] = unreadable
     unique: dict[str, Activity] = {}
-    documents: dict[str, int] = {}
+    documents: dict[str, DocumentReference] = {}
     unverified: set[str] = set()
     for document, notice in matching:
         for stop in notice.stops:

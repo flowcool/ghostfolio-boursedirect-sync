@@ -92,7 +92,7 @@ TTF proof SHALL retain the existing hold.
 
 #### Scenario: Twenty-four fee differences
 - **WHEN** Run reviews the retained pre-correction notice comparison
-- **THEN** it reports all 24 fee differences, subject to source holds; examples are RI BUY 2.67 to 2.66 EUR, LWLD BUY 14.80 to 2.90 EUR, and ELEC SELL 2.90 to 1.90 EUR. Approval changes only fee; repeat proposes no further fee correction.
+- **THEN** it reports all 24 fee differences from the private qualification record, subject to source holds. Approval changes only fee; repeat proposes no further fee correction.
 
 ### Requirement: Manual coupon net and date alignment
 
@@ -116,8 +116,8 @@ duplicate matching. A stored instant on the same local day SHALL stay unchanged 
 proposal. Correct notice-net coupons SHALL remain conforming.
 
 #### Scenario: Four probable payments
-- **WHEN** Run reviews the real SAAB 2025-10-16, APAM 2025-12-12, RHM 2026-05-19 and DB1 2026-05-22 payments
-- **THEN** it proposes net EUR 1.02, 7.65, 16.93 and 6.18 on those dates, each with quantity 1 and fee 0; SAAB shows old SEK explicitly. No correction or duplicate creation occurs before approval.
+- **WHEN** Run reviews the four retained payments in the private qualification record
+- **THEN** it proposes each exact net EUR credit on its printed date, with quantity 1 and fee 0; a foreign-currency target shows its old currency explicitly. No correction or duplicate creation occurs before approval.
 
 #### Scenario: Window and ambiguity
 - **WHEN** Run uses those coupons with explicitly derived target dates at 31 and 32 days or an extra competing dividend
@@ -148,10 +148,10 @@ SHALL NOT prove broker-history completeness; empty periods stay unknown.
 
 #### Scenario: Eleven absent rows and corrected history
 - **WHEN** Run compares the retained 86-notice pre-correction set, then the retained post-correction destination
-- **THEN** the first report distinguishes 11 absent supported rows from the 24 fee differences and 4 probable coupons. UCB BUY 2 and APAM SELL 18 are absent initially and conforming afterward. The ten restored rows leave only the unresolved EMEIS SELL 10 absent. No writes occur.
+- **THEN** the first report distinguishes 11 absent supported rows from the 24 fee differences and 4 probable coupons. The retained BUY and SELL examples are absent initially and conforming afterward. The ten restored rows leave only the unresolved SELL absent. No writes occur.
 
 #### Scenario: False creations and unreadable evidence
-- **WHEN** Run reads the real split-normalized LQQ rows, foreign-price rows, and the August coupon without an ISIN
+- **WHEN** Run reads the retained split-normalized rows, foreign-price rows, and the coupon without an ISIN
 - **THEN** uncertain representations are not absence; unsupported events and `notice_unreadable` stay visible. It never reports complete coverage or invents an ISIN.
 
 ### Requirement: Notice-backed position comparison and alerts
@@ -166,7 +166,7 @@ the affected comparison unverifiable. A done tag SHALL NOT prove the missing
 quantity transformation. Do not infer zero opening holdings.
 
 Account/position statements SHALL NOT be parsed in this increment. Absolute
-statement holdings, missing acquisition evidence for EMEIS/Millennium and
+statement holdings, missing acquisition evidence and
 periods outside available notices SHALL remain unverified. Never invent opening BUYs. Report this limitation with `coverage_unverifiable`.
 Absent supported rows SHALL give `coverage_gap`. These three codes SHALL use
 the existing action path: exit 0 unless a failure also occurs, one redacted
@@ -177,8 +177,8 @@ Alerts SHALL contain counts and next steps, without personal or financial
 details. Existing failure precedence, silent clean runs and delivery rules remain.
 
 #### Scenario: Position changes before and after backfill
-- **WHEN** Run compares the retained UCB and APAM intervals before and after their restored trades
-- **THEN** initial source-minus-destination differences are +2 UCB and -18 APAM; both become zero. LQQ split evidence stays unverifiable; no absolute Millennium or EMEIS acquisition is inferred.
+- **WHEN** Run compares the retained BUY and SELL intervals before and after their restored trades
+- **THEN** the exact initial source-minus-destination differences in the private qualification record become zero. Split evidence stays unverifiable; no absolute opening acquisition is inferred.
 
 #### Scenario: Repeated redacted alert
 - **WHEN** Run with `NOTICE_COVERAGE=1` finds a gap or unverifiable comparison twice

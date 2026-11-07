@@ -3,6 +3,33 @@
 User-visible changes are listed by release. Older statement-based CLI and lab
 history remains available in Git (tag `legacy-wip`).
 
+## v2.2.0 (unreleased)
+
+- Add read-only PDF folder input with content identity, unchanged financial
+  duplicate checks and digest-bound stop waivers. Keep Paperless optional.
+- Retain unreadable write blocks, printed-date cut-offs, review and coverage.
+- Use a portable released-image Compose path and optional source/network mounts.
+- Include the optional mapping example in the operator bundle.
+- Update installation, Paperless permissions, recovery, support and privacy guidance.
+- Prepare community announcement text as an unsent draft. No release or topic change.
+
+## v2.1.0
+
+Released manual reconciliation and available-notice coverage. See the
+[release record](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v2.1.0)
+for qualified artifacts and changes.
+
+## v2.0.0
+
+Released persistent operator review and reconciliation profiles. See the
+[release record](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v2.0.0).
+
+## v1.0.0
+
+Released the PDF-notice importer with read-only Paperless input, BUY/SELL/coupon
+imports, exact readback, charged TTF, duplicate guards and unattended scheduling.
+See the [release record](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v1.0.0).
+
 ## v0.1.1
 
 - Made the public quick start Docker-first with copyable Compose and environment
