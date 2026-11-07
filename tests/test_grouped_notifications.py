@@ -111,3 +111,70 @@ def test_alternating_modes_never_clear_unevaluated_actions(tmp_path, monkeypatch
     clock[0] += 1
     assert app.main() == 0 and len(messages) == 2
     assert all("Action cleared" not in message for message in messages)
+
+
+@pytest.mark.parametrize("status,expected", [
+    ("sent", "sent"), ("timeout", "timeout, delivery unconfirmed"),
+    ("invalid_destination", "invalid configuration"), ("failed", "failed"),
+    (RuntimeError("PRIVATE-DESTINATION"), "failed"),
+])
+def test_action_delivery_uses_action_label_and_keeps_pending_snapshot(tmp_path, monkeypatch, caplog,
+                                                                    status, expected):
+    import logging
+
+    from ghostfolio_boursedirect_sync import app, config, notify
+
+    monkeypatch.setenv("ACTIVITY_REVIEW_FILE", str(tmp_path / "review.yaml"))
+    monkeypatch.setattr(grouped.time, "time", lambda: 1000)
+
+    def run(errors, **kwargs):
+        errors.add("review_approval")
+        kwargs["actions"]["review_approval"] = {"PRIVATE-EVENT"}
+        return 0
+
+    messages = []
+
+    def send(settings, title, body):
+        messages.append(body)
+        if isinstance(status, Exception):
+            raise status
+        return status
+
+    monkeypatch.setattr(app, "run_sync", run)
+    monkeypatch.setattr(config, "load_notification_config", lambda: {"urls": ["json://notify.invalid"], "timeout": 1})
+    monkeypatch.setattr(notify, "send_notification", send)
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 0
+        assert app.main() == 0
+    assert len(messages) == (1 if status == "sent" else 2)
+    assert f"Notification result: {expected}" in caplog.text
+    assert "Failure notification" not in caplog.text
+    assert "Action notification" in caplog.text
+    assert all("PRIVATE-EVENT" not in body for body in messages)
+    assert "PRIVATE-DESTINATION" not in caplog.text
+
+
+def test_grouped_notification_titles_distinguish_required_and_resolved(tmp_path, monkeypatch):
+    from ghostfolio_boursedirect_sync import app, config, notify
+
+    monkeypatch.setenv("ACTIVITY_REVIEW_FILE", str(tmp_path / "review.yaml"))
+    current = {"review_approval": {"private-event"}}
+
+    def run(errors, **kwargs):
+        kwargs["actions"].update(current)
+        errors.update(current)
+        return 0
+
+    delivered = []
+    monkeypatch.setattr(app, "run_sync", run)
+    monkeypatch.setattr(config, "load_notification_config", lambda: {"urls": ["json://notify.invalid"], "timeout": 1})
+    monkeypatch.setattr(notify, "send_notification", lambda _, title, body: delivered.append((title, body)) or "sent")
+    assert app.main() == 0
+    current.clear()
+    assert app.main() == 0
+    assert app.main() == 0
+    assert [title for title, _ in delivered] == [
+        "ghostfolio-boursedirect-sync: user action required",
+        "ghostfolio-boursedirect-sync: user action resolved",
+    ]
+    assert "Action cleared: review_approval count=0." in delivered[1][1]

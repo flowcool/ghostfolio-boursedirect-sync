@@ -229,3 +229,35 @@ def test_blocked_review_logs_a_fixed_reason_without_private_exception_status(cap
     assert "SECRET-CANARY" not in caplog.text
     assert "TOKEN-CANARY" not in caplog.text
     assert proposal["status"].startswith("SECRET-CANARY")  # Retain private review evidence.
+
+
+@pytest.mark.parametrize("review", [False, True])
+def test_operational_evidence_keeps_infra_result_contract(monkeypatch, caplog, tmp_path, review):
+    failure_run(monkeypatch)
+    monkeypatch.setenv("DRY_RUN", "1")
+    monkeypatch.setattr(ghostfolio, "lookup_symbol", lambda *_: "EXAMPLE.PA")
+    if review:
+        monkeypatch.setenv("ACTIVITY_REVIEW_FILE", str(tmp_path / "review.yaml"))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 0
+    lines = [record.message for record in caplog.records]
+    assert "Cycle result: success" in lines
+    assert "Summary: simulated=1 duplicates=0 corrections=0 other_account_notices=0 unreadable_notices=0 created=0" in lines
+    deferred = "0" if review else "unavailable"
+    assert ("Account evidence: simulated proposals=1; duplicates=0; other held events=0; "
+            f"deferred automatic work={deferred}; cash=not managed") in lines
+    if review:
+        assert ("Reconciliation result: already consistent=0; automatically corrected=0; manually corrected=0; "
+                "automatic work deferred=0; manual review required=0; rejected association=0; blocked=0; "
+                "would correct=0; reference migrations=0; corrected targets=0; decision counts can overlap") in lines
+    else:
+        assert "Reconciliation result: unavailable" in lines
+    assert "Notification result: not required" in lines
+
+
+def test_failed_acquisition_has_no_invented_account_evidence(monkeypatch, caplog):
+    monkeypatch.setattr(config, "load", Mock(side_effect=RuntimeError("invalid_configuration")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 1
+    assert ("Account evidence: imports=unavailable; duplicates=unavailable; "
+            "other held events=unavailable; deferred automatic work=unavailable; cash=not managed") in caplog.text

@@ -36,6 +36,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     actions = {} if actions is None else actions
     document_id: DocumentReference | None = None
     created = 0
+    simulated: bool | None = None
+    proposals: int | None = None
     held: set[str] = set()
     review_counts: dict[str, int] = {}
     corrected = 0
@@ -47,6 +49,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         if invalid_schedule:
             raise RuntimeError("invalid_configuration CRON")
         settings = config.load()
+        simulated = settings.dry_run
         cutoff = settings.import_create_from
         log.info("Activity comparison TZ=%s; must match the Ghostfolio server TZ",
                  settings.timezone or "UTC")
@@ -258,6 +261,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         eligible = [candidate for candidate in unique.values() if candidate.comment not in held
                     and (not cutoff or activity_review.instant(candidate.date).date() >= cutoff)]
         selected = sync.select_account_activities(eligible, existing)
+        proposals = len(selected.activities)
         duplicates = selected.duplicates + source_duplicates
         # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
         # BD binds originals instead of a Flex window; decimal strings stay exact.
@@ -310,6 +314,10 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                  duplicates, corrected, other_accounts, unreadable, created)
         return 1
     finally:
+        outcome.log_account_evidence(
+            simulated=simulated, accepted=proposals if simulated else created if proposals is not None else None,
+            duplicates=duplicates if proposals is not None else None,
+            held=len(held) if proposals is not None else None, reconciliation=review_counts)
         log.info("Creation cut-off summary: excluded_rows=%s excluded_documents=%s",
                  excluded_rows, excluded_documents)
         log.info("Review summary: conforming=%s corrections=%s migrations=%s held=%s deferred=%s "
@@ -344,37 +352,57 @@ def main(*, invalid_schedule: bool = False) -> int:
                  os.environ.get("NOTICE_WAIVER_FILE", "")) if value]
     context = activity_review.fingerprint([os.environ.get(key, "") for key in
         ("GHOST_HOST", "GHOST_ACCOUNT_NAME", "BD_ACCOUNT_REF", "PAPERLESS_URL")])
-    plan = action_notifications.plan_action_notification(actions,
+    # IBKR v4.3.4 app.py:606-615: incomplete runs cannot certify resolution.
+    plan = None if code else action_notifications.plan_action_notification(actions,
         os.environ.get("ACTIVITY_REVIEW_FILE") or None, context, inputs=protected,
         mode="coverage" if os.environ.get("NOTICE_COVERAGE") == "1" else "normal")
-    if not code and not plan["due"]:
-        log.info("Notification result: not required")
+    if plan is not None and not plan["due"]:
+        report_notification_result("not required")
         return code
+    label = "Failure" if code else "Action"
     try:
         settings = config.load_notification_config()
+    except Exception:
+        log.warning("%s notification could not be sent", label)
+        report_notification_result("invalid configuration")
+        return code
+    try:
         if settings is None:
-            log.warning("Notification result: disabled; configure APPRISE_URLS")
+            report_notification_result("disabled")
             return code
         summary = outcome.notification_summary(errors)
         details = [f"Action required: {reason} count={count}. {outcome.ACTION_INSTRUCTIONS[reason]}"
-                   for reason, count in sorted(plan["document"]["groups"].items())]
-        if not code:
+                   for reason, count in action_notifications.action_groups(actions).items()]
+        if plan is not None:
             details.extend(f"Action cleared: {reason} count=0." for reason in plan["cleared"])
         if details:
             summary = "\n".join(([outcome.failure_summary(errors & outcome.FAILURE_CODES)] if code else []) + details)
-        status = notify.send_notification(settings, notify.NOTIFY_TITLE, summary)
+        # IBKR v4.3.4 app.py:647-650: action-only titles must not claim failure.
+        title = notify.NOTIFY_TITLE if code else (
+            "ghostfolio-boursedirect-sync: user action resolved"
+            if plan is not None and plan["cleared"] and not plan["document"]["groups"]
+            else "ghostfolio-boursedirect-sync: user action required")
+        status = notify.send_notification(settings, title, summary)
         if status == "sent":
-            log.info("Failure notification sent" if code else "Action notification sent")
-            if not code:
+            log.info("%s notification sent", label)
+            if plan is not None and (plan["document"]["groups"] or plan["cleared"]):
                 action_notifications.confirm_action_notification(plan)
-            log.info("Notification result: sent")
+            report_notification_result("sent")
         elif status == "timeout":
-            log.warning("Failure notification unconfirmed (timeout; not retried)")
-            log.warning("Notification result: timeout, delivery unconfirmed")
+            log.warning("%s notification unconfirmed (timeout; not retried)", label)
+            report_notification_result("timeout, delivery unconfirmed")
         else:
-            log.warning("Failure notification not delivered")
-            log.warning("Notification result: failed")
+            log.warning("%s notification not delivered", label)
+            report_notification_result("invalid configuration" if status == "invalid_destination" else "failed")
     except Exception:
-        log.warning("Failure notification could not be sent")
-        log.warning("Notification result: invalid configuration or failed")
+        log.warning("%s notification could not be sent", label)
+        report_notification_result("failed")
     return code
+
+
+# IBKR v4.3.4 app.py:583-588: delivery diagnostics do not affect financial status.
+def report_notification_result(status: str) -> None:
+    """Log one fixed transport result with a shared troubleshooting hint."""
+    warning = status not in ("sent", "not required")
+    log.log(logging.WARNING if warning else logging.INFO, "Notification result: %s%s", status,
+            "; inspect APPRISE_URLS/APPRISE_TIMEOUT and the local log" if warning else "")

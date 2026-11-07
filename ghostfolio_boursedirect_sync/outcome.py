@@ -79,3 +79,23 @@ def log_operational_result(codes: set[str], code: int) -> None:
 RECONCILIATION_COUNTS = ("already consistent", "automatically corrected", "manually corrected",
                          "automatic work deferred", "manual review required", "rejected association",
                          "blocked", "would correct", "reference migrations", "corrected targets")
+
+
+# IBKR v4.3.4 outcome.py:149-163. BD has one target and does not manage cash.
+def log_account_evidence(*, simulated: bool | None, accepted: int | None,
+                         duplicates: int | None, held: int | None,
+                         reconciliation: dict[str, int]) -> None:
+    """Report observed counts only; keep unavailable evidence distinct from zero."""
+    import logging
+
+    log = logging.getLogger(__name__)
+    log.info("Account evidence: %s=%s; duplicates=%s; other held events=%s; "
+             "deferred automatic work=%s; cash=not managed",
+             "imports" if accepted is None else "simulated proposals" if simulated else "accepted imports",
+             accepted if accepted is not None else "unavailable",
+             duplicates if duplicates is not None else "unavailable",
+             held if held is not None else "unavailable",
+             reconciliation.get("automatic work deferred", "unavailable"))
+    log.info("Reconciliation result: %s", "; ".join(
+        f"{name}={reconciliation.get(name, 0)}" for name in RECONCILIATION_COUNTS
+    ) + "; decision counts can overlap" if reconciliation else "unavailable")
