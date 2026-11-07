@@ -274,7 +274,8 @@ def main(*, invalid_schedule: bool = False) -> int:
     context = activity_review.fingerprint([os.environ.get(key, "") for key in
         ("GHOST_HOST", "GHOST_ACCOUNT_NAME", "BD_ACCOUNT_REF", "PAPERLESS_URL")])
     plan = action_notifications.plan_action_notification(actions,
-        os.environ.get("ACTIVITY_REVIEW_FILE") or None, context, inputs=protected)
+        os.environ.get("ACTIVITY_REVIEW_FILE") or None, context, inputs=protected,
+        mode="coverage" if os.environ.get("NOTICE_COVERAGE") == "1" else "normal")
     if not code and not plan["due"]:
         log.info("Notification result: not required")
         return code

@@ -337,7 +337,7 @@ The private `.required-actions.yaml` companion beside `ACTIVITY_REVIEW_FILE`
 stores delivery counts and time only. Retain this private mount for reminders.
 Without usable persistent state, actions remain eligible each run and a fixed
 warning explains the missing state. Failed or uncertain delivery does not advance
-its clock. Failed runs cannot certify cleared actions. Full findings stay in the
+its clock. Failed runs cannot certify cleared actions. Normal and coverage modes keep separate delivery state and reminder clocks. Full findings stay in the
 local log on every run. Notification delivery uses a separate process.
 The deadline covers process startup and delivery. On expiry, the process stops.
 A timed-out notification can still arrive. The connector does not retry it.

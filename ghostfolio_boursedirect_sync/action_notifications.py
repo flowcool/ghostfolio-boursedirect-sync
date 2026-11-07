@@ -6,7 +6,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 from ghostfolio_boursedirect_sync.activity_review import (
     atomic_yaml,
@@ -53,7 +53,8 @@ def delivery_document(data: bytes) -> dict[str, Any]:
 
 def plan_action_notification(actions: dict[str, set[str]], filename: str | None,
                              context: str, now: int | None = None, *,
-                             inputs: list[Path] | None = None) -> ActionNotificationPlan:
+                             inputs: list[Path] | None = None,
+                             mode: Literal["normal", "coverage"] = "normal") -> ActionNotificationPlan:
     """Compare reason/count groups, never event IDs or changing diagnostic text."""
     now = int(time.time()) if now is None else now
     groups = action_groups(actions)
@@ -66,7 +67,7 @@ def plan_action_notification(actions: dict[str, set[str]], filename: str | None,
         if groups:
             log.warning("Required-action delivery state unavailable; notices remain eligible")
         return plan
-    path = Path(filename + ".required-actions.yaml").absolute()
+    path = Path(filename + f".{mode}.required-actions.yaml").absolute()
     try:
         safe_path(path, protected)
         original = file_bytes(path)
