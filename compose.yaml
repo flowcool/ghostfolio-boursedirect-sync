@@ -16,6 +16,7 @@ services:
       PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:?Set the read-only Paperless token}
       PAPERLESS_DONE_TAG: ${PAPERLESS_DONE_TAG:-ghostfolio-done}
       DRY_RUN: ${DRY_RUN-1}
+      IMPORT_CREATE_FROM: ${IMPORT_CREATE_FROM-}
       NOTICE_COVERAGE: ${NOTICE_COVERAGE-0}
       TZ: ${TZ:-}
       CRON: ${CRON:-}

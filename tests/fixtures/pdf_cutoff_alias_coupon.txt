@@ -1,0 +1,42 @@
+  COMPTE N° TEST ACCOUNTEUR PEA
+       Date                                                            Désignation                                                              Débit (€)                               Crédit (€)
+
+
+
+   22/06/2026           COUPONS                               FR0000061459 ANONYMIZED SECURITY                                                                                               23,00
+
+                        QUANTITE : -10
+                        PX UN.BRUT : +2,30000                 BRUT : +23,00
+                        COMMISSION : +0,00                    CRED. IMPOT : +0,00
+
+   22/06/2026           COUPONS                               DE000A3E5E55 ANONYMIZED SECURITY                                                                                                     11,04
+
+                        QUANTITE : -150
+                        PX UN.BRUT : +0,08665                 BRUT : +13,00
+                        COMMISSION : +0,00
+
+   22/06/2026           ACHAT ETRANGER                        DE000A255F11 ANONYMIZED SECURITY                                                     491,39
+
+                        QUANTITE : +7
+                        COURS : +69,85                        BRUT : +488,95
+                        COURTAGE : +2,44                      TVA : +0,00
+
+                        Heure Execution: 11:18:03         Lieu: DEUTSCHER KASSENVEREIN GRUPPE DEUTSC
+
+
+
+   22/06/2026           ACHAT COMPTANT                        FR0010282822 ANONYMIZED SECURITY                                                           478,99
+
+                        QUANTITE : +4
+                        COURS : +119,5                        BRUT : +478,00
+                        COURTAGE : +0,99                      TVA : +0,00
+
+                        Heure Execution: 10:36:03          Lieu: BORSE BERLIN EQUIDUCT TRADING - BERL
+
+
+
+   22/06/2026           TAXE TRANSACT FINANCIERES             FR0010282822 ANONYMIZED SECURITY                                                                     1,91
+
+
+
+

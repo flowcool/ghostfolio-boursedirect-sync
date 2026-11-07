@@ -39,11 +39,14 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     review_counts: dict[str, int] = {}
     corrected = 0
     other_accounts = unreadable = duplicates = 0
+    excluded_rows = excluded_documents = 0
+    blocking_unreadable = 0
     review_state: activity_review.ReviewState | None = None
     try:
         if invalid_schedule:
             raise RuntimeError("invalid_configuration CRON")
         settings = config.load()
+        cutoff = settings.import_create_from
         level = os.environ.get("LOG_LEVEL", "INFO")
         if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
             raise RuntimeError("invalid_configuration LOG_LEVEL")
@@ -63,32 +66,56 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             try:
                 notice = notices.parse_text(notices.extract_text(pdf))
             except RuntimeError as exc:
+                unreadable += 1
+                if cutoff and str(exc) == "notice_unreadable":
+                    day = paperless.document_date(settings, document_id)
+                    if day is not None and day < cutoff:
+                        excluded_documents += 1
+                        log.info("Historical unreadable notice: document=%s code=notice_unreadable date=%s; "
+                                 "excluded from normal writes; coverage incomplete", document_id, day)
+                        continue
                 errors.add(str(exc).split()[0] if str(exc).split() else "unhandled_error")
                 log.error("%s document=%s", exc, document_id)
-                unreadable += 1
+                blocking_unreadable += 1
                 continue
             if notice.account_ref != settings.bd_account_ref:
                 other_accounts += 1
                 continue
+            if cutoff:
+                excluded_rows += sum(t.date < cutoff for t in notice.trades)
+                if ((notice.trades or notice.stops) and all(t.date < cutoff for t in notice.trades)
+                        and all(s.date is not None and s.date < cutoff for s in notice.stops)):
+                    excluded_documents += 1
+            original_ttf = notice.ttf_rows
             notice, failed_ttf = sync.attribute_ttf_rows(notice)
             if failed_ttf:
-                errors.add("ttf_attribution_failed")
-                log.error("ttf_attribution_failed document=%s", document_id)
+                if (cutoff and not settings.notice_coverage
+                        and all(t.date < cutoff for t in original_ttf if t.isin in failed_ttf)):
+                    log.info("Historical TTF attribution failed: document=%s; affected BUYs remain held", document_id)
+                else:
+                    errors.add("ttf_attribution_failed")
+                    log.error("ttf_attribution_failed document=%s", document_id)
             if notice.custody_fees:
                 log.warning("custody_fee_ignored document=%s rows=%s", document_id, notice.custody_fees)
             if notice.inferred_brokerages:
                 log.info("brokerage_zero_inferred document=%s rows=%s", document_id, notice.inferred_brokerages)
-            if notice.trades or notice.stops:
+            if notice.trades or notice.stops or settings.notice_coverage:
                 matching.append((document_id, notice))
         # IBKR app.py:203-208 filters rejected securities before dispatch.
         # BD stops span all selected notices, regardless of their read order.
         done = paperless.done_document_ids(settings) if any(n.stops for _, n in matching) else set()
         blocked: set[str] = set()
+        historical_blocked: set[str] = set()
         has_stops = False
         for document_id, notice in matching:
             if document_id in done:
                 continue
             for stop in notice.stops:
+                if cutoff and stop.date is not None and stop.date < cutoff and not settings.notice_coverage:
+                    log.info("Historical unsupported row: code=%s document=%s date=%s", stop.code, document_id, stop.date)
+                    if stop.isin is not None:
+                        historical_blocked.add(stop.isin)
+                    continue
                 log.error("%s document=%s", stop.code, document_id)
                 errors.add(stop.code)
                 has_stops = True
@@ -97,7 +124,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         if not any(t.isin not in blocked for _, n in matching for t in n.trades) and not settings.activity_review_file and not settings.notice_coverage:
             log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
                      "unreadable_notices=%s created=0", other_accounts, unreadable)
-            return int(unreadable > 0 or bool(errors))
+            return int(blocking_unreadable > 0 or bool(errors))
         # IBKR app.py:151 verifies the source before any target-account lookup.
         token = ghostfolio.exchange_token(settings)
         account_id = ghostfolio.find_account(settings, token)
@@ -105,16 +132,23 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         # IBKR sync.py:92 gives explicit mappings priority. The approved BD
         # adaptation replaces the broker-symbol fallback with an ISIN lookup.
         unresolved: set[str] = set()
-        for isin in sorted({trade.isin for _, notice in matching for trade in notice.trades}):
+        blocking_unresolved: set[str] = set()
+        current_isins = {t.isin for _, n in matching for t in n.trades if not cutoff or t.date >= cutoff}
+        needed_isins = {trade.isin for _, notice in matching for trade in notice.trades
+                        if not cutoff or trade.date >= cutoff or settings.activity_review_file or settings.notice_coverage}
+        for isin in sorted(needed_isins):
             if isin in mapping or (isin in blocked and not settings.notice_coverage):
                 continue
             symbol = ghostfolio.lookup_symbol(settings, token, isin)
             if symbol is None:
                 unresolved.add(isin)
-                errors.add("unresolved_security")
-                # Pinned IBKR app.py:580: one mapping hint per ISIN.
-                log.error("unresolved_security isin=%s symbol_mapping: '%s: <yahoo ticker>'",
-                          isin, isin)
+                if isin in current_isins or settings.notice_coverage:
+                    blocking_unresolved.add(isin)
+                    errors.add("unresolved_security")
+                    # Pinned IBKR app.py:580: one mapping hint per ISIN.
+                    log.error("unresolved_security isin=%s symbol_mapping: '%s: <yahoo ticker>'", isin, isin)
+                else:
+                    log.info("Historical unresolved security: isin=%s; no creation; inspect mapping for review", isin)
             else:
                 mapping[isin] = symbol
         candidates: list[Activity] = []
@@ -124,10 +158,12 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             namespace = sync.notice_namespace(notice)
             ranks: Counter[Trade] = Counter()
             for trade in notice.trades:
-                if trade.isin in unresolved or trade.isin in blocked:
-                    continue
                 rank = ranks[trade]
                 ranks[trade] += 1
+                if (trade.isin not in mapping or trade.isin in unresolved or trade.isin in blocked
+                        or (cutoff and trade.date < cutoff and trade.isin in historical_blocked)
+                        or (cutoff and trade.date < cutoff and not settings.activity_review_file)):
+                    continue
                 activity = sync.activity(trade, mapping, account_id, settings.bd_account_ref, namespace, rank)
                 candidates.append(activity)
                 documents.setdefault(activity.comment, document_id)
@@ -148,7 +184,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                                    settings.timezone or "UTC", incomplete=bool(unreadable or unresolved
                                    or "ttf_attribution_failed" in errors), unreadable=unreadable)
             return int(bool(errors & outcome.FAILURE_CODES))
-        if settings.activity_review_file and not unreadable:
+        if settings.activity_review_file and not blocking_unreadable:
             try:
                 review_state = activity_review.open_review(
                     settings.activity_review_file, [settings.mapping_file] if settings.mapping_file else [])
@@ -198,7 +234,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 errors.add("review_evidence")
                 actions.setdefault("review_evidence", set()).add(candidate.comment)
                 log.warning("review_evidence scope=%s; unverified symbol association; inspect mapping; no write", candidate.comment)
-        eligible = [candidate for candidate in unique.values() if candidate.comment not in held]
+        eligible = [candidate for candidate in unique.values() if candidate.comment not in held
+                    and (not cutoff or activity_review.instant(candidate.date).date() >= cutoff)]
         selected = sync.select_account_activities(eligible, existing)
         duplicates = selected.duplicates + source_duplicates
         # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
@@ -220,10 +257,10 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                     activity.quantity, activity.unit_price, activity.fee, activity.currency,
                     activity.account_id, activity.data_source, activity.comment,
             )
-        has_errors = bool(selected.errors or unreadable > 0 or unresolved or has_stops
+        has_errors = bool(selected.errors or blocking_unreadable > 0 or blocking_unresolved or has_stops
                           or "ttf_attribution_failed" in errors
                           or "owned_activity_conflict" in errors)
-        blocking = has_errors if settings.dry_run else (unreadable > 0 or (has_errors and not selected.activities))
+        blocking = has_errors if settings.dry_run else (blocking_unreadable > 0 or (has_errors and not selected.activities))
         if blocking:
             log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities) if settings.dry_run else 0, selected.duplicates, other_accounts, unreadable)
@@ -249,6 +286,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                  duplicates, corrected, other_accounts, unreadable, created)
         return 1
     finally:
+        log.info("Creation cut-off summary: excluded_rows=%s excluded_documents=%s",
+                 excluded_rows, excluded_documents)
         log.info("Review summary: conforming=%s corrections=%s migrations=%s held=%s deferred=%s "
                  "would_correct=%s counts_available=%s counts_can_overlap=yes",
                  review_counts.get("already consistent", 0), corrected,

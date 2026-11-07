@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from datetime import date
 from typing import TypedDict
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -43,6 +44,15 @@ def required(name: str) -> str:
 
 def load() -> Settings:
     """BD permits only the exact modes absent, 1 and 0."""
+    raw_cutoff = os.environ.get("IMPORT_CREATE_FROM", "")
+    cutoff = None
+    if raw_cutoff:
+        try:
+            if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", raw_cutoff) is None:
+                raise ValueError
+            cutoff = date.fromisoformat(raw_cutoff)
+        except ValueError:
+            raise RuntimeError("invalid_configuration IMPORT_CREATE_FROM") from None
     coverage = os.environ.get("NOTICE_COVERAGE", "0")
     if coverage not in ("0", "1"):
         raise RuntimeError("invalid_configuration NOTICE_COVERAGE")
@@ -91,6 +101,7 @@ def load() -> Settings:
         activity_reconciliation=profile,
         timezone=timezone,
         notice_coverage=coverage == "1",
+        import_create_from=cutoff,
     )
 
 

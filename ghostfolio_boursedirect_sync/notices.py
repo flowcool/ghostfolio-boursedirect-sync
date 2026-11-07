@@ -233,7 +233,7 @@ def parse_text(text: str) -> Notice:
                            {"QUANTITE", "SORTIE DE", "ENTREE DE", "COURS", "BRUT", "COURTAGE",
                             "TVA", "PX UN.BRUT", "COMMISSION", "CRED. IMPOT"})
             stops.append(NoticeStop("share_count_change" if division else "unknown_operation",
-                                    isin[0] if isin else None))
+                                    isin[0] if isin else None, day))
             continue
         kind: Literal["BUY", "SELL", "DIVIDEND"] = (
             "DIVIDEND" if header[2] == "COUPONS" else "BUY" if header[2].startswith("ACHAT") else "SELL"

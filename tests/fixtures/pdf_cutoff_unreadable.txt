@@ -1,0 +1,14 @@
+  COMPTE N° TEST ACCOUNTEUR PEA
+       Date                                                            Désignation                                                            Débit (€)                                Crédit (€)
+
+
+
+   06/08/2026           COUPONS                                                          ANONYMIZED RIGHTS                                                                                                    9,98
+
+                        QUANTITE : -29
+                        PX UN.BRUT : +0,40518                BRUT : +11,75
+                        COMMISSION : +0,00
+
+
+
+

@@ -4,6 +4,8 @@ Pagination reuses the configured URL. Response URLs never receive tokens.
 """
 
 import json
+import re
+from datetime import date
 
 import requests
 
@@ -110,3 +112,26 @@ def original_pdf(settings: Settings, document_id: int) -> bytes:
     if document_id <= 0:
         raise RuntimeError("paperless_unreachable")
     return get(settings, f"/api/documents/{document_id}/download/", {"original": "true"}).content
+
+
+def document_date(settings: Settings, document_id: int) -> date | None:
+    """Read Paperless's document date, never its ingestion date or filename.
+
+    Approved BD cut-off adaptation. Unusable dates cannot exempt an original.
+    Reuse the configured-origin GET and its authentication/transport failures.
+    """
+    if document_id <= 0:
+        raise RuntimeError("paperless_unreachable")
+    try:
+        body: object = get(settings, f"/api/documents/{document_id}/", {}).json()
+    except ValueError:
+        raise RuntimeError("paperless_unreachable") from None
+    if not isinstance(body, dict) or type(body.get("id")) is not int or body["id"] != document_id:
+        raise RuntimeError("paperless_unreachable")
+    value = body.get("created")
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
