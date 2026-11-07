@@ -28,5 +28,4 @@ takes priority over lookup. With `MAPPING_FILE` empty, the connector uses
 Ghostfolio lookup. It accepts exactly one EUR YAHOO result for each ISIN.
 An unresolved security is skipped and reported. Independent operations continue.
 
-The legacy mapping formats remain in Git history. They do not configure the
-v1 package. See the [README](../README.md) for current settings.
+The legacy mapping formats remain in Git history. They do not configure the current package. See the [README](../README.md) for current settings.

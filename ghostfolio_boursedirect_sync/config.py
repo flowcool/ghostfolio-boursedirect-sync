@@ -5,10 +5,12 @@ import logging
 import os
 import re
 from datetime import date
+from pathlib import Path
 from typing import TypedDict
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from ghostfolio_boursedirect_sync import folder
 from ghostfolio_boursedirect_sync.models import Settings
 
 
@@ -86,12 +88,23 @@ def load() -> Settings:
             ZoneInfo(timezone)
         except (ValueError, ZoneInfoNotFoundError):
             raise RuntimeError("invalid_configuration TZ") from None
+    notice_dir = os.environ.get("NOTICE_DIR", "")
+    waiver_file = os.environ.get("NOTICE_WAIVER_FILE", "")
+    if notice_dir:
+        if not Path(notice_dir).is_absolute() or any(os.environ.get(k) for k in ("PAPERLESS_URL", "PAPERLESS_TOKEN")):
+            raise RuntimeError("invalid_configuration NOTICE_DIR")
+        paperless_url = paperless_token = ""
+    else:
+        if waiver_file:
+            raise RuntimeError("invalid_configuration NOTICE_WAIVER_FILE")
+        paperless_url = validate_origin(required("PAPERLESS_URL"), "PAPERLESS_URL")
+        paperless_token = required("PAPERLESS_TOKEN")
     return Settings(
         ghost_host=validate_origin(required("GHOST_HOST"), "GHOST_HOST"),
         ghost_account_name=required("GHOST_ACCOUNT_NAME"),
         bd_account_ref=account,
-        paperless_url=validate_origin(required("PAPERLESS_URL"), "PAPERLESS_URL"),
-        paperless_token=required("PAPERLESS_TOKEN"),
+        paperless_url=paperless_url,
+        paperless_token=paperless_token,
         ghost_token=token,
         ghost_access_token=access,
         mapping_file=os.environ.get("MAPPING_FILE", ""),
@@ -102,6 +115,9 @@ def load() -> Settings:
         timezone=timezone,
         notice_coverage=coverage == "1",
         import_create_from=cutoff,
+        notice_dir=notice_dir,
+        notice_waiver_file=waiver_file,
+        notice_waivers=folder.load_waivers(waiver_file, notice_dir, review_file),
     )
 
 

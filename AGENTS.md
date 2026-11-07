@@ -45,7 +45,7 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
 
 | Beads `project` | Agent | Owns |
 | --- | --- | --- |
-| `infra` | Claude, `~/claude_project/infra` | Production deployment (Komodo, GitOps `flowcool/mylittlemess`), image and catalog pins, schedules, collector task configuration, hosts and NAS outside the labs, Paperless configuration and permissions, SOPS secrets, backup, monitoring. |
+| `infra` | Infra owner agent | Production deployment (Komodo, GitOps `flowcool/mylittlemess`), image and catalog pins, schedules, collector task configuration, hosts and NAS outside the labs, Paperless configuration and permissions, SOPS secrets, backup, monitoring. |
 | `BillCollector` | Codex | The engine only (`flowcool/BillCollector`): generic actions, scheduler, vault and TOTP, throttles, delivery, recipe schema, engine contract, upstream engine contributions. |
 | `billcollector-recipes` | Codex | Every provider recipe end to end (`flowcool/billcollector-recipes`): portal exploration, selectors, history window, qualification on the exact engine revision, catalog release, upstream recipe contributions. |
 | `ghostfolio-ibkr-sync`, `ghostfolio-degiro-sync`, `ghostfolio-boursedirect-sync` | Codex | Connector code, spec, lab tests, PRs and releases. The Ghostfolio financial operation, under Florent's GO. |
@@ -61,7 +61,7 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
   Paperless workflow or permission: `infra`. Importer behavior: the connector.
 - **Release boundary.** A development project stops at a qualified release: an
   immutable image digest or catalog tag, with its proof. Infra deploys it.
-- **Labs: free use on agentvm.** Create, configure, reset, restart, redeploy and
+- **Labs: free use on the configured lab host.** Create, configure, reset, restart, redeploy and
   scratch lab stacks under `stacks/a/` (Komodo server `a`). To add your own
   lab, open a `flowcool/mylittlemess` PR limited to `stacks/a/<lab>/` and its
   `komodo/sync.toml` entry; merge it on green CI. Separate authority remains for
@@ -145,7 +145,7 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
   boundaries and typed functions. Keep review, reconciliation, transport and
   orchestration in their own modules; do not compress them into one file.
 - Use the labs under the Project boundaries rules above. A dedicated BD test
-  container is allowed as an agentvm lab.
+  container is allowed as an isolated lab.
 - Build the candidate image once. Require empty and golden lab scenarios to
   pass on its digest. Publish that exact image without rebuilding. No mandatory
   RC channel. Reuse applicable IBKR checks. Publication and production writes
@@ -215,6 +215,6 @@ configuration and resets. Keep reservations, separate credentials, retained
 proof, stop on uncertainty without automatic resend, and final stop verification.
 Broker access, production, publication and removal of stack containers,
 volumes, recovery copies or proof retain separate authority. One-shot test
-containers are not proof: the agentvm daily `docker-oneshot-gc` removes them
+containers are not proof: the lab host daily `docker-oneshot-gc` removes them
 after 24 h and keeps the newest per name family (Florent 2026-11-06). This scope overrides generic write-approval rules
 for these two labs only.

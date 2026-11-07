@@ -1,7 +1,0 @@
-  COMPTE N°                      TEST ACCOUNTEUR PEA
-
-   12/12/2025           COUPONS                              FR0000000002 ANONYMIZED EQUITY                    7,65
-
-                        QUANTITE : -18
-                        PX UN.BRUT : +0,50000                BRUT : +9,00
-                        COMMISSION : +0,00

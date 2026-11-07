@@ -1,14 +1,19 @@
 # Security
 
-Report suspected credential leaks or security vulnerabilities privately using
-[GitHub private vulnerability reporting](https://github.com/flowcool/ghostfolio-boursedirect-sync/security/advisories/new).
+Report suspected credential leaks or security vulnerabilities privately. Use
+[GitHub private vulnerability reporting](https://github.com/flowcool/ghostfolio-boursedirect-sync/security/advisories/new)
+when the **Report a vulnerability** button is available. If it is unavailable,
+open a [contact request](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues/new)
+that says only "Private security contact requested". Include no vulnerability
+details or private evidence. Wait for a private route before sharing them.
 Do not include Bourse Direct credentials or one-time codes, Ghostfolio tokens,
 account identifiers, statements or contract notes in public issues or pull
 requests.
 
-Security fixes target the current `main` branch. Older revisions do not receive
+Security fixes target the current stable line through `main`; install the latest
+patched stable release when available. Older revisions do not receive
 separate backports. Dependency checks run on pull requests and weekly. This
-repository publishes an AMD64 connector image to GHCR and a checksummed operator
+repository publishes amd64 and arm64 connector images to GHCR and a checksummed operator
 archive through the [release workflow](workflows/release-image.yml). Images are
 scanned for fixable HIGH/CRITICAL vulnerabilities and smoke-checked offline before
 publication. See the [build guarantees](BUILD.md) and
@@ -30,5 +35,5 @@ and [Renovate vulnerability alerts](https://docs.renovatebot.com/configuration-o
 
 For non-security support, share only fixed terminal error codes, the connector
 version/image digest, architecture, and Docker/Compose versions. Follow the
-[safe reporting procedure](../README.md#troubleshooting); Docker log retention is
-disabled and private acquisition receipts must not be posted publicly.
+[safe reporting procedure](../README.md#troubleshooting); Docker retains logs according to your daemon configuration. Keep full financial
+logs, originals, review files and acquisition receipts private.

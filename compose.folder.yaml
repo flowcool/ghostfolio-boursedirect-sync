@@ -1,0 +1,9 @@
+services:
+  importer:
+    volumes:
+      - type: bind
+        source: ${NOTICE_DIRECTORY:?Set the host notice directory}
+        target: /notices
+        read_only: true
+        bind:
+          create_host_path: false

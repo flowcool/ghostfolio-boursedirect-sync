@@ -23,6 +23,9 @@ class Settings:
     timezone: str = ""
     notice_coverage: bool = False
     import_create_from: date | None = None
+    notice_dir: str = ""
+    notice_waiver_file: str = ""
+    notice_waivers: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -127,3 +130,30 @@ class ReviewResult:
     migrations: int
     codes: set[str]
     counts: dict[str, int]
+
+
+DocumentReference = int | str
+
+
+@dataclass(frozen=True)
+class SourceDocument:
+    reference: DocumentReference
+    pdf: bytes | None
+    digest: str
+    code: str = ""
+    copies: int = 1
+
+
+@dataclass(frozen=True)
+class FolderSnapshot:
+    documents: tuple[SourceDocument, ...]
+    files: int
+    ignored: int
+    evidence: tuple[tuple[str, tuple[int, ...], str], ...]
+    root: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class Source:
+    documents: tuple[SourceDocument, ...]
+    snapshot: FolderSnapshot | None = None

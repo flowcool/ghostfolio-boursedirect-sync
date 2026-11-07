@@ -1,4 +1,7 @@
-# Issue tracker: Beads
+# Maintainer issue tracker: Beads
+
+Public contributors use [GitHub Issues](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues).
+Private tracker access is not a contributor prerequisite.
 
 Issues and specs for this repository live in the shared Beads database. Scope every query and mutation to `project=ghostfolio-boursedirect-sync`.
 

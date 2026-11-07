@@ -185,3 +185,47 @@ def test_interrupted_run_does_not_notify(monkeypatch, interrupt):
     with pytest.raises(interrupt):
         app.main()
     sender.assert_not_called()
+
+
+@pytest.mark.parametrize("stage", ["configuration", "document", "review"])
+@pytest.mark.parametrize("message", [
+    "SECRET-CANARY https://user:CREDENTIAL-CANARY@example.invalid/?token=TOKEN-CANARY",
+    "notice_unreadable SECRET-CANARY",
+    "invalid_configuration SECRET-CANARY",
+])
+def test_runtime_exception_text_never_reaches_logs_or_notifications(monkeypatch, caplog, stage, message):
+    failure_run(monkeypatch)
+    monkeypatch.setenv("DRY_RUN", "0")
+    monkeypatch.setenv("APPRISE_URLS", '["json://notify.invalid/hook"]')
+    sender = Mock(return_value="sent")
+    monkeypatch.setattr(notify, "send_notification", sender)
+    if stage == "configuration":
+        monkeypatch.setattr(config, "load", Mock(side_effect=RuntimeError(message)))
+    elif stage == "document":
+        monkeypatch.setattr(notices, "extract_text", Mock(side_effect=RuntimeError(message)))
+    else:
+        monkeypatch.setenv("ACTIVITY_REVIEW_FILE", "/review/activities.yaml")
+        monkeypatch.setattr(ghostfolio, "lookup_symbol", lambda *_: "EXAMPLE.PA")
+        monkeypatch.setattr(app.activity_review, "open_review", Mock(side_effect=RuntimeError(message)))
+    with caplog.at_level(logging.DEBUG):
+        assert app.main() == 1
+    sender.assert_called_once()
+    evidence = caplog.text + sender.call_args.args[2]
+    for secret in ("SECRET-CANARY", "CREDENTIAL-CANARY", "TOKEN-CANARY", "example.invalid"):
+        assert secret not in evidence
+    assert "Run failed: " in sender.call_args.args[2]
+
+
+
+def test_blocked_review_logs_a_fixed_reason_without_private_exception_status(caplog):
+    proposal = {"source event": "derived-event", "actionable": False,
+                "status": "SECRET-CANARY https://user:TOKEN-CANARY@example.invalid"}
+    codes = set()
+    with caplog.at_level(logging.WARNING):
+        app.activity_review.report_review_outcome({}, {"_codes": codes},
+                                                 {"derived": proposal}, {"derived-event"}, set())
+    assert codes == {"review_evidence"}
+    assert "reason=review_evidence" in caplog.text
+    assert "SECRET-CANARY" not in caplog.text
+    assert "TOKEN-CANARY" not in caplog.text
+    assert proposal["status"].startswith("SECRET-CANARY")  # Retain private review evidence.

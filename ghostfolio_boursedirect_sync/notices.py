@@ -183,6 +183,14 @@ def parse_text(text: str) -> Notice:
                       if match[1].strip() == account_ref else "")
     legacy_occurrences: Counter[tuple[tuple[str, str], ...]] = Counter()
     lines = text.splitlines()
+    # An undated operation must not disappear in first-page furniture, regardless
+    # of source. Paperless metadata exemptions apply only after parsing fails.
+    for line in lines:
+        if ((re.search(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", line)
+                or re.search(r"\b(?:ACHAT (?:COMPTANT|ETRANGER)|VENTE (?:COMPTANT|ETRANGER)|COUPONS|"
+                             r"TAXE TRANSACT FINANCIERES|DROITS DE GARDE|DIVISION)\b", line))
+                and re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line) is None):
+            raise RuntimeError("notice_unreadable")
     starts = [index for index, line in enumerate(lines)
               if re.match(r"\s*\d{2}/\d{2}/\d{4}\s+", line)]
     if not starts:

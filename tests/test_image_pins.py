@@ -9,7 +9,7 @@ ROOT = Path(__file__).parents[1]
 IMAGE = "ghcr.io/flowcool/ghostfolio-boursedirect-sync"
 # The tag is optional so a bare reference (implicit tag) is caught and rejected.
 PIN = re.compile(re.escape(IMAGE) + r"(?![\w./-])(?::([^\s}`'\"]+))?")
-STABLE = re.compile(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)@sha256:[0-9a-f]{64}\Z")
+STABLE = re.compile(r"v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)@sha256:[0-9a-f]{64}\Z")
 
 
 def single_stable_pin(texts):

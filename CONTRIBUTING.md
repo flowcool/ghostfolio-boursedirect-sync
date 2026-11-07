@@ -1,22 +1,20 @@
 # Contributing
 
+Use [GitHub Issues](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues)
+for questions, bugs and feature ideas. Search existing issues first. You do not
+need access to a private tracker or infrastructure to contribute.
+
+Include connector version/image digest, source mode, amd64/arm64, Docker/Compose
+versions, Ghostfolio version and Paperless version only when used. Share the
+fixed error code, exit status and a minimal sanitized reproduction. Keep original
+PDFs, review files, full financial logs, tokens, account IDs and private URLs off
+GitHub. Use independent synthetic examples. Report vulnerabilities through the
+[private security process](.github/SECURITY.md).
+
 Read the [README](README.md), the current
-[behavior contract](openspec/specs/notice-import/spec.md) and the relevant
-approved OpenSpec change before changing behavior. A proposed change does not
-replace the released contract. The published v1 reads PDF notices from Paperless.
-
-## Ownership and work items
-
-This project owns connector code, specifications, lab qualification and releases.
-`billcollector-recipes` owns provider recipes. BillCollector owns the engine,
-broker login and vault. Infra owns deployment, production host/NAS files,
-Paperless configuration, schedules and monitoring. Route a cross-project need
-through one self-contained issue in the owning project before changing its state.
-
-After contract approval, use one parent item and one implementation item for the
-change. Keep the tasks in `tasks.md`; do not create one item per task. Operations
-and decisions keep separate items when required. Continue authorized work in the
-same session. Use one branch and one PR per deliverable in each repository.
+[behavior contract](openspec/specs/notice-import/spec.md) and the approved change
+before changing behavior. Keep one branch and one PR per deliverable.
+The current v2 importer has no broker login. v2.2 adds optional folder input.
 
 ## Development setup
 
@@ -79,3 +77,8 @@ merge. Reserve shared labs and stop them after use. Every release needs the same
 proof on its exact digest; reuse it when the digest is identical. See the [build guarantees](.github/BUILD.md) and the
 [retained release procedure](docs/operations/releasing.md). Stable publication
 and production writes require separate authorization.
+
+## License
+
+Contributions use the [MIT NON-AI License](LICENSE), including its additional
+restrictions. This is not the standard MIT license.

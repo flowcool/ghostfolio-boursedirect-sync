@@ -1,5 +1,7 @@
 """Fixed failure codes only; adapted from pinned IBKR outcome.py:49."""
 
+import re
+
 FAILURE_CODES = frozenset({
     "invalid_configuration", "invalid_mapping", "paperless_auth_failed",
     "paperless_unreachable", "source_field_missing", "notice_unreadable",
@@ -7,9 +9,34 @@ FAILURE_CODES = frozenset({
     "owned_activity_conflict", "possible_duplicate", "invalid_identity",
     "sell_exceeds_holding", "share_count_change", "unknown_operation",
     "future_activity", "import_unconfirmed", "ghostfolio_auth_failed",
-    "ttf_attribution_failed",
+    "ttf_attribution_failed", "notice_source_unavailable",
     "ghostfolio_unreachable", "unhandled_error", "review_unavailable",
 })
+
+
+# IBKR f9a2b11 notify.redacted_source_failure: diagnostic boundary.
+# BD deliberately permits only fixed code/field/HTTP classes, never free text.
+FAILURE_CONTEXT = frozenset({
+    "CRON", "LOG_LEVEL", "IMPORT_CREATE_FROM", "NOTICE_COVERAGE", "DRY_RUN",
+    "GHOST_TOKEN or GHOST_ACCESS_TOKEN", "Ghostfolio token", "BD_ACCOUNT_REF",
+    "PAPERLESS_DONE_TAG", "ACTIVITY_RECONCILIATION", "ACTIVITY_REVIEW_FILE", "TZ",
+    "NOTICE_DIR", "NOTICE_WAIVER_FILE", "PAPERLESS_URL", "PAPERLESS_TOKEN",
+    "GHOST_HOST", "GHOST_ACCOUNT_NAME", "APPRISE_URLS", "APPRISE_TIMEOUT",
+    "Ghostfolio authentication", "Ghostfolio accounts", "correction in simulation",
+})
+
+
+def redacted_failure(exc: Exception) -> str:
+    """Keep a fixed failure class and allowlisted context, without exception text."""
+    if not isinstance(exc, RuntimeError):
+        return "unhandled_error"
+    code, _, context = str(exc).partition(" ")
+    if code not in FAILURE_CODES:
+        return "unhandled_error"
+    if (code == "invalid_configuration" and context in FAILURE_CONTEXT
+            or re.fullmatch(r"HTTP [1-5][0-9]{2}", context)):
+        return f"{code} {context}"
+    return code
 
 
 def failure_summary(codes: set[str]) -> str:

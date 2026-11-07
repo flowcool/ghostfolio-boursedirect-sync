@@ -1,7 +1,19 @@
 #!/bin/bash
 set -e
 
-echo "ghostfolio-boursedirect-sync version ${APP_VERSION:-dev}"
+# Generated once with pyfiglet 1.0.4, font slant. No runtime renderer.
+cat <<'BANNER'
+    ____  ____     _______  ___   ________
+   / __ )/ __ \   / ___/\ \/ / | / / ____/
+  / __  / / / /   \__ \  \  /  |/ / /
+ / /_/ / /_/ /   ___/ /  / / /|  / /___
+/_____/_____/   /____/  /_/_/ |_/\____/
+              Bourse Direct -> Ghostfolio
+BANNER
+
+revision=${APP_REVISION:-unknown}
+if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then revision=unknown; fi
+printf 'ghostfolio-boursedirect-sync version %s — commit %s\n' "${APP_VERSION:-dev}" "${revision:0:12}"
 
 if [ -n "${CRON:-}" ]; then
     # Five numeric cron fields only; never interpolate an environment command.
@@ -25,7 +37,7 @@ if [ -n "${CRON:-}" ]; then
         exec python -m ghostfolio_boursedirect_sync --invalid-cron
     fi
     echo 'Running with validated cron schedule'
-    exec supercronic "$crontab_path"
+    exec supercronic -passthrough-logs -split-logs "$crontab_path"
 else
     echo "Running once (no CRON schedule set)"
     exec python -m ghostfolio_boursedirect_sync

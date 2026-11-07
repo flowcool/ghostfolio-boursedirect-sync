@@ -21,10 +21,13 @@ SAFE_ROOT_FILES = (
     "README.md",
     "compose.yaml",
     "compose.ghostfolio.yaml",
+    "compose.folder.yaml",
+    "compose.waivers.yaml",
 )
 SAFE_EXTRA_FILES = (
     ".github/BUILD.md",
     "config/README.md",
+    "config/mappings.example.yaml",
 )
 SAFE_DOC_SUFFIXES = {".md", ".json", ".svg", ".yaml", ".yml"}
 RELEASE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
@@ -59,7 +62,7 @@ def public_paths(root, tracked_paths):
             paths.append(path.as_posix())
     selected = sorted(set(paths))
     for name in selected:
-        if name.startswith((".env/", "config/mappings", "input/", "inputs/", "tmp/", "state/")):
+        if name != "config/mappings.example.yaml" and name.startswith((".env/", "config/mappings", "input/", "inputs/", "tmp/", "state/")):
             raise ValueError("private path rejected from release bundle: " + name)
         path = root / name
         if not path.is_file() or path.is_symlink():

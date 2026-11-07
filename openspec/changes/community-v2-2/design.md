@@ -77,3 +77,24 @@ Keep Paperless ENV valid. Add folder mode without historical conversion.
 Validate the published-image route after implementation. Qualify one digest in
 both labs. Roll back to the prior image and ENV; retain journals and accepted
 activities. Image rollback cannot undo financial writes.
+
+## Approved IBKR runtime and documentation alignment
+
+Use IBKR `f9a2b113539674296667e45dd28fddaff1ecb1c5` as read-only evidence.
+`entrypoint.sh:4–6,32` supplies revision validation and scheduler flags.
+`ghostfolio_ibkr_sync/__main__.py:11–26` supplies logging and the urllib3 cap.
+`app.py:962–969,798–808` supplies per-run identity, simulation and timezone logs.
+`notify.py:redacted_source_failure` supplies the diagnostic boundary. BD uses
+fixed allowlisted codes and context, never arbitrary exception text.
+The approved `feat/retro-startup-banner:entrypoint.sh:4–16` pattern supplies
+static art. Generate `BD SYNC` once with pyfiglet 1.0.4 slant. Keep five art
+lines, an ASCII subtitle and no runtime renderer. Identity retains its approved
+em dash; the art and subtitle stay ASCII.
+IBKR `compose.yaml:3–6,14` supplies restart policy and timezone defaults.
+Its README tag policy and `docs/` split supply the public documentation pattern.
+Keep BD's digest-pinned operator bundle and unreleased v2.2 installation route.
+
+Acceptance uses the entrypoint process boundary, CLI log streams, app failure
+finalization and ENV/Compose key parity. No financial rule changes or lab writes
+belong to this alignment. The existing lab owner retains qualification.
+Rollback reverts these additive commits and retains all source and lab evidence.

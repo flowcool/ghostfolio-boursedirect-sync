@@ -15,6 +15,7 @@ from unittest.mock import Mock
 
 import pytest
 import requests
+from test_pdf_buy import settings as settings
 
 from ghostfolio_boursedirect_sync import app, ghostfolio, notices, paperless, sync
 
@@ -403,8 +404,7 @@ def test_activity_read_uses_exact_wire_numbers_and_one_full_request(monkeypatch)
     assert "params" not in get.call_args.kwargs
 
 
-def test_invalid_source_stops_before_target_authentication(monkeypatch, caplog):
-    settings = Mock(dry_run=True, mapping_file="", bd_account_ref="TESTACCOUNT", import_create_from=None)
+def test_invalid_source_stops_before_target_authentication(settings, monkeypatch, caplog):
     monkeypatch.setattr(app.config, "load", lambda: settings)
     monkeypatch.setattr(paperless, "document_ids", lambda _: [1])
     monkeypatch.setattr(paperless, "original_pdf", lambda *_: b"original")
