@@ -10,7 +10,7 @@ from pathlib import Path
 
 MAX_TEXT_BYTES = 1024 * 1024
 RULES = {
-    "private_workspace": re.compile(r"/home/[^/\s]+/(?:claude_project|\.claude|\.codex)|~/claude_project/"),
+    "private_workspace": re.compile(r"/home/[^/\s]+/(?:claude_project|\.claude|\.codex)|[~][/]claude_project[/]"),
     "private_tracker": re.compile(r"\binfra-[a-z0-9]+(?:\.[0-9]+)*\b"),
     "holder_field": re.compile(r"^\s*(?:titulaire|nom du titulaire|adresse du titulaire)\s*:\s*\S", re.I | re.M),
     "credential_signature": re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
