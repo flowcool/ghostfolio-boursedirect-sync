@@ -106,7 +106,7 @@ The one-off `--rm` command does not use the service restart policy.
 Use the same filter for Bourse Direct and IBKR logs:
 
 ```sh
-docker compose logs --no-log-prefix importer | grep -E 'Cycle result:|Account evidence|Reconciliation result:|Notification result:'
+docker compose logs --no-log-prefix | grep -E 'Cycle result:|Account evidence|Reconciliation result:|Notification result:'
 ```
 
 `Cycle result` gives the financial processing result. `Account evidence` reports
