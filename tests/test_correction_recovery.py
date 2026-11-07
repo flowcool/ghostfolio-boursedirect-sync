@@ -156,7 +156,9 @@ def test_manual_yes_without_timezone_survives_restart_and_preserves_tags(setting
 
 
 @pytest.mark.parametrize("profile", ["conservative", "balanced", "permissive"])
-def test_profile_one_update_budget_and_deferred_choice_survive_restart(settings, tmp_path, monkeypatch, profile):
+def test_profile_uncapped_budget_and_no_resend_after_restart(settings, tmp_path, monkeypatch, profile):
+    sleeps = []
+    monkeypatch.setattr(review.time, "sleep", sleeps.append)
     row, event, events = sample()
     other = replace(event, date="2025-02-04T00:00:00+00:00", comment=event.comment[:-1] + "a")
     events.update(review.source_events([other], "TESTACCOUNT", {other.comment: [{"sha256": "b" * 64}]}))
@@ -167,15 +169,16 @@ def test_profile_one_update_budget_and_deferred_choice_survive_restart(settings,
     state = review.open_review(str(path), [])
     try:
         result = review.process_review(state, configured, "token", events)
-        assert result.corrected == 1
-        assert sender.call_count == 1
-        assert result.counts["automatic work deferred"] == 1
+        assert result.corrected == 2
+        assert sender.call_count == 2
+        assert sleeps == [120.0]
+        assert result.counts["automatic work deferred"] == 0
     finally:
         review.close_review(state)
     state = review.open_review(str(path), [])
     try:
         repeated = review.process_review(state, configured, "token", events)
-        assert repeated.corrected == 1
+        assert repeated.corrected == 0
         assert sender.call_count == 2
         assert {Decimal(str(row["fee"])) for row in rows} == {Decimal(1)}
         clean = review.process_review(state, configured, "token", events)
@@ -282,3 +285,30 @@ def test_journal_publication_crash_recovers_only_exact_generation(tmp_path, monk
         assert "pending journal sha256" not in recovered["evidence"]
     finally:
         review.close_review(recovered)
+
+
+def test_confirmed_previous_process_retains_delay_for_unsent_work(settings, tmp_path, monkeypatch):
+    """Derived two-operation chain; each process is limited only by test admission."""
+    row, event, events = sample()
+    other = replace(event, date="2025-02-04T00:00:00+00:00", comment=event.comment[:-1] + "a")
+    events.update(review.source_events([other], "TESTACCOUNT", {other.comment: [{"sha256": "b" * 64}]}))
+    rows, sender = transport(monkeypatch, row)
+    rows.append({**deepcopy(row), "id": "second", "date": other.date, "comment": other.comment})
+    sleeps = []
+    monkeypatch.setattr(review.time, "sleep", sleeps.append)
+    monkeypatch.setattr(review, "QUALIFIED_EXECUTION", ("isolated-test-admission", 1, 120.0))
+    configured = replace(settings, dry_run=False, activity_reconciliation="conservative", timezone="Europe/Paris")
+    path = tmp_path / "review.yaml"
+    state = review.open_review(str(path), [])
+    try:
+        assert review.process_review(state, configured, "token", events).corrected == 1
+        assert sleeps == []
+    finally:
+        review.close_review(state)
+    state = review.open_review(str(path), [])
+    try:
+        assert review.process_review(state, configured, "token", events).corrected == 1
+        assert sleeps == [120.0]
+        assert sender.call_count == 2
+    finally:
+        review.close_review(state)

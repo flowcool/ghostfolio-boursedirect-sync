@@ -2,8 +2,7 @@
 
 ## Purpose
 
-Read Bourse Direct PDF notices from Paperless into one Ghostfolio account.
-Add BUY, SELL and DIVIDEND activities. One container serves one account.
+Import Paperless Bourse Direct PDF BUY/SELL/DIVIDEND notices. One container serves one Ghostfolio account.
 
 "Run" means `docker compose run --rm -T <service>; echo "exit=$?"`.
 Notices have Paperless `Source = Bourse Direct`, with/without `PAPERLESS_DONE_TAG`.
@@ -232,7 +231,7 @@ Valid `CRON` SHALL schedule imports; absence runs once; invalid values exit 1.
 
 ### Requirement: Source-proven correction fields
 
-Pair validated event/activity within the same active account/type/YAHOO security/EUR. ISIN conflicts/competing candidates SHALL block pairs; exact references win. Fees/order/aggregates never prove identity. Change only proved date/price/fee/reference; preserve ID/owner/account/security/type/currency/tags/notes and BUY/SELL quantity. DIVIDEND SHALL retain validated net, quantity 1. Report quantity differences/groups; never merge/split/delete. Legacy migration SHALL require reproducible event/account proof; otherwise `review_evidence`. Migrate comments alone; assess financial corrections later.
+Pair validated events/activities in the same active account/type/YAHOO security/EUR. ISIN conflicts/competing candidates SHALL block; exact references win. Fees/order/aggregates never prove identity. Replace only proved date/price/fee/reference. Preserve ID/owner/account/security/type/currency/tags/notes and BUY/SELL quantity. DIVIDEND SHALL retain validated net and quantity 1. Report quantity/group differences; never merge/split/delete. Legacy migration SHALL require reproducible event/account proof; otherwise `review_evidence`. Migrate comments separately from financial corrections.
 
 #### Scenario: Separate migration
 - **WHEN** finds proved legacy ownership plus a fee discrepancy
@@ -256,11 +255,11 @@ Both limits SHALL pass: exact positive quantity×price gross, excluding fees; so
 
 ### Requirement: Bounded corrections and durable uncertainty
 
-Manual/profile/migration/TTF updates SHALL share one correction per run; new imports remain uncapped. Choose oldest eligible work, stable ties. Keep deferred choices. Simulation SHALL show `would correct`. Persist before/after/authority before updating; require exact changed/preserved-field readback. Uncertainty SHALL hold all account writes across restarts without resend. Only exact confirmation SHALL settle pending work; old/missing/changed/unavailable evidence, simulation, profile changes or file removal SHALL NOT settle it.
+Apply every eligible manual/profile/migration/TTF correction, oldest first; stable ties; imports stay uncapped. Simulation SHALL show `would correct`. Persist before/after/authority before PUT. Next PUTs require exact changed/preserved-field readback and D=120 seconds after confirmation. Qualify D in labs. A new release raises D when the lab margin no longer passes. Uncertainty SHALL retain approvals and hold account writes across restarts without resend. Only exact confirmation settles pending; other evidence/settings/simulation/file changes SHALL NOT settle it.
 
 #### Scenario: Restart
-- **WHEN** resumes an uncertain correction
-- **THEN** it retains the hold until exact confirmation without retry or double counting.
+- **WHEN** an uncertain correction resumes
+- **THEN** retain the hold until exact confirmation; never retry or double count.
 
 ### Requirement: Review delivered implementations
 

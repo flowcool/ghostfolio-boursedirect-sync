@@ -45,12 +45,15 @@ IBKR-style private delivery state; no second report store. Failed or uncertain
 delivery cannot advance that state.
 
 Apply all eligible manual, profile and comment corrections in stable order.
-Use fixed D=28 seconds after each confirmed correction before the next PUT.
+Use fixed D=120 seconds after each confirmed correction before the next PUT.
 Exact readback precedes each next PUT. First uncertainty stops all later
 financial writes. Restart reads the journal and never resends. Qualify D on
-the exact BD candidate in the integrated empty/golden lab acceptance.
+the exact BD candidate in the integrated empty/golden lab acceptance. A new
+release raises D when the lab margin no longer passes. D=120 replaces D=28
+after the measured 69.230-second chain failed the previous qualification.
 
-Compare canonical source and stored dates by calendar day in configured `TZ`.
+For manual notice proposals, compare canonical source and stored dates by
+calendar day in configured `TZ`. Keep existing profile date rules.
 Use the printed coupon payment day at 00:00 UTC. Preserve a stored instant on
 the same local day; do not propose a date change for its intraday difference.
 

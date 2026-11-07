@@ -6,11 +6,14 @@ import logging
 import os
 from collections import Counter
 from dataclasses import replace
+from pathlib import Path
 
 from ghostfolio_boursedirect_sync import (
+    action_notifications,
     activity_review,
     config,
     ghostfolio,
+    notice_coverage,
     notices,
     notify,
     outcome,
@@ -26,8 +29,10 @@ from ghostfolio_boursedirect_sync.models import (
 log = logging.getLogger(__name__)
 
 
-def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
+def run_sync(errors: set[str], *, invalid_schedule: bool = False,
+             actions: dict[str, set[str]] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    actions = {} if actions is None else actions
     document_id: int | None = None
     created = 0
     held: set[str] = set()
@@ -89,7 +94,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 has_stops = True
                 if stop.isin is not None:
                     blocked.add(stop.isin)
-        if not any(t.isin not in blocked for _, n in matching for t in n.trades) and not settings.activity_review_file:
+        if not any(t.isin not in blocked for _, n in matching for t in n.trades) and not settings.activity_review_file and not settings.notice_coverage:
             log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
                      "unreadable_notices=%s created=0", other_accounts, unreadable)
             return int(unreadable > 0 or bool(errors))
@@ -101,7 +106,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
         # adaptation replaces the broker-symbol fallback with an ISIN lookup.
         unresolved: set[str] = set()
         for isin in sorted({trade.isin for _, notice in matching for trade in notice.trades}):
-            if isin in mapping or isin in blocked:
+            if isin in mapping or (isin in blocked and not settings.notice_coverage):
                 continue
             symbol = ghostfolio.lookup_symbol(settings, token, isin)
             if symbol is None:
@@ -138,6 +143,11 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
             unique[candidate.comment] = candidate
         source_duplicates = len(candidates) - len(unique)
         log.debug("LAB_EVIDENCE %s", json.dumps({"kind": "source", "value": source}))
+        if settings.notice_coverage:
+            notice_coverage.report(matching, mapping, account_id, existing, errors, actions,
+                                   settings.timezone or "UTC", incomplete=bool(unreadable or unresolved
+                                   or "ttf_attribution_failed" in errors), unreadable=unreadable)
+            return int(bool(errors & outcome.FAILURE_CODES))
         if settings.activity_review_file and not unreadable:
             try:
                 review_state = activity_review.open_review(
@@ -150,6 +160,13 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                 held = result.held
                 corrected = result.corrected
                 review_counts = result.counts
+                for item in review_state["document"]["proposals"].values():
+                    if not activity_review.proposal_holds(item):
+                        continue
+                    if not item["actionable"]:
+                        actions.setdefault("review_evidence", set()).add(item["source event"])
+                    elif item["approve"] != "yes" and not item.get("automatic eligible"):
+                        actions.setdefault("review_approval", set()).add(item["source event"])
                 if result.blocked_accounts:
                     raise RuntimeError("import_unconfirmed")
                 # Corrections can change holdings context. Never select imports on stale evidence.
@@ -161,15 +178,28 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
                     code = "review_unavailable"
                 raise RuntimeError(code) from None
         elif not settings.activity_review_file:
+            events = activity_review.source_events(list(unique.values()), settings.bd_account_ref, {})
+            manual_held = activity_review.manual_history_holds(
+                events, list(existing.raw_rows), settings.timezone or "UTC")
+            held.update(manual_held)
+            if manual_held:
+                errors.add("review_evidence")
+                actions.setdefault("review_evidence", set()).update(manual_held)
             for candidate in unique.values():
                 if sync.ttf_correction_matches(candidate, existing):
                     held.add(candidate.comment)
                     errors.add("review_evidence")
+                    actions.setdefault("review_evidence", set()).add(candidate.comment)
                     log.warning("review_evidence scope=%s; BUY held; configure ACTIVITY_REVIEW_FILE "
                                 "to retain correction evidence; independent imports continue", candidate.comment)
+        for candidate in unique.values():
+            if sync.unresolved_alias_rows(candidate, existing):
+                held.add(candidate.comment)
+                errors.add("review_evidence")
+                actions.setdefault("review_evidence", set()).add(candidate.comment)
+                log.warning("review_evidence scope=%s; unverified symbol association; inspect mapping; no write", candidate.comment)
         eligible = [candidate for candidate in unique.values() if candidate.comment not in held]
-        selected = sync.select_account_activities(
-            eligible, existing)
+        selected = sync.select_account_activities(eligible, existing)
         duplicates = selected.duplicates + source_duplicates
         # Pinned IBKR ibkr.py:127 and ghostfolio.py:459 expose native DEBUG evidence.
         # BD binds originals instead of a Flex window; decimal strings stay exact.
@@ -202,7 +232,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
             log.info("Summary: simulated=%s duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities), duplicates, review_counts.get("would correct", 0), other_accounts, unreadable)
             return 0
-        # The review path has already used the single shared update budget.
+        # Corrections have exact readback before ordinary additive imports.
         for activity in selected.activities:
             ghostfolio.import_activities(settings, token, [activity])
             created += 1
@@ -232,22 +262,48 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False) -> int:
 def main(*, invalid_schedule: bool = False) -> int:
     """Finalize once, including simulation (IBKR app.py:584)."""
     errors: set[str] = set()
-    code = run_sync(errors, invalid_schedule=invalid_schedule)
+    actions: dict[str, set[str]] = {}
+    code = run_sync(errors, invalid_schedule=invalid_schedule, actions=actions)
     code = int(bool(code or errors & outcome.FAILURE_CODES))
     outcome.log_operational_result(errors, code)
-    if not errors:
+    for reason in errors & outcome.ACTION_INSTRUCTIONS.keys():
+        if reason not in actions:
+            actions[reason] = {reason}
+    protected = [Path(value) for value in (os.environ.get("MAPPING_FILE", ""),
+                 os.environ.get("ACTIVITY_REVIEW_FILE", "")) if value]
+    context = activity_review.fingerprint([os.environ.get(key, "") for key in
+        ("GHOST_HOST", "GHOST_ACCOUNT_NAME", "BD_ACCOUNT_REF", "PAPERLESS_URL")])
+    plan = action_notifications.plan_action_notification(actions,
+        os.environ.get("ACTIVITY_REVIEW_FILE") or None, context, inputs=protected,
+        mode="coverage" if os.environ.get("NOTICE_COVERAGE") == "1" else "normal")
+    if not code and not plan["due"]:
+        log.info("Notification result: not required")
         return code
     try:
         settings = config.load_notification_config()
         if settings is None:
+            log.warning("Notification result: disabled; configure APPRISE_URLS")
             return code
-        status = notify.send_notification(settings, notify.NOTIFY_TITLE, outcome.notification_summary(errors))
+        summary = outcome.notification_summary(errors)
+        details = [f"Action required: {reason} count={count}. {outcome.ACTION_INSTRUCTIONS[reason]}"
+                   for reason, count in sorted(plan["document"]["groups"].items())]
+        if not code:
+            details.extend(f"Action cleared: {reason} count=0." for reason in plan["cleared"])
+        if details:
+            summary = "\n".join(([outcome.failure_summary(errors & outcome.FAILURE_CODES)] if code else []) + details)
+        status = notify.send_notification(settings, notify.NOTIFY_TITLE, summary)
         if status == "sent":
-            log.info("Failure notification sent")
+            log.info("Failure notification sent" if code else "Action notification sent")
+            if not code:
+                action_notifications.confirm_action_notification(plan)
+            log.info("Notification result: sent")
         elif status == "timeout":
             log.warning("Failure notification unconfirmed (timeout; not retried)")
+            log.warning("Notification result: timeout, delivery unconfirmed")
         else:
             log.warning("Failure notification not delivered")
+            log.warning("Notification result: failed")
     except Exception:
         log.warning("Failure notification could not be sent")
+        log.warning("Notification result: invalid configuration or failed")
     return code

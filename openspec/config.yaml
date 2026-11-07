@@ -11,7 +11,7 @@ context: |
   Reuse applicable IBKR module boundaries; do not compress the application into one file.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
-  BD exception: only the exact BUY fee correction defined in the active spec.
+  BD corrections follow the active spec and approved manual-reconciliation-coverage delta.
   Preserve all other fields and identity; confirm readback; never delete.
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.

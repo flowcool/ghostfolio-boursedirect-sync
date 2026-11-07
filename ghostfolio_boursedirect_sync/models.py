@@ -21,6 +21,7 @@ class Settings:
     activity_review_file: str = ""
     activity_reconciliation: str = "off"
     timezone: str = ""
+    notice_coverage: bool = False
 
 
 @dataclass(frozen=True)

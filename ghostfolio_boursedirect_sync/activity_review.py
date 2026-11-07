@@ -589,6 +589,72 @@ def update_payload(row: dict[str, Any], proposed: dict[str, Any]) -> dict[str, A
     return payload
 
 
+def manual_history_kind(row: dict[str, Any], event: dict[str, Any], timezone: str) -> str | None:
+    """Approved BD adaptation: fee-only trades and reviewed 31-day coupons."""
+    source, asset = event["values"], profile(row)
+    if (marker_of(row) is not None or row.get("accountId") != event["destination account"]
+            or row.get("type") != source["type"] or not activity_is_active(row)
+            or asset.get("dataSource") != "YAHOO"
+            or not (asset.get("symbol") == source["symbol"] or
+                    (event["isin"] and asset.get("isin") == event["isin"]))
+            or (asset.get("isin") and event["isin"] and asset["isin"] != event["isin"])):
+        return None
+    _, context = reconciliation_rules.date_eligible("permissive", source["date"], row["date"], source["type"], timezone, local_source=True)
+    if "calendar distance" not in context:
+        return None
+    distance = int(context["calendar distance"])
+    if source["type"] == "DIVIDEND":
+        return "manual coupon hypothesis" if distance <= 31 else None
+    if (distance <= 2 and effective_currency(row) == "EUR"
+            and numeric(row["quantity"]) == numeric(source["quantity"])
+            and numeric(row["unitPrice"]) == numeric(source["unitPrice"])):
+        return "manual fee hypothesis"
+    return None
+
+
+def manual_history_pairs(events: dict[str, dict[str, Any]], rows: list[dict[str, Any]],
+                         timezone: str) -> dict[tuple[str, str], str]:
+    pairs = {}
+    for event_id, event in events.items():
+        if any(marker_of(row) == event_id or (marker_of(row) in event["legacy"]
+               and row.get("accountId") == event["destination account"]) for row in rows):
+            continue
+        for row in rows:
+            reason = manual_history_kind(row, event, timezone)
+            if reason:
+                pairs[event_id, row["id"]] = reason
+    return pairs
+
+
+def mutually_unique(pair: tuple[str, str], pairs: Mapping[tuple[str, str], object]) -> bool:
+    return (sum(key[0] == pair[0] for key in pairs) == 1
+            and sum(key[1] == pair[1] for key in pairs) == 1)
+
+
+def manual_history_holds(events: dict[str, dict[str, Any]], rows: list[dict[str, Any]],
+                         timezone: str) -> set[str]:
+    """Keep unreviewed differences out of additive import; unchanged rows stay duplicates."""
+    held: set[str] = set()
+    pairs = manual_history_pairs(events, rows, timezone)
+    for event_id, row_id in pairs:
+        source = events[event_id]["values"]
+        if source["type"] == "DIVIDEND" and not mutually_unique((event_id, row_id), pairs):
+            held.add(event_id)
+            continue
+        row = next(row for row in rows if row["id"] == row_id)
+        conforming = numeric(row["fee"]) == numeric(source["fee"])
+        if source["type"] == "DIVIDEND":
+            _, context = reconciliation_rules.date_eligible(
+                "permissive", source["date"], row["date"], source["type"], timezone, local_source=True)
+            conforming = (conforming and all(numeric(row[field]) == numeric(source[field])
+                          for field in ("quantity", "unitPrice"))
+                          and effective_currency(row) == source["currency"]
+                          and context.get("calendar distance") == "0")
+        if not conforming:
+            held.add(event_id)
+    return held
+
+
 def candidate_reason(row: dict[str, Any], event: dict[str, Any], exact_exists: bool,
                      timezone: str = "UTC") -> str | None:
     reference = marker_of(row)
@@ -711,7 +777,9 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
     satisfied: set[str] = set()
     automatic = automatic_pairs(events, rows, reconciliation, timezone)
     migration_pairs = automatic_pairs(events, rows, "permissive", timezone)
-    discovery_timezone = "UTC" if reconciliation == "off" else timezone
+    discovery_timezone = timezone
+    manual_pairs = manual_history_pairs(events, rows, timezone)
+    manual_conforming: set[str] = set()
     historical_pairs = {(item["source event"], item["destination account"], item["activity id"])
                         for item in previous.values() if item.get("execution path") == "historical maintenance"}
     for event_id, event in sorted(events.items()):
@@ -722,7 +790,7 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                           and row.get("accountId") == event["destination account"]))
         for row in sorted(rows, key=lambda item: item["id"]):
             try:
-                reason = candidate_reason(row, event, exact_exists, discovery_timezone)
+                reason = manual_pairs.get((event_id, row["id"])) or candidate_reason(row, event, exact_exists, discovery_timezone)
             except RuntimeError:
                 continue
             if reason is None:
@@ -743,9 +811,11 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                 legacy_dividend = (marker_of(row) in event["legacy"] and event["values"]["type"] == "DIVIDEND"
                                    and (event["legacy safe"] or (event_id, row["id"]) in migration_pairs))
                 source = event["values"]
+                manual = reason.startswith("manual ")
+                manual_coupon = reason == "manual coupon hypothesis"
                 asset = profile(row)
                 if (row.get("accountId") != event["destination account"]
-                        or row.get("type") != source["type"] or effective_currency(row) != "EUR"
+                        or row.get("type") != source["type"] or (effective_currency(row) != "EUR" and not manual_coupon)
                         or asset.get("symbol") != source["symbol"] or asset.get("dataSource") != "YAHOO"
                         or (asset.get("isin") and event["isin"] and asset["isin"] != event["isin"])
                         or (source["type"] != "DIVIDEND" and numeric(current["quantity"]) != numeric(source["quantity"]))):
@@ -753,13 +823,19 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                                        else "Immutable activity fields or ISIN conflict")
                 if instant(current["date"]) > datetime.now(UTC):
                     raise RuntimeError("Future destination activity")
-                if (reason != "exact reference" and not legacy_trade and not legacy_dividend
+                if (not manual and reason != "exact reference" and not legacy_trade and not legacy_dividend
                         and all(numeric(current[key]) == numeric(proposed[key]) for key in NUMBERS)):
                     # Approved BD duplicate contract, reusing sync._manual_exact:
                     # unchanged legacy values need no authority to replace a hash.
                     satisfied.add(event_id)
                     continue
-                proposed["comment"] = replacement_comment(row, event)
+                proposed["comment"] = current["comment"] if manual else replacement_comment(row, event)
+                if reason == "manual fee hypothesis":
+                    proposed = {**current, "fee": source["fee"]}
+                _, date_context = reconciliation_rules.date_eligible(
+                    "permissive", source["date"], current["date"], source["type"], timezone, local_source=True)
+                if manual and date_context.get("calendar distance") == "0":
+                    proposed["date"] = current["date"]
                 diagnostics = {field: {"current": current[field], "source": proposed[field]}
                                for field in changed_fields(current, proposed)}
                 if legacy_trade or legacy_dividend:
@@ -792,10 +868,14 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                 if marker_of(row) in event["legacy"] and not legacy_trade and not legacy_dividend:
                     raise RuntimeError("legacy aggregate cannot identify one action")
                 changes = changed_fields(current, proposed)
-                if not changes and marker_of(row) == event_id:
+                if manual and not mutually_unique((event_id, row["id"]), manual_pairs):
+                    raise RuntimeError("Competing manual source or destination candidates")
+                if not changes and (marker_of(row) == event_id or manual):
                     if event_id in (held_events or set()):
                         raise RuntimeError("Relevant corporate-action evidence holds this activity")
                     satisfied.add(event_id)
+                    if manual_coupon:
+                        manual_conforming.add(event_id)
                     continue
             except (RuntimeError, ValueError, OverflowError, UnicodeError) as exc:
                 if str(exc) == "owned_activity_conflict":
@@ -829,7 +909,7 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
                 numbers = reconciliation_rules.numeric_evidence(event, current)
             except (RuntimeError, KeyError, ArithmeticError, ValueError):
                 numbers = {"cause": "Missing or unsupported exact financial evidence"}
-            item.update({"automatic eligible": bool(auto and actionable), "profile": reconciliation, "ttf eligible": bool(ttf and actionable),
+            item.update({"automatic eligible": bool(auto and actionable and not reason.startswith("manual ")), "profile": reconciliation, "ttf eligible": bool(ttf and actionable),
                          "numeric evidence": numbers,
                          "profile date context": auto["profile date context"] if auto else {}})
             association = association_binding(event, current, occupied, marker_of(row)) if current else None
@@ -886,13 +966,14 @@ def refresh_proposals(previous: dict[str, Any], events: dict[str, dict[str, Any]
     for item in result.values():
         item["automatic eligible"] = bool(item.get("execution path") == "normal run"
             and item["actionable"] and not item.get("rejection cooldown")
-            and item["source event"] in events and ((item["source event"], item["activity id"]) in automatic
+            and item["source event"] in events and ((not item["match reason"].startswith("manual ")
+                and (item["source event"], item["activity id"]) in automatic)
                 or (item.get("ttf eligible") and sum(other["source event"] == item["source event"] or other["activity id"] == item["activity id"] for other in result.values()) == 1)))
         old = previous.get(item["key"])
         retained = old.get("first eligible") if old and old["review revision"] == item["review revision"] else None
         eligible = item.get("automatic eligible") or (item["approve"] == "yes" and item["actionable"])
         item["first eligible"] = retained or (eligible_at if eligible else None)
-    return result, {item["source event"] for item in result.values() if proposal_holds(item)}
+    return result, {item["source event"] for item in result.values() if proposal_holds(item)} | manual_conforming
 
 
 
@@ -936,8 +1017,14 @@ def selected_proposals(proposals: dict[str, Any]) -> tuple[list[dict[str, Any]],
 
 def expected_row(row: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     after = deepcopy(row)
-    if effective_currency(row) != payload["currency"]:
+    currency_changed = effective_currency(row) != payload["currency"]
+    if currency_changed and not (row.get("type") == "DIVIDEND" and marker_of(row) is None
+                                 and payload["currency"] == "EUR"):
         raise RuntimeError("Changed activity currency is forbidden")
+    if currency_changed:
+        after["currency"] = payload["currency"]
+        if "stored currency" in after:
+            after["stored currency"] = payload["currency"]
     for key in REPLACED:
         if key not in ("symbol", "currency"):
             after[key] = payload[key]
@@ -967,15 +1054,9 @@ def row_matches(row: dict[str, Any], evidence: dict[str, Any]) -> bool:
 
 
 
-# Reuse the single-update budget from pinned IBKR activity_review.py:971.
-# Review of Ghostfolio 3.96.0 at 2f21c255 confirms the same update/event/queue
-# mechanism and nullable stored currency. The BD image still needs lab proof.
-# No environment setting can increase or bypass this limit.
-QUALIFIED_EXECUTION: tuple[str, int, float] | None = (
-    "ghostfolio/ghostfolio@sha256:97b9dd2e8b07610bfa383480b911065f7497070f53c302c037ab8a1b596ccae5",
-    1,
-    0.0,
-)
+# IBKR 23cb762 activity-correction-review: qualified uncapped sequential budget.
+# Exact candidate acceptance must qualify this delay in both native BD labs.
+QUALIFIED_EXECUTION: tuple[str, int | None, float] | None = ("bd-sequential-v1", None, 120.0)
 RECOVERY_WAITS = (0, 2, 5, 10)
 
 
@@ -1160,14 +1241,15 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
             refreshed[key] = {**old, "status": "unresolved request; account writes blocked"}
     for position, item in enumerate(sorted(approved, key=lambda item: (item.get("first eligible") or "", item["key"])), 1):
         item["queue position"] = position
-        item["remaining eligible runs"] = position
+        item["remaining eligible runs"] = 1
     publish(refreshed)
     executed = 0
     planned = 0
     previews: set[str] = set()
     for item in sorted(approved, key=lambda item: (item.get("first eligible") or "", item["key"])):
         account = item["destination account"]
-        if (account in blocked or item["source event"] not in events or not item["actionable"]
+        if (unresolved or any(entry["status"] != "confirmed" for entry in state["journal"]["entries"].values())
+                or account in blocked or item["source event"] not in events or not item["actionable"]
                 or item["key"] not in refreshed or item.get("execution path") != "normal run"):
             continue
         qualification = QUALIFIED_EXECUTION
@@ -1175,9 +1257,9 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
             log.warning("Reviewed correction retained: exact-image execution budget not qualified")
             continue
         image, limit, delay = qualification
-        if not image or type(limit) is not int or limit < 1 or not 0 <= delay < float("inf"):
+        if not image or (limit is not None and (type(limit) is not int or limit < 1)) or not 0 <= delay < float("inf"):
             raise RuntimeError("Invalid qualified correction execution budget")
-        if executed + planned >= limit:
+        if limit is not None and executed + planned >= limit:
             continue
         if simulated:
             planned += 1
@@ -1187,11 +1269,12 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
             log.info("DRY RUN would correct activity %s; authority=%s; fields=%s", item["activity id"],
                      proposal_authority(item), item["changed fields"])
             continue
-        if executed and delay:
+        if delay and (executed or recovered_events or any(
+                entry["status"] == "confirmed" for entry in state["journal"]["entries"].values())):
             time.sleep(delay)
         assert_unchanged(state)
         fresh_rows = snapshot_rows(config)
-        fresh, _ = refresh(refreshed, fresh_rows)
+        fresh, held = refresh(refreshed, fresh_rows)
         apply_source_holds(config, fresh)
         current = fresh.get(item["key"])
         fresh_selection, fresh_conflicts = selected_proposals(fresh)
@@ -1238,7 +1321,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
         matched, _ = recovery_read(config, entry)
         if not matched:
             blocked.add(account)
-            continue
+            break
         entry["status"] = "confirmed"
         entry["verified result"] = after
         publish_journal(state)
@@ -1248,7 +1331,7 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
         publish(refreshed)
     # Rediscover new context and release reassigned alternatives after confirmed PUTs.
     if not simulated and executed:
-        refreshed, _ = refresh(refreshed, snapshot_rows(config))
+        refreshed, held = refresh(refreshed, snapshot_rows(config))
     apply_source_holds(config, refreshed)
     deferred, conflicts = selected_proposals(refreshed)
     blocked |= conflicts
@@ -1263,14 +1346,14 @@ def _process_review(state: ReviewState, config: dict[str, Any], events: dict[str
     queue = [item for item in deferred if item["destination account"] not in blocked and item["key"] not in previews]
     for position, item in enumerate(sorted(queue, key=lambda item: (item.get("first eligible") or "", item["key"])), 1):
         item["queue position"] = position
-        item["remaining eligible runs"] = position
+        item["remaining eligible runs"] = 1
         if item["destination account"] not in blocked and item["key"] not in previews:
             item["status"] = "automatic work deferred"
     publish(refreshed)
     outcome = config.get("_outcome")
     if outcome is not None:
         outcome["reconciliation"] = dict(counts)
-    held = {item["source event"] for item in refreshed.values() if proposal_holds(item)} | unresolved_events
+    held = {item["source event"] for item in refreshed.values() if proposal_holds(item)} | unresolved_events | held
     config["_review_rejected"] = {}
     for item in refreshed.values():
         if item.get("rejected") and item["source event"] in events:

@@ -168,6 +168,24 @@ def _manual_exact(candidate: Activity, row: ExistingActivity) -> bool:
         return row.quantity * row.unit_price - row.fee == candidate.quantity * candidate.unit_price
 
 
+def unresolved_alias_rows(candidate: Activity, existing: ActivityIndex) -> list[ExistingActivity]:
+    """Cash/date agreement under an unverified symbol is uncertainty, never identity.
+
+    Approved available-notice adaptation; this cannot authorize a correction.
+    """
+    # An ISIN-shaped Yahoo fallback needs mapping verification. Equal cash
+    # under unrelated ordinary symbols must not hide an otherwise absent row.
+    if (candidate.type != "DIVIDEND" or not candidate.isin
+            or candidate.symbol.split(".", 1)[0] != candidate.isin):
+        return []
+    return [row for row in existing.rows if row.account_id == candidate.account_id
+            and row.active and row.type == "DIVIDEND" and row.data_source == "YAHOO"
+            and not row.comment.startswith("BD#v3#") and not _same_security(candidate, row)
+            and not (candidate.isin and row.isin and candidate.isin != row.isin)
+            and abs((row.date.date() - activity_instant(candidate.date).date()).days) <= 31
+            and _manual_exact(candidate, row)]
+
+
 def _manual_assignment(
     matches: list[list[tuple[int, ExistingActivity]]], candidates: list[Activity],
 ) -> dict[int, str]:
