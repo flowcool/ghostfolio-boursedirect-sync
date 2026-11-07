@@ -52,6 +52,18 @@ Keep each PR focused. Describe the resulting behavior and the checks run.
 Preserve exact Decimal values, source dates, identity, duplicate protection and
 stop-on-uncertainty behavior. Follow the approved OpenSpec for behavior changes.
 
+Open the PR as a draft. Finish the changes, then run `gh pr ready <n>` to start
+CodeQL and Dependency Review on the final head. After each later push, run
+`gh pr ready <n> --undo`, then `gh pr ready <n>` again. The strict required checks
+block merge until that head has results. Other PR checks still run on each push.
+
+This step also applies to Renovate, Dependabot and documentation-only PRs.
+For a PR that is already ready, use the same two commands. The own-image README
+update can automerge only after an operator or agent completes this step.
+Documentation-only PRs still skip application and security analysis. The ready
+event records their required scope results. Opening or reopening a PR does not
+start these security workflows.
+
 CI checks the typed package, the retained offline suite, documentation links,
 whitespace, the native image and dependency security. Pullfrog reviews the final
 code head. It is the only PR reviewer; no pre-PR review subagents are required.

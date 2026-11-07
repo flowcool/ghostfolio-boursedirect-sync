@@ -120,7 +120,12 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
   Do not run application tests, image builds or scans, dependency review or CodeQL
   for such a PR. Code PRs retain those checks and the current CodeQL error and
   medium-or-higher security thresholds. The required `analyze` job enforces them. Open the PR
-  yourself, then run `~/.agents/bin/pr-ship <n> --repo
+  as a draft. Mark it ready after the final push. After a later push, run
+  `gh pr ready <n> --undo`, then `gh pr ready <n>` again. This also applies to
+  bot and docs-only PRs. See [PR steps](CONTRIBUTING.md#pull-requests).
+  The required CodeQL and Dependency Review results belong to that head.
+  PR images build and scan AMD64; candidates keep AMD64 and ARM64.
+  Then run `~/.agents/bin/pr-ship <n> --repo
   flowcool/ghostfolio-boursedirect-sync` in one call, never a `sleep` loop: it
   waits, merges on `ready` and hands back any other verdict (exit 2: re-run).
   Fix or answer each actionable comment, then re-run. Run the PR lifecycle in

@@ -10,7 +10,15 @@ concurrency:
   group: release-image
   cancel-in-progress: false
 jobs:
+  codeql:
+    uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
+      security-events: write
+  dependency-review:
+    uses: ./.github/workflows/dependency-review.yml
   promote:
+    needs: [codeql, dependency-review]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
