@@ -1,7 +1,7 @@
 # Documentation map
 
 Start with the current [installation guide](getting-started.md). v2 includes
-operator review and coverage. v2.2.0 adds optional folder input and is unreleased.
+operator review and coverage. Folder input requires v2.2.0 or later.
 Paperless remains supported. v0.1.1 is a legacy preview only.
 
 - [Configuration](configuration.md): ENV, Paperless, mapping, timezone and logs.

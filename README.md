@@ -11,6 +11,10 @@ not support folder input. Select a published version from
 The operator bundle pins its qualified image digest. Use the instructions from
 that bundle with the same image version.
 
+The source checkout keeps this stable image example. The operator bundle replaces
+it with the qualified release image:
+`ghcr.io/flowcool/ghostfolio-boursedirect-sync:2.1.0@sha256:2949c5773dab862590a3dabbaf2bb52495d759f37c615f9cfdb72b66bbcd6c76`.
+
 [Releases](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases) ·
 [Questions and bugs](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues) ·
 [Contribute](CONTRIBUTING.md) · [Changes](CHANGELOG.md)
