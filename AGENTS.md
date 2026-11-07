@@ -177,9 +177,9 @@ voice, no internal jargon.
   The completed [v2 change](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/proposal.md)
   and its [tasks](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/tasks.md)
   record implementation history.
-- Proposed manual corrections and notice coverage are in
+- Approved manual corrections and notice coverage are in
   [manual-reconciliation-coverage](openspec/changes/manual-reconciliation-coverage/proposal.md).
-  This proposal requires Florent's approval before implementation.
+  Apply its approved delta with the current spec.
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
 - Rebuild epic: "v1 rebuild (option B)". Include completed work with
   `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.

@@ -1,9 +1,7 @@
 # notice-import delta
 
-Run means `docker compose run --rm -T --no-deps importer` with the stated
-real anonymized inputs and isolated destination; read output and exit status.
-Scenario quantities and amounts come from retained evidence. They are not
-fixed runtime counts. Complete-archive failures remain visible.
+Run means `docker compose run --rm -T --no-deps importer` with real anonymized
+inputs and an isolated destination. Check output/exit. Retained scenario values are not fixed runtime counts. Preserve archive failures.
 
 ## MODIFIED Requirements
 
@@ -52,38 +50,31 @@ resolution. Preserve full private findings each run. Omit identifiers/securities
 
 ### Requirement: Bounded corrections and durable uncertainty
 
-Manual/profile/migration/TTF updates SHALL execute all eligible corrections in one run; new imports remain uncapped. Choose oldest eligible work, stable ties. Wait at least D=120 seconds after each confirmed correction before the next PUT. Qualify D in the BD lab. A new release SHALL raise D when the lab margin no longer passes. Keep later approvals after uncertainty. Simulation SHALL show `would correct`. Persist before/after/authority before updating; require exact changed/preserved-field readback. Uncertainty SHALL hold all account writes across restarts without resend. Only exact confirmation SHALL settle pending work; old/missing/changed/unavailable evidence, simulation, profile changes or file removal SHALL NOT settle it.
+Apply every eligible manual/profile/migration/TTF correction, oldest first; stable ties; imports stay uncapped. Simulation SHALL show `would correct`. Persist before/after/authority before PUT. Next PUTs require exact changed/preserved-field readback and D=120 seconds after confirmation. Qualify D in labs. A new release raises D when the lab margin no longer passes. Uncertainty SHALL retain approvals and hold account writes across restarts without resend. Only exact confirmation settles pending; other evidence/settings/simulation/file changes SHALL NOT settle it.
 
 #### Scenario: Restart
-- **WHEN** resumes an uncertain correction
-- **THEN** it retains the hold until exact confirmation without retry or double counting.
+- **WHEN** an uncertain correction resumes
+- **THEN** retain the hold until exact confirmation; never retry or double count.
 
 ## ADDED Requirements
 
 ### Requirement: Reviewed manual history corrections
 
-New manual fee/coupon kinds SHALL use `ACTIVITY_REVIEW_FILE`, its existing
-review, journal and exact readback. Only unchanged `decision: yes` SHALL permit
-them, including with non-off `ACTIVITY_RECONCILIATION`. Profiles SHALL NOT
-approve these new kinds. Existing TTF/profile authority SHALL stay unchanged.
-Manual means an activity without a recognized BD identity. Show exact changes,
-source notice, target and the reason for association. A unique proximity match
-SHALL be labelled a hypothesis until the operator confirms payment identity.
+New manual fee/coupon kinds SHALL use existing `ACTIVITY_REVIEW_FILE`, review,
+journal and exact readback. Only unchanged `decision: yes` authorizes them,
+including with non-off profiles. Profiles SHALL NOT approve these kinds.
+Existing TTF/profile authority stays unchanged. Manual means an activity without a recognized BD identity. Show exact changes, notice,
+target and association reason. Label proximity as a hypothesis until the
+operator confirms payment identity.
 
-Pending, blocked or rejected pairs SHALL follow existing review semantics.
-Hold pending/ambiguous source events against additive import even without a
-review file; report `review_evidence` then. Conflicting references, ISINs,
-source holds, unavailable evidence or nonunique pairs SHALL prevent correction.
-Preserve ID, owner, account, security, type, tags and the complete comment.
-Never merge, split, delete or create a replacement. Apply every eligible manual,
-profile and comment correction in one run, in stable order, without a count cap.
-Wait at least 120 seconds after each confirmed correction before the next PUT.
-Require exact readback before each next PUT. Qualify this fixed delay in the BD
-lab. A new release SHALL raise D when the lab margin no longer passes.
-Simulation previews all corrections. First uncertainty stops all later
-financial writes, preserves later approvals and retains the journal across
-restart. Restart never resends. Changed evidence
-SHALL clear approval. Only exact readback SHALL confirm; never resend.
+Keep existing semantics for pending, blocked or rejected pairs. Hold pending
+or ambiguous source events against import without a review file; report
+`review_evidence`. Conflicting references/ISINs, source holds, unavailable
+evidence or nonunique pairs SHALL prevent correction. Preserve ID, owner,
+account, security, type, tags and the complete comment. Never merge, split,
+delete or create replacements. Apply every eligible manual/profile/comment
+correction in stable order without a count cap, under the shared correction
+delay and recovery requirement above. Changed evidence SHALL clear approval. First uncertainty SHALL stop financial writes.
 
 #### Scenario: Approval, restart and repeat
 - **WHEN** Run applies several approved real fee and coupon proposals, then repeats or restarts after an uncertain response
@@ -122,8 +113,7 @@ Set activity currency to EUR explicitly, including with a SEK market profile.
 If the API cannot preserve the profile and exact activity values, hold the
 proposal. The 31-day window SHALL NOT expand automatic profiles or normal
 duplicate matching. A stored instant on the same local day SHALL stay unchanged without a date
-proposal. Already correct notice-net coupons SHALL remain conforming without
-a new proposal.
+proposal. Correct notice-net coupons SHALL remain conforming.
 
 #### Scenario: Four probable payments
 - **WHEN** Run reviews the real SAAB 2025-10-16, APAM 2025-12-12, RHM 2026-05-19 and DB1 2026-05-22 payments
@@ -135,13 +125,13 @@ a new proposal.
 
 ### Requirement: Full available-notice coverage report
 
-With `NOTICE_COVERAGE=1`, read every selected original from every Paperless page,
-including done-tagged notices, and the complete usable Ghostfolio inventory.
-Compare only the configured source and destination account. Deduplicate notice
-copies by existing logical identity. Report observed date range, document/row
-counts and counts for conforming, correction candidate, unresolved association,
-absent supported, unsupported and unreadable rows. Include row-level reason,
-notice identity, date, type, resolved security and exact values in local output.
+`NOTICE_COVERAGE=1` SHALL read every selected original across all Paperless
+pages, including done-tagged notices, and complete usable Ghostfolio inventory.
+Compare only configured source/destination accounts. Deduplicate by logical
+identity. Report date range, document/row counts and counts for conforming,
+correction candidate, unresolved association, absent supported, unsupported and
+unreadable rows. Local output SHALL include each row's reason, notice identity,
+date, type, resolved security and exact values.
 
 A creation selected by normal import SHALL NOT alone prove absence. Examine
 manual, legacy, alias, date, price and normalized-quantity candidates. Ambiguous
@@ -151,10 +141,10 @@ An absent row SHALL remain listed even when the sell guard blocks import.
 
 This mode SHALL send no financial POST/PUT/DELETE, settle no pending correction,
 and change no review decision or source document, even with `DRY_RUN=0` and `yes`.
-Historical creation SHALL use only normal import and all existing guards.
+Historical creation SHALL retain normal import and all guards.
 Incomplete acquisition or unreadable evidence SHALL retain its failure code,
-mark coverage incomplete, and prevent a clean-coverage claim. Available notices
-SHALL NOT prove broker-history completeness; empty periods remain unknown.
+mark coverage incomplete, and prevent a clean-coverage claim. Notices
+SHALL NOT prove broker-history completeness; empty periods stay unknown.
 
 #### Scenario: Eleven absent rows and corrected history
 - **WHEN** Run compares the retained 86-notice pre-correction set, then the retained post-correction destination
@@ -177,8 +167,7 @@ quantity transformation. Do not infer zero opening holdings.
 
 Account/position statements SHALL NOT be parsed in this increment. Absolute
 statement holdings, missing acquisition evidence for EMEIS/Millennium and
-periods outside available notices SHALL remain unverified. Never invent an
-opening BUY. Report this limitation with `coverage_unverifiable`.
+periods outside available notices SHALL remain unverified. Never invent opening BUYs. Report this limitation with `coverage_unverifiable`.
 Absent supported rows SHALL give `coverage_gap`. These three codes SHALL use
 the existing action path: exit 0 unless a failure also occurs, one redacted
 Apprise summary per run, including simulation, under the grouped notification and seven-day reminder
@@ -189,7 +178,7 @@ details. Existing failure precedence, silent clean runs and delivery rules remai
 
 #### Scenario: Position changes before and after backfill
 - **WHEN** Run compares the retained UCB and APAM intervals before and after their restored trades
-- **THEN** initial source-minus-destination differences are +2 UCB and -18 APAM; both become zero afterward. LQQ split evidence stays unverifiable; no absolute Millennium or EMEIS acquisition is inferred.
+- **THEN** initial source-minus-destination differences are +2 UCB and -18 APAM; both become zero. LQQ split evidence stays unverifiable; no absolute Millennium or EMEIS acquisition is inferred.
 
 #### Scenario: Repeated redacted alert
 - **WHEN** Run with `NOTICE_COVERAGE=1` finds a gap or unverifiable comparison twice
