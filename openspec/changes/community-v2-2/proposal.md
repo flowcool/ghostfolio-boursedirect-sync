@@ -41,11 +41,9 @@ Folder storage adds no notice family. Replay those originals through both source
 
 ### New Capabilities
 
-None.
+- `connector-runtime`: startup banner, identity and safe operational logs.
 
 ### Modified Capabilities
-
-- `connector-runtime`: startup banner, identity and safe operational logs.
 - `notice-import`: folder source only. Apply the released manual-reconciliation
   and creation-cut-off deltas with the main spec.
 
