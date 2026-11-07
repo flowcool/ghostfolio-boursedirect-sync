@@ -3,6 +3,7 @@ on:
   # Not a required check: documentation-only PRs skip it; main is checked on
   # the PR before merge (no re-run after merge). Both native architectures are
   # built and scanned in prepare-release-image.yml before exact-digest promotion.
+  # ARM64-specific failures, including the Supercronic checksum, wait for that gate.
   pull_request:
     paths-ignore:
       - "docs/**"
