@@ -100,3 +100,55 @@ Do not use `up` with empty `CRON`. It repeats the one-off run, even after exit 0
 For one run, keep the scheduled service stopped and use
 `docker compose run --rm -T --no-deps -e DRY_RUN=1 -e CRON= importer`.
 The one-off `--rm` command does not use the service restart policy.
+
+## Run result lines
+
+Use the same filter for Bourse Direct and IBKR logs:
+
+```sh
+docker compose logs --no-log-prefix | grep -E 'Cycle result:|Account evidence|Reconciliation result:|Notification result:'
+```
+
+`Cycle result` gives the financial processing result. `Account evidence` reports
+`simulated proposals` or `accepted imports`, `duplicates`, `other held events`
+and `deferred automatic work`. An accepted import has exact readback. A simulated
+proposal is not a write. BD reports one target account without its identifier.
+BD does not update cash and reports `cash=not managed`. Missing evidence is
+`unavailable`, not zero. `Reconciliation result` uses the IBKR count names.
+Decision counts can overlap. These lines do not prove complete notice coverage.
+
+BD keeps its existing `Summary: ` fields and the exact `Cycle result: success`
+line for scheduler compatibility. IBKR adds hold and notification fields to its
+cycle line. Read BD's separate evidence and notification lines for those results.
+
+`Notification result` is `not required`, `disabled`, `invalid configuration`,
+`sent`, `failed` or `timeout, delivery unconfirmed`. Warning results include a
+configuration hint. Delivery does not change the cycle result or exit code.
+A timeout can still deliver. The current run does not retry it.
+
+Required actions use a separate title from failures. Resolved groups use
+`user action resolved` and include each cleared reason with count zero.
+With valid delivery state beside `ACTIVITY_REVIEW_FILE`, unchanged reason/count
+groups stay silent until 168 hours after confirmed sending. Without that state,
+each run can repeat them. Failed runs send one failure summary and do not advance
+the last successful grouped snapshot or certify resolution. Private per-event evidence
+and financial holds remain in force.
+
+## Foreign shares bought in EUR
+
+Bourse Direct trades foreign shares in EUR on a European venue, for example
+Deutsche Börse. Check the notice's venue and currency. Map the ISIN to the EUR
+listing. Do not select the home listing in SEK or USD for an EUR trade.
+Otherwise Ghostfolio reads the EUR price in the wrong currency.
+
+For example, map SAAB B (`SE0021921269`) to the Frankfurt EUR listing `SDV1.F`:
+
+```yaml
+symbol_mapping:
+  SE0021921269: SDV1.F
+```
+
+Check that the listing has price history for the holding period. An ISIN lookup
+can return several listings. Use an explicit verified mapping when the lookup
+is ambiguous. A mapping change does not repair existing activities. Inspect
+those activities through the guarded review procedure before any correction.
