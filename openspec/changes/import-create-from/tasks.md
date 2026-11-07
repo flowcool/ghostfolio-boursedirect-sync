@@ -6,5 +6,5 @@
 
 ## 2. Qualification
 
-- [ ] 2.1 Replay current read-only capture and all 75 originals. Require two absent BUYs only, zero false creations/errors/corrections, exit 0. Save private evidence. Run strict mypy, Ruff and full pytest once after focused tests pass.
-- [ ] 2.2 Qualify one exact candidate in empty and golden labs with repeat. Reserve, retain proof, stop and release. Complete independent code review, one PR, green CI and Pullfrog head review through pr-ship. No publication or production action.
+- [x] 2.1 Replay current read-only capture and all 75 originals. Require two absent BUYs only, zero false creations/errors/corrections, exit 0. Save private evidence. Run strict mypy, Ruff and full pytest once after focused tests pass.
+- [x] 2.2 Qualify one exact candidate in empty and golden labs with repeat. Reserve, retain proof, stop and release. Complete independent code review, one PR, green CI and Pullfrog head review through pr-ship. No publication or production action.
