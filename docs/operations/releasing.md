@@ -15,7 +15,10 @@ image pins, deployment, host/NAS files, schedules, backup and monitoring.
 3. Download the `candidate-image` artifact. It records the exact source commit,
    signed index digest and both checked native manifest digests.
 4. Use the existing Infra labs to qualify that exact index in empty and golden
-   scenarios. Retain proof and verify that both owned labs are stopped.
+   scenarios. Require at least 150 seconds from each correction confirmation to
+   the next PUT. Require each request-bound background chain to complete within
+   100 seconds. This keeps the 1.5 qualification margin for D=150 seconds.
+   Retain proof and verify that both owned labs are stopped.
 5. Add `labs.empty` and `labs.golden` to `candidate-image.json`. Each entry needs
    `status: PASS`, `cleanup: stopped` and the retained proof's `evidence_sha256`.
    Save the result as `lab-qualification.json`. Never reuse another image's proof.
