@@ -1,0 +1,22 @@
+  COMPTE N° TEST ACCOUNTEUR PEA
+       Date                                                            Désignation                                                              Débit (€)                              Crédit (€)
+
+
+
+   26/01/2026           ACHAT COMPTANT                        FR0000130692 ANONYMIZED SECURITY                                                    491,49
+
+                        QUANTITE : +45
+                        COURS : +10,9                         BRUT : +490,50
+                        COURTAGE : +0,99                      TVA : +0,00
+
+                        Heure Execution: 10:44:58          Lieu: BORSE BERLIN EQUIDUCT TRADING - BERL
+
+
+
+   26/01/2026           ACHAT ETRANGER                        LU1673108939 ANONYMIZED SECURITY                                                            499,53
+
+                        QUANTITE : +190
+                        COURS : +2,616                        BRUT : +497,04
+                        COURTAGE : +2,49                      TVA : +0,00
+
+                        Heure Execution: 12:26:45               Lieu: DEUTSCHE BOERSE AG

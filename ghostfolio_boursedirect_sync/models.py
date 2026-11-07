@@ -22,6 +22,7 @@ class Settings:
     activity_reconciliation: str = "off"
     timezone: str = ""
     notice_coverage: bool = False
+    import_create_from: date | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,7 @@ class TTF:
 class NoticeStop:
     code: Literal["share_count_change", "unknown_operation"]
     isin: str | None
+    date: date | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)

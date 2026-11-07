@@ -80,6 +80,7 @@ The published legacy preview has this immutable image reference:
 | `PAPERLESS_DONE_TAG` | no | Tag name, default `ghostfolio-done` |
 | `MAPPING_FILE` | no | Read-only YAML mapping file; empty allows no override |
 | `DRY_RUN` | no | Absent or `1` simulates; `0` enables imports |
+| `IMPORT_CREATE_FROM` | no | Optional `YYYY-MM-DD`; never create rows before this trade/payment date; absent or empty disables the cut-off |
 | `TZ` | for a non-off profile | Explicit IANA timezone for destination date comparison and scheduling; source dates stay UTC |
 | `NOTICE_COVERAGE` | no | `1` reads all available notices and reports coverage; sends no financial write even with `DRY_RUN=0`; default `0` |
 | `ACTIVITY_REVIEW_FILE` | no | Private writable YAML path inside the container, for example `/review/activities.yaml` |
@@ -273,6 +274,21 @@ source holds cannot authorize a write or duplicate creation. Already corrected
 rows need no further correction. The whole manual comment stays unchanged.
 
 ### Available-notice coverage
+
+Set `IMPORT_CREATE_FROM=YYYY-MM-DD` to prevent creation of older notice rows.
+The boundary day remains eligible. Dates must be valid ISO calendar dates.
+Historical rows stay available for review and full notice coverage. The cut-off
+does not approve corrections. Historical rows do not add simulated holdings.
+Historical unsupported operations do not block recent creations. They remain
+visible in coverage and retain historical review holds.
+
+An unreadable notice normally blocks all writes. With a cut-off, only a valid
+older Paperless document `created` date exempts it from this block. The importer
+never uses the ingestion date or filename for this decision. Missing, invalid
+or current dates retain the block. Paperless access failures remain failures.
+Logs retain each exempt unreadable document and count excluded source rows and
+documents with only historical rows. Source-copy rows count separately.
+Coverage still reports unreadable originals and incomplete evidence.
 
 Set `NOTICE_COVERAGE=1` for a report with no financial POST, PUT or DELETE.
 It reads every selected Paperless page, including done-tagged originals.
