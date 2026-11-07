@@ -1,0 +1,46 @@
+  COMPTE N° TEST ACCOUNTEUR PEA
+       Date                                                              Désignation                                                            Débit (€)                              Crédit (€)
+
+
+
+   10/03/2026           ACHAT COMPTANT                        FR0000064271 ANONYMIZED SECURITY                                                                  715,90
+
+                        QUANTITE : +6
+                        COURS : +119                          BRUT : +714,00
+                        COURTAGE : +1,90                      TVA : +0,00
+
+                        Heure Execution: 09:10:51          Lieu: BORSE BERLIN EQUIDUCT TRADING - BERL
+
+
+
+   10/03/2026           VENTE COMPTANT                        FR0005691656                TRIGANO                                                                                                     1 240,30
+
+                        QUANTITE : -8
+                        COURS : +155,4                        BRUT : +1 243,20
+                        COURTAGE : +2,90                      TVA : +0,00
+
+                        Heure Execution: 09:07:41          Lieu: BORSE BERLIN EQUIDUCT TRADING - BERL
+
+
+
+   10/03/2026           ACHAT COMPTANT                        FR0014010HV4 ANONYMIZED SECURITY                                                    992,45
+
+                        QUANTITE : +220
+                        COURS : +4,5025                       BRUT : +990,55
+                        COURTAGE : +1,90                      TVA : +0,00
+
+                        Heure Execution: 09:12:12             Lieu: EURONEXT - EURONEXT PARIS
+
+
+
+   10/03/2026           VENTE COMPTANT                        FR0014010H01 ANONYMIZED SECURITY                                                                                           548,90
+
+                        QUANTITE : -17
+                        COURS : +32,4                         BRUT : +550,80
+                        COURTAGE : +1,90                      TVA : +0,00
+
+                        Heure Execution: 09:08:59                Lieu:
+
+
+
+   10/03/2026           TAXE TRANSACT FINANCIERES             FR0000064271 ANONYMIZED SECURITY                                                                     2,86

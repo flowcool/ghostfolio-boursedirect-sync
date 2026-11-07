@@ -175,3 +175,41 @@ def test_historical_unreadable_notice_remains_in_coverage(settings, monkeypatch,
     assert "incomplete=True" in caplog.text
     post.assert_not_called()
     put.assert_not_called()
+
+
+@pytest.mark.parametrize("current_failure", [False, True])
+def test_historical_ttf_failure_cannot_hide_a_current_failure(settings, monkeypatch, caplog, current_failure):
+    # Explicit derived-data regression: orphan the real notice's charged TTF.
+    # No claim that this altered attribution occurred in a real original.
+    old = (FIXTURES / "pdf_cutoff_ttf.txt").read_text()
+    tax = next(line for line in old.splitlines() if "TAXE TRANSACT" in line)
+    old = old.replace(tax, tax.replace("FR0000064271", "FR0005691656"))
+    if current_failure:
+        # Keep the old orphan and add a boundary-day orphan with the same ISIN.
+        old += "\n" + tax.replace("10/03/2026", "01/10/2026").replace("FR0000064271", "FR0005691656") + "\n"
+    run_cycle(settings, monkeypatch, {1: old, 2: (FIXTURES / "pdf_cutoff_buys.txt").read_text()})
+    codes = set()
+    with caplog.at_level(logging.INFO):
+        assert app.run_sync(codes) == int(current_failure)
+    assert codes == ({"ttf_attribution_failed"} if current_failure else set())
+    assert "simulated=2" in caplog.text
+    if not current_failure:
+        assert "affected historical BUYs dropped; not reviewed" in caplog.text
+        assert any(r.levelno == logging.WARNING and "TTF attribution failed" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("current_unresolved", [False, True])
+def test_historical_unresolved_security_stays_visible_without_blocking_recent_review(settings, monkeypatch, tmp_path, caplog, current_unresolved):
+    run_cycle(settings, monkeypatch, {1: (FIXTURES / "pdf_cutoff_old_notice.txt").read_text(),
+        2: (FIXTURES / "pdf_cutoff_buys.txt").read_text()}, activity_review_file=str(tmp_path / "review.yaml"))
+    def lookup(_, __, isin):
+        if current_unresolved and isin == "FR0010342592":
+            return None
+        return {"FR0010342592": "LQQ.PA", "FR0014010HV4": "LWLD.PA"}.get(isin)
+    monkeypatch.setattr(ghostfolio, "lookup_symbol", lookup)
+    codes = set()
+    with caplog.at_level(logging.INFO):
+        assert app.run_sync(codes) == int(current_unresolved)
+    assert codes == ({"unresolved_security"} if current_unresolved else set())
+    assert f"simulated={1 if current_unresolved else 2}" in caplog.text
+    assert any(r.levelno == logging.WARNING and "Historical unresolved security" in r.message for r in caplog.records)

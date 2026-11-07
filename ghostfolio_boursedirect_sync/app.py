@@ -73,7 +73,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                         excluded_documents += 1
                         if settings.notice_coverage:
                             errors.add("notice_unreadable")
-                        log.info("Historical unreadable notice: document=%s code=notice_unreadable date=%s; "
+                        log.warning("Historical unreadable notice: document=%s code=notice_unreadable date=%s; "
                                  "excluded from normal writes; coverage incomplete", document_id, day)
                         continue
                 errors.add(str(exc).split()[0] if str(exc).split() else "unhandled_error")
@@ -93,7 +93,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             if failed_ttf:
                 if (cutoff and not settings.notice_coverage
                         and all(t.date < cutoff for t in original_ttf if t.isin in failed_ttf)):
-                    log.info("Historical TTF attribution failed: document=%s; affected BUYs remain held", document_id)
+                    log.warning("Historical TTF attribution failed: document=%s; affected historical BUYs dropped; not reviewed", document_id)
                 else:
                     errors.add("ttf_attribution_failed")
                     log.error("ttf_attribution_failed document=%s", document_id)
@@ -114,7 +114,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 continue
             for stop in notice.stops:
                 if cutoff and stop.date is not None and stop.date < cutoff and not settings.notice_coverage:
-                    log.info("Historical unsupported row: code=%s document=%s date=%s", stop.code, document_id, stop.date)
+                    log.warning("Historical unsupported row: code=%s document=%s date=%s", stop.code, document_id, stop.date)
                     if stop.isin is not None:
                         historical_blocked.add(stop.isin)
                     continue
@@ -150,7 +150,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                     # Pinned IBKR app.py:580: one mapping hint per ISIN.
                     log.error("unresolved_security isin=%s symbol_mapping: '%s: <yahoo ticker>'", isin, isin)
                 else:
-                    log.info("Historical unresolved security: isin=%s; no creation; inspect mapping for review", isin)
+                    log.warning("Historical unresolved security: isin=%s; no creation; inspect mapping for review", isin)
             else:
                 mapping[isin] = symbol
         candidates: list[Activity] = []
