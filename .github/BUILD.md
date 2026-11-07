@@ -80,9 +80,13 @@ receipts. It copies the exact index to `X.Y.Z` and reads back its digest.
 It updates and verifies `latest` only for the current stable release.
 No RC channel or rebuild is required. A failed publication stops for inspection.
 
-The publication workflow retains the digest-pinned operator archive,
-`IMAGE_DIGEST` and `SHA256SUMS`. It verifies the index and both native digests
-against the qualified record before packaging. Source Compose retains its local
+The manual draft workflow prepares the digest-pinned operator archive,
+`IMAGE_DIGEST` and `SHA256SUMS` before publication. It uses the draft API notes
+and the same Ubuntu/Python package toolchain as publication. It verifies the
+index and both native digests against the qualification record and compares
+all downloaded asset bytes. The publication workflow regenerates and compares
+the frozen assets before image promotion. Published immutable assets are never
+added, replaced or deleted. Source Compose retains its local
 build; bundled Compose uses the qualified image. The archive includes public
 configuration examples and tracked docs, plus the public GitHub release notes.
 It excludes application source, build context and private files.
