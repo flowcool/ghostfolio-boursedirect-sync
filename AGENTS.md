@@ -177,14 +177,19 @@ voice, no internal jargon.
 
 ## Durable work state
 
-- Released v2 reconciliation behavior is in
+- [v2.2.0 is released](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v2.2.0).
+  It includes folder input, manual reconciliation and notice coverage.
+  Current behavior is in
   [notice-import](openspec/specs/notice-import/spec.md).
   The completed [v2 change](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/proposal.md)
   and its [tasks](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/tasks.md)
   record implementation history.
-- Approved manual corrections and notice coverage are in
-  [manual-reconciliation-coverage](openspec/changes/manual-reconciliation-coverage/proposal.md).
-  Apply its approved delta with the current spec.
+- Manual corrections and notice coverage shipped before v2.2.0. Their
+  [change](openspec/changes/manual-reconciliation-coverage/proposal.md) remains
+  outside the archive. Apply its approved delta with the current spec.
+- The released [v2.2 change](openspec/changes/community-v2-2/proposal.md) also
+  remains outside the archive. Release and installation evidence do not imply
+  authority to send the community announcement or change repository topics.
 - Beads project metadata: `project=ghostfolio-boursedirect-sync`.
 - Rebuild epic: "v1 rebuild (option B)". Include completed work with
   `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.

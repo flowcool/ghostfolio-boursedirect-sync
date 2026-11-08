@@ -9,6 +9,7 @@
 | `source_field_missing` | Set `Source = Bourse Direct` on the intended originals yourself. |
 | `notice_source_unavailable` | Restore directory readability or finish the source copy. Keep input stable during acquisition and dispatch. |
 | `notice_unreadable` | Preserve the original. Privately check text extraction, account label, printed dates, known layout and all required fields. It blocks all financial writes. |
+| `other_account_notices` counts intended notices | Check `BD_ACCOUNT_REF` against `COMPTE N°`. Remove spaces, the `EUR` suffix and the account type. A successful run can select zero intended notices. |
 | `invalid_mapping` | Check that `MAPPING_FILE` exists, is readable by UID/GID 10001 and contains a `symbol_mapping` object. Leave it empty for automatic lookup. |
 | `unresolved_security` | Verify one EUR Yahoo ticker and add the optional mapping; this is separate from unreadable-PDF recovery. |
 | `review_unavailable` | Check private ownership/modes, source separation and companion files. Stop writers before editing. |
@@ -103,11 +104,16 @@ The one-off `--rm` command does not use the service restart policy.
 
 ## Run result lines
 
-Use the same filter for Bourse Direct and IBKR logs:
+For a one-off run, save both output streams before `--rm` removes its container.
+Read the [simulation commands](getting-started.md#3-simulate-and-inspect).
+Filter the saved private file:
 
 ```sh
-docker compose logs --no-log-prefix | grep -E 'Cycle result:|Account evidence|Reconciliation result:|Notification result:'
+grep -E 'Summary:|Cycle result:|Account evidence|Reconciliation result:|Notification result:' simulation.log
 ```
+
+For a scheduled service, use `docker compose logs --no-log-prefix` as the filter's
+input. It cannot recover output from removed one-off containers.
 
 `Cycle result` gives the financial processing result. `Account evidence` reports
 `simulated proposals` or `accepted imports`, `duplicates`, `other held events`

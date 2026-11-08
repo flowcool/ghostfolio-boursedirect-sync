@@ -7,7 +7,7 @@
 | `GHOST_HOST` | yes | Ghostfolio HTTP(S) origin without credentials, query or fragment |
 | `GHOST_TOKEN` or `GHOST_ACCESS_TOKEN` | one | Ghostfolio bearer or security token |
 | `GHOST_ACCOUNT_NAME` | yes | Exact name of one active Ghostfolio account |
-| `BD_ACCOUNT_REF` | yes | Exact account reference from the notice, without spaces |
+| `BD_ACCOUNT_REF` | yes | Reference after `COMPTE N°`, without spaces, `EUR` or the account type; see [account setup](getting-started.md#2-set-ghostfolio-and-choose-one-source) |
 | `PAPERLESS_URL` | Paperless only | Paperless HTTP(S) origin |
 | `PAPERLESS_TOKEN` | Paperless only | Read-only Paperless token |
 | `NOTICE_DIR` | folder only | Absolute container path; excludes both Paperless settings |
@@ -82,6 +82,10 @@ symbol_mapping:
 ```
 
 The mapping file is read only. A mapped ISIN takes priority over lookup.
+Map every selected ISIN to freeze the symbols across simulation, import and
+repeat. Keep the same file for all three runs. Live lookup can return different
+results between runs. For foreign shares bought in EUR, follow the
+[EUR listing guide](troubleshooting.md#foreign-shares-bought-in-eur).
 For each unmapped ISIN, the connector queries Ghostfolio once per run.
 It accepts exactly one EUR result from the YAHOO data source.
 
