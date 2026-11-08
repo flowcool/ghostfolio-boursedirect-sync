@@ -11,6 +11,7 @@ from pathlib import Path
 from ghostfolio_boursedirect_sync import (
     action_notifications,
     activity_review,
+    cash,
     config,
     ghostfolio,
     notice_coverage,
@@ -19,12 +20,14 @@ from ghostfolio_boursedirect_sync import (
     notify,
     outcome,
     paperless,
+    statements,
     sync,
 )
 from ghostfolio_boursedirect_sync.models import (
     Activity,
     DocumentReference,
     Notice,
+    Statement,
     Trade,
 )
 
@@ -44,11 +47,19 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     other_accounts = unreadable = duplicates = 0
     excluded_rows = excluded_documents = 0
     blocking_unreadable = 0
+    recognized_statements = 0
+    other_statements = 0
+    cash_result = "not managed"
+    cash_incomplete = False
+    cash_statements: list[Statement] = []
+    cash_notices: list[Notice] = []
     review_state: activity_review.ReviewState | None = None
     try:
         if invalid_schedule:
             raise RuntimeError("invalid_configuration CRON")
         settings = config.load()
+        if settings.cash_balance and not settings.notice_coverage:
+            cash_result = "unavailable"
         simulated = settings.dry_run
         cutoff = settings.import_create_from
         log.info("Activity comparison TZ=%s; must match the Ghostfolio server TZ",
@@ -74,7 +85,21 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             try:
                 if document.code or document.pdf is None:
                     raise RuntimeError(document.code or "notice_unreadable")
-                notice = notices.parse_text(notices.extract_text(document.pdf))
+                text = notices.extract_text(document.pdf)
+                if statements.is_statement(text):
+                    recognized_statements += 1
+                    if settings.cash_balance and not settings.notice_coverage:
+                        try:
+                            if statements.account_ref(text) != settings.bd_account_ref:
+                                other_statements += 1
+                            else:
+                                cash_statements.append(statements.parse_text(text))
+                        except RuntimeError:
+                            cash_incomplete = True
+                            log.warning("Cash: statement_position=%s; statement validation failed",
+                                        recognized_statements)
+                    continue
+                notice = notices.parse_text(text)
             except RuntimeError as exc:
                 unreadable += 1
                 if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":
@@ -94,6 +119,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             if notice.account_ref != settings.bd_account_ref:
                 other_accounts += 1
                 continue
+            cash_notices.append(notice)
             if cutoff:
                 excluded_rows += document.copies * sum(t.date < cutoff for t in notice.trades)
                 if ((notice.trades or notice.stops) and all(t.date < cutoff for t in notice.trades)
@@ -114,6 +140,9 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 log.info("brokerage_zero_inferred document=%s rows=%s", document_id, notice.inferred_brokerages)
             if notice.trades or notice.stops or settings.notice_coverage:
                 matching.append((document_id, notice))
+        log.info("Account statements: recognized=%s", recognized_statements)
+        if settings.cash_balance and not settings.notice_coverage:
+            log.info("Account statements: other_account_statements=%s", other_statements)
         # IBKR app.py:203-208 filters rejected securities before dispatch.
         # BD stops span all selected notices, regardless of their read order.
         done = paperless.done_document_ids(settings) if not settings.notice_dir and any(n.stops for _, n in matching) else set()
@@ -141,7 +170,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 has_stops = True
                 if stop.isin is not None:
                     blocked.add(stop.isin)
-        if not any(t.isin not in blocked for _, n in matching for t in n.trades) and not settings.activity_review_file and not settings.notice_coverage:
+        if (not any(t.isin not in blocked for _, n in matching for t in n.trades)
+                and not settings.activity_review_file and not settings.notice_coverage and not settings.cash_balance):
             log.info("Summary: simulated=0 duplicates=0 other_account_notices=%s "
                      "unreadable_notices=%s created=0", other_accounts, unreadable)
             return int(blocking_unreadable > 0 or bool(errors))
@@ -290,15 +320,34 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             log.info("Summary: simulated=%s duplicates=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities) if settings.dry_run else 0, selected.duplicates, other_accounts, unreadable)
             return 1
+        if not settings.dry_run:
+            # Corrections have exact readback before ordinary additive imports.
+            for activity in selected.activities:
+                notice_source.verify(settings, acquired)
+                ghostfolio.import_activities(settings, token, [activity])
+                created += 1
+        # IBKR ghostfolio.py:651: independent, single account cash phase.
+        # Run after activity confirmation; never resend an uncertain account PUT.
+        if settings.cash_balance:
+            cash_stage = "source evidence"
+            try:
+                if cash_incomplete or unreadable:
+                    raise RuntimeError("cash_unavailable")
+                cash_stage = "statement and notice calculation"
+                balance = cash.calculate(cash_statements, cash_notices, settings.bd_account_ref)
+                log.info("Cash: statement=%s later_notices=%s proposed=%s EUR",
+                         balance.closing_date, balance.notices, balance.amount)
+                cash_stage = "source verification"
+                notice_source.verify(settings, acquired)
+                cash_stage = "account update or readback"
+                cash_result = ghostfolio.update_cash_balance(settings, token, account_id, balance.amount)
+            except RuntimeError:
+                errors.add("cash_unavailable")
+                log.warning("cash_unavailable: %s failed", cash_stage)
         if settings.dry_run:
             log.info("Summary: simulated=%s duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities), duplicates, review_counts.get("would correct", 0), other_accounts, unreadable)
             return 0
-        # Corrections have exact readback before ordinary additive imports.
-        for activity in selected.activities:
-            notice_source.verify(settings, acquired)
-            ghostfolio.import_activities(settings, token, [activity])
-            created += 1
         log.info("Summary: simulated=0 duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=%s",
                  duplicates, corrected, other_accounts, unreadable, created)
         return int(has_errors)
@@ -314,10 +363,12 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                  duplicates, corrected, other_accounts, unreadable, created)
         return 1
     finally:
+        if cash_result == "unavailable" and "cash_unavailable" not in errors:
+            log.info("Cash phase not attempted: activity phase did not complete")
         outcome.log_account_evidence(
             simulated=simulated, accepted=proposals if simulated else created if proposals is not None else None,
             duplicates=duplicates if proposals is not None else None,
-            held=len(held) if proposals is not None else None, reconciliation=review_counts)
+            held=len(held) if proposals is not None else None, reconciliation=review_counts, cash=cash_result)
         log.info("Creation cut-off summary: excluded_rows=%s excluded_documents=%s",
                  excluded_rows, excluded_documents)
         log.info("Review summary: conforming=%s corrections=%s migrations=%s held=%s deferred=%s "

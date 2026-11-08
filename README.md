@@ -96,12 +96,17 @@ Using an AI assistant to install it? Point it to [llms.txt](llms.txt).
 | `NOTICE_DIR` | folder source | empty | `/notices`. Leave empty to use Paperless. |
 | `PAPERLESS_URL`, `PAPERLESS_TOKEN` | Paperless source | empty | Paperless-ngx URL and a read-only token. |
 | `DRY_RUN` | no | `1` | `1` simulates. `0` writes to Ghostfolio. |
+| `CASH_BALANCE` | no | `0` | `1` manages cash from monthly statements and later notices. `0` leaves the balance unchanged. |
 | `CRON` | no | empty | Five-field schedule, e.g. `0 6 * * *`. Empty runs once. |
 | `TZ` | no | — | Your timezone, e.g. `Europe/Paris`. |
 | `MAPPING_FILE` | no | empty | Mounted YAML file with a `symbol_mapping:` block of `ISIN: TICKER` overrides. See [mapping](config/README.md). |
 | `IMPORT_CREATE_FROM` | no | empty | `YYYY-MM-DD`: never create activities before this date. |
 | `APPRISE_URLS` | no | empty | JSON list of [Apprise](https://github.com/caronc/apprise) URLs for alerts. |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`. |
+
+To manage cash, set `CASH_BALANCE=1` and download the monthly **relevé de compte**
+into the same source. This overwrites the Ghostfolio account balance. Simulate
+first. You can set the optional platform in the Ghostfolio UI.
 
 All settings, review options and Paperless setup: [configuration reference](docs/configuration.md).
 
@@ -116,7 +121,7 @@ the EUR listing, e.g. SAAB → `SDV1.F`, not `SAAB-B.ST`.
 
 ## Limitations
 
-Original text PDFs of EUR PEA and PEA-PME only. No CTO, no account statements, no
+Original text PDFs of EUR PEA and PEA-PME only. No CTO, no securities statements, no
 scans, no currency conversion. Corporate actions are held for manual review. A sell
 needs its earlier buy notice. Details: [supported notices](docs/supported-notices.md).
 

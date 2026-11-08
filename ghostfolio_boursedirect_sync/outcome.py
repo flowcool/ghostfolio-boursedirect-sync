@@ -17,7 +17,7 @@ FAILURE_CODES = frozenset({
 # IBKR f9a2b11 notify.redacted_source_failure: diagnostic boundary.
 # BD deliberately permits only fixed code/field/HTTP classes, never free text.
 FAILURE_CONTEXT = frozenset({
-    "CRON", "LOG_LEVEL", "IMPORT_CREATE_FROM", "NOTICE_COVERAGE", "DRY_RUN",
+    "CRON", "LOG_LEVEL", "IMPORT_CREATE_FROM", "NOTICE_COVERAGE", "DRY_RUN", "CASH_BALANCE",
     "GHOST_TOKEN or GHOST_ACCESS_TOKEN", "Ghostfolio token", "BD_ACCOUNT_REF",
     "PAPERLESS_DONE_TAG", "ACTIVITY_RECONCILIATION", "ACTIVITY_REVIEW_FILE", "TZ",
     "NOTICE_DIR", "NOTICE_WAIVER_FILE", "PAPERLESS_URL", "PAPERLESS_TOKEN",
@@ -47,6 +47,8 @@ def failure_summary(codes: set[str]) -> str:
 
 # IBKR outcome.py:114,127,134; BD keeps its published failure classifications.
 ACTION_INSTRUCTIONS = {
+    "cash_unavailable": "Check the account statements, their balance chain and the EUR account balance. "
+                        "Inspect the stored balance before another live run after an unconfirmed update.",
     "coverage_gap": "Compare the missing notice rows with Ghostfolio. Use normal guarded import only after resolving the evidence.",
     "position_mismatch": "Compare notice and destination movements for the reported interval. Resolve the unexplained quantity difference.",
     "coverage_unverifiable": "Inspect the named missing or conflicting evidence. Restore that proof before checking the affected interval.",
@@ -81,21 +83,21 @@ RECONCILIATION_COUNTS = ("already consistent", "automatically corrected", "manua
                          "blocked", "would correct", "reference migrations", "corrected targets")
 
 
-# IBKR v4.3.4 outcome.py:149-163. BD has one target and does not manage cash.
+# IBKR v4.3.4 outcome.py:149-163. BD has one target; cash is opt-in.
 def log_account_evidence(*, simulated: bool | None, accepted: int | None,
                          duplicates: int | None, held: int | None,
-                         reconciliation: dict[str, int]) -> None:
+                         reconciliation: dict[str, int], cash: str = "not managed") -> None:
     """Report observed counts only; keep unavailable evidence distinct from zero."""
     import logging
 
     log = logging.getLogger(__name__)
     log.info("Account evidence: %s=%s; duplicates=%s; other held events=%s; "
-             "deferred automatic work=%s; cash=not managed",
+             "deferred automatic work=%s; cash=%s",
              "imports" if accepted is None else "simulated proposals" if simulated else "accepted imports",
              accepted if accepted is not None else "unavailable",
              duplicates if duplicates is not None else "unavailable",
              held if held is not None else "unavailable",
-             reconciliation.get("automatic work deferred", "unavailable"))
+             reconciliation.get("automatic work deferred", "unavailable"), cash)
     log.info("Reconciliation result: %s", "; ".join(
         f"{name}={reconciliation.get(name, 0)}" for name in RECONCILIATION_COUNTS
     ) + "; decision counts can overlap" if reconciliation else "unavailable")

@@ -119,7 +119,10 @@ input. It cannot recover output from removed one-off containers.
 `simulated proposals` or `accepted imports`, `duplicates`, `other held events`
 and `deferred automatic work`. An accepted import has exact readback. A simulated
 proposal is not a write. BD reports one target account without its identifier.
-BD does not update cash and reports `cash=not managed`. Missing evidence is
+With `CASH_BALANCE=0` (the default), BD reports `cash=not managed`. To opt in,
+see [cash balance](configuration.md#cash-balance). `cash=unavailable` requires
+user action. Check the statements and the stored balance before another live run.
+Missing evidence is
 `unavailable`, not zero. `Reconciliation result` uses the IBKR count names.
 Decision counts can overlap. These lines do not prove complete notice coverage.
 

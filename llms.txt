@@ -20,6 +20,7 @@ Instructions for an AI assistant that installs or runs this tool for a user.
 - Never print, log or paste tokens. Never commit `.env`, PDFs or logs.
 - If a run reports an uncertain write or a hold, stop and show the user the result line. Do not rerun to "fix" it and never delete review or state files.
 - `other_account_notices` > 0 with 0 simulated rows usually means a wrong `BD_ACCOUNT_REF`.
+- Keep `CASH_BALANCE=0` unless the user opts in: monthly account statements go in the same source; `1` overwrites the Ghostfolio cash balance. Simulate first.
 - Foreign shares are bought in EUR: map them to the EUR listing (e.g. SAAB → `SDV1.F`) with `MAPPING_FILE`.
 
 ## Reading results

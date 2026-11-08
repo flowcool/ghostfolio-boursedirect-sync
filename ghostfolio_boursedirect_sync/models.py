@@ -26,6 +26,7 @@ class Settings:
     notice_dir: str = ""
     notice_waiver_file: str = ""
     notice_waivers: tuple[tuple[str, str], ...] = ()
+    cash_balance: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class Trade:
     type: Literal["BUY", "SELL", "DIVIDEND"] = "BUY"
     brokerage: Decimal | None = None
     legacy: LegacyNoticeEvidence | None = field(default=None, compare=False, hash=False, repr=False)
+    net_cash: Decimal | None = field(default=None, compare=False, hash=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,29 @@ class Notice:
     inferred_brokerages: int = 0
     ttf_rows: tuple[TTF, ...] = ()
     stops: tuple[NoticeStop, ...] = ()
+
+
+@dataclass(frozen=True)
+class StatementMovement:
+    date: date
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class Statement:
+    account_ref: str
+    opening_date: date
+    opening_balance: Decimal
+    closing_date: date
+    closing_balance: Decimal
+    movements: tuple[StatementMovement, ...]
+
+
+@dataclass(frozen=True)
+class CashBalance:
+    closing_date: date
+    notices: int
+    amount: Decimal
 
 
 @dataclass(frozen=True)

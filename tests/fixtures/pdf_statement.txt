@@ -1,0 +1,17 @@
+RELEVE DE COMPTE
+
+COMPTE N° TEST ACCOUNT EUR PEA
+
+EXAMPLE HOLDER
+1 EXAMPLE STREET
+
+      Date                                                    Désignation                                                     Débit (€)          Crédit (€)
+
+               Solde au : 31/12/2024                                                                                                                       1 000,00
+
+03/01/2025     ACH CPT EXAMPLE SECURITY                                             Qté : 2           Cours : 49,50                 100,00
+06/01/2025     COUPONS EXAMPLE SECURITY                                             Qté : 0           Cours : 0                                               25,00
+
+               Cumul mouvements :                                                                                                   100,00                    25,00
+
+               Solde au : 31/01/2025                                                                                                                         925,00

@@ -15,6 +15,7 @@
 | `PAPERLESS_DONE_TAG` | no | Tag name, default `ghostfolio-done` |
 | `MAPPING_FILE` | no | Read-only YAML mapping file; empty allows no override |
 | `DRY_RUN` | no | Absent or `1` simulates; `0` enables imports |
+| `CASH_BALANCE` | no | `0` (default) leaves cash unchanged; `1` computes and updates the EUR account balance; other values fail before service access |
 | `IMPORT_CREATE_FROM` | no | Optional `YYYY-MM-DD`; never create rows before this trade/payment date; absent or empty disables the cut-off |
 | `TZ` | for a non-off profile | IANA timezone for destination date comparison and scheduling; Compose defaults to `Europe/Paris`; source dates stay UTC |
 | `NOTICE_COVERAGE` | no | `1` reads all available notices and reports coverage; sends no financial write even with `DRY_RUN=0`; default `0` |
@@ -35,6 +36,40 @@
 The connector rejects redirects before it sends a credential. It uses a
 120-second timeout for the Ghostfolio account read. It never logs response
 bodies or secrets.
+
+## Cash balance
+
+Download the monthly Bourse Direct **relevé de compte** into the same folder or
+Paperless source as the notices. Recognized statements are counted and never
+create activities, even with `CASH_BALANCE=0`. Securities statements remain
+unsupported. The importer does not download documents from the broker.
+
+Set `CASH_BALANCE=1` to opt in. Cash is the latest statement closing balance of
+`BD_ACCOUNT_REF`, plus checked net BUY, SELL and coupon amounts after its closing
+date, including charged TTF. Statements of other accounts are counted and ignored.
+Each selected statement must reconcile, and consecutive statements must chain.
+The computation is independent of which activities are new or already imported,
+and of `IMPORT_CREATE_FROM` when the source is readable. An unreadable historical
+PDF still prevents a cash update, even when Paperless dates exclude it from
+activity creation. Its printed operation dates and amounts cannot be checked.
+The import cut-off does not waive this cash evidence requirement.
+Deposits and custody fees after the closing date
+wait for the next statement. This can delay their effect by one month.
+
+**This replaces the account balance in Ghostfolio.** Keep `DRY_RUN=1` first.
+The preview logs the closing date, later notice count and proposed EUR amount.
+With `DRY_RUN=0`, the importer checks the stored account currency and balance
+after the activity phase. Equal balances give `cash=unchanged` without a PUT.
+Otherwise it sends one balance update and requires exact readback. It keeps
+the account name, currency, platform, comment and tags. You can set the optional
+platform in the Ghostfolio UI. `NOTICE_COVERAGE=1` still sends no financial write.
+
+The account evidence line reports `cash=not managed`, `cash=simulated`,
+`cash=unchanged`, `cash=updated` or `cash=unavailable`. Missing or inconsistent
+statements, a broken chain, a non-EUR account or an unconfirmed update give
+`cash_unavailable`, exit 0 with user action. Activity imports keep their own result.
+Inspect the stored balance before another live run after an uncertain update.
+Never resend an uncertain write automatically. Keep the PDFs and logs private.
 
 ## Paperless setup
 
