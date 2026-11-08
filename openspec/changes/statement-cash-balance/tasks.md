@@ -17,6 +17,6 @@
 
 ## 4. Qualification
 
-- [ ] 4.1 Run strict mypy, Ruff and the full pytest suite once after focused tests pass.
-- [ ] 4.2 Lab proof on empty and golden labs with real statements and notices: simulation shows the proposed cash; live run stores it and readback matches; repeat run reports `cash=unchanged` and sends no write. Retain proof; stop and verify the labs.
-- [ ] 4.3 One PR, green CI, Pullfrog head review, `pr-ship`. No release or production action without Florent's GO.
+- [x] 4.1 Run strict mypy, Ruff and the full pytest suite once after focused tests pass.
+- [x] 4.2 Lab proof on empty and golden labs with real statements and notices: simulation shows the proposed cash; live run stores it and readback matches; repeat run reports `cash=unchanged` and sends no write. Retain proof; stop and verify the labs.
+- [x] 4.3 One PR, green CI, Pullfrog head review, `pr-ship`. No release or production action without Florent's GO.
