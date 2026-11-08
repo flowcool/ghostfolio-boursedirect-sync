@@ -49,10 +49,9 @@ Set `CASH_BALANCE=1` to opt in. Cash is the latest statement closing balance of
 date, including charged TTF. Statements of other accounts are counted and ignored.
 Each selected statement must reconcile, and consecutive statements must chain.
 The computation is independent of which activities are new or already imported,
-and of `IMPORT_CREATE_FROM` when the source is readable. An unreadable historical
-PDF still prevents a cash update, even when Paperless dates exclude it from
-activity creation. Its printed operation dates and amounts cannot be checked.
-The import cut-off does not waive this cash evidence requirement.
+and of `IMPORT_CREATE_FROM` when the source is readable. An unreadable Paperless
+document blocks cash unless its reliable date is strictly before the latest
+statement closing; unknown dates and unreadable folder files still block cash.
 Deposits and custody fees after the closing date
 wait for the next statement. This can delay their effect by one month.
 

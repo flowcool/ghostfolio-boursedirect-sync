@@ -237,3 +237,48 @@ def test_cash_ignores_creation_cutoff_and_duplicates(settings, monkeypatch, tmp_
     assert app.run_sync(set()) == 0
     post.assert_not_called()
     assert update.call_args.args[-1] == Decimal("822.00")
+
+
+@pytest.mark.parametrize("document_date, cash_allowed, exit_code", [
+    (date(2026, 8, 6), True, 0), (date(2026, 9, 29), True, 0),
+    (date(2026, 9, 30), False, 0), (date(2026, 10, 1), False, 1),
+    (None, False, 1),
+])
+def test_unreadable_cash_boundary_keeps_activity_gate(settings, monkeypatch, caplog,
+                                                     document_date, cash_allowed, exit_code):
+    from test_import_cutoff import run_cycle
+    from ghostfolio_boursedirect_sync import paperless
+
+    statement = (FIXTURES / "pdf_statement.txt").read_text().replace(
+        "31/12/2024", "31/08/2026").replace("31/01/2025", "30/09/2026").replace(
+        "03/01/2025", "03/09/2026").replace("06/01/2025", "06/09/2026")
+    post, put = run_cycle(settings, monkeypatch, {
+        1: (FIXTURES / "pdf_cutoff_unreadable.txt").read_text(),
+        2: statement,
+    }, cash_balance=True, dry_run=False)
+    monkeypatch.setattr(paperless, "document_date", lambda *_: document_date)
+    update = Mock(return_value="updated")
+    monkeypatch.setattr(ghostfolio, "update_cash_balance", update)
+    errors = set()
+    with caplog.at_level("INFO"):
+        assert app.run_sync(errors) == exit_code
+    assert errors == (set() if cash_allowed else {"notice_unreadable"} if exit_code else {"cash_unavailable"})
+    assert update.call_count == int(cash_allowed)
+    if cash_allowed:
+        assert update.call_args.args[-1] == Decimal("925.00")
+    assert "unreadable_notices=1" in caplog.text
+    assert f"cash={'updated' if cash_allowed else 'unavailable'}" in caplog.text
+    post.assert_not_called()
+    put.assert_not_called()
+
+
+def test_folder_unreadable_keeps_all_writes_blocked(settings, monkeypatch, tmp_path):
+    source, post, put = folder_cycle(settings, monkeypatch, tmp_path, CASH_BALANCE=1, DRY_RUN=0)
+    (source / "statement.pdf").write_bytes((FIXTURES / "pdf_statement.txt").read_bytes())
+    (source / "2020-01-01.pdf").write_bytes((FIXTURES / "pdf_cutoff_unreadable.txt").read_bytes())
+    update = Mock()
+    monkeypatch.setattr(ghostfolio, "update_cash_balance", update)
+    assert app.run_sync(set()) == 1
+    update.assert_not_called()
+    post.assert_not_called()
+    put.assert_not_called()

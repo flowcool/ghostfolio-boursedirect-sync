@@ -6,6 +6,7 @@ import os
 import re
 from collections import Counter
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 from ghostfolio_boursedirect_sync import (
@@ -51,6 +52,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     other_statements = 0
     cash_result = "not managed"
     cash_incomplete = False
+    unreadable_dates: list[date | None] = []
     cash_statements: list[Statement] = []
     cash_notices: list[Notice] = []
     review_state: activity_review.ReviewState | None = None
@@ -102,8 +104,10 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 notice = notices.parse_text(text)
             except RuntimeError as exc:
                 unreadable += 1
+                unreadable_dates.append(None)
                 if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":
                     day = paperless.document_date(settings, document_id)
+                    unreadable_dates[-1] = day
                     if day is not None and day < cutoff:
                         excluded_documents += 1
                         if settings.notice_coverage:
@@ -331,7 +335,9 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         if settings.cash_balance:
             cash_stage = "source evidence"
             try:
-                if cash_incomplete or unreadable:
+                latest_closing = max((s.closing_date for s in cash_statements), default=None)
+                if cash_incomplete or any(day is None or latest_closing is None or day >= latest_closing
+                                          for day in unreadable_dates):
                     raise RuntimeError("cash_unavailable")
                 cash_stage = "statement and notice calculation"
                 balance = cash.calculate(cash_statements, cash_notices, settings.bd_account_ref)
