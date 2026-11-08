@@ -16,7 +16,7 @@ ENV requires `GHOST_HOST`, `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT
 - **WHEN** token missing
 - **THEN** `invalid_configuration`, `PAPERLESS_TOKEN`, exit 1.
 
-#### Scenario: Ambiguous account
+#### Scenario: Ambiguity
 - **WHEN** names collide
 - **THEN** `invalid_configuration`, exit 1.
 
@@ -24,15 +24,15 @@ ENV requires `GHOST_HOST`, `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT
 
 Incomplete/masked/invalid evidence SHALL give `activities_unavailable` before selection/writes. assetProfile precedes SymbolProfile. Draft/excluded/non-YAHOO identities count without holdings/matches. Future events defer: `future_activity`.
 
-#### Scenario: Unsafe activity evidence
+#### Scenario: Masked evidence
 - **WHEN** evidence masked
 - **THEN** `activities_unavailable`, no writes.
 
-#### Scenario: Excluded target
+#### Scenario: Exclusion
 - **WHEN** target excluded
 - **THEN** `invalid_configuration`, exit 1.
 
-#### Scenario: Future activity
+#### Scenario: Future
 - **WHEN** date future
 - **THEN** `future_activity`, exit 1; current BUY remains eligible.
 
@@ -48,15 +48,15 @@ Incomplete/masked/invalid evidence SHALL give `activities_unavailable` before se
 
 Read all originals; Paperless stays read-only. Rejected tokens give `paperless_auth_failed`; unexpected answers, `paperless_unreachable`. Errors show only HTTP-status/code/document-ID. Omit holder/address; account references only in identity comments/logs. `BourseDirect_` files without `Source = Bourse Direct` SHALL stop writes with `source_field_missing`.
 
-#### Scenario: Wrong Paperless token
+#### Scenario: Rejected token
 - **WHEN** token rejected
 - **THEN** `paperless_auth_failed`, exit 1.
 
-#### Scenario: Paperless down
+#### Scenario: Unreachable
 - **WHEN** service unavailable
 - **THEN** `paperless_unreachable`, exit 1.
 
-#### Scenario: Source field missing
+#### Scenario: Missing Source
 - **WHEN** Source missing
 - **THEN** `source_field_missing`, no writes.
 
@@ -72,7 +72,7 @@ Selection SHALL require one labelled account/notice; remove spaces once; match `
 
 Unreadable notices/accounts/unknown labels SHALL stop activity writes: `notice_unreadable`. Simulation lists readable activities.
 
-#### Scenario: Unreadable document
+#### Scenario: Unreadable
 - **WHEN** PDF unreadable
 - **THEN** `notice_unreadable`, no writes.
 
@@ -80,21 +80,21 @@ Unreadable notices/accounts/unknown labels SHALL stop activity writes: `notice_u
 
 Amounts SHALL be EUR. BUY/SELL: abs(QUANTITE)×COURS, HALF_UP cents, equals BRUT; preserve quantity/price. BUY-debit=BRUT+COURTAGE+TVA; SELL-credit=BRUT−COURTAGE−TVA; TVA=0. Missing BUY brokerage=0 only with explicit TVA=0/Debit=BRUT: `brokerage_zero_inferred`. Coupons: positive EUR credits; otherwise `amount_check_failed`, affected rows withheld.
 
-#### Scenario: Altered amount
+#### Scenario: Altered gross
 - **WHEN** BRUT inconsistent
 - **THEN** `amount_check_failed`, exit 1.
 
-#### Scenario: Rounded gross
+#### Scenario: Rounding
 - **WHEN** fractional-cent gross
 - **THEN** HALF_UP matches; values preserved.
 
-#### Scenario: Omitted brokerage
+#### Scenario: Brokerage
 - **WHEN** qualifying COURTAGE omitted
 - **THEN** `brokerage_zero_inferred`, zero fee.
 
 ### Requirement: Activity content
 
-BUY/SELL SHALL use absolute quantity/source-price/EUR/printed-date-midnight-UTC; fee=brokerage+attributed-BUY-TTF. DIVIDEND: quantity=1/net-credit/fee=0. Identity: `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`; KIND=type; key=broker reference, otherwise normalized rows+occurrence rank. Ignore file metadata. Permit notes after blank separator.
+BUY/SELL SHALL use absolute quantity/source price/EUR/printed date at midnight UTC; fee=brokerage+attributed-BUY-TTF. DIVIDEND: quantity=1/net-credit/fee=0. Identity: `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`; KIND=type; key=broker reference, otherwise normalized rows+occurrence rank. Ignore file metadata. Permit notes after blank separator.
 
 #### Scenario: Simulated coupon
 - **WHEN** coupon simulated
@@ -104,19 +104,19 @@ BUY/SELL SHALL use absolute quantity/source-price/EUR/printed-date-midnight-UTC;
 
 Charged TTF SHALL require exactly one BUY within account/notice/date/ISIN. Never estimate/allocate. Ambiguity: `ttf_attribution_failed`; hold affected BUYs, continue independent events.
 
-#### Scenario: Attributed TTF
+#### Scenario: Attribution
 - **WHEN** TTF unique
 - **THEN** brokerage+TTF; quantity/price preserved.
 
-#### Scenario: Ambiguous TTF
+#### Scenario: Ambiguous tax
 - **WHEN** TTF ambiguous
 - **THEN** `ttf_attribution_failed`, BUYs held.
 
 ### Requirement: Security resolution
 
-Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Otherwise hold ISIN with `unresolved_security` and mapping hint. Nonempty missing/invalid mapping gives `invalid_mapping`.
+Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Otherwise hold ISIN with `unresolved_security` and mapping hint. Nonempty missing/invalid mapping SHALL give `invalid_mapping`.
 
-#### Scenario: Nonunique lookup
+#### Scenario: Lookup
 - **WHEN** lookup nonunique
 - **THEN** `unresolved_security`, mapping hint.
 
@@ -124,31 +124,31 @@ Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Othe
 
 Duplicate: identical account/identity/date/type/security/currency/quantity/price/fee. Compare identity first lines; preserve notes. Moved/conflicting identities SHALL give `owned_activity_conflict`, except eligible corrections. Both modes match unchanged legacy/unowned trades by side/security(or ISIN)/quantity/price within two days: maximize one-to-one matches, minimize distance. Dividends match security/net within three days. Other nearby values give `possible_duplicate`. Never import review-held events. Malformed/unsupported reserved identities: `invalid_identity`, stop writes; read valid v1/v2 without migration ownership. Unproved optional migrations never make unchanged duplicates required actions.
 
-#### Scenario: Regenerated notice
+#### Scenario: Regeneration
 - **WHEN** copies regenerated
 - **THEN** same identities, no duplicates.
 
-#### Scenario: Moved identity
+#### Scenario: Movement
 - **WHEN** identity moved
 - **THEN** `owned_activity_conflict`, no recreation.
 
-#### Scenario: Invalid identity
+#### Scenario: Invalidity
 - **WHEN** identity malformed
 - **THEN** `invalid_identity`, no writes.
 
-#### Scenario: Second run
+#### Scenario: Repeat
 - **WHEN** inputs repeated
 - **THEN** only duplicates, zero creations.
 
-#### Scenario: Existing coupon
+#### Scenario: Duplicate coupon
 - **WHEN** legacy coupon matches
 - **THEN** duplicate, no DIVIDEND creation.
 
 ### Requirement: Sell guard
 
-SHALL use current-holdings+chronological-new-rows; equal-date SELL first; no replay. Negative positions hold SELL: `sell_exceeds_holding`.
+SHALL use current holdings plus chronological new rows; equal-date SELL first; no replay. Negative positions hold SELL: `sell_exceeds_holding`.
 
-#### Scenario: Insufficient holdings
+#### Scenario: Oversell
 - **WHEN** holdings insufficient
 - **THEN** `sell_exceeds_holding`, exit 1.
 
@@ -156,7 +156,7 @@ SHALL use current-holdings+chronological-new-rows; equal-date SELL first; no rep
 
 Custody fees SHALL give `custody_fee_ignored`; import/exit unchanged.
 
-#### Scenario: Custody fee
+#### Scenario: Custody
 - **WHEN** custody fee present
 - **THEN** `custody_fee_ignored`, SELL unaffected.
 
@@ -168,7 +168,7 @@ DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation
 - **WHEN** DIVISION unwaived
 - **THEN** `share_count_change`, coupon held.
 
-#### Scenario: Stop cleared
+#### Scenario: Waiver
 - **WHEN** document waived
 - **THEN** coupon eligible, hold cleared.
 
@@ -176,11 +176,11 @@ DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation
 
 Never delete. Only specified corrections update. Imports SHALL confirm once with identical account/comment/symbol/data-source/date/type/quantity/price/fee/currency. Permit delayed readback, never resend. Incomplete/conflicting/extra evidence: `import_unconfirmed`, stop writes. Only confirmed rows advance holdings.
 
-#### Scenario: Unexpected import response
+#### Scenario: Unconfirmed import
 - **WHEN** confirmation absent
 - **THEN** `import_unconfirmed`, no resend.
 
-#### Scenario: Delayed confirmation
+#### Scenario: Delayed readback
 - **WHEN** delayed evidence exact
 - **THEN** confirmed once; execution continues.
 
@@ -188,11 +188,11 @@ Never delete. Only specified corrections update. Imports SHALL confirm once with
 
 Fee-only correction SHALL require one account/date/security/quantity/price-matched BUY, brokerage-only fee, unique charged TTF. `ttf` authority includes exact unowned matches without `yes`; preserve comments bytes. Correct fees: no-op. Persistent review required even with profile `off`; unset file holds BUY: `review_evidence`; independent imports continue. Share budget/recovery below. Exact readback required; uncertainty: `import_unconfirmed`, no resend/double-counted TTF.
 
-#### Scenario: Brokerage-only BUY
+#### Scenario: Fee correction
 - **WHEN** file usable, TTF proved
 - **THEN** fee-only update; repeat unchanged.
 
-#### Scenario: Missing review
+#### Scenario: Review missing
 - **WHEN** review file unset
 - **THEN** `review_evidence`, independent imports continue.
 
@@ -208,7 +208,7 @@ SHALL report `success`/`success with user action required`/`failure` at INFO/WAR
 
 Count imports/simulations/duplicates/conforming/corrections/migrations/holds/deferred/delivery; mark unavailable/overlap. Actions include reason/scope/impact/next-step/resolution, including imported events. Apprise: at most one redacted failure/action summary/run, including simulation; repeat unresolved actions; clean runs silent. Omit identifiers/securities/amounts/paths/secrets. Report sent/failed/unconfirmed; never retry timeout; delivery failure preserves financial selection/exit.
 
-#### Scenario: Failure notification
+#### Scenario: Notification
 - **WHEN** failure/action persists
 - **THEN** delivered: `Failure notification sent`; otherwise failed/unconfirmed.
 
@@ -216,15 +216,15 @@ Count imports/simulations/duplicates/conforming/corrections/migrations/holds/def
 
 `CRON` SHALL schedule imports; absent runs once; invalid exits 1.
 
-#### Scenario: Invalid schedule
+#### Scenario: Schedule
 - **WHEN** `CRON=bad`
 - **THEN** `Invalid CRON`, exit 1.
 
 ### Requirement: Persistent operator review
 
-`ACTIVITY_REVIEW_FILE` SHALL enable YAML reference/financial proposals, groups/conforming rows, exact before/after/changed-fields/source/target/evidence/authority/status/block. Initialize only after valid acquisition. Unsafe paths/permissions/links/input-overlap/concurrency/unavailable-evidence: `review_unavailable` before writes. Preserve recovery evidence. Only `decision: yes` approves existing unchanged eligible proposals; `reject` changes no activity. Preserve unchanged choices; changed evidence invalidates. Invalidated rejections/rebuilt evidence never grant immediate automatic authority. Blocked `yes` stays blocked. Hold related imports only.
+`ACTIVITY_REVIEW_FILE` SHALL enable YAML reference/financial proposals, groups/conforming rows, exact before/after/changed-fields/source/target/evidence/authority/status/block. Initialize only after valid acquisition. Unsafe paths/permissions/links/input-overlap/concurrency/unavailable-evidence: `review_unavailable` before writes. Preserve recovery evidence. Only `decision: yes` approves existing unchanged eligible proposals; `reject` rejects that pair without writes. Preserve unchanged choices; changed evidence invalidates. Invalidated rejections/rebuilt evidence never grant immediate automatic authority. Blocked `yes` stays blocked. Hold related imports only.
 
-#### Scenario: Changed consent
+#### Scenario: Consent
 - **WHEN** `yes` evidence changes
 - **THEN** clear consent; no execution.
 
@@ -232,7 +232,7 @@ Count imports/simulations/duplicates/conforming/corrections/migrations/holds/def
 
 SHALL pair validated events/activities: same active account/type/YAHOO-security/EUR. Block ISIN conflicts/competing candidates; exact references win. Fees/order/aggregates never prove identity. Replace only proved date/price/fee/reference; preserve ID/owner/account/security/type/currency/tags/notes/BUY-SELL-quantity. DIVIDEND keeps validated net, quantity 1. Report quantity/group differences; never merge/split/delete. Legacy migration requires reproducible event/account proof; otherwise `review_evidence`. Separate comment migrations from financial corrections.
 
-#### Scenario: Separate migration
+#### Scenario: Migration
 - **WHEN** legacy ownership proved, fee differs
 - **THEN** comment only; fee next run.
 
@@ -264,7 +264,7 @@ SHALL apply all eligible manual/profile/migration/TTF corrections oldest-first; 
 
 Agents SHALL review delivered commit-pinned IBKR/BD code/tests/proofs before implementation. Record reuse/adaptations/gaps/acceptance-commands in Beads. Contradictions block affected work.
 
-#### Scenario: Missing review
+#### Scenario: Review missing
 - **WHEN** comparison missing
 - **THEN** affected work unstarted.
 
@@ -289,7 +289,7 @@ Select `BD_ACCOUNT_REF` statements under notice rules; count/ignore others. Vali
 
 Simulation logs closing-date/later-notice-count/proposed-cash without writes. Live SHALL write balance only, once, preserve other fields, confirm readback; equal balances: no write. Report `cash=simulated|unchanged|updated|unavailable`.
 
-Unreadable Paperless documents block cash unless reliably dated strictly before latest closing; folder files block. No/malformed/inconsistent statements, broken chains, currency mismatch or unconfirmed write SHALL give `cash_unavailable`, exit 0 with user action. No cash write; preserve activity selection/imports/exit. Omit statement-text/holder/address.
+Unreadable Paperless documents block cash unless reliably dated strictly before latest closing; unreadable folder files block. No/malformed/inconsistent statements, broken chains, currency mismatch or unconfirmed write SHALL give `cash_unavailable`, exit 0 with user action. No cash write; preserve activity selection/imports/exit. Cash logs: dates/counts/amounts only; omit statement text/holder/address.
 
 #### Scenario: Cash
 - **WHEN** closing=348.66 EUR, later BUY=120.00 EUR net
