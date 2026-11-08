@@ -2,7 +2,7 @@
 FROM python:3.15.2-slim@sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0
 
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends apt libapt-pkg7.0 poppler-utils tzdata \
+RUN apt-get update && apt-get install -y --no-install-recommends apt libapt-pkg7.0 zlib1g poppler-utils tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Install supercronic for cron support.
