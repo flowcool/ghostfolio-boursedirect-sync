@@ -96,12 +96,17 @@ Vous installez avec un assistant IA ? Donnez-lui [llms.txt](llms.txt).
 | `NOTICE_DIR` | source dossier | vide | `/notices`. Vide pour utiliser Paperless. |
 | `PAPERLESS_URL`, `PAPERLESS_TOKEN` | source Paperless | vide | URL de Paperless-ngx et token en lecture seule. |
 | `DRY_RUN` | non | `1` | `1` simule. `0` écrit dans Ghostfolio. |
+| `CASH_BALANCE` | non | `0` | `1` gère les espèces depuis les relevés mensuels et les avis suivants. `0` conserve le solde. |
 | `CRON` | non | vide | Planning à cinq champs, ex. `0 6 * * *`. Vide : une seule exécution. |
 | `TZ` | non | — | Votre fuseau, ex. `Europe/Paris`. |
 | `MAPPING_FILE` | non | vide | Fichier YAML monté, avec un bloc `symbol_mapping:` de correspondances `ISIN: TICKER`. Voir [mapping](config/README.md). |
 | `IMPORT_CREATE_FROM` | non | vide | `AAAA-MM-JJ` : ne crée jamais d'activité avant cette date. |
 | `APPRISE_URLS` | non | vide | Liste JSON d'URL [Apprise](https://github.com/caronc/apprise) pour les alertes. |
 | `LOG_LEVEL` | non | `INFO` | `DEBUG`, `INFO`, `WARNING` ou `ERROR`. |
+
+Pour gérer les espèces, mettez `CASH_BALANCE=1` et téléchargez le **relevé de compte**
+mensuel dans la même source. Cela remplace le solde du compte Ghostfolio. Simulez
+d’abord. Vous pouvez définir la plateforme facultative dans l’interface Ghostfolio.
 
 Tous les réglages, la revue et la source Paperless : [référence de configuration](docs/configuration.md) (en anglais).
 
@@ -117,7 +122,7 @@ Associez-les à la cotation en EUR, par exemple SAAB → `SDV1.F`, pas `SAAB-B.S
 ## Limites
 
 Avis PDF texte originaux de PEA et PEA-PME en EUR uniquement. Pas de CTO, pas de
-relevés de compte, pas de scans, pas de conversion de devises. Les opérations sur
+relevés de titres, pas de scans, pas de conversion de devises. Les opérations sur
 titres sont mises en attente pour revue manuelle. Une vente a besoin de l'avis de
 son achat. Détails : [avis pris en charge](docs/supported-notices.md).
 

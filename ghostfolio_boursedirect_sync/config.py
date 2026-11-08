@@ -58,6 +58,9 @@ def load() -> Settings:
     coverage = os.environ.get("NOTICE_COVERAGE", "0")
     if coverage not in ("0", "1"):
         raise RuntimeError("invalid_configuration NOTICE_COVERAGE")
+    cash = os.environ.get("CASH_BALANCE", "0")
+    if cash not in ("0", "1"):
+        raise RuntimeError("invalid_configuration CASH_BALANCE")
     mode = os.environ.get("DRY_RUN", "1")
     if mode not in ("0", "1"):
         raise RuntimeError("invalid_configuration DRY_RUN")
@@ -114,6 +117,7 @@ def load() -> Settings:
         activity_reconciliation=profile,
         timezone=timezone,
         notice_coverage=coverage == "1",
+        cash_balance=cash == "1",
         import_create_from=cutoff,
         notice_dir=notice_dir,
         notice_waiver_file=waiver_file,

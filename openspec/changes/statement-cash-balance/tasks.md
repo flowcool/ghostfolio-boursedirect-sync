@@ -7,13 +7,13 @@
 
 ## 2. Cash computation and write
 
-- [ ] 2.1 Add `CASH_BALANCE` (`0`/`1`, absent `0`, else `invalid_configuration CASH_BALANCE` before service access). Files: config.py, models.py, outcome.py, tests. Scenarios: Setting off; Invalid setting.
-- [ ] 2.2 Compute cash = latest statement closing balance of `BD_ACCOUNT_REF` + net cash of supported BUY, SELL and coupon notices dated after it, in Decimal cents. Scenario: Cash from latest statement and later notices.
-- [ ] 2.3 Port the IBKR account update (`ghost_update_cash_balance`) to `ghostfolio.py`: GET, EUR check, explicit DTO with stored `platformId`, one PUT, GET readback. Simulation logs only. Map every failure to `cash_unavailable` (exit 0, user action) without changing imports. Outcome `cash=` value. Files: ghostfolio.py, app.py, outcome.py, tests with mocked HTTP.
+- [x] 2.1 Add `CASH_BALANCE` (`0`/`1`, absent `0`, else `invalid_configuration CASH_BALANCE` before service access). Files: config.py, models.py, outcome.py, tests. Scenarios: Setting off; Invalid setting.
+- [x] 2.2 Compute cash = latest statement closing balance of `BD_ACCOUNT_REF` + net cash of supported BUY, SELL and coupon notices dated after it, in Decimal cents. Scenario: Cash from latest statement and later notices.
+- [x] 2.3 Port the IBKR account update (`ghost_update_cash_balance`) to `ghostfolio.py`: GET, EUR check, explicit DTO with stored `platformId`, one PUT, GET readback. Simulation logs only. Map every failure to `cash_unavailable` (exit 0, user action) without changing imports. Outcome `cash=` value. Files: ghostfolio.py, app.py, outcome.py, tests with mocked HTTP.
 
 ## 3. Documentation
 
-- [ ] 3.1 Document `CASH_BALANCE`, statement download and the overwrite warning in README.md, README.fr.md (essential table), docs/configuration.md, `.env.example`, `llms.txt`.
+- [x] 3.1 Document `CASH_BALANCE`, statement download and the overwrite warning in README.md, README.fr.md (essential table), docs/configuration.md, `.env.example`, `llms.txt`.
 
 ## 4. Qualification
 

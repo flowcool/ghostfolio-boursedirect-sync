@@ -254,5 +254,6 @@ def parse_text(text: str) -> Notice:
                             Decimal(0) if kind == "DIVIDEND" else fields["COURTAGE"], kind,
                             None if kind == "DIVIDEND" else fields["COURTAGE"],
                             legacy_evidence(legacy_account, kind, day.isoformat(), header[3], block,
-                                            fields, decimal(header[4]), legacy_occurrences)))
+                                            fields, decimal(header[4]), legacy_occurrences),
+                            decimal(header[4]).copy_negate() if kind == "BUY" else decimal(header[4])))
     return Notice(account_ref, tuple(trades), custody_fees, inferred_brokerages, tuple(ttf_rows), tuple(stops))

@@ -359,6 +359,58 @@ def update_reviewed_activity(settings: Settings, token: str, payload: dict[str, 
         raise RuntimeError("import_unconfirmed")
 
 
+def read_cash_account(settings: Settings, token: str, account_id: str) -> dict[str, object]:
+    """Read exact native account fields. Reject missing or redacted evidence."""
+    try:
+        response = requests.get(
+            f"{settings.ghost_host}/api/v1/account/{quote(account_id, safe='')}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=(10, 60), allow_redirects=False,
+        )
+        if not 200 <= response.status_code < 300:
+            raise RuntimeError("cash_unavailable")
+        body: object = json.loads(response.content, parse_float=Decimal)
+    except (requests.RequestException, ValueError, UnicodeError):
+        raise RuntimeError("cash_unavailable") from None
+    if (not isinstance(body, dict) or body.get("id") != account_id or body.get("currency") != "EUR"
+            or not isinstance(body.get("name"), str) or "platformId" not in body
+            or (body["platformId"] is not None and not isinstance(body["platformId"], str))
+            or isinstance(body.get("balance"), bool) or not isinstance(body.get("balance"), (int, Decimal))
+            or not Decimal(body["balance"]).is_finite()):
+        raise RuntimeError("cash_unavailable")
+    return body
+
+
+def update_cash_balance(settings: Settings, token: str, account_id: str, balance: Decimal) -> str:
+    """Port of IBKR ghostfolio.py:651–729; exact Decimal and confirmed readback.
+
+    Omit optional comment and tags to retain them. No redirect or retry.
+    Never log response bodies, account metadata or transport exception text.
+    """
+    if not balance.is_finite():
+        raise RuntimeError("cash_unavailable")
+    account = read_cash_account(settings, token, account_id)
+    if settings.dry_run:
+        return "simulated"
+    if account["balance"] == balance:
+        return "unchanged"
+    payload = {key: account[key] for key in ("currency", "id", "name", "platformId")}
+    payload["balance"] = balance
+    try:
+        response = requests.put(
+            f"{settings.ghost_host}/api/v1/account/{quote(account_id, safe='')}",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            data=decimal_json(payload), timeout=(10, 30), allow_redirects=False,
+        )
+    except requests.RequestException:
+        raise RuntimeError("cash_unavailable") from None
+    if not 200 <= response.status_code < 300:
+        raise RuntimeError("cash_unavailable")
+    if read_cash_account(settings, token, account_id)["balance"] != balance:
+        raise RuntimeError("cash_unavailable")
+    return "updated"
+
+
 def find_account(settings: Settings, token: str) -> str:
     try:
         response = requests.get(

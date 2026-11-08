@@ -42,9 +42,7 @@ def parse_text(text: str) -> Statement:
     """Read a single EUR statement and require exact cent reconciliation."""
     if not is_statement(text):
         raise RuntimeError("statement_unreadable")
-    accounts = list(ACCOUNT.finditer(text))
-    if len(accounts) != 1 or len(re.findall(r"\bCOMPTE\s+N[°º]", text, re.I)) != 1:
-        raise RuntimeError("statement_unreadable")
+    account = account_ref(text)
     lines = text.splitlines()
     headers = [i for i, line in enumerate(lines)
                if re.fullmatch(r"\s*Date\s+Désignation\s+Débit \(€\)\s+Crédit \(€\)\s*", line)]
@@ -88,7 +86,15 @@ def parse_text(text: str) -> Statement:
         context.prec = max(28, sum(len(str(v)) for v in (opening, closing, *(m.amount for m in movements))) + 8)
         if opening + sum((m.amount for m in movements), Decimal(0)) != closing:
             raise RuntimeError("statement_unreadable")
-    return Statement(accounts[0][1].replace(" ", ""), days[0], opening, days[1], closing, tuple(movements))
+    return Statement(account, days[0], opening, days[1], closing, tuple(movements))
+
+
+def account_ref(text: str) -> str:
+    """Apply the notice account rule without reading another account's amounts."""
+    accounts = list(ACCOUNT.finditer(text))
+    if len(accounts) != 1 or len(re.findall(r"\bCOMPTE\s+N[°º]", text, re.I)) != 1:
+        raise RuntimeError("statement_unreadable")
+    return accounts[0][1].replace(" ", "")
 
 
 def validate_chain(statements: Sequence[Statement]) -> None:
