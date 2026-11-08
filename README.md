@@ -62,7 +62,7 @@ Put the PDFs in `notices/`. The container runs as UID 10001 and needs read acces
 **2. Create `.env`:**
 
 ```dotenv
-GHOST_HOST=http://ghostfolio:3333
+GHOST_HOST=https://ghostfolio.example.com
 GHOST_ACCESS_TOKEN=your-ghostfolio-security-token
 GHOST_ACCOUNT_NAME=Bourse Direct PEA
 BD_ACCOUNT_REF=12345678
@@ -89,7 +89,7 @@ Using an AI assistant to install it? Point it to [llms.txt](llms.txt).
 
 | Variable | Required | Default | Values and meaning |
 | --- | --- | --- | --- |
-| `GHOST_HOST` | yes | — | Ghostfolio URL, reachable from the container (shared Docker network or its normal URL). |
+| `GHOST_HOST` | yes | — | Ghostfolio URL as seen from the container: its normal URL, or `http://ghostfolio:3333` if both services share a Docker network. |
 | `GHOST_ACCESS_TOKEN` | yes | — | Ghostfolio Security Token. |
 | `GHOST_ACCOUNT_NAME` | yes | — | Exact name of the target Ghostfolio account. |
 | `BD_ACCOUNT_REF` | yes | — | Account reference after `COMPTE N°` on a notice, without spaces, `EUR` or `PEA`. |
@@ -98,7 +98,7 @@ Using an AI assistant to install it? Point it to [llms.txt](llms.txt).
 | `DRY_RUN` | no | `1` | `1` simulates. `0` writes to Ghostfolio. |
 | `CRON` | no | empty | Five-field schedule, e.g. `0 6 * * *`. Empty runs once. |
 | `TZ` | no | — | Your timezone, e.g. `Europe/Paris`. |
-| `MAPPING_FILE` | no | empty | YAML file of `ISIN: TICKER` overrides. |
+| `MAPPING_FILE` | no | empty | Mounted YAML file with a `symbol_mapping:` block of `ISIN: TICKER` overrides. See [mapping](config/README.md). |
 | `IMPORT_CREATE_FROM` | no | empty | `YYYY-MM-DD`: never create activities before this date. |
 | `APPRISE_URLS` | no | empty | JSON list of [Apprise](https://github.com/caronc/apprise) URLs for alerts. |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`. |

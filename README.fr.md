@@ -62,7 +62,7 @@ les lire : `sudo chgrp -R 10001 notices && chmod -R g+rX notices`.
 **2. Créez `.env` :**
 
 ```dotenv
-GHOST_HOST=http://ghostfolio:3333
+GHOST_HOST=https://ghostfolio.example.com
 GHOST_ACCESS_TOKEN=votre-security-token-ghostfolio
 GHOST_ACCOUNT_NAME=Bourse Direct PEA
 BD_ACCOUNT_REF=12345678
@@ -89,7 +89,7 @@ Vous installez avec un assistant IA ? Donnez-lui [llms.txt](llms.txt).
 
 | Variable | Obligatoire | Défaut | Valeurs et rôle |
 | --- | --- | --- | --- |
-| `GHOST_HOST` | oui | — | URL de Ghostfolio, joignable depuis le conteneur (réseau Docker partagé ou URL normale). |
+| `GHOST_HOST` | oui | — | URL de Ghostfolio vue du conteneur : son URL normale, ou `http://ghostfolio:3333` si les deux services partagent un réseau Docker. |
 | `GHOST_ACCESS_TOKEN` | oui | — | Security Token de Ghostfolio. |
 | `GHOST_ACCOUNT_NAME` | oui | — | Nom exact du compte Ghostfolio cible. |
 | `BD_ACCOUNT_REF` | oui | — | Référence après `COMPTE N°` sur un avis, sans espaces, sans `EUR` ni `PEA`. |
@@ -98,7 +98,7 @@ Vous installez avec un assistant IA ? Donnez-lui [llms.txt](llms.txt).
 | `DRY_RUN` | non | `1` | `1` simule. `0` écrit dans Ghostfolio. |
 | `CRON` | non | vide | Planning à cinq champs, ex. `0 6 * * *`. Vide : une seule exécution. |
 | `TZ` | non | — | Votre fuseau, ex. `Europe/Paris`. |
-| `MAPPING_FILE` | non | vide | Fichier YAML de correspondances `ISIN: TICKER`. |
+| `MAPPING_FILE` | non | vide | Fichier YAML monté, avec un bloc `symbol_mapping:` de correspondances `ISIN: TICKER`. Voir [mapping](config/README.md). |
 | `IMPORT_CREATE_FROM` | non | vide | `AAAA-MM-JJ` : ne crée jamais d'activité avant cette date. |
 | `APPRISE_URLS` | non | vide | Liste JSON d'URL [Apprise](https://github.com/caronc/apprise) pour les alertes. |
 | `LOG_LEVEL` | non | `INFO` | `DEBUG`, `INFO`, `WARNING` ou `ERROR`. |
