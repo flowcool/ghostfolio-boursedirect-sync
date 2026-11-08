@@ -15,8 +15,8 @@
 
 **Non-Goals:**
 - Cash history by date, cash activities, import of statement movements as activities.
-- Statement collection (BillCollector item infra-h9a7l).
-- Platform metadata (infra-ybqb.9). It can reuse the same PUT later.
+- Statement collection (separate BillCollector work).
+- Platform metadata (separate work). It can reuse the same PUT later.
 
 ## Decisions
 
@@ -32,4 +32,4 @@
 - [Cash between statements] → deposits and fees appear up to one month late. Logged with the statement date.
 - [Overwrites a manual balance] → opt-in only; simulation shows the value first; README warns.
 - [Notice and statement disagree on a trade amount] → the statement is authoritative at month end; the next statement corrects the drift.
-- [Paperless delivery of statements needs collector work] → until infra-h9a7l, the user drops statements by hand.
+- [Paperless delivery of statements needs collector work] → until collector support is available, the user drops statements by hand.

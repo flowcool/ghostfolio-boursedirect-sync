@@ -24,7 +24,8 @@ def calculate(source: Sequence[Statement], notices: Sequence[Notice], account: s
         if notice.account_ref != account:
             continue
         later = [trade for trade in notice.trades if trade.date > latest.closing_date]
-        if not later:
+        taxes = [tax for tax in notice.ttf_rows if tax.date > latest.closing_date]
+        if not later and not taxes:
             continue
         key = sync.notice_namespace(notice)
         if key in seen:
@@ -39,7 +40,7 @@ def calculate(source: Sequence[Statement], notices: Sequence[Notice], account: s
             if trade.net_cash is None:
                 raise RuntimeError("cash_unavailable")
             amounts.append(trade.net_cash)
-        amounts.extend(tax.amount.copy_negate() for tax in notice.ttf_rows if tax.date > latest.closing_date)
+        amounts.extend(tax.amount.copy_negate() for tax in taxes)
         count += 1
     with localcontext() as context:
         context.prec = max(28, sum(len(str(value)) for value in amounts) + 8)

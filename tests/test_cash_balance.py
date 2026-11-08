@@ -188,6 +188,14 @@ def test_cash_failure_notification_is_user_action():
     assert outcome.notification_summary({"cash_unavailable"}).startswith("Action required: cash_unavailable.")
 
 
+def test_later_orphan_ttf_prevents_partial_cash():
+    statement = statements.parse_text((FIXTURES / "pdf_statement.txt").read_text())
+    text = (FIXTURES / "pdf_buy.txt").read_text().splitlines()[0]
+    orphan = notices.parse_text(text + "\n03/02/2025 TAXE TRANSACT FINANCIERES FR0000120271  0.30\n")
+    with pytest.raises(RuntimeError, match="^cash_unavailable$"):
+        cash.calculate([statement], [orphan], "TESTACCOUNT")
+
+
 def test_sell_cash_and_latest_statement():
     first = statements.parse_text((FIXTURES / "pdf_statement.txt").read_text())
     second = replace(first, opening_date=first.closing_date, closing_date=date(2025, 2, 28),
