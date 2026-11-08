@@ -1,23 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
   <title id="title">Bourse Direct to Ghostfolio</title>
-  <desc id="desc">A connection from Bourse Direct operation notices to a Ghostfolio preview report.</desc>
+  <desc id="desc">Original PDF notices pass through the importer to a self-hosted Ghostfolio portfolio. Preview, check, then import.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#10213f"/>
-      <stop offset="1" stop-color="#0b6b63"/>
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#123d47"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#64e0c5"/>
+      <stop offset="1" stop-color="#8ed1ff"/>
     </linearGradient>
   </defs>
-  <rect width="1200" height="360" rx="28" fill="url(#background)"/>
-  <circle cx="1040" cy="80" r="150" fill="#50c2b6" opacity=".12"/>
-  <circle cx="1130" cy="305" r="190" fill="#f4c85f" opacity=".10"/>
-  <path d="M214 174h274" stroke="#8be3d5" stroke-width="8" stroke-linecap="round"/>
-  <path d="m452 138 42 36-42 36" fill="none" stroke="#8be3d5" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="76" y="102" width="138" height="144" rx="18" fill="#fff" opacity=".95"/>
-  <path d="M109 141h72M109 169h72M109 197h48" stroke="#0b6b63" stroke-width="10" stroke-linecap="round"/>
-  <rect x="500" y="82" width="610" height="196" rx="20" fill="#fff" opacity=".96"/>
-  <rect x="536" y="118" width="176" height="18" rx="9" fill="#0b6b63"/>
-  <rect x="536" y="160" width="524" height="12" rx="6" fill="#bed7d3"/>
-  <rect x="536" y="192" width="398" height="12" rx="6" fill="#bed7d3"/>
-  <rect x="536" y="224" width="252" height="12" rx="6" fill="#f4c85f"/>
-  <text x="76" y="318" fill="#ffffff" font-family="system-ui, sans-serif" font-size="28" font-weight="700">Operation notices → private preview</text>
+  <rect width="1200" height="360" rx="24" fill="url(#background)"/>
+  <circle cx="1120" cy="30" r="230" fill="#64e0c5" opacity=".05"/>
+  <path d="M0 306C240 248 354 360 630 290S982 244 1200 282V360H0Z" fill="#071722" opacity=".55"/>
+  <g font-family="Segoe UI,Arial,sans-serif">
+    <text x="56" y="60" fill="#77dfca" font-size="14" font-weight="700" letter-spacing="3">YOUR NOTICES. YOUR PORTFOLIO.</text>
+    <text x="54" y="116" fill="#f4f7fb" font-size="44" font-weight="700" letter-spacing="-1">Bourse Direct to Ghostfolio</text>
+    <text x="56" y="156" fill="#c4dce5" font-size="23">Bourse Direct PDF notices → self-hosted Ghostfolio</text>
+    <g fill="#102c39" stroke="#466879" stroke-width="1">
+      <rect x="56" y="198" width="284" height="104" rx="16"/>
+      <rect x="458" y="198" width="284" height="104" rx="16"/>
+      <rect x="860" y="198" width="284" height="104" rx="16"/>
+    </g>
+    <g fill="none" stroke="url(#flow)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M350 250h96m-10-8 10 8-10 8M752 250h96m-10-8 10 8-10 8"/>
+      <path d="M82 225h26l12 12v36H82zM108 225v12h12M91 248h20m-20 10h14"/>
+      <path d="m486 250 10 10 22-24"/>
+      <rect x="882" y="226" width="42" height="46" rx="5"/>
+      <path d="M892 260v-9m10 9v-18m10 18v-25"/>
+    </g>
+    <g fill="#f4f7fb" font-size="21" font-weight="600">
+      <text x="138" y="245">PDF notices</text>
+      <text x="538" y="245">Importer</text>
+      <text x="942" y="245">Ghostfolio</text>
+    </g>
+    <g fill="#b6d1dc" font-size="15">
+      <text x="138" y="273">Folder or Paperless</text>
+      <text x="538" y="273">Preview · Check · Import</text>
+      <text x="942" y="273">Self-hosted portfolio</text>
+    </g>
+  </g>
 </svg>
