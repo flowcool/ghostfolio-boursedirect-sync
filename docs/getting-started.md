@@ -1,6 +1,8 @@
 # Getting started
 
-Check the [release availability](../README.md) before using folder input.
+Choose a published [release](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases).
+Folder input requires v2.2.0 or later. Check [supported notices](supported-notices.md)
+before preparing the source.
 
 Use Docker Engine and Compose v2 on Linux amd64 or arm64. Prepare a reachable
 Ghostfolio instance and its backup procedure first. Keep the final service URL:
@@ -19,9 +21,9 @@ Verify the checksum before extraction. Commands below use the extracted bundle.
 They need no source checkout or local image build. Keep `IMAGE_DIGEST` with it.
 It identifies the exact qualified image; keep the previous bundle for rollback.
 
-```sh
+```bash
 umask 077
-version=2.2.0
+read -r -p "Release version (without v): " version
 release="https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/download/v$version"
 curl --fail --location --remote-name "$release/ghostfolio-boursedirect-sync-v$version.tar.gz"
 curl --fail --location --remote-name "$release/SHA256SUMS"
@@ -35,8 +37,8 @@ sudo install -d -m 0700 -o 10001 -g 10001 review
 
 Require the archive checksum to report `OK`. Stop if a download or verification
 fails. `--ignore-missing` skips other release assets that you did not download.
-The extracted bundle contains `IMAGE_DIGEST`. For another release, change
-`version` and read that release's instructions.
+The extracted bundle contains `IMAGE_DIGEST`. Enter the selected release version
+without its `v` prefix. Read that release's instructions.
 
 Use one installation directory and one service for each source/target account.
 A second account needs separate `.env`, review directory and Compose project
@@ -163,7 +165,9 @@ On a shared or managed destination, obtain its owner's approval before writes.
 Run one deliberate import with the same inputs:
 
 ```sh
-docker compose run --rm -T --no-deps -e DRY_RUN=0 -e CRON= importer
+docker compose run --rm -T --no-deps -e DRY_RUN=0 -e CRON= importer > import.log 2>&1
+echo "Exit status: $?"
+less import.log
 ```
 
 Require exit 0. Check Ghostfolio's exact activities and the final created,
@@ -171,7 +175,8 @@ corrected and held counts. The importer confirms each accepted write by exact
 readback. If a result is uncertain, stop. Do not resend or delete journals.
 Read [recovery](troubleshooting.md) before another run.
 
-After a confirmed import, repeat the same command once. Require zero new
+After a confirmed import, repeat the same import once. Save its output to
+`repeat.log` to preserve the first import log. Require zero new
 activities and zero repeated corrections. File renaming, copies, relocation and
 switching sources retain `BD#v3` financial identities. Identical bytes share a
 `sha256:` document identity. Different bytes change source evidence; they do not
@@ -190,15 +195,5 @@ procedure, with the importer stopped and its journals retained.
 
 ## Supported inputs
 
-| Supported | Limits |
-| --- | --- |
-| EUR PEA and PEA-PME original operation notices | No CTO or arbitrary account types; no statements or OCR scans |
-| Text-bearing `ACHAT COMPTANT`, `ACHAT ETRANGER`, `VENTE COMPTANT`, `VENTE ETRANGER` | Exact supported layout and EUR values; foreign labels do not imply FX conversion |
-| `COUPONS` | Validated net credit; quantity 1 and fee 0 in Ghostfolio |
-| Charged TTF | One unambiguous BUY in the same notice/account/date/ISIN |
-| `DROITS DE GARDE` | Reported and ignored; no activity |
-| Corporate actions or unknown operations | Held and reported; no automatic transformation |
-
-Missing earlier BUYs can hold a SELL with `sell_exceeds_holding`. Supply the
-supported history or resolve opening positions independently. No opening BUY
-is invented. This importer is not a complete fiscal ledger.
+See [supported notices and limits](supported-notices.md) for operation labels,
+account types and history requirements.

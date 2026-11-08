@@ -46,8 +46,7 @@ subject to their normal checks.
 
 ## Operator review and reconciliation
 
-Reconciliation is part of v2. Source-folder support is planned for v2.2.0.
-The same financial checks apply to both sources.
+The same financial checks apply to folder and Paperless sources.
 
 Set `ACTIVITY_REVIEW_FILE=/review/activities.yaml` to retain proposals and
 recovery evidence. The container runs as UID/GID `10001`. The parent directory
