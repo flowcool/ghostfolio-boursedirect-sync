@@ -96,6 +96,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                                 cash_statements.append(statements.parse_text(text))
                         except RuntimeError:
                             cash_incomplete = True
+                            log.warning("Cash: statement_position=%s; statement validation failed",
+                                        recognized_statements)
                     continue
                 notice = notices.parse_text(text)
             except RuntimeError as exc:
@@ -327,16 +329,21 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         # IBKR ghostfolio.py:651: independent, single account cash phase.
         # Run after activity confirmation; never resend an uncertain account PUT.
         if settings.cash_balance:
+            cash_stage = "source evidence"
             try:
                 if cash_incomplete or unreadable:
                     raise RuntimeError("cash_unavailable")
+                cash_stage = "statement and notice calculation"
                 balance = cash.calculate(cash_statements, cash_notices, settings.bd_account_ref)
                 log.info("Cash: statement=%s later_notices=%s proposed=%s EUR",
                          balance.closing_date, balance.notices, balance.amount)
+                cash_stage = "source verification"
                 notice_source.verify(settings, acquired)
+                cash_stage = "account update or readback"
                 cash_result = ghostfolio.update_cash_balance(settings, token, account_id, balance.amount)
             except RuntimeError:
-                log.warning("cash_unavailable")
+                errors.add("cash_unavailable")
+                log.warning("cash_unavailable: %s failed", cash_stage)
         if settings.dry_run:
             log.info("Summary: simulated=%s duplicates=%s corrections=%s other_account_notices=%s unreadable_notices=%s created=0",
                      len(selected.activities), duplicates, review_counts.get("would correct", 0), other_accounts, unreadable)
@@ -356,8 +363,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                  duplicates, corrected, other_accounts, unreadable, created)
         return 1
     finally:
-        if cash_result == "unavailable":
-            errors.add("cash_unavailable")
+        if cash_result == "unavailable" and "cash_unavailable" not in errors:
+            log.info("Cash phase not attempted: activity phase did not complete")
         outcome.log_account_evidence(
             simulated=simulated, accepted=proposals if simulated else created if proposals is not None else None,
             duplicates=duplicates if proposals is not None else None,

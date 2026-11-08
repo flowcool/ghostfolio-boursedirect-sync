@@ -100,6 +100,8 @@ def test_cash_runs_after_imports_and_does_not_block_them(settings, monkeypatch, 
         assert "Cycle result: success with user action required" in caplog.text
         assert "Action required: cash_unavailable" not in caplog.text  # notifications disabled
         assert "cash_unavailable:" in caplog.text
+        assert "statement_position=1; statement validation failed" in caplog.text
+        assert "cash_unavailable: source evidence failed" in caplog.text
     else:
         assert "Cash: statement=2025-01-31 later_notices=1 proposed=822.00 EUR" in caplog.text
     assert "EXAMPLE HOLDER" not in caplog.text
@@ -162,6 +164,10 @@ def test_statement_selection_and_cash_failure_are_independent(settings, monkeypa
     assert post.call_count == (0 if case == "only" else 1)
     assert update.call_count == int(case in ("other", "only", "failed_write"))
     assert errors == ({"cash_unavailable"} if case in ("missing", "broken_chain", "failed_write") else set())
+    if case == "failed_write":
+        assert "cash_unavailable: account update or readback failed" in caplog.text
+    if case == "broken_chain":
+        assert "cash_unavailable: statement and notice calculation failed" in caplog.text
     if case == "other":
         assert "other_account_statements=1" in caplog.text
     if case == "only":
@@ -217,7 +223,7 @@ def test_uncertain_activity_stops_before_cash(settings, monkeypatch, tmp_path):
     monkeypatch.setattr(ghostfolio, "update_cash_balance", update)
     errors = set()
     assert app.run_sync(errors) == 1
-    assert "import_unconfirmed" in errors
+    assert errors == {"import_unconfirmed"}
     update.assert_not_called()
 
 
