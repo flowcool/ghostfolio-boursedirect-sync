@@ -2,8 +2,8 @@
 
 ## 1. Statements in the source
 
-- [ ] 1.1 Recognize account statements by content and remove them from the notice path. Count them in logs. Requirement: Account statements in the source. Scenarios: Statement next to notices; Unknown PDF. Files: statements.py (new), app.py, tests/test_statements.py, anonymized fixtures derived from real `releveCompte.pdf` text (no holder, address or account number). Check: `.venv/bin/python -m pytest tests/test_statements.py` and the existing notice tests.
-- [ ] 1.2 Parse one statement exactly: closing date, opening and closing balance, signed movements by column, wrapped lines and lines without amount. Reject a statement that does not reconcile. Gate: all 21 retained statements under `inputs/boursedirect-all-history-20261026/pea/statements/` reconcile and chain; save a private result under `tmp/`. Requirement: Opt-in cash balance. Scenario: Inconsistent statement.
+- [x] 1.1 Recognize account statements by content and remove them from the notice path. Count them in logs. Requirement: Account statements in the source. Scenarios: Statement next to notices; Unknown PDF. Files: statements.py (new), app.py, tests/test_statements.py, anonymized fixtures derived from real `releveCompte.pdf` text (no holder, address or account number). Check: `.venv/bin/python -m pytest tests/test_statements.py` and the existing notice tests.
+- [x] 1.2 Parse one statement exactly: closing date, opening and closing balance, signed movements by column, wrapped lines and lines without amount. Reject a statement that does not reconcile. Gate: all 21 retained statements under `inputs/boursedirect-all-history-20261026/pea/statements/` reconcile and chain; save a private result under `tmp/`. Requirement: Opt-in cash balance. Scenario: Inconsistent statement.
 
 ## 2. Cash computation and write
 

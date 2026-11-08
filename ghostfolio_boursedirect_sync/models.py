@@ -72,6 +72,22 @@ class Notice:
 
 
 @dataclass(frozen=True)
+class StatementMovement:
+    date: date
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class Statement:
+    account_ref: str
+    opening_date: date
+    opening_balance: Decimal
+    closing_date: date
+    closing_balance: Decimal
+    movements: tuple[StatementMovement, ...]
+
+
+@dataclass(frozen=True)
 class Activity:
     account_id: str
     symbol: str

@@ -19,6 +19,7 @@ from ghostfolio_boursedirect_sync import (
     notify,
     outcome,
     paperless,
+    statements,
     sync,
 )
 from ghostfolio_boursedirect_sync.models import (
@@ -44,6 +45,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     other_accounts = unreadable = duplicates = 0
     excluded_rows = excluded_documents = 0
     blocking_unreadable = 0
+    recognized_statements = 0
     review_state: activity_review.ReviewState | None = None
     try:
         if invalid_schedule:
@@ -74,7 +76,11 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             try:
                 if document.code or document.pdf is None:
                     raise RuntimeError(document.code or "notice_unreadable")
-                notice = notices.parse_text(notices.extract_text(document.pdf))
+                text = notices.extract_text(document.pdf)
+                if statements.is_statement(text):
+                    recognized_statements += 1
+                    continue
+                notice = notices.parse_text(text)
             except RuntimeError as exc:
                 unreadable += 1
                 if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":
@@ -114,6 +120,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                 log.info("brokerage_zero_inferred document=%s rows=%s", document_id, notice.inferred_brokerages)
             if notice.trades or notice.stops or settings.notice_coverage:
                 matching.append((document_id, notice))
+        log.info("Account statements: recognized=%s", recognized_statements)
         # IBKR app.py:203-208 filters rejected securities before dispatch.
         # BD stops span all selected notices, regardless of their read order.
         done = paperless.done_document_ids(settings) if not settings.notice_dir and any(n.stops for _, n in matching) else set()
