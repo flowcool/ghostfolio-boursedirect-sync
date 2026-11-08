@@ -19,6 +19,7 @@ SAFE_ROOT_FILES = (
     "CONTRIBUTING.md",
     "LICENSE",
     "README.md",
+    "README.fr.md",
     "compose.yaml",
     "compose.ghostfolio.yaml",
     "compose.folder.yaml",
@@ -33,7 +34,7 @@ SAFE_DOC_SUFFIXES = {".md", ".json", ".svg", ".yaml", ".yml"}
 RELEASE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 INLINE_LINK = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)]+)\)")
 IMAGE_REFERENCE = re.compile(
-    r"ghcr\.io/flowcool/ghostfolio-boursedirect-sync:v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"ghcr\.io/flowcool/ghostfolio-boursedirect-sync:(?:latest|v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
     r"(?:@sha256:[0-9a-f]{64})?"
 )
 IMAGE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -195,7 +196,8 @@ def create_bundle(root, tag, output_dir, tracked_paths, image_digest, release_no
     reference = image_reference(tag, image_digest)
     entries = bundle_entries(root, tag, tracked_paths, release_notes)
     entries["compose.yaml"] = render_compose(entries["compose.yaml"], tag, image_digest)
-    entries["README.md"] = IMAGE_REFERENCE.sub(reference, entries["README.md"].decode("utf-8")).encode("utf-8")
+    for readme in ("README.md", "README.fr.md"):
+        entries[readme] = IMAGE_REFERENCE.sub(reference, entries[readme].decode("utf-8")).encode("utf-8")
     entries["IMAGE_DIGEST"] = (reference + "\n").encode("utf-8")
     bundle_name = "ghostfolio-boursedirect-sync-" + tag
     output_dir.mkdir(parents=True, exist_ok=True)

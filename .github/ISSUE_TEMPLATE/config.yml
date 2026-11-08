@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions
+    url: https://github.com/flowcool/ghostfolio-boursedirect-sync/discussions/categories/q-a
+    about: Ask setup and usage questions in Discussions Q&A.

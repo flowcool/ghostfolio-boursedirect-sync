@@ -152,6 +152,10 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
   need Florent's go.
 - Docs: README, one spec, AGENTS.md. History stays in Git. No new plan, review
   or contract files.
+- Public front door: README.md (English) and README.fr.md (French) stay short and
+  in sync: same quick start, same essential settings table, image `:latest`, no
+  digest. llms.txt is the entry for an AI assistant that installs the tool; keep it
+  aligned with the README quick start. AGENTS.md stays for contributors.
 
 ## Writing style
 

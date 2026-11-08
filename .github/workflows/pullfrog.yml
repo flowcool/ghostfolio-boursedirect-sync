@@ -34,7 +34,7 @@ jobs:
           pr=$(printf '%s' "$RUN_NAME" | sed -nE 's/^Review (new commits on )?#([0-9]+).*/\2/p')
           if [ -n "$pr" ]; then
             files=$(gh pr diff "$pr" --repo "$GITHUB_REPOSITORY" --name-only || true)
-            if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '^(docs/|openspec/)|\.md$'; then
+            if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '^(docs/|openspec/)|\.md$|^llms\.txt$'; then
               review=false
             fi
           fi

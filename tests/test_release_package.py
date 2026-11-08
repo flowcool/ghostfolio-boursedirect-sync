@@ -32,6 +32,7 @@ def minimal_release_tree(root, tag):
         "CONTRIBUTING.md": "# Contributing\n",
         "LICENSE": "license\n",
         "README.md": "# Operator bundle\n",
+        "README.fr.md": "# Bundle FR\n```yaml\nimage: ghcr.io/flowcool/ghostfolio-boursedirect-sync:latest\n```\n",
         "compose.yaml": "image: ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0\n",
         "compose.ghostfolio.yaml": "services: {}\n",
         ".github/BUILD.md": "# Build\n",
@@ -54,6 +55,7 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
         "CONTRIBUTING.md": "# Contributing\n",
         "LICENSE": "license\n",
         "README.md": "# Operator bundle\n```yaml\nimage: ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:" + "b" * 64 + "\n```\n[Build source](Dockerfile)\n[Bundle docs](docs/)\n[Source scripts](scripts/)\n",
+        "README.fr.md": "# Bundle FR\n```yaml\nimage: ghcr.io/flowcool/ghostfolio-boursedirect-sync:latest\n```\n",
         "Dockerfile": "FROM scratch\n",
         "compose.yaml": "services:\n  importer:\n    image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0}\n",
         "compose.ghostfolio.yaml": "services:\n  importer:\n    networks: [ghostfolio]\n",
@@ -103,6 +105,8 @@ def test_release_bundle_has_versioned_compose_and_only_public_allowlisted_files(
     reference = "ghcr.io/flowcool/ghostfolio-boursedirect-sync:1.2.3@" + DIGEST
     assert reference.encode() in content["compose.yaml"]
     assert reference.encode() in content["README.md"]
+    assert reference.encode() in content["README.fr.md"]
+    assert b":latest" not in content["README.fr.md"]
     assert b"v0.1.0" not in content["README.md"]
     assert ("b" * 64).encode() not in content["README.md"]
     assert content["IMAGE_DIGEST"] == (reference + "\n").encode()
@@ -172,6 +176,12 @@ def test_release_bundle_requires_a_regular_release_note(tmp_path):
 
 def test_compose_replaces_the_previous_digest_without_leaving_a_second_suffix():
     old = b"image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:v0.1.0@sha256:" + b"b" * 64 + b"}\n"
+    expected = ("image: ${BOURSEDIRECT_IMAGE:-" + image_reference("v1.2.3", DIGEST) + "}\n").encode()
+    assert render_compose(old, "v1.2.3", DIGEST) == expected
+
+
+def test_compose_pins_the_latest_source_image_to_the_release_digest():
+    old = b"image: ${BOURSEDIRECT_IMAGE:-ghcr.io/flowcool/ghostfolio-boursedirect-sync:latest}\n"
     expected = ("image: ${BOURSEDIRECT_IMAGE:-" + image_reference("v1.2.3", DIGEST) + "}\n").encode()
     assert render_compose(old, "v1.2.3", DIGEST) == expected
 
