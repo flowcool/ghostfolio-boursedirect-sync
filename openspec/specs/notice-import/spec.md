@@ -22,7 +22,7 @@ ENV requires `GHOST_HOST`, `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT
 
 ### Requirement: Usable Ghostfolio evidence
 
-Incomplete/masked/invalid evidence gives `activities_unavailable` before selection/writes. assetProfile precedes SymbolProfile. Draft/excluded/non-YAHOO identities count without holdings/matches. Future events defer: `future_activity`.
+Incomplete/masked/invalid evidence SHALL give `activities_unavailable` before selection/writes. assetProfile precedes SymbolProfile. Draft/excluded/non-YAHOO identities count without holdings/matches. Future events defer: `future_activity`.
 
 #### Scenario: Unsafe activity evidence
 - **WHEN** evidence masked
@@ -38,7 +38,7 @@ Incomplete/masked/invalid evidence gives `activities_unavailable` before selecti
 
 ### Requirement: Simulation by default
 
-`DRY_RUN=0` enables financial writes; absent/1 simulates; otherwise `invalid_configuration`. Review refresh/action notifications remain available.
+`DRY_RUN=0` SHALL enable financial writes; absent/1 simulates; otherwise `invalid_configuration`. Review refresh/action notifications remain available.
 
 #### Scenario: Simulated BUY
 - **WHEN** BUY simulated
@@ -46,7 +46,7 @@ Incomplete/masked/invalid evidence gives `activities_unavailable` before selecti
 
 ### Requirement: Paperless source
 
-Read all originals; Paperless stays read-only. Rejected tokens give `paperless_auth_failed`; unexpected answers, `paperless_unreachable`. Errors show only HTTP status/code/document ID. Omit holder/address; account references only in identity comments/logs. `BourseDirect_` files without `Source = Bourse Direct` SHALL stop writes with `source_field_missing`.
+Read all originals; Paperless stays read-only. Rejected tokens give `paperless_auth_failed`; unexpected answers, `paperless_unreachable`. Errors show only HTTP-status/code/document-ID. Omit holder/address; account references only in identity comments/logs. `BourseDirect_` files without `Source = Bourse Direct` SHALL stop writes with `source_field_missing`.
 
 #### Scenario: Wrong Paperless token
 - **WHEN** token rejected
@@ -62,7 +62,7 @@ Read all originals; Paperless stays read-only. Rejected tokens give `paperless_a
 
 ### Requirement: Account selection
 
-Before target selection: one labelled account/notice; remove spaces once; match `BD_ACCOUNT_REF`; count others. Missing/multiple: `notice_unreadable`.
+Selection SHALL require one labelled account/notice; remove spaces once; match `BD_ACCOUNT_REF`; count others. Missing/multiple: `notice_unreadable`.
 
 #### Scenario: Other account
 - **WHEN** accounts differ
@@ -78,7 +78,7 @@ Unreadable notices/accounts/unknown labels SHALL stop activity writes: `notice_u
 
 ### Requirement: Amount checks
 
-Amounts SHALL be EUR. BUY/SELL: abs(QUANTITE)×COURS, HALF_UP cents, equals BRUT; preserve quantity/price. BUY debit SHALL equal BRUT+COURTAGE+TVA; SELL credit, BRUT−COURTAGE−TVA; TVA SHALL equal zero. Missing BUY brokerage means zero only with explicit TVA=0 and Debit=BRUT: `brokerage_zero_inferred`. Coupons require positive EUR credits; otherwise `amount_check_failed`, affected rows withheld.
+Amounts SHALL be EUR. BUY/SELL: abs(QUANTITE)×COURS, HALF_UP cents, equals BRUT; preserve quantity/price. BUY-debit=BRUT+COURTAGE+TVA; SELL-credit=BRUT−COURTAGE−TVA; TVA=0. Missing BUY brokerage=0 only with explicit TVA=0/Debit=BRUT: `brokerage_zero_inferred`. Coupons: positive EUR credits; otherwise `amount_check_failed`, affected rows withheld.
 
 #### Scenario: Altered amount
 - **WHEN** BRUT inconsistent
@@ -94,7 +94,7 @@ Amounts SHALL be EUR. BUY/SELL: abs(QUANTITE)×COURS, HALF_UP cents, equals BRUT
 
 ### Requirement: Activity content
 
-BUY/SELL: absolute quantity, source price, EUR, printed date midnight UTC; fee=brokerage+attributed BUY TTF. DIVIDEND: quantity 1, net credit, fee 0. Identity: `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`; KIND=type; key=broker reference, otherwise normalized rows+occurrence rank. Ignore file metadata. Permit notes after blank separator.
+BUY/SELL SHALL use absolute quantity/source-price/EUR/printed-date-midnight-UTC; fee=brokerage+attributed-BUY-TTF. DIVIDEND: quantity=1/net-credit/fee=0. Identity: `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`; KIND=type; key=broker reference, otherwise normalized rows+occurrence rank. Ignore file metadata. Permit notes after blank separator.
 
 #### Scenario: Simulated coupon
 - **WHEN** coupon simulated
@@ -102,7 +102,7 @@ BUY/SELL: absolute quantity, source price, EUR, printed date midnight UTC; fee=b
 
 ### Requirement: Charged TTF attribution
 
-Charged TTF requires exactly one BUY within account/notice/date/ISIN. Never estimate/allocate. Ambiguity: `ttf_attribution_failed`; hold affected BUYs, continue independent events.
+Charged TTF SHALL require exactly one BUY within account/notice/date/ISIN. Never estimate/allocate. Ambiguity: `ttf_attribution_failed`; hold affected BUYs, continue independent events.
 
 #### Scenario: Attributed TTF
 - **WHEN** TTF unique
@@ -114,7 +114,7 @@ Charged TTF requires exactly one BUY within account/notice/date/ISIN. Never esti
 
 ### Requirement: Security resolution
 
-Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Otherwise hold ISIN with `unresolved_security` and mapping hint. Nonempty missing/invalid mapping SHALL give `invalid_mapping`.
+Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Otherwise hold ISIN with `unresolved_security` and mapping hint. Nonempty missing/invalid mapping gives `invalid_mapping`.
 
 #### Scenario: Nonunique lookup
 - **WHEN** lookup nonunique
@@ -122,7 +122,7 @@ Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Othe
 
 ### Requirement: No duplicate activity
 
-Duplicate: identical account/identity/date/type/security/currency/quantity/price/fee. Compare identity first lines; preserve notes. Moved/conflicting identities SHALL give `owned_activity_conflict`, except eligible corrections. Both modes match unchanged legacy/unowned trades by side/security(or ISIN)/quantity/price within two days: maximize one-to-one matches, minimize distance. Dividends match security/net within three days. Other nearby values give `possible_duplicate`. Never import review-held events. Malformed/unsupported reserved identities SHALL stop writes with `invalid_identity`; read valid v1/v2 without assuming migration ownership. Unproved optional migrations never make unchanged duplicates required actions.
+Duplicate: identical account/identity/date/type/security/currency/quantity/price/fee. Compare identity first lines; preserve notes. Moved/conflicting identities SHALL give `owned_activity_conflict`, except eligible corrections. Both modes match unchanged legacy/unowned trades by side/security(or ISIN)/quantity/price within two days: maximize one-to-one matches, minimize distance. Dividends match security/net within three days. Other nearby values give `possible_duplicate`. Never import review-held events. Malformed/unsupported reserved identities: `invalid_identity`, stop writes; read valid v1/v2 without migration ownership. Unproved optional migrations never make unchanged duplicates required actions.
 
 #### Scenario: Regenerated notice
 - **WHEN** copies regenerated
@@ -146,7 +146,7 @@ Duplicate: identical account/identity/date/type/security/currency/quantity/price
 
 ### Requirement: Sell guard
 
-Current holdings+chronological new rows; equal dates SELL first; no replay. Negative positions hold SELL: `sell_exceeds_holding`.
+SHALL use current-holdings+chronological-new-rows; equal-date SELL first; no replay. Negative positions hold SELL: `sell_exceeds_holding`.
 
 #### Scenario: Insufficient holdings
 - **WHEN** holdings insufficient
@@ -154,7 +154,7 @@ Current holdings+chronological new rows; equal dates SELL first; no replay. Nega
 
 ### Requirement: Custody fees ignored
 
-Custody fees: `custody_fee_ignored`; import/exit unchanged.
+Custody fees SHALL give `custody_fee_ignored`; import/exit unchanged.
 
 #### Scenario: Custody fee
 - **WHEN** custody fee present
@@ -174,7 +174,7 @@ DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation
 
 ### Requirement: Additive writes with readback
 
-Never delete. Only specified corrections update. Confirm imports once with identical account/comment/symbol/data-source/date/type/quantity/price/fee/currency. Permit delayed readback, never resend. Incomplete/conflicting/extra evidence: `import_unconfirmed`, stop writes. Only confirmed rows advance holdings.
+Never delete. Only specified corrections update. Imports SHALL confirm once with identical account/comment/symbol/data-source/date/type/quantity/price/fee/currency. Permit delayed readback, never resend. Incomplete/conflicting/extra evidence: `import_unconfirmed`, stop writes. Only confirmed rows advance holdings.
 
 #### Scenario: Unexpected import response
 - **WHEN** confirmation absent
@@ -186,7 +186,7 @@ Never delete. Only specified corrections update. Confirm imports once with ident
 
 ### Requirement: Exact BUY fee correction
 
-Fee-only correction requires one account/date/security/quantity/price-matched BUY, brokerage-only fee, unique charged TTF. `ttf` authority includes exact unowned matches without `yes`; preserve comments bytes. Correct fees: no-op. Persistent review required even with profile `off`; unset file holds BUY: `review_evidence`; independent imports continue. Share budget/recovery below. Exact readback required; uncertainty: `import_unconfirmed`, no resend/double-counted TTF.
+Fee-only correction SHALL require one account/date/security/quantity/price-matched BUY, brokerage-only fee, unique charged TTF. `ttf` authority includes exact unowned matches without `yes`; preserve comments bytes. Correct fees: no-op. Persistent review required even with profile `off`; unset file holds BUY: `review_evidence`; independent imports continue. Share budget/recovery below. Exact readback required; uncertainty: `import_unconfirmed`, no resend/double-counted TTF.
 
 #### Scenario: Brokerage-only BUY
 - **WHEN** file usable, TTF proved
@@ -198,7 +198,7 @@ Fee-only correction requires one account/date/security/quantity/price-matched BU
 
 ### Requirement: Exit code, summary and notification
 
-Report `success`, `success with user action required`, or `failure` at INFO/WARNING/ERROR. Classify codes:
+SHALL report `success`/`success with user action required`/`failure` at INFO/WARNING/ERROR:
 
 | Exit | Codes |
 | --- | --- |
@@ -210,11 +210,11 @@ Count imports/simulations/duplicates/conforming/corrections/migrations/holds/def
 
 #### Scenario: Failure notification
 - **WHEN** failure/action persists
-- **THEN** `Failure notification sent` on delivery; otherwise failed/unconfirmed.
+- **THEN** delivered: `Failure notification sent`; otherwise failed/unconfirmed.
 
 ### Requirement: Schedule
 
-`CRON` schedules imports; absent runs once; invalid exits 1.
+`CRON` SHALL schedule imports; absent runs once; invalid exits 1.
 
 #### Scenario: Invalid schedule
 - **WHEN** `CRON=bad`
@@ -222,7 +222,7 @@ Count imports/simulations/duplicates/conforming/corrections/migrations/holds/def
 
 ### Requirement: Persistent operator review
 
-`ACTIVITY_REVIEW_FILE`: YAML reference/financial proposals, groups/conforming rows, exact before/after/changed-fields/source/target/evidence/authority/status/block. Initialize only after valid acquisition. Unsafe paths/permissions/links/input-overlap/concurrency/unavailable-evidence: `review_unavailable` before writes. Preserve recovery evidence. Only `decision: yes` approves existing unchanged eligible proposals; `reject` changes no activity. Preserve unchanged choices; changed evidence invalidates. Invalidated rejections/rebuilt evidence never grant immediate automatic authority. Blocked `yes` stays blocked. Hold related imports only.
+`ACTIVITY_REVIEW_FILE` SHALL enable YAML reference/financial proposals, groups/conforming rows, exact before/after/changed-fields/source/target/evidence/authority/status/block. Initialize only after valid acquisition. Unsafe paths/permissions/links/input-overlap/concurrency/unavailable-evidence: `review_unavailable` before writes. Preserve recovery evidence. Only `decision: yes` approves existing unchanged eligible proposals; `reject` changes no activity. Preserve unchanged choices; changed evidence invalidates. Invalidated rejections/rebuilt evidence never grant immediate automatic authority. Blocked `yes` stays blocked. Hold related imports only.
 
 #### Scenario: Changed consent
 - **WHEN** `yes` evidence changes
@@ -230,7 +230,7 @@ Count imports/simulations/duplicates/conforming/corrections/migrations/holds/def
 
 ### Requirement: Source-proven correction fields
 
-Pair validated events/activities: same active account/type/YAHOO-security/EUR. Block ISIN conflicts/competing candidates; exact references win. Fees/order/aggregates never prove identity. Replace only proved date/price/fee/reference; preserve ID/owner/account/security/type/currency/tags/notes/BUY-SELL-quantity. DIVIDEND keeps validated net, quantity 1. Report quantity/group differences; never merge/split/delete. Legacy migration requires reproducible event/account proof; otherwise `review_evidence`. Separate comment migrations from financial corrections.
+SHALL pair validated events/activities: same active account/type/YAHOO-security/EUR. Block ISIN conflicts/competing candidates; exact references win. Fees/order/aggregates never prove identity. Replace only proved date/price/fee/reference; preserve ID/owner/account/security/type/currency/tags/notes/BUY-SELL-quantity. DIVIDEND keeps validated net, quantity 1. Report quantity/group differences; never merge/split/delete. Legacy migration requires reproducible event/account proof; otherwise `review_evidence`. Separate comment migrations from financial corrections.
 
 #### Scenario: Separate migration
 - **WHEN** legacy ownership proved, fee differs
@@ -238,7 +238,7 @@ Pair validated events/activities: same active account/type/YAHOO-security/EUR. B
 
 ### Requirement: Explicit reconciliation profiles
 
-`ACTIVITY_RECONCILIATION`: `off`(default)/`conservative`/`balanced`/`permissive`. Non-off requires review file+explicit IANA `TZ`; otherwise `invalid_configuration`. Off retains manual/TTF/recovery authority without TZ. Profiles never create `yes`. Require mutually unique pairs; conservative requires recognized unique reference; others permit unreferenced pairs.
+`ACTIVITY_RECONCILIATION` SHALL accept `off`(default)/`conservative`/`balanced`/`permissive`. Non-off requires review file+explicit IANA `TZ`; otherwise `invalid_configuration`. Off retains manual/TTF/recovery authority without TZ. Profiles never create `yes`. Require mutually unique pairs; conservative requires recognized unique reference; others permit unreferenced pairs.
 
 | Profile | Absolute gross | Relative | Date distance |
 | --- | --- | --- | --- |
@@ -254,7 +254,7 @@ Require both limits: exact positive quantity×price gross without fees; source-r
 
 ### Requirement: Bounded corrections and durable uncertainty
 
-Apply all eligible manual/profile/migration/TTF corrections oldest-first, stable ties; imports uncapped. Simulation: `would correct`. Persist before/after/authority before PUT. Next PUT requires exact changed/preserved-field readback+D=150 seconds after confirmation. Qualify D in labs; raise D next release if margin fails. Uncertainty retains approvals, holds account writes across restarts, never resends. Only exact confirmation settles pending; other evidence/settings/simulation/file changes cannot.
+SHALL apply all eligible manual/profile/migration/TTF corrections oldest-first; stable ties; imports uncapped. Simulation: `would correct`. Persist before/after/authority before PUT. Next PUT requires exact changed/preserved-field readback+D=150 seconds after confirmation. Qualify D in labs; raise D next release if margin fails. Uncertainty retains approvals, holds account writes across restarts, never resends. Only exact confirmation settles pending; other evidence/settings/simulation/file changes cannot.
 
 #### Scenario: Restart
 - **WHEN** uncertain correction resumes
@@ -262,7 +262,7 @@ Apply all eligible manual/profile/migration/TTF corrections oldest-first, stable
 
 ### Requirement: Review delivered implementations
 
-Before implementation review delivered commit-pinned IBKR/BD code/tests/proofs. Record reuse/adaptations/gaps/acceptance-commands in Beads. Contradictions block affected work.
+Agents SHALL review delivered commit-pinned IBKR/BD code/tests/proofs before implementation. Record reuse/adaptations/gaps/acceptance-commands in Beads. Contradictions block affected work.
 
 #### Scenario: Missing review
 - **WHEN** comparison missing
