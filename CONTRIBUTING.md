@@ -80,5 +80,4 @@ and production writes require separate authorization.
 
 ## License
 
-Contributions use the [MIT NON-AI License](LICENSE), including its additional
-restrictions. This is not the standard MIT license.
+Contributions use the [MIT License](LICENSE).

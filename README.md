@@ -6,7 +6,7 @@
   <a href="https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/latest"><img src="https://img.shields.io/github/v/release/flowcool/ghostfolio-boursedirect-sync?display_name=tag&amp;sort=semver" alt="Latest release"></a>
   <a href="https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/offline-tests.yml"><img src="https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/offline-tests.yml/badge.svg" alt="Build and checks: offline tests"></a>
   <a href="https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/codeql.yml"><img src="https://github.com/flowcool/ghostfolio-boursedirect-sync/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20NON--AI-5b6f8f" alt="MIT NON-AI License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5b6f8f" alt="MIT License"></a>
 </p>
 
 <p align="center"><strong>Your Bourse Direct trades, in your self-hosted Ghostfolio.</strong><br>Drop your PDF notices in a folder. Preview. Import. Done.</p>
@@ -131,4 +131,4 @@ Bugs: [Issues](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues)
 
 ## License
 
-[MIT NON-AI License](LICENSE). It adds restrictions to the standard MIT license. Read it before use.
+[MIT](LICENSE).
