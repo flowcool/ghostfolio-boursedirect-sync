@@ -14,7 +14,18 @@ ARG SUPERCRONIC_SHA256SUM_amd64=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a
 ARG SUPERCRONIC_SHA256SUM_arm64=4ae22576a78223d8ccdf5f3b3660a5cbb5288416bf0ca96afc4a36d195932b94
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
-    curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLO "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" && \
+    case "${TARGETARCH}" in \
+      amd64) ASSET_ID=662964203 ;; \
+      arm64) ASSET_ID=662964204 ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    # TEMPORARY (2026-11-08): API fallback for v0.2.51 while release downloads return 504. \
+    { curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLO "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" \
+      || { test "${SUPERCRONIC_VERSION}" = v0.2.51 && \
+        curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL \
+          --header "Accept: application/octet-stream" \
+          "https://api.github.com/repos/aptible/supercronic/releases/assets/${ASSET_ID}" \
+          --output "supercronic-linux-${TARGETARCH}"; }; } && \
     case "${TARGETARCH}" in \
       amd64) EXPECTED="${SUPERCRONIC_SHA256SUM_amd64}" ;; \
       arm64) EXPECTED="${SUPERCRONIC_SHA256SUM_arm64}" ;; \

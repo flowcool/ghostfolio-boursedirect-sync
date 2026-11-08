@@ -43,6 +43,8 @@ update only the account balance once per run, keep the other account fields, and
 confirm the stored balance by readback. The outcome line SHALL report `cash=simulated`,
 `cash=unchanged`, `cash=updated` or `cash=unavailable`.
 
+An unreadable Paperless document SHALL block cash unless its date is known and strictly before the latest statement closing date. Unreadable folder files SHALL remain blocking. Activity write protection SHALL remain unchanged.
+
 No statement, an unreadable or inconsistent statement, a broken chain, a
 currency mismatch or an unconfirmed cash write SHALL give `cash_unavailable`.
 `cash_unavailable` SHALL be exit 0 with user action required. It SHALL send no
@@ -65,3 +67,11 @@ text, holder name or address.
 #### Scenario: Invalid setting
 - **WHEN** `CASH_BALANCE=yes`
 - **THEN** `invalid_configuration CASH_BALANCE`, no service access, exit 1.
+
+#### Scenario: Historical unreadable Paperless document
+- **WHEN** an unreadable Paperless document has a date strictly before the latest statement closing date
+- **THEN** it does not block cash; all activity write protections remain.
+
+#### Scenario: Relevant unreadable document
+- **WHEN** an unreadable document has no reliable date, or its date is on or after the latest statement closing date
+- **THEN** it blocks cash; folder filenames never prove a date.

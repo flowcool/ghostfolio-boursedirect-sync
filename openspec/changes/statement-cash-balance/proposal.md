@@ -11,6 +11,7 @@ Ghostfolio shows no correct cash for the Bourse Direct account. IBKR sync keeps 
 - New opt-in setting `CASH_BALANCE`. Absent or `0`: no cash read, no cash write (current behavior).
 - With `CASH_BALANCE=1`, the importer computes: cash = closing balance of the latest statement + net amounts of supported notices dated after that statement.
 - Simulation logs the proposed cash. Live mode updates the Ghostfolio account balance once per run and reads it back.
+- An unreadable Paperless document strictly older than the latest closing does not block cash. Unknown dates and unreadable folder files still block it. Activity protections stay unchanged.
 - An unreadable statement, a broken balance chain, a currency mismatch or an account mismatch stops the cash write. Activity import is not affected.
 - Today a statement in the source stops all writes as an unreadable notice. After this change, it is recognized and counted.
 

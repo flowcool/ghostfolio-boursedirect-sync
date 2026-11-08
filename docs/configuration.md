@@ -176,3 +176,5 @@ Failures use fixed codes and allowlisted setting or HTTP context. Arbitrary
 exception text is omitted from logs and notifications.
 An absent `DRY_RUN` warns `DRY_RUN not set: simulation, nothing written`.
 Use explicit `DRY_RUN=1` for a deliberate simulation.
+
+An unreadable Paperless document dated strictly before the latest statement closing does not block cash; unknown dates and unreadable folder files still block it.
