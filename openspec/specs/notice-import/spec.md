@@ -2,28 +2,27 @@
 
 ## Purpose
 
-Import Paperless Bourse Direct PDF BUY/SELL/DIVIDEND notices. One container serves one Ghostfolio account.
+Import Bourse Direct PDF BUY/SELL/DIVIDEND notices into one Ghostfolio account/container.
 
-"Run" means `docker compose run --rm -T <service>; echo "exit=$?"`.
-Notices have Paperless `Source = Bourse Direct`, with/without `PAPERLESS_DONE_TAG`.
+Run: `docker compose run --rm -T <service>`. Paperless notices: `Source = Bourse Direct`; optional `PAPERLESS_DONE_TAG`.
 
 ## Requirements
 
 ### Requirement: Settings from ENV only
 
-ENV SHALL supply `GHOST_HOST`, `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT_NAME`, `BD_ACCOUNT_REF`, `PAPERLESS_URL`, `PAPERLESS_TOKEN`; optional `PAPERLESS_DONE_TAG` (default `ghostfolio-done`), `MAPPING_FILE`, `DRY_RUN`, `TZ`, `CRON`, `APPRISE_URLS`, `APPRISE_TIMEOUT`, `LOG_LEVEL`, `ACTIVITY_REVIEW_FILE`, `ACTIVITY_RECONCILIATION`. Invalid settings/nonunique/inactive/excluded targets SHALL give `invalid_configuration`. Omit secrets.
+ENV requires `GHOST_HOST`, `GHOST_ACCESS_TOKEN` or `GHOST_TOKEN`, `GHOST_ACCOUNT_NAME`, `BD_ACCOUNT_REF`, `PAPERLESS_URL`, `PAPERLESS_TOKEN`; optional `PAPERLESS_DONE_TAG` (default `ghostfolio-done`), `MAPPING_FILE`, `DRY_RUN`, `TZ`, `CRON`, `APPRISE_URLS`, `APPRISE_TIMEOUT`, `LOG_LEVEL`, `ACTIVITY_REVIEW_FILE`, `ACTIVITY_RECONCILIATION`. Invalid settings/nonunique/inactive/excluded targets SHALL give `invalid_configuration`. Omit secrets.
 
-#### Scenario: Missing Paperless token
+#### Scenario: Missing token
 - **WHEN** token missing
 - **THEN** `invalid_configuration`, `PAPERLESS_TOKEN`, exit 1.
 
-#### Scenario: Ambiguous Ghostfolio account
+#### Scenario: Ambiguous account
 - **WHEN** names collide
 - **THEN** `invalid_configuration`, exit 1.
 
 ### Requirement: Usable Ghostfolio evidence
 
-Incomplete/masked/invalid evidence SHALL give `activities_unavailable` before selection/writes. assetProfile SHALL precede SymbolProfile. Draft/excluded/non-YAHOO rows SHALL occupy identities without supporting holdings/matches. Future events SHALL defer with `future_activity`.
+Incomplete/masked/invalid evidence gives `activities_unavailable` before selection/writes. assetProfile precedes SymbolProfile. Draft/excluded/non-YAHOO identities count without holdings/matches. Future events defer: `future_activity`.
 
 #### Scenario: Unsafe activity evidence
 - **WHEN** evidence masked
@@ -39,15 +38,15 @@ Incomplete/masked/invalid evidence SHALL give `activities_unavailable` before se
 
 ### Requirement: Simulation by default
 
-`DRY_RUN=0` SHALL enable financial writes; absent/1 SHALL simulate without financial writes. Otherwise `invalid_configuration`. Review refresh/action notifications SHALL remain available.
+`DRY_RUN=0` enables financial writes; absent/1 simulates; otherwise `invalid_configuration`. Review refresh/action notifications remain available.
 
-#### Scenario: Real BUY in simulation
+#### Scenario: Simulated BUY
 - **WHEN** BUY simulated
 - **THEN** `DRY RUN`, exact fields.
 
 ### Requirement: Paperless source
 
-Read all original notices; Paperless SHALL remain read-only. Rejected tokens SHALL give `paperless_auth_failed`; unexpected answers, `paperless_unreachable`. Errors SHALL show only HTTP status/code/document ID. Omit holder/address; account references appear only in identity comments/logs. `BourseDirect_` files without `Source = Bourse Direct` SHALL stop writes with `source_field_missing`.
+Read all originals; Paperless stays read-only. Rejected tokens give `paperless_auth_failed`; unexpected answers, `paperless_unreachable`. Errors show only HTTP status/code/document ID. Omit holder/address; account references only in identity comments/logs. `BourseDirect_` files without `Source = Bourse Direct` SHALL stop writes with `source_field_missing`.
 
 #### Scenario: Wrong Paperless token
 - **WHEN** token rejected
@@ -63,15 +62,15 @@ Read all original notices; Paperless SHALL remain read-only. Rejected tokens SHA
 
 ### Requirement: Account selection
 
-Before target selection require one labelled account/notice. Remove spaces once; match `BD_ACCOUNT_REF`. Count other accounts. Missing/multiple accounts SHALL give `notice_unreadable`.
+Before target selection: one labelled account/notice; remove spaces once; match `BD_ACCOUNT_REF`; count others. Missing/multiple: `notice_unreadable`.
 
-#### Scenario: Notice of another account
+#### Scenario: Other account
 - **WHEN** accounts differ
 - **THEN** selected rows; others counted.
 
 ### Requirement: Unreadable documents block writes
 
-Unreadable notices/accounts or unknown field labels SHALL stop all writes with `notice_unreadable`. Simulation SHALL list readable activities.
+Unreadable notices/accounts/unknown labels SHALL stop activity writes: `notice_unreadable`. Simulation lists readable activities.
 
 #### Scenario: Unreadable document
 - **WHEN** PDF unreadable
@@ -79,7 +78,7 @@ Unreadable notices/accounts or unknown field labels SHALL stop all writes with `
 
 ### Requirement: Amount checks
 
-All amounts SHALL be EUR. For BUY/SELL, abs(QUANTITE) × COURS rounded HALF_UP to cents SHALL equal BRUT. Keep quantity/price. BUY debit SHALL equal BRUT+COURTAGE+TVA; SELL credit, BRUT−COURTAGE−TVA; TVA SHALL equal zero. Missing BUY brokerage SHALL mean zero with explicit TVA=0 and Debit=BRUT: `brokerage_zero_inferred`. Coupons SHALL be positive EUR credits. Otherwise report `amount_check_failed`, without importing affected rows.
+Amounts SHALL be EUR. BUY/SELL: abs(QUANTITE)×COURS, HALF_UP cents, equals BRUT; preserve quantity/price. BUY debit SHALL equal BRUT+COURTAGE+TVA; SELL credit, BRUT−COURTAGE−TVA; TVA SHALL equal zero. Missing BUY brokerage means zero only with explicit TVA=0 and Debit=BRUT: `brokerage_zero_inferred`. Coupons require positive EUR credits; otherwise `amount_check_failed`, affected rows withheld.
 
 #### Scenario: Altered amount
 - **WHEN** BRUT inconsistent
@@ -95,15 +94,15 @@ All amounts SHALL be EUR. For BUY/SELL, abs(QUANTITE) × COURS rounded HALF_UP t
 
 ### Requirement: Activity content
 
-BUY/SELL SHALL use absolute quantity, source price, EUR, printed date at midnight UTC. Fee SHALL equal brokerage plus attributed BUY TTF. DIVIDEND SHALL use quantity 1, net credit, fee 0. Identity SHALL be `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`; KIND equals type; key uses broker reference, otherwise normalized rows with occurrence rank. Ignore file metadata for identity. Identity first lines SHALL permit notes after a blank separator.
+BUY/SELL: absolute quantity, source price, EUR, printed date midnight UTC; fee=brokerage+attributed BUY TTF. DIVIDEND: quantity 1, net credit, fee 0. Identity: `BD#v3#<BD_ACCOUNT_REF>:<KIND>:<row key>`; KIND=type; key=broker reference, otherwise normalized rows+occurrence rank. Ignore file metadata. Permit notes after blank separator.
 
-#### Scenario: Real coupon in simulation
+#### Scenario: Simulated coupon
 - **WHEN** coupon simulated
 - **THEN** DIVIDEND, quantity 1, net, fee 0.
 
 ### Requirement: Charged TTF attribution
 
-Charged TTF SHALL attach to exactly one BUY within source account/notice/date/ISIN. Never estimate/allocate. Ambiguity SHALL give `ttf_attribution_failed`, holding affected BUYs while independent events continue.
+Charged TTF requires exactly one BUY within account/notice/date/ISIN. Never estimate/allocate. Ambiguity: `ttf_attribution_failed`; hold affected BUYs, continue independent events.
 
 #### Scenario: Attributed TTF
 - **WHEN** TTF unique
@@ -117,13 +116,13 @@ Charged TTF SHALL attach to exactly one BUY within source account/notice/date/IS
 
 Resolve ISIN through `MAPPING_FILE.symbol_mapping`, then unique EUR lookup. Otherwise hold ISIN with `unresolved_security` and mapping hint. Nonempty missing/invalid mapping SHALL give `invalid_mapping`.
 
-#### Scenario: No EUR lookup result
+#### Scenario: Nonunique lookup
 - **WHEN** lookup nonunique
 - **THEN** `unresolved_security`, mapping hint.
 
 ### Requirement: No duplicate activity
 
-Identical account/identity/date/type/security/currency/quantity/price/fee SHALL mean duplicate. Compare identity first lines; preserve notes. Moved/conflicting identities SHALL give `owned_activity_conflict`, except eligible corrections. In both modes, unchanged legacy/unowned trades SHALL match same side/security (or ISIN)/quantity/price within two days: maximize one-to-one matches, then minimize distance. Dividends SHALL match same security/net within three days. Other nearby values give `possible_duplicate`. Review-held events SHALL NOT become imports. Malformed/unsupported reserved identities SHALL stop writes with `invalid_identity`; read valid v1/v2 without assuming migration ownership. Optional unproved migration SHALL NOT turn unchanged duplicates into required actions.
+Duplicate: identical account/identity/date/type/security/currency/quantity/price/fee. Compare identity first lines; preserve notes. Moved/conflicting identities SHALL give `owned_activity_conflict`, except eligible corrections. Both modes match unchanged legacy/unowned trades by side/security(or ISIN)/quantity/price within two days: maximize one-to-one matches, minimize distance. Dividends match security/net within three days. Other nearby values give `possible_duplicate`. Never import review-held events. Malformed/unsupported reserved identities SHALL stop writes with `invalid_identity`; read valid v1/v2 without assuming migration ownership. Unproved optional migrations never make unchanged duplicates required actions.
 
 #### Scenario: Regenerated notice
 - **WHEN** copies regenerated
@@ -141,31 +140,31 @@ Identical account/identity/date/type/security/currency/quantity/price/fee SHALL 
 - **WHEN** inputs repeated
 - **THEN** only duplicates, zero creations.
 
-#### Scenario: Coupon already in Ghostfolio
+#### Scenario: Existing coupon
 - **WHEN** legacy coupon matches
 - **THEN** duplicate, no DIVIDEND creation.
 
 ### Requirement: Sell guard
 
-Use current holdings plus chronological new rows, SELL first on equal dates. No replay. Negative positions SHALL hold SELL with `sell_exceeds_holding`.
+Current holdings+chronological new rows; equal dates SELL first; no replay. Negative positions hold SELL: `sell_exceeds_holding`.
 
-#### Scenario: Sell without a position
+#### Scenario: Insufficient holdings
 - **WHEN** holdings insufficient
 - **THEN** `sell_exceeds_holding`, exit 1.
 
 ### Requirement: Custody fees ignored
 
-Custody fees SHALL produce `custody_fee_ignored`, without import/exit change.
+Custody fees: `custody_fee_ignored`; import/exit unchanged.
 
-#### Scenario: Sell notice with a custody fee
+#### Scenario: Custody fee
 - **WHEN** custody fee present
 - **THEN** `custody_fee_ignored`, SELL unaffected.
 
 ### Requirement: Stop on a share-count change
 
-DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation`. With ISIN, hold that security across notices; independent securities continue. `PAPERLESS_DONE_TAG` SHALL waive these codes for that document only; other rows remain eligible.
+DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation`. ISIN holds span notices; independent securities continue. `PAPERLESS_DONE_TAG` SHALL waive these codes for that document only; other rows remain eligible.
 
-#### Scenario: Division and coupon in one notice
+#### Scenario: DIVISION/coupon
 - **WHEN** DIVISION unwaived
 - **THEN** `share_count_change`, coupon held.
 
@@ -175,7 +174,7 @@ DIVISION SHALL give `share_count_change`; unknown operations, `unknown_operation
 
 ### Requirement: Additive writes with readback
 
-Never delete. Only specified corrections SHALL update. Imports SHALL confirm once with identical account/comment/symbol/data-source/date/type/quantity/price/fee/currency. Uncertainty SHALL permit delayed readback, never resend. Incomplete/conflicting/extra evidence SHALL stop writes with `import_unconfirmed`; only confirmed rows advance holdings.
+Never delete. Only specified corrections update. Confirm imports once with identical account/comment/symbol/data-source/date/type/quantity/price/fee/currency. Permit delayed readback, never resend. Incomplete/conflicting/extra evidence: `import_unconfirmed`, stop writes. Only confirmed rows advance holdings.
 
 #### Scenario: Unexpected import response
 - **WHEN** confirmation absent
@@ -187,13 +186,13 @@ Never delete. Only specified corrections SHALL update. Imports SHALL confirm onc
 
 ### Requirement: Exact BUY fee correction
 
-One account/date/security/quantity/price-matched BUY with brokerage-only fee and unique charged TTF SHALL qualify for fee-only correction. Dedicated `ttf` authority SHALL include exact unowned matches without `yes`; preserve comments byte-for-byte. Correct fees: no-op. Persistent review SHALL be required, including profile `off`. An unset file SHALL hold that BUY with `review_evidence`; independent imports continue. Share budget/recovery below. Confirm exact readback; uncertainty SHALL give `import_unconfirmed`, without resend or double-counted TTF.
+Fee-only correction requires one account/date/security/quantity/price-matched BUY, brokerage-only fee, unique charged TTF. `ttf` authority includes exact unowned matches without `yes`; preserve comments bytes. Correct fees: no-op. Persistent review required even with profile `off`; unset file holds BUY: `review_evidence`; independent imports continue. Share budget/recovery below. Exact readback required; uncertainty: `import_unconfirmed`, no resend/double-counted TTF.
 
-#### Scenario: Existing brokerage-only BUY
+#### Scenario: Brokerage-only BUY
 - **WHEN** file usable, TTF proved
 - **THEN** fee-only update; repeat unchanged.
 
-#### Scenario: Missing correction file
+#### Scenario: Missing review
 - **WHEN** review file unset
 - **THEN** `review_evidence`, independent imports continue.
 
@@ -207,7 +206,7 @@ Report `success`, `success with user action required`, or `failure` at INFO/WARN
 | 0, information | `custody_fee_ignored`, `brokerage_zero_inferred` |
 | 1, failure | `invalid_configuration`, `invalid_mapping`, `paperless_auth_failed`, `paperless_unreachable`, `source_field_missing`, `notice_unreadable`, `amount_check_failed`, `activities_unavailable`, `unresolved_security`, `owned_activity_conflict`, `possible_duplicate`, `invalid_identity`, `sell_exceeds_holding`, `share_count_change`, `unknown_operation`, `future_activity`, `import_unconfirmed`, `ghostfolio_auth_failed`, `ttf_attribution_failed`, `ghostfolio_unreachable`, `unhandled_error`, `review_unavailable` |
 
-Count imports/simulations/duplicates/conforming/corrections/migrations/holds/deferred work/delivery; mark unavailable/overlapping counts. Actions SHALL state reason/scope/impact/next-step/resolution, including imported events. Apprise SHALL send at most one redacted failure/action summary/run, including simulation; repeat unresolved actions; clean runs stay silent. Omit identifiers/securities/amounts/paths/secrets. Report sent/failed/unconfirmed; never retry timeout or change financial selection/exit for delivery failure.
+Count imports/simulations/duplicates/conforming/corrections/migrations/holds/deferred/delivery; mark unavailable/overlap. Actions include reason/scope/impact/next-step/resolution, including imported events. Apprise: at most one redacted failure/action summary/run, including simulation; repeat unresolved actions; clean runs silent. Omit identifiers/securities/amounts/paths/secrets. Report sent/failed/unconfirmed; never retry timeout; delivery failure preserves financial selection/exit.
 
 #### Scenario: Failure notification
 - **WHEN** failure/action persists
@@ -215,7 +214,7 @@ Count imports/simulations/duplicates/conforming/corrections/migrations/holds/def
 
 ### Requirement: Schedule
 
-Valid `CRON` SHALL schedule imports; absence runs once; invalid values exit 1.
+`CRON` schedules imports; absent runs once; invalid exits 1.
 
 #### Scenario: Invalid schedule
 - **WHEN** `CRON=bad`
@@ -223,23 +222,23 @@ Valid `CRON` SHALL schedule imports; absence runs once; invalid values exit 1.
 
 ### Requirement: Persistent operator review
 
-`ACTIVITY_REVIEW_FILE` SHALL enable YAML reference/financial proposals, groups and conforming rows with exact before/after, changed fields, source/target, evidence, authority/status/block. Initialize after valid acquisition only. Unsafe paths/permissions/links/input overlap/concurrency/unavailable evidence SHALL give `review_unavailable` before financial writes. Preserve recovery evidence. Only `decision: yes` SHALL approve unchanged eligible proposals already present; `reject` rejects that pair without activity changes. Preserve unchanged choices; invalidate changed evidence. Invalidated rejections/rebuilt evidence SHALL NOT grant immediate automatic authority. Blocked `yes` SHALL remain blocked. Hold related imports only.
+`ACTIVITY_REVIEW_FILE`: YAML reference/financial proposals, groups/conforming rows, exact before/after/changed-fields/source/target/evidence/authority/status/block. Initialize only after valid acquisition. Unsafe paths/permissions/links/input-overlap/concurrency/unavailable-evidence: `review_unavailable` before writes. Preserve recovery evidence. Only `decision: yes` approves existing unchanged eligible proposals; `reject` changes no activity. Preserve unchanged choices; changed evidence invalidates. Invalidated rejections/rebuilt evidence never grant immediate automatic authority. Blocked `yes` stays blocked. Hold related imports only.
 
 #### Scenario: Changed consent
-- **WHEN** reads `yes` with changed evidence
-- **THEN** it clears consent without executing that proposal.
+- **WHEN** `yes` evidence changes
+- **THEN** clear consent; no execution.
 
 ### Requirement: Source-proven correction fields
 
-Pair validated events/activities in the same active account/type/YAHOO security/EUR. ISIN conflicts/competing candidates SHALL block; exact references win. Fees/order/aggregates never prove identity. Replace only proved date/price/fee/reference. Preserve ID/owner/account/security/type/currency/tags/notes and BUY/SELL quantity. DIVIDEND SHALL retain validated net and quantity 1. Report quantity/group differences; never merge/split/delete. Legacy migration SHALL require reproducible event/account proof; otherwise `review_evidence`. Migrate comments separately from financial corrections.
+Pair validated events/activities: same active account/type/YAHOO-security/EUR. Block ISIN conflicts/competing candidates; exact references win. Fees/order/aggregates never prove identity. Replace only proved date/price/fee/reference; preserve ID/owner/account/security/type/currency/tags/notes/BUY-SELL-quantity. DIVIDEND keeps validated net, quantity 1. Report quantity/group differences; never merge/split/delete. Legacy migration requires reproducible event/account proof; otherwise `review_evidence`. Separate comment migrations from financial corrections.
 
 #### Scenario: Separate migration
-- **WHEN** finds proved legacy ownership plus a fee discrepancy
-- **THEN** it changes only the comment; another run evaluates fee.
+- **WHEN** legacy ownership proved, fee differs
+- **THEN** comment only; fee next run.
 
 ### Requirement: Explicit reconciliation profiles
 
-`ACTIVITY_RECONCILIATION` SHALL accept `off` (default), `conservative`, `balanced`, `permissive`. Non-off SHALL require review file and explicit IANA `TZ`, otherwise `invalid_configuration`. Off SHALL retain manual/TTF/recovery authority without requiring TZ. Profiles never create `yes`. Pairs SHALL be mutually unique; conservative requires recognized unique reference; others permit unreferenced pairs.
+`ACTIVITY_RECONCILIATION`: `off`(default)/`conservative`/`balanced`/`permissive`. Non-off requires review file+explicit IANA `TZ`; otherwise `invalid_configuration`. Off retains manual/TTF/recovery authority without TZ. Profiles never create `yes`. Require mutually unique pairs; conservative requires recognized unique reference; others permit unreferenced pairs.
 
 | Profile | Absolute gross | Relative | Date distance |
 | --- | --- | --- | --- |
@@ -247,101 +246,71 @@ Pair validated events/activities in the same active account/type/YAHOO security/
 | balanced | 0.01 EUR | 0.1% | 0 days |
 | permissive | 1 EUR | 1% | BUY/SELL 2; DIVIDEND 3 days |
 
-Both limits SHALL pass: exact positive quantity×price gross, excluding fees; source-relative. Fees SHALL require independent validation without matching limit. No FX/residue exception. Compare printed source date with destination date in `TZ`; write midnight UTC. Show dates/instants. Eligible outside-limit pairs SHALL remain manually reviewable.
+Require both limits: exact positive quantity×price gross without fees; source-relative. Validate fees independently without matching limit. No FX/residue exception. Compare printed source/destination dates in `TZ`; write midnight UTC; show dates/instants. Outside-limit eligible pairs remain manually reviewable.
 
 #### Scenario: Threshold
-- **WHEN** compares pairs at/beyond either limit
-- **THEN** it only selects pairs passing both limits automatically.
+- **WHEN** pair at/beyond limits
+- **THEN** automatic selection requires both limits.
 
 ### Requirement: Bounded corrections and durable uncertainty
 
-Apply every eligible manual/profile/migration/TTF correction, oldest first; stable ties; imports stay uncapped. Simulation SHALL show `would correct`. Persist before/after/authority before PUT. Next PUTs require exact changed/preserved-field readback and D=150 seconds after confirmation. Qualify D in labs. A new release raises D when the lab margin no longer passes. Uncertainty SHALL retain approvals and hold account writes across restarts without resend. Only exact confirmation settles pending; other evidence/settings/simulation/file changes SHALL NOT settle it.
+Apply all eligible manual/profile/migration/TTF corrections oldest-first, stable ties; imports uncapped. Simulation: `would correct`. Persist before/after/authority before PUT. Next PUT requires exact changed/preserved-field readback+D=150 seconds after confirmation. Qualify D in labs; raise D next release if margin fails. Uncertainty retains approvals, holds account writes across restarts, never resends. Only exact confirmation settles pending; other evidence/settings/simulation/file changes cannot.
 
 #### Scenario: Restart
-- **WHEN** an uncertain correction resumes
-- **THEN** retain the hold until exact confirmation; never retry or double count.
+- **WHEN** uncertain correction resumes
+- **THEN** hold until exact confirmation; no retry/double-count.
 
 ### Requirement: Review delivered implementations
 
-Before implementation, agents SHALL review delivered, commit-pinned IBKR/BD code/tests/proofs. Record reuse/adaptations/gaps/acceptance-commands in Beads. Contradictions SHALL block affected work.
+Before implementation review delivered commit-pinned IBKR/BD code/tests/proofs. Record reuse/adaptations/gaps/acceptance-commands in Beads. Contradictions block affected work.
 
 #### Scenario: Missing review
-- **WHEN** implementation lacks this comparison
-- **THEN** affected work remains unstarted.
+- **WHEN** comparison missing
+- **THEN** affected work unstarted.
 
 
 ### Requirement: Account statements in the source
 
-The source (folder or Paperless) MAY contain Bourse Direct monthly account
-statements ("Relevé de compte"). The importer SHALL recognize a statement by its
-printed title and its opening and closing `Solde au` lines. A recognized
-statement SHALL NOT be an operation notice. It SHALL never create, correct or
-hold an activity. It SHALL NOT give `notice_unreadable`. Logs SHALL count
-recognized statements. A PDF that is neither a supported notice nor a
-recognized statement SHALL keep the existing `notice_unreadable` behavior.
-Securities statements ("Relevé de titres") SHALL remain unsupported.
+Folder/Paperless monthly statements SHALL use title+opening/closing `Solde au` recognition; count them; never create/correct/hold activities or give `notice_unreadable`. Other unsupported PDFs/securities statements retain `notice_unreadable`.
 
-#### Scenario: Statement next to notices
-- **WHEN** the source holds notices and one account statement, `CASH_BALANCE` absent
-- **THEN** the notices import as today, the statement is counted, no `notice_unreadable`.
+#### Scenario: Statement with notices
+- **WHEN** notices/statement coexist
+- **THEN** count statement; notices unaffected.
 
 #### Scenario: Unknown PDF
-- **WHEN** the source holds a PDF that is neither a notice nor a statement
-- **THEN** `notice_unreadable`, no writes, as today.
+- **WHEN** PDF unsupported
+- **THEN** `notice_unreadable`, no writes.
 
 ### Requirement: Opt-in cash balance
 
-Optional ENV `CASH_BALANCE` SHALL accept `0` or `1`. Absent SHALL mean `0`.
-Other values SHALL give `invalid_configuration CASH_BALANCE` before service
-access. With `0`, the importer SHALL read no statement amount and SHALL send no
-cash write. The outcome line SHALL keep `cash=not managed`.
+`CASH_BALANCE` SHALL accept absent/0 (no amount read/write, `cash=not managed`) or 1; otherwise `invalid_configuration CASH_BALANCE` before service access.
 
-With `1`, the importer SHALL select the statements of `BD_ACCOUNT_REF`, with the
-same account rule as notices. Statements of other accounts SHALL be counted and
-ignored. The importer SHALL take the latest statement by closing date. It SHALL
-check that its opening balance plus its movements equals its closing balance,
-and that consecutive statements chain (opening equals the previous closing).
-The proposed cash SHALL be the closing balance plus the net cash of supported
-BUY, SELL and coupon notices of the same account dated after the closing date.
-Money SHALL use exact decimal cents. The Ghostfolio account currency SHALL be
-EUR.
+Select `BD_ACCOUNT_REF` statements under notice rules; count/ignore others. Validate opening+movements=closing; consecutive opening=previous closing. Cash SHALL equal latest closing+later same-account BUY/SELL/coupon net, exact decimal EUR cents. Target SHALL be EUR.
 
-Simulation SHALL log the statement closing date, the number of later notices
-and the proposed cash, and SHALL send no cash write. Live mode SHALL send no write
-when the stored balance already equals the proposed cash. Otherwise it SHALL
-update only the account balance once per run, keep the other account fields, and
-confirm the stored balance by readback. The outcome line SHALL report `cash=simulated`,
-`cash=unchanged`, `cash=updated` or `cash=unavailable`.
+Simulation logs closing-date/later-notice-count/proposed-cash without writes. Live SHALL write balance only, once, preserve other fields, confirm readback; equal balances: no write. Report `cash=simulated|unchanged|updated|unavailable`.
 
-An unreadable Paperless document SHALL block cash unless its date is known and strictly before the latest statement closing date. Unreadable folder files SHALL remain blocking. Activity write protection SHALL remain unchanged.
+Unreadable Paperless documents block cash unless reliably dated strictly before latest closing; folder files block. No/malformed/inconsistent statements, broken chains, currency mismatch or unconfirmed write SHALL give `cash_unavailable`, exit 0 with user action. No cash write; preserve activity selection/imports/exit. Omit statement-text/holder/address.
 
-No statement, an unreadable or inconsistent statement, a broken chain, a
-currency mismatch or an unconfirmed cash write SHALL give `cash_unavailable`.
-`cash_unavailable` SHALL be exit 0 with user action required. It SHALL send no
-cash write and SHALL NOT change activity selection, imports or their exit code.
-Logs SHALL show dates, counts and amounts only; they SHALL NOT show statement
-text, holder name or address.
+#### Scenario: Cash
+- **WHEN** closing=348.66 EUR, later BUY=120.00 EUR net
+- **THEN** simulate/store/readback 228.66 EUR.
 
-#### Scenario: Cash from latest statement and later notices
-- **WHEN** `CASH_BALANCE=1`, the latest statement closes on 31/08 at 348.66 EUR, and one BUY notice of 120.00 EUR net is dated 05/09
-- **THEN** simulation proposes 228.66 EUR; live mode stores 228.66 EUR and confirms it by readback.
-
-#### Scenario: Setting off
-- **WHEN** `CASH_BALANCE` is absent
-- **THEN** no cash read or write, `cash=not managed`.
+#### Scenario: Off
+- **WHEN** setting absent
+- **THEN** no cash read/write; `cash=not managed`.
 
 #### Scenario: Inconsistent statement
-- **WHEN** the movements of the latest statement do not sum to its closing balance
-- **THEN** `cash_unavailable`, no cash write, activities import normally, exit 0 with user action.
+- **WHEN** reconciliation fails
+- **THEN** `cash_unavailable`; activities unaffected.
 
 #### Scenario: Invalid setting
 - **WHEN** `CASH_BALANCE=yes`
-- **THEN** `invalid_configuration CASH_BALANCE`, no service access, exit 1.
+- **THEN** `invalid_configuration CASH_BALANCE`, exit 1 before access.
 
-#### Scenario: Historical unreadable Paperless document
-- **WHEN** an unreadable Paperless document has a date strictly before the latest statement closing date
-- **THEN** it does not block cash; all activity write protections remain.
+#### Scenario: Old unreadable document
+- **WHEN** Paperless date strictly precedes closing
+- **THEN** no cash block; activity protections remain.
 
 #### Scenario: Relevant unreadable document
-- **WHEN** an unreadable document has no reliable date, or its date is on or after the latest statement closing date
-- **THEN** it blocks cash; folder filenames never prove a date.
+- **WHEN** date unknown/at/after closing, or folder unreadable
+- **THEN** cash blocked.
