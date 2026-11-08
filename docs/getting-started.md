@@ -20,13 +20,23 @@ They need no source checkout or local image build. Keep `IMAGE_DIGEST` with it.
 It identifies the exact qualified image; keep the previous bundle for rollback.
 
 ```sh
+umask 077
+version=2.2.0
+release="https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/download/v$version"
+curl --fail --location --remote-name "$release/ghostfolio-boursedirect-sync-v$version.tar.gz"
+curl --fail --location --remote-name "$release/SHA256SUMS"
 sha256sum --check SHA256SUMS --ignore-missing
-tar -xzf ghostfolio-boursedirect-sync-vX.Y.Z.tar.gz
-cd ghostfolio-boursedirect-sync-vX.Y.Z
+tar -xzf "ghostfolio-boursedirect-sync-v$version.tar.gz"
+cd "ghostfolio-boursedirect-sync-v$version"
 cp .env.example .env
 chmod 600 .env
 sudo install -d -m 0700 -o 10001 -g 10001 review
 ```
+
+Require the archive checksum to report `OK`. Stop if a download or verification
+fails. `--ignore-missing` skips other release assets that you did not download.
+The extracted bundle contains `IMAGE_DIGEST`. For another release, change
+`version` and read that release's instructions.
 
 Use one installation directory and one service for each source/target account.
 A second account needs separate `.env`, review directory and Compose project
@@ -42,7 +52,11 @@ Set exactly one credential mode. Never put a token on a command line or in an is
 
 Set `GHOST_HOST` and the exact `GHOST_ACCOUNT_NAME`. The account must be unique,
 active and included in analysis. Use full account access, not restricted public
-view access. Set `BD_ACCOUNT_REF` from the PDF account label, without spaces.
+view access. Set `BD_ACCOUNT_REF` to the account reference after `COMPTE N°` on
+the PDF. Remove spaces. Exclude the currency suffix `EUR` and the account type
+`PEA` or `PEA-PME`. Text extraction can join `EUR` to the reference.
+If `other_account_notices` excludes your intended files, fix this setting before
+importing. Exit 0 alone does not prove that the intended account was selected.
 
 For a **folder**, set these values in `.env`:
 
@@ -78,16 +92,25 @@ For **Paperless**, leave `NOTICE_DIR` and `NOTICE_WAIVER_FILE` empty. Use
 `COMPOSE_FILE=compose.yaml`. Set `PAPERLESS_URL` and `PAPERLESS_TOKEN`.
 Follow [Paperless setup](configuration.md#paperless-setup) before the first simulation.
 
-Keep `MAPPING_FILE` empty for automatic lookup. If an ISIN cannot resolve to one
-EUR Yahoo symbol, verify that symbol in Ghostfolio. Copy
-`config/mappings.example.yaml` to private `config/mappings.yaml`, replace the
-synthetic entry, then set `MAPPING_FILE=/config/mappings.yaml`. Give GID 10001
-read access as described in [mapping setup](../config/README.md).
+Keep `MAPPING_FILE` empty for automatic lookup. To keep the same symbols across
+simulation, import and repeat, freeze the mapping for every selected ISIN.
+In Ghostfolio's activity editor, search for each Yahoo ticker and check its
+currency. Close the editor without saving an activity. For a foreign share
+bought in EUR, use the [EUR listing guide](troubleshooting.md#foreign-shares-bought-in-eur).
+Live lookup can be ambiguous or change between runs.
+
+Copy `config/mappings.example.yaml` to private `config/mappings.yaml`. Replace
+the synthetic entry with your verified `ISIN: TICKER` lines under `symbol_mapping`.
+Set `MAPPING_FILE=/config/mappings.yaml`. Keep that file unchanged for the three
+runs. Give GID 10001 read access as described in [mapping setup](../config/README.md).
 
 The base Compose uses the public image and normal Docker egress. For an existing
 private Docker network, append `:compose.ghostfolio.yaml` to `COMPOSE_FILE`, set
 `GHOSTFOLIO_NETWORK` to its exact name, and use reachable internal service URLs.
-The override adds that network. It requires no fixed personal network name.
+The override adds that network. Use the Ghostfolio service name and its container
+port on that network. `localhost` or `127.0.0.1` inside the importer refers to the
+importer itself. A host-only loopback URL is not reachable through normal Docker
+egress. Do not expose a private destination publicly to work around this.
 A source checkout can use `compose.build.yaml` for development; release users
 must not need it. `BOURSEDIRECT_IMAGE` can select an immutable digest explicitly.
 
@@ -99,13 +122,18 @@ Pull the image, then force one non-interactive simulation:
 ```sh
 docker compose config --quiet
 docker compose pull
-docker compose run --rm -T --no-deps -e DRY_RUN=1 -e CRON= importer
+docker compose run --rm -T --no-deps -e DRY_RUN=1 -e CRON= importer > simulation.log 2>&1
+echo "Exit status: $?"
+less simulation.log
 ```
 
 Read the exit status and each proposed date, type, symbol, quantity, price and
 fee. Inspect the source-file/document counts, unreadable count and review/action
 counts. Exit 0 can still require a user action. Preserve private logs locally.
-Never share full financial logs or resolved Compose output.
+Never share full financial logs or resolved Compose output. `--rm` removes the
+one-off container. Save stdout and stderr as above; `docker compose logs` cannot
+retrieve that removed container's output. Save coverage, import and repeat logs
+in separate private files in the same way.
 
 Run coverage against the same source and account:
 

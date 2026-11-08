@@ -5,15 +5,11 @@ Use a read-only folder or an existing Paperless-ngx service. The importer has no
 broker login and no vault access. It adds activities and prevents duplicates.
 Simulation is the default. Paperless is always read only.
 
-Folder input and digest waivers require v2.2.0 or later. The v2.1.0 image does
-not support folder input. Select a published version from
-[GitHub Releases](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases).
-The operator bundle pins its qualified image digest. Use the instructions from
-that bundle with the same image version.
-
-The source checkout keeps this stable image example. The operator bundle replaces
-it with the qualified release image:
-`ghcr.io/flowcool/ghostfolio-boursedirect-sync:2.1.0@sha256:2949c5773dab862590a3dabbaf2bb52495d759f37c615f9cfdb72b66bbcd6c76`.
+[v2.2.0 is published](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v2.2.0).
+It includes folder input and digest waivers. Download its operator bundle for
+installation. It pins the qualified image digest and needs no source checkout.
+Use the bundle's instructions with its image version. v2.1.0 does not support
+folder input.
 
 [Releases](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases) ·
 [Questions and bugs](https://github.com/flowcool/ghostfolio-boursedirect-sync/issues) ·

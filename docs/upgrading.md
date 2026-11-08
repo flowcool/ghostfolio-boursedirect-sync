@@ -16,6 +16,10 @@ Do not assume compatibility with untested Ghostfolio versions.
 6. Run one deliberate import and verify its result. Resume the schedule only
    after exact readback and the duplicate check succeed.
 
+Keep the verified mapping unchanged during the upgrade checks. Live lookup can
+change between runs. Use the [EUR listing guide](troubleshooting.md#foreign-shares-bought-in-eur)
+for foreign shares bought in EUR.
+
 v2.2 adds folder input. Keep Paperless configured until you deliberately select
 the folder override. Do not mix sources. A source switch preserves financial
 identities. Changed source evidence can clear review consent. It never settles
