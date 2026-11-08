@@ -82,21 +82,6 @@
       "matchManagers": ["dockerfile", "github-actions"],
       "matchPackageNames": ["python", "actions/python-versions"],
       "groupName": "Python runtime"
-    },
-    {
-      "description": "Own image: after a stable release, bump the README pin; automerge only when required checks pass (tests/test_image_pins.py guards consistency).",
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchPackageNames": [
-        "ghcr.io/flowcool/ghostfolio-boursedirect-sync"
-      ],
-      "groupName": "own image",
-      "schedule": [
-        "at any time"
-      ],
-      "automerge": true,
-      "automergeType": "pr"
     }
   ],
   "vulnerabilityAlerts": {
@@ -109,18 +94,6 @@
   },
   "osvVulnerabilityAlerts": false,
   "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Own published image pins in the README (bumped after each stable release).",
-      "managerFilePatterns": [
-        "/^README\\.md$/"
-      ],
-      "matchStrings": [
-        "ghcr\\.io/flowcool/ghostfolio-boursedirect-sync:(?<currentValue>v\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "depNameTemplate": "ghcr.io/flowcool/ghostfolio-boursedirect-sync",
-      "datasourceTemplate": "docker"
-    },
     {
       "customType": "regex",
       "description": "Track the SHA-verified scheduler; update both binary hashes with the version.",

@@ -39,7 +39,7 @@ jobs:
               ]).split(b'\0')
               paths = [p.decode('utf-8', errors='surrogateescape') for p in changed if p]
               code = not paths or any(
-                  not (p.startswith(('docs/', 'openspec/')) or p.endswith('.md'))
+                  not (p.startswith(('docs/', 'openspec/')) or p.endswith('.md') or p == 'llms.txt')
                   for p in paths
               )
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:

@@ -1,4 +1,7 @@
-"""Offline check: README image pins name one stable release, so Renovate bumps them together."""
+"""Offline check: the public READMEs use the moving :latest tag (Florent 2026-11-08).
+
+Release bundles pin the exact digest at packaging time (scripts/release_package.py).
+"""
 
 import re
 from pathlib import Path
@@ -20,8 +23,10 @@ def single_stable_pin(texts):
     return pin
 
 
-def test_readme_pins_one_stable_release():
-    single_stable_pin([(ROOT / "README.md").read_text(encoding="utf-8")])
+def test_readmes_use_latest_only():
+    for name in ("README.md", "README.fr.md"):
+        found = set(PIN.findall((ROOT / name).read_text(encoding="utf-8")))
+        assert found == {"latest"}, f"{name}: expected only :latest, found {sorted(found)}"
 
 
 def test_mismatched_pin_fails():

@@ -1,0 +1,34 @@
+# Bourse Direct → Ghostfolio
+
+> Docker importer: reads original Bourse Direct PDF operation notices (avis d'opéré) for EUR PEA and PEA-PME accounts and creates the matching activities in one self-hosted Ghostfolio account. No broker login.
+
+Instructions for an AI assistant that installs or runs this tool for a user.
+
+## Setup
+
+1. Follow the Quick start in README.md: one `compose.yaml` (image `ghcr.io/flowcool/ghostfolio-boursedirect-sync:latest`, folder `./notices` mounted read only at `/notices`) and one `.env`.
+2. Ask the user for: Ghostfolio URL reachable from the container, Ghostfolio Security Token (Account → Access), exact Ghostfolio account name, and the account reference after `COMPTE N°` on a notice (without spaces, `EUR` or `PEA`).
+3. The user copies original text PDFs into `notices/`. The container user is UID 10001 and needs read access.
+4. Simulate: `docker compose run --rm importer` (`DRY_RUN=1` is the default).
+5. Import once only after the user approves the simulated rows: `docker compose run --rm -e DRY_RUN=0 importer`. A repeat must create 0 activities.
+6. Schedule only after that: `DRY_RUN=0` and a five-field `CRON` in `.env`, then `docker compose up -d`. Never `up -d` with an empty `CRON`: the container would rerun in a loop.
+
+## Rules for the assistant
+
+- Never write to Ghostfolio (`DRY_RUN=0`) before the user has reviewed a simulation and said yes.
+- Suggest a Ghostfolio database backup before the first real import. Imports cannot be undone automatically.
+- Never print, log or paste tokens. Never commit `.env`, PDFs or logs.
+- If a run reports an uncertain write or a hold, stop and show the user the result line. Do not rerun to "fix" it and never delete review or state files.
+- `other_account_notices` > 0 with 0 simulated rows usually means a wrong `BD_ACCOUNT_REF`.
+- Foreign shares are bought in EUR: map them to the EUR listing (e.g. SAAB → `SDV1.F`) with `MAPPING_FILE`.
+
+## Reading results
+
+Each run ends with `Summary:` (simulated, duplicates, created…) and `Cycle result:` (`success`, `success with user action required`, or failure). Exit 0 alone does not prove the intended account was used: read the counts.
+
+## References
+
+- README.md: quick start and essential settings.
+- docs/configuration.md: every setting, Paperless source, mapping, review.
+- docs/troubleshooting.md: result lines, error codes, recovery.
+- Questions: https://github.com/flowcool/ghostfolio-boursedirect-sync/discussions
