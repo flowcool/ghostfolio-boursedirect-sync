@@ -44,6 +44,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
     proposals: int | None = None
     held: set[str] = set()
     review_counts: dict[str, int] = {}
+    review_disabled = False
     corrected = 0
     other_accounts = unreadable = duplicates = 0
     excluded_rows = excluded_documents = 0
@@ -60,6 +61,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         if invalid_schedule:
             raise RuntimeError("invalid_configuration CRON")
         settings = config.load()
+        review_disabled = settings.activity_reconciliation == "off" and not settings.activity_review_file
         if settings.cash_balance and not settings.notice_coverage:
             cash_result = "unavailable"
         simulated = settings.dry_run
@@ -105,6 +107,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             except RuntimeError as exc:
                 unreadable += 1
                 unreadable_dates.append(None)
+                reason = (" reason=missing_isin" if str(exc) == "notice_unreadable"
+                          and getattr(exc, "notice_reason", None) == "missing_isin" else "")
                 if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":
                     day = paperless.document_date(settings, document_id)
                     unreadable_dates[-1] = day
@@ -113,11 +117,11 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                         if settings.notice_coverage:
                             errors.add("notice_unreadable")
                         log.warning("Historical unreadable notice: document=%s code=notice_unreadable date=%s; "
-                                 "excluded from normal writes; coverage incomplete", document_id, day)
+                                 "excluded from normal writes; coverage incomplete%s", document_id, day, reason)
                         continue
                 message = outcome.redacted_failure(exc)
                 errors.add(message.split()[0])
-                log.error("%s document=%s", message, document_id)
+                log.error("%s document=%s%s", message, document_id, reason)
                 blocking_unreadable += 1
                 continue
             if notice.account_ref != settings.bd_account_ref:
@@ -139,7 +143,7 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
                     errors.add("ttf_attribution_failed")
                     log.error("ttf_attribution_failed document=%s", document_id)
             if notice.custody_fees:
-                log.warning("custody_fee_ignored document=%s rows=%s", document_id, notice.custody_fees)
+                log.info("custody_fee_ignored document=%s rows=%s", document_id, notice.custody_fees)
             if notice.inferred_brokerages:
                 log.info("brokerage_zero_inferred document=%s rows=%s", document_id, notice.inferred_brokerages)
             if notice.trades or notice.stops or settings.notice_coverage:
@@ -374,15 +378,18 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
         outcome.log_account_evidence(
             simulated=simulated, accepted=proposals if simulated else created if proposals is not None else None,
             duplicates=duplicates if proposals is not None else None,
-            held=len(held) if proposals is not None else None, reconciliation=review_counts, cash=cash_result)
+            held=len(held) if proposals is not None else None, reconciliation=review_counts, cash=cash_result,
+            review_disabled=review_disabled)
         log.info("Creation cut-off summary: excluded_rows=%s excluded_documents=%s",
                  excluded_rows, excluded_documents)
-        log.info("Review summary: conforming=%s corrections=%s migrations=%s held=%s deferred=%s "
-                 "would_correct=%s counts_available=%s counts_can_overlap=yes",
-                 review_counts.get("already consistent", 0), corrected,
-                 review_counts.get("reference migrations", 0), len(held),
-                 review_counts.get("automatic work deferred", 0), review_counts.get("would correct", 0),
-                 bool(review_counts))
+        if review_counts:
+            log.info("Review summary: conforming=%s corrections=%s migrations=%s held=%s deferred=%s "
+                     "would_correct=%s counts_available=True counts_can_overlap=yes",
+                     review_counts.get("already consistent", 0), corrected,
+                     review_counts.get("reference migrations", 0), len(held),
+                     review_counts.get("automatic work deferred", 0), review_counts.get("would correct", 0))
+        else:
+            log.info("Review summary: %s", "disabled" if review_disabled else "unavailable")
         if review_state is not None:
             activity_review.close_review(review_state)
 

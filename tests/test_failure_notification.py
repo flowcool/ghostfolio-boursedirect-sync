@@ -243,15 +243,19 @@ def test_operational_evidence_keeps_infra_result_contract(monkeypatch, caplog, t
     lines = [record.message for record in caplog.records]
     assert "Cycle result: success" in lines
     assert "Summary: simulated=1 duplicates=0 corrections=0 other_account_notices=0 unreadable_notices=0 created=0" in lines
-    deferred = "0" if review else "unavailable"
+    deferred = "0" if review else "disabled"
     assert ("Account evidence: simulated proposals=1; duplicates=0; other held events=0; "
             f"deferred automatic work={deferred}; cash=not managed") in lines
     if review:
         assert ("Reconciliation result: already consistent=0; automatically corrected=0; manually corrected=0; "
                 "automatic work deferred=0; manual review required=0; rejected association=0; blocked=0; "
                 "would correct=0; reference migrations=0; corrected targets=0; decision counts can overlap") in lines
+        assert ("Review summary: conforming=0 corrections=0 migrations=0 held=0 deferred=0 "
+                "would_correct=0 counts_available=True counts_can_overlap=yes") in lines
     else:
-        assert "Reconciliation result: unavailable" in lines
+        assert "Reconciliation result: disabled" in lines
+        assert "Review summary: disabled" in lines
+        assert not any("Review summary: conforming=" in line for line in lines)
     assert "Notification result: not required" in lines
 
 
@@ -261,3 +265,14 @@ def test_failed_acquisition_has_no_invented_account_evidence(monkeypatch, caplog
         assert app.main() == 1
     assert ("Account evidence: imports=unavailable; duplicates=unavailable; "
             "other held events=unavailable; deferred automatic work=unavailable; cash=not managed") in caplog.text
+
+
+def test_configured_review_without_results_stays_unavailable(monkeypatch, caplog, tmp_path):
+    monkeypatch.setenv("ACTIVITY_REVIEW_FILE", str(tmp_path / "review.yaml"))
+    monkeypatch.setattr(paperless, "document_ids", Mock(side_effect=RuntimeError("paperless_unreachable")))
+    with caplog.at_level(logging.INFO):
+        assert app.main() == 1
+    assert "Reconciliation result: unavailable" in caplog.text
+    assert "Review summary: unavailable" in caplog.text
+    assert "Review summary: conforming=" not in caplog.text
+    assert "paperless_unreachable" in caplog.text

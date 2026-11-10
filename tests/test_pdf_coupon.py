@@ -76,8 +76,17 @@ def test_coupon_uses_printed_net_and_does_not_infer_tax_from_gross():
     ("FR0000000002", "", "notice_unreadable"),
 ])
 def test_coupon_retains_field_and_amount_guards(old, new, code):
-    with pytest.raises(RuntimeError, match=f"^{code}$"):
+    with pytest.raises(RuntimeError, match=f"^{code}$") as caught:
         notices.parse_text(coupon_text().replace(old, new))
+    assert (getattr(caught.value, "notice_reason", None) == "missing_isin") == (old == "FR0000000002")
+
+
+def test_real_coupon_without_isin_keeps_error_code_with_fixed_reason():
+    text = (FIXTURES / "pdf_cutoff_unreadable.txt").read_text()
+    with pytest.raises(RuntimeError, match="^notice_unreadable$") as caught:
+        notices.parse_text(text)
+    assert str(caught.value) == "notice_unreadable"
+    assert caught.value.notice_reason == "missing_isin"
 
 
 @pytest.mark.parametrize("days", [-4, -3, 0, 3, 4])

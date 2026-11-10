@@ -113,6 +113,9 @@ def test_real_unreadable_coupon_requires_proved_older_document_date(settings, mo
         assert app.run_sync(codes) == exit_code
     assert post.call_count == (2 if exit_code == 0 else 0)
     assert codes == (set() if exit_code == 0 else {"notice_unreadable"})
+    assert "reason=missing_isin" in caplog.text
+    assert "ANONYMIZED RIGHTS" not in caplog.text
+    assert "0,40518" not in caplog.text
     if not exit_code:
         assert "Historical unreadable notice: document=1" in caplog.text
         assert "excluded_documents=1" in caplog.text
@@ -173,6 +176,7 @@ def test_historical_unreadable_notice_remains_in_coverage(settings, monkeypatch,
     assert "notice_unreadable" in codes
     assert "'unreadable': 1" in caplog.text
     assert "incomplete=True" in caplog.text
+    assert "reason=missing_isin" in caplog.text
     post.assert_not_called()
     put.assert_not_called()
 
