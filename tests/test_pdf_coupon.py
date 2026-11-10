@@ -83,8 +83,9 @@ def test_coupon_retains_field_and_amount_guards(old, new, code):
     assert (getattr(caught.value, "notice_reason", None) == "missing_isin") == (old == "FR0000000002" and new == "")
 
 
-def test_real_coupon_without_isin_keeps_error_code_with_fixed_reason():
-    text = (FIXTURES / "pdf_cutoff_unreadable.txt").read_text()
+@pytest.mark.parametrize("label", ["ANONYMIZED RIGHTS", "ANONYMIZED DO6"])
+def test_real_coupon_without_isin_keeps_error_code_with_fixed_reason(label):
+    text = (FIXTURES / "pdf_cutoff_unreadable.txt").read_text().replace("ANONYMIZED RIGHTS", label)
     with pytest.raises(RuntimeError, match="^notice_unreadable$") as caught:
         notices.parse_text(text)
     assert str(caught.value) == "notice_unreadable"
