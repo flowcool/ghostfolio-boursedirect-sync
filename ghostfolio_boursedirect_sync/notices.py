@@ -43,6 +43,14 @@ FOOTER = re.compile(
 )
 
 
+class NoticeUnreadable(RuntimeError):
+    """Fixed source diagnostic; follows IBKR ghostfolio.py:112 error typing."""
+
+    def __init__(self, reason: Literal["missing_isin"]) -> None:
+        super().__init__("notice_unreadable")
+        self.notice_reason = reason
+
+
 def extract_text(pdf: bytes) -> str:
     try:
         result = subprocess.run(
@@ -231,6 +239,9 @@ def parse_text(text: str) -> Notice:
                 raise RuntimeError("notice_unreadable")
             isin = re.search(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b", row)
             operation = row[:isin.start()].strip() if isin else re.split(r"\s{2,}", row)[0]
+            if (operation == "COUPONS" and isin is None
+                    and re.search(r"\b[A-Z]{2}[0-9]", row) is None):
+                raise NoticeUnreadable("missing_isin")
             if not operation or operation in {
                 "ACHAT COMPTANT", "ACHAT ETRANGER", "VENTE COMPTANT", "VENTE ETRANGER", "COUPONS",
                 "DROITS DE GARDE",

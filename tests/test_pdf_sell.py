@@ -173,6 +173,9 @@ def test_sell_and_custody_simulation(fixture, holding, expected, simulated, monk
     with caplog.at_level(logging.INFO):
         assert app.main() == expected
     assert "custody_fee_ignored document=123" in caplog.text
+    custody = [r for r in caplog.records if r.message.startswith("custody_fee_ignored")]
+    assert [(r.levelno, r.message) for r in custody] == [
+        (logging.INFO, "custody_fee_ignored document=123 rows=1")]
     assert f"simulated={simulated}" in caplog.text
     assert ("sell_exceeds_holding" in caplog.text) == bool(expected)
     assert ("type=SELL" in caplog.text) == bool(simulated)

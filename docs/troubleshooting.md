@@ -122,8 +122,10 @@ proposal is not a write. BD reports one target account without its identifier.
 With `CASH_BALANCE=0` (the default), BD reports `cash=not managed`. To opt in,
 see [cash balance](configuration.md#cash-balance). `cash=unavailable` requires
 user action. Check the statements and the stored balance before another live run.
-Missing evidence is
-`unavailable`, not zero. `Reconciliation result` uses the IBKR count names.
+Review evidence is `disabled` when `ACTIVITY_RECONCILIATION=off` and
+`ACTIVITY_REVIEW_FILE` is empty. It is `unavailable` when review is configured
+but no result exists. Neither value means zero. `Reconciliation result` uses
+the IBKR count names.
 Decision counts can overlap. These lines do not prove complete notice coverage.
 
 BD keeps its existing `Summary: ` fields and the exact `Cycle result: success`
