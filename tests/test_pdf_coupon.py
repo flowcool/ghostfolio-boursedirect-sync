@@ -74,11 +74,13 @@ def test_coupon_uses_printed_net_and_does_not_infer_tax_from_gross():
     ("EUR PEA", "USD PEA", "notice_unreadable"),
     ("COMMISSION", "WITHHOLDING", "notice_unreadable"),
     ("FR0000000002", "", "notice_unreadable"),
+    ("FR0000000002", "FR000000000", "notice_unreadable"),
+    ("FR0000000002", "FR000000000X", "notice_unreadable"),
 ])
 def test_coupon_retains_field_and_amount_guards(old, new, code):
     with pytest.raises(RuntimeError, match=f"^{code}$") as caught:
         notices.parse_text(coupon_text().replace(old, new))
-    assert (getattr(caught.value, "notice_reason", None) == "missing_isin") == (old == "FR0000000002")
+    assert (getattr(caught.value, "notice_reason", None) == "missing_isin") == (old == "FR0000000002" and new == "")
 
 
 def test_real_coupon_without_isin_keeps_error_code_with_fixed_reason():

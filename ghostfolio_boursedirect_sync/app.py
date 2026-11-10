@@ -107,8 +107,8 @@ def run_sync(errors: set[str], *, invalid_schedule: bool = False,
             except RuntimeError as exc:
                 unreadable += 1
                 unreadable_dates.append(None)
-                reason = (" reason=missing_isin" if str(exc) == "notice_unreadable"
-                          and getattr(exc, "notice_reason", None) == "missing_isin" else "")
+                reason = (" reason=missing_isin" if isinstance(exc, notices.NoticeUnreadable)
+                          and exc.notice_reason == "missing_isin" else "")
                 if cutoff and isinstance(document_id, int) and str(exc) == "notice_unreadable":
                     day = paperless.document_date(settings, document_id)
                     unreadable_dates[-1] = day
