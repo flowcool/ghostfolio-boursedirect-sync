@@ -58,11 +58,12 @@ CodeQL and Dependency Review on the final head. After each later push, run
 block merge until that head has results. Other PR checks still run on each push.
 
 This step also applies to Renovate, Dependabot and documentation-only PRs.
-For a PR that is already ready, use the same two commands. The own-image README
-update can automerge only after an operator or agent completes this step.
-Documentation-only PRs still skip application and security analysis. The ready
-event records their required scope results. Opening or reopening a PR does not
-start these security workflows.
+A PR opened ready for review starts both security workflows at once. Opening a
+draft skips these jobs. A later push to any ready PR still needs the two commands
+above. Reopening a PR does not start these workflows. The own-image README update
+can automerge only after the current head has its required check results.
+Documentation-only PRs still skip application and security analysis. The opening
+or ready event records their required scope results.
 
 CI checks the typed package, the retained offline suite, documentation links,
 whitespace, the native image and dependency security. Pullfrog reviews the final
