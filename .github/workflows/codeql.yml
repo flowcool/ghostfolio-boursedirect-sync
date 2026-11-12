@@ -3,7 +3,7 @@ name: CodeQL
 on:
   # Required on the final PR head. A later push needs a new draft -> ready transition.
   pull_request:
-    types: [ready_for_review]
+    types: [opened, ready_for_review]
   workflow_call:
   schedule:
     - cron: "41 4 * * 1"
@@ -17,10 +17,11 @@ concurrency:
 
 jobs:
   scope:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     uses: ./.github/workflows/pr-scope.yml
   analyze:
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code != 'false') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.scope.result != 'success' || needs.scope.outputs.code != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

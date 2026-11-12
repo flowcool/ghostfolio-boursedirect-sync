@@ -8,13 +8,15 @@ smoke-checks and scans the native AMD64 image without publishing it. Both native
 architectures are built and scanned during candidate preparation. This defers
 ARM64-specific failures, including the Supercronic checksum, to that gate.
 
-CodeQL and Dependency Review run on the final PR head when a draft becomes ready.
+CodeQL and Dependency Review run when a PR opens ready for review or when a draft
+becomes ready. Opening a draft skips these jobs.
 CodeQL blocks errors and medium-or-higher security findings. Dependency Review
 blocks new moderate-or-higher findings, including development dependencies.
 Follow the [PR procedure](../CONTRIBUTING.md#pull-requests), also for bot PRs.
 A later push needs a new draft-to-ready transition. Missing results on that head
 block merge under the existing strict required checks. Documentation-only PRs
-keep their scope exemption. Their required scope results still need this event.
+keep their scope exemption. Their required scope results still need an opening
+or ready event.
 All workflows use read-only repository access unless a specific job needs a
 narrower permission grant.
 
