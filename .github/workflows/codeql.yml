@@ -30,23 +30,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # TEMPORARY (2026-11-08): release-download HTTP 504; keep the recommended CLI and analysis gates.
-      - name: Download the verified CodeQL Python bundle
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          bundle="$RUNNER_TEMP/codeql-bundle-python-linux64.tar.zst"
-          curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error --location \
-            "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-python-linux64.tar.zst" \
-            --output "$bundle" \
-          || gh api -H 'Accept: application/octet-stream' \
-            repos/github/codeql-action/releases/assets/692239340 > "$bundle"
-          echo "d862cb11aff035988f178703b69751be072f2aa7e76616f16bb725a207b50b7d  $bundle" | sha256sum --check --strict
-          echo "CODEQL_BUNDLE=$bundle" >> "$GITHUB_ENV"
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: python
-          tools: ${{ env.CODEQL_BUNDLE }}
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           output: sarif-results
