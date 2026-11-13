@@ -1,5 +1,5 @@
 # Runtime closure selected from the pinned ibkr source. No dev tools in the image.
-certifi==2026.10.19
+certifi==2026.10.23
 charset-normalizer==3.5.2
 idna==3.20
 PyYAML==6.0.3
@@ -7,8 +7,8 @@ requests==2.34.2
 urllib3==2.8.0
 
 # Isolated Apprise worker closure from the pinned IBKR source.
-apprise==2.0.1
+apprise==2.1.0
 click==8.5.0
-markdown==3.11.1
+markdown==3.11.2
 oauthlib==4.0.1
 requests-oauthlib==2.0.0
