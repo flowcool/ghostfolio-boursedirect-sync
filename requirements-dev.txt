@@ -1,11 +1,11 @@
 -r requirements.txt
-pytest==9.1.1
+pytest==9.2.0
 iniconfig==2.3.1
 packaging==26.3
 pluggy==1.7.0
 pygments==2.21.0
-ruff==0.17.1
-mypy==2.4.0
-types-requests==2.33.0.20261006
-types-PyYAML==6.0.12.20260906
+ruff==0.17.3
+mypy==2.4.1
+types-requests==2.33.0.20261030
+types-PyYAML==6.0.12.20261030
 pip-audit==2.10.1
