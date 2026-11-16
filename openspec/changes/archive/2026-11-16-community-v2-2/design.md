@@ -17,7 +17,7 @@ store or source completion database. Items 2–8 remain tasks only.
 
 Sibling references use IBKR
 `f9a2b113539674296667e45dd28fddaff1ecb1c5`.
-The [earlier adoption map](../archive/2026-10-30-pdf-notice-importer/design.md)
+The [earlier adoption map](../2026-10-30-pdf-notice-importer/design.md)
 pins the financial mechanisms already present in BD.
 
 | Part | Reuse |

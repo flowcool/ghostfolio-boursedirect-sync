@@ -81,7 +81,8 @@ your own project. This project: `ghostfolio-boursedirect-sync`.
 ## Method (same as ibkr)
 
 - **Spec first.** No code without an OpenSpec change that Florent approved. A
-  spec has 1 800 words or fewer. It describes visible behavior and error codes,
+  delta spec has 1 800 words or fewer. The consolidated main spec may have up to
+  6 000 words (Florent, 2026-11-16). It describes visible behavior and error codes,
   never internal mechanisms. Do not specify recovery tools, lab tools, release
   process or docs layout. When reality is different from the spec, stop and
   report. Do not change the spec silently.
@@ -171,8 +172,8 @@ voice, no internal jargon.
   Never put a secret in Git, logs, Beads, tests or reports.
 - Paperless is read only. The importer never writes to Paperless.
 - Personal data stays off Git: `inputs/`, `outputs/`, `state/`, `tmp/`, `audit/`.
-- Ghostfolio: `DRY_RUN=1` by default. Add new activities; never delete. Updates follow the current spec and the approved
-  [manual reconciliation change](openspec/changes/manual-reconciliation-coverage/specs/notice-import/spec.md).
+- Ghostfolio: `DRY_RUN=1` by default. Add new activities; never delete. Updates follow the current
+  [notice-import spec](openspec/specs/notice-import/spec.md).
   Preserve every other field and logical identity. Confirm exact readback; stop on
   uncertainty without resend. Production writes need Florent's go. Shared labs
   use their permanent authority below.
@@ -181,24 +182,15 @@ voice, no internal jargon.
 
 ## Durable work state
 
-- [v2.2.0 is released](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v2.2.0).
-  It includes folder input, manual reconciliation and notice coverage.
-  Current behavior is in
-  [notice-import](openspec/specs/notice-import/spec.md).
-  The completed [v2 change](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/proposal.md)
-  and its [tasks](openspec/changes/archive/2026-11-06-operator-actions-and-reconciliation/tasks.md)
-  record implementation history.
-- Manual corrections and notice coverage shipped before v2.2.0. Their
-  [change](openspec/changes/manual-reconciliation-coverage/proposal.md) remains
-  outside the archive. Apply its approved delta with the current spec.
-- The released [v2.2 change](openspec/changes/community-v2-2/proposal.md) also
-  remains outside the archive. Release and installation evidence do not imply
-  authority to send the community announcement or change repository topics.
-- Beads project metadata: `project=ghostfolio-boursedirect-sync`.
-- Rebuild epic: "v1 rebuild (option B)". Include completed work with
-  `bd list --metadata-field project=ghostfolio-boursedirect-sync --type epic --all`.
-- Private pointers (bead IDs, decision document) live in `CLAUDE.local.md`,
-  which Git ignores.
+- [v2.3.1 is released](https://github.com/flowcool/ghostfolio-boursedirect-sync/releases/tag/v2.3.1).
+  It adds clearer notice diagnostics to the folder, reconciliation, coverage
+  and cash-balance features from earlier releases.
+- Current behavior is in [notice-import](openspec/specs/notice-import/spec.md)
+  and [connector-runtime](openspec/specs/connector-runtime/spec.md).
+  Completed changes under `openspec/changes/archive/` are history.
+- Beads owns active work and release evidence. Use
+  `project=ghostfolio-boursedirect-sync` to select this project.
+- Private pointers live in `CLAUDE.local.md`, which Git ignores.
 
 ## Code
 
