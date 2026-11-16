@@ -24,7 +24,7 @@ installation without changing the financial rules.
 ## Operation Scope
 
 Use the same saved original-notice corpus as the released
-[manual reconciliation change](../manual-reconciliation-coverage/proposal.md).
+[manual reconciliation change](../2026-11-16-manual-reconciliation-coverage/proposal.md).
 Folder storage adds no notice family. Replay those originals through both sources.
 
 | Observed operation | In scope / out of scope |

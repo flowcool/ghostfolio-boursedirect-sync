@@ -23,7 +23,7 @@ jobs:
   preflight:
     needs: [codeql, dependency-review]
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -61,8 +61,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {runner: ubuntu-24.04, arch: amd64}
-          - {runner: ubuntu-24.04-arm, arch: arm64}
+          - {runner: ubuntu-26.04, arch: amd64}
+          - {runner: ubuntu-26.04-arm, arch: arm64}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
@@ -84,7 +84,7 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Generate OCI metadata from the validated release identity
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
           tags: type=raw,value=${{ env.RELEASE_APP_VERSION }}
@@ -157,7 +157,7 @@ jobs:
 
   manifest:
     needs: [preflight, native-image]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read

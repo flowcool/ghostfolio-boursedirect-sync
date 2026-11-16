@@ -11,7 +11,7 @@ context: |
   Reuse applicable IBKR module boundaries; do not compress the application into one file.
   Target contract = sibling forks ../ghostfolio-ibkr-sync and ../ghostfolio-degiro-sync:
   CRON, APPRISE_URLS, additive deduplicated import, ENV only.
-  BD corrections follow the active spec and approved manual-reconciliation-coverage delta.
+  BD corrections follow the consolidated notice-import spec.
   Preserve all other fields and identity; confirm readback; never delete.
   DRY_RUN=0 imports; DRY_RUN=1 simulates; an absent variable selects simulation.
   Reuse their mechanisms; do not design a new one they already have.
@@ -40,7 +40,7 @@ rules:
     - Build that table from saved real documents of the chosen source; when the source changes, rebuild it.
     - Include a "Non-goals" section.
   specs:
-    - Max 1800 words. Describe visible behavior and error codes only, never internal mechanisms.
+    - "Delta specs: max 1800 words. The consolidated main spec may have up to 6000 words (Florent, 2026-11-16). Describe visible behavior and error codes only, never internal mechanisms."
     - Every requirement has at least one WHEN/THEN scenario that a person can check by running one command and reading its output.
     - Never state Bourse Direct page or document behavior that is not observed in a saved real document; mark unknowns as open questions.
   design:
