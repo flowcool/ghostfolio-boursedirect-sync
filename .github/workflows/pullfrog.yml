@@ -47,6 +47,6 @@ jobs:
           persist-credentials: false
       - name: Run agent
         if: steps.scope.outputs.review == 'true'
-        uses: pullfrog/pullfrog@8d512c34f4c6170374e7f139e5ffe0eede6db8f2 # v0.1.129
+        uses: pullfrog/pullfrog@297233107454120a5d2e9926b20fdc15d234dca6 # v0.1.146
         with:
           prompt: ${{ inputs.prompt }}
